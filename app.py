@@ -80,7 +80,7 @@ def find_timestamped_folders(path):
     >>> find_timestamped_folders("./tmp")
     [PosixPath('tmp/2022_05_14')]
     """
-    folders = []
+    nights = {}
 
     def _preprocess(name):
         return name.replace("_", "-")
@@ -92,8 +92,10 @@ def find_timestamped_folders(path):
         except dateutil.parser.ParserError:
             pass
         else:
-            folders.append(d)
-    return folders
+            nights[date] = d
+
+    # @TODO should be sorted by date
+    return nights
 
 
 class MainLayout(Widget):
@@ -109,22 +111,20 @@ class MainLayout(Widget):
             )[0],
         )
 
-        self.nightly_folders = find_timestamped_folders(root_dir)
-        self.display_folders(self.nightly_folders)
+        nightly_folders = find_timestamped_folders(root_dir)
+        self.display_folders(nightly_folders)
 
     def display_folders(self, folders):
 
         grid = self.ids.nightly_folders
 
         grid.children = []
-        for d in folders:
-            # self.ids.num_images.text = f"Images: {len(images)}"
-            # self.ids.num_subdirs.text = f"Subfolders: {len(directories)}"
+        for date, path in folders.items():
             images = [
-                f for f in d.iterdir() if f.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
+                f for f in path.iterdir() if f.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
             ]
             bg_image = str(random.choice(images).absolute())
-            label = f"{d.name} \n({len(images)} images)"
+            label = f"{date.strftime('%c')} \n({len(images)} images)"
             button = Button(
                 text=label,
                 # color=(0, 0, 1, 1),
@@ -136,7 +136,7 @@ class MainLayout(Widget):
                 # background_normal=bg_image,
                 # border = (30, 30, 30, 30),
             )
-            callback = lambda btn: print(d, btn)
+            callback = lambda btn: print(path, btn)
             button.bind(on_release=callback)
             grid.add_widget(button)
 
