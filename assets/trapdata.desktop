@@ -1,0 +1,12 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Name=AMI Trap Data Processor
+Comment=Analyze data from autonomous insect monitoring traps
+# Exec=/home/michael/anaconda3/bin/python3 /home/michael/Projects/AMI/trapdata-app/app.py
+Exec=/home/michael/anaconda3/bin/python3 /home/michael/Projects/AMI/trapdata-app/app.py
+Icon=/home/michael/Projects/AMI/trapdata-app/assets/ami_logo.png
+Terminal=false
+Type=Application
+Categories=Utility;Application;
+
