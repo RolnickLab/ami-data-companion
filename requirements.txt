@@ -1,0 +1,3 @@
+kivy
+plyer  # cross platform interfaces like file chooser
+black
