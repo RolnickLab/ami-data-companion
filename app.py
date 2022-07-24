@@ -36,6 +36,8 @@ Builder.load_file("menu.kv")
 
 SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg")
 
+TEMPORARY_BASE_PATH = "/media/michael/LaCie/AMI/"
+
 
 # class Gallery(GridLayout):
 #     images = ObjectProperty()
@@ -75,6 +77,52 @@ def read_setting(key):
         return f.read_text()
     else:
         return None
+
+
+def delete_setting(key):
+    f = cache_dir() / key
+    logger.debug(f"Deleting cache: {f}")
+    if f.exists():
+        return f.unlink()
+    else:
+        return None
+
+
+def choose_root_directory():
+    """
+    Prompt the user to select a directory where trap data has been saved.
+    The subfolders of this directory should be timestamped directories
+    with nightly trap images.
+
+    The user's selection is saved and reused on the subsequent launch.
+    """
+    # @TODO Look for SDCARD / USB Devices first?
+
+    setting_key = "last_root_dir"
+
+    root_dir = read_setting(setting_key)
+
+    if root_dir:
+        root_dir = pathlib.Path(root_dir)
+
+        if root_dir.is_dir():
+            return root_dir
+        else:
+            delete_setting(setting_key)
+
+    selection = filechooser.choose_dir(
+        title="Choose the root directory for your nightly trap data",
+        path=TEMPORARY_BASE_PATH,
+    )
+
+    if selection:
+        root_dir = selection[0]
+    else:
+        return None
+
+    save_setting(setting_key, root_dir)
+
+    return root_dir
 
 
 def find_timestamped_folders(path):
@@ -213,25 +261,6 @@ class AnalyzeButton(Button):
 class MainLayout(Widget):
     root_dir = ObjectProperty()
 
-    def choose_root_directory(self):
-        # @TODO "$HOME" doesn't work, maybe choose SDCARD / USB Device first?
-        # /home/michael/Projects/AMI/data/TrapData_2022
-
-        root_dir = read_setting("last_root_dir") or save_setting(
-            "last_root_dir",
-            filechooser.choose_dir(
-                title="Choose the root directory for your nightly trap data",
-                path="/media/michael/LaCie/AMI/",
-            )[0],
-        )
-
-        self.root_dir = root_dir
-
-        # Initialize trap data objects
-        nightly_folders = find_timestamped_folders(root_dir)
-
-        return nightly_folders
-
     def display_folders(self, folders):
         grid = self.ids.nightly_folders
 
@@ -243,7 +272,7 @@ class MainLayout(Widget):
             label = f"{date.strftime('%a, %b %-d')} \n{len(images)} images"
             bg_image = str(random.choice(images).absolute())
 
-            analyze_btn = AnalyzeButton(text="Analyze", path=path)
+            analyze_btn = AnalyzeButton(text="Process", path=path)
             # analyze_btn.bind(on_release=self.analyze_callback)
 
             find_species_btn = Button(text="List species", disabled=True)
@@ -265,9 +294,12 @@ class MainLayout(Widget):
 
 class TrapDataAnalyzer(App):
     def build(self):
+        self.title = "AMI Trap Data Companion"
         layout = MainLayout()
-        nightly_folders = layout.choose_root_directory()
-        layout.display_folders(nightly_folders)
+        self.root_dir = choose_root_directory()
+        if self.root_dir:
+            nightly_folders = find_timestamped_folders(self.root_dir)
+            layout.display_folders(nightly_folders)
         return layout
 
 
