@@ -3,6 +3,8 @@ import pathlib
 import random
 
 
+from PIL import Image as PImage
+
 import kivy
 
 kivy.require("2.1.0")
@@ -25,17 +27,40 @@ Builder.load_file("image_bbox_test.kv")
 def load_sample():
     source_dir = pathlib.Path(
         # "/media/michael/LaCie/AMI/TrapData_2022/Quebec/2022_05_17"
-        "/media/michael/LaCie/AMI/TrapData_2022/Vermont/test"
+        # "/media/michael/LaCie/AMI/TrapData_2022/Vermont/test"
+        # "/media/michael/LaCie/Camera/Metolius Camping Trip 2022"
+        "/home/michael/Pictures/MetoliusCamping2022"
     )
     annotations = json.load(
         open(
-            "/media/michael/LaCie/AMI/TrapData_2022/Vermont/localize_classify_annotation-test.json"
+            # "/media/michael/LaCie/Camera/localize_classify_annotation-Metolius Camping Trip 2022.json"
+            "/home/michael/Pictures/MetoliusCamping2022/megadetections.json"
         )
     )
-    sample = random.choice(list(annotations.keys()))
-    img_path = source_dir / sample
-    bboxes = annotations[sample][0]
-    labels = annotations[sample][1]
+    if "images" in annotations:
+        # This is from MegaDetector
+        sample = random.choice(list(annotations["images"]))
+        img_path = source_dir / sample["file"]
+        bboxes = []
+        for detection in sample["detections"]:
+            img_width, img_height = PImage.open(img_path).size
+            print("PIL image:", img_width, img_height)
+            x, y, width, height = detection["bbox"]
+            x1 = x * img_width
+            y1 = y * img_height
+            x2 = (width * img_width) + x1
+            y2 = (height * img_height) + y1
+            bbox = [x1, y1, x2, y2]
+            print("MegaDetector bbox:", detection["bbox"])
+            print("MegaDetector bbox converted:", bbox)
+            bboxes.append(bbox)
+    else:
+        # Aditya's format
+        sample = random.choice(list(annotations.keys()))
+        img_path = source_dir / sample
+        bboxes = annotations[sample][0]
+        labels = annotations[sample][1]
+
     return img_path, bboxes
 
 
@@ -124,7 +149,9 @@ class CanvasWidget(Widget):
                 self.bbox_widgets.append(
                     Line(points=[x1, y1, x1, y2, x2, y2, x2, y1, x1, y1], width=2)
                 )
-                self.bbox_widgets.append(Label(text=str(i), pos=(x1, y2), color=color))
+                self.bbox_widgets.append(
+                    Label(text=str(i), center=(x1, y2), color=color)
+                )
 
 
 class MainLayout(BoxLayout):
