@@ -21,8 +21,9 @@ from kivy.uix.image import Image
 from kivy.uix.button import Button
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
-from kivy.graphics import Rectangle, Color
+from kivy.graphics import Rectangle, Color, Canvas, Line
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.relativelayout import RelativeLayout
 from kivy.lang import Builder
 from kivy.properties import StringProperty, ListProperty, ObjectProperty
 
@@ -236,7 +237,12 @@ class AnalyzeButton(Button):
 
     def show_results(self, img_path, results):
         content = GridLayout(rows=3, cols=1, spacing=20)
-        content.add_widget(Image(source=str(img_path)))
+        img_container = RelativeLayout()
+        img = Image(source=str(img_path), keep_ratio=True, allow_stretch=True)
+        rect = Line(rounded_rectangle=(0, 0, 100, 100, 5))
+        img.canvas.add(rect)
+        img_container.add_widget(img)
+        content.add_widget(img_container)
 
         result_text = Label(
             text=f"{results['highest_confidence_label']} \n{results['highest_confidence']}"
