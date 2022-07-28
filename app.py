@@ -151,8 +151,11 @@ class MainLayout(Widget):
             analyze_btn = AnalyzeButton(text="Process", path=path)
             # analyze_btn.bind(on_release=self.analyze_callback)
 
-            find_species_btn = Button(text="List species", disabled=True)
-            play_video_btn = Button(text="Play video", disabled=True)
+            annotations = find_annotations(path)
+            btn_disabled = False if annotations else True
+
+            find_species_btn = Button(text="List species", disabled=btn_disabled)
+            play_video_btn = Button(text="Play video", disabled=btn_disabled)
 
             row = GridLayout(rows=1, cols=5, spacing=10)
             row.add_widget(Image(source=bg_image))

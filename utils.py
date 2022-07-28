@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg")
+SUPPORTED_ANNOTATION_PATTERNS = ("detections.json", "megadetections.json")
 TEMPORARY_BASE_PATH = "/media/michael/LaCie/AMI/"
 
 
@@ -136,6 +137,13 @@ def find_images(path):
         f for f in path.iterdir() if f.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
     ]
     return images
+
+
+def find_annotations(path):
+    annotations = [
+        f for f in path.iterdir() if f.name.lower() in SUPPORTED_ANNOTATION_PATTERNS
+    ]
+    return annotations
 
 
 def predict_image(path):
