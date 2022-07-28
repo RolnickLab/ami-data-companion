@@ -9,7 +9,6 @@ import requests
 import base64
 import io
 
-
 import kivy
 
 kivy.require("2.1.0")
@@ -27,18 +26,13 @@ from kivy.uix.relativelayout import RelativeLayout
 from kivy.lang import Builder
 from kivy.properties import StringProperty, ListProperty, ObjectProperty
 
-from plyer import filechooser
-import PIL
+from utils import *
+from ml import detect_and_classify
 
 
 logger = logging.getLogger(__name__)
 
 Builder.load_file("menu.kv")
-
-SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg")
-
-TEMPORARY_BASE_PATH = "/media/michael/LaCie/AMI/"
-
 
 # class Gallery(GridLayout):
 #     images = ObjectProperty()
@@ -48,131 +42,6 @@ TEMPORARY_BASE_PATH = "/media/michael/LaCie/AMI/"
 #         images = kwargs.get("images", [])
 #         for image in images:
 #             seld.add_widget(Image(source=str(image)))
-
-
-def cache_dir():
-    # If fails, use temp dir?
-    # d = tempfile.TemporaryDirectory(delete=False)
-    d = pathlib.Path(".cache")
-    d.mkdir(exist_ok=True)
-    return d
-
-
-def save_setting(key, val):
-    """
-    >>> save_setting("last_test", "now")
-    'now'
-    >>> read_setting("last_test")
-    'now'
-    """
-    f = cache_dir() / key
-    logger.debug(f"Writing to cache: {f}")
-    f.write_text(val)
-    return val
-
-
-def read_setting(key):
-    f = cache_dir() / key
-    logger.debug(f"Checking cache: {f}")
-    if f.exists():
-        return f.read_text()
-    else:
-        return None
-
-
-def delete_setting(key):
-    f = cache_dir() / key
-    logger.debug(f"Deleting cache: {f}")
-    if f.exists():
-        return f.unlink()
-    else:
-        return None
-
-
-def choose_root_directory():
-    """
-    Prompt the user to select a directory where trap data has been saved.
-    The subfolders of this directory should be timestamped directories
-    with nightly trap images.
-
-    The user's selection is saved and reused on the subsequent launch.
-    """
-    # @TODO Look for SDCARD / USB Devices first?
-
-    setting_key = "last_root_dir"
-
-    root_dir = read_setting(setting_key)
-
-    if root_dir:
-        root_dir = pathlib.Path(root_dir)
-
-        if root_dir.is_dir():
-            return root_dir
-        else:
-            delete_setting(setting_key)
-
-    selection = filechooser.choose_dir(
-        title="Choose the root directory for your nightly trap data",
-        path=TEMPORARY_BASE_PATH,
-    )
-
-    if selection:
-        root_dir = selection[0]
-    else:
-        return None
-
-    save_setting(setting_key, root_dir)
-
-    return root_dir
-
-
-def find_timestamped_folders(path):
-    """
-    Find all directories in a given path that have
-    dates / timestamps in the name.
-
-    This should be the nightly folders from the trap data.
-
-    >>> pathlib.Path("./tmp/2022_05_14").mkdir(exist_ok=True, parents=True)
-    >>> pathlib.Path("./tmp/nope").mkdir(exist_ok=True, parents=True)
-    >>> find_timestamped_folders("./tmp")
-    [PosixPath('tmp/2022_05_14')]
-    """
-    nights = {}
-
-    def _preprocess(name):
-        return name.replace("_", "-")
-
-    for d in pathlib.Path(path).iterdir():
-        # @TODO use yield?
-        try:
-            date = dateutil.parser.parse(_preprocess(d.name))
-        except Exception:
-            # except dateutil.parser.ParserError:
-            pass
-        else:
-            nights[date] = d
-
-    # @TODO should be sorted by date
-    return nights
-
-
-def find_images(path):
-    images = [
-        f for f in path.iterdir() if f.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
-    ]
-    return images
-
-
-def predict_image(path):
-    img = PIL.Image.open(path)
-    buffered = io.BytesIO()
-    img.save(buffered, format="JPEG")
-    img_str = base64.b64encode(buffered.getvalue())
-    resp = requests.post("http://localhost:5000/predict", data={"b64": img_str})
-    resp.raise_for_status()
-    results = resp.json()
-    return results
 
 
 class CanvasWidget(Widget):
@@ -226,14 +95,15 @@ class AnalyzeButton(Button):
 
         For now, just classify a random image.
         """
-        images = find_images(self.path)
-        img_path = random.choice(images)
-        results = predict_image(img_path)
+        annotations = detect_and_classify(self.path)
+        # images = find_images(self.path)
+        # img_path = random.choice(images)
+        # results = predict_image(img_path)
         for widget in self.parent.children:
             # @TODO should we register nightly folders by ID somewhere?
             if isinstance(widget, Button):
                 widget.disabled = False
-        self.show_results(img_path, results)
+        # self.show_results(img_path, results)
 
     def show_results(self, img_path, results):
         content = GridLayout(rows=3, cols=1, spacing=20)
@@ -302,7 +172,7 @@ class TrapDataAnalyzer(App):
     def build(self):
         self.title = "AMI Trap Data Companion"
         layout = MainLayout()
-        self.root_dir = choose_root_directory()
+        self.root_dir = choose_root_directory(cache=False)
         if self.root_dir:
             nightly_folders = find_timestamped_folders(self.root_dir)
             layout.display_folders(nightly_folders)
