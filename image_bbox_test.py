@@ -20,26 +20,56 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.relativelayout import RelativeLayout
 from kivy.graphics import Rectangle, Color, Canvas, Line, Ellipse
 from kivy.core.window import Window
+from kivy.properties import StringProperty, ListProperty, ObjectProperty
 
 Builder.load_file("image_bbox_test.kv")
 
 
-def load_sample():
-    source_dir = pathlib.Path(
-        # "/media/michael/LaCie/AMI/TrapData_2022/Quebec/2022_05_17"
-        # "/media/michael/LaCie/AMI/TrapData_2022/Vermont/test"
-        # "/media/michael/LaCie/Camera/Metolius Camping Trip 2022"
-        "/home/michael/Pictures/MetoliusCamping2022"
-    )
+from utils import *
+
+SOURCE_DIR = choose_root_directory(cache=False)
+
+
+def choose_sample(images, direction, last_sample=None):
+
+    if last_sample:
+        last_sample = pathlib.Path(last_sample).name
+        last_idx = images.index(last_sample)
+    else:
+        last_idx = 0
+
+    if direction > 0:
+        idx = last_idx + 1
+    elif direction < 0:
+        idx = last_idx - 1
+    print("Sample index:", idx)
+    sample = images[idx % len(images)]
+    print("Last sample :", last_sample)
+    print("Loading sample :", sample)
+    return sample
+
+
+def load_sample(direction, last_sample=None):
+    # source_dir = pathlib.Path(
+    #     # "/media/michael/LaCie/AMI/TrapData_2022/Quebec/2022_05_17"
+    #     # "/media/michael/LaCie/AMI/TrapData_2022/Vermont/test"
+    #     # "/media/michael/LaCie/Camera/Metolius Camping Trip 2022"
+    #     "/home/michael/Pictures/MetoliusCamping2022"
+    # )
+    source_dir = pathlib.Path(SOURCE_DIR)
     annotations = json.load(
         open(
             # "/media/michael/LaCie/Camera/localize_classify_annotation-Metolius Camping Trip 2022.json"
-            "/home/michael/Pictures/MetoliusCamping2022/megadetections.json"
+            # "/home/michael/Pictures/MetoliusCamping2022/megadetections.json"
+            source_dir
+            / "detections.json"
         )
     )
     if "images" in annotations:
         # This is from MegaDetector
-        sample = random.choice(list(annotations["images"]))
+        images = list(annotations["images"])
+        # sample = random.choice(list(annotations["images"]))
+        sample = choose_sample(images, direction, last_sample)
         img_path = source_dir / sample["file"]
         bboxes = []
         for detection in sample["detections"]:
@@ -56,7 +86,9 @@ def load_sample():
             bboxes.append(bbox)
     else:
         # Aditya's format
-        sample = random.choice(list(annotations.keys()))
+        images = list(annotations.keys())
+        # sample = random.choice(list(annotations.keys()))
+        sample = choose_sample(images, direction, last_sample)
         img_path = source_dir / sample
         bboxes = annotations[sample][0]
         labels = annotations[sample][1]
@@ -115,7 +147,7 @@ class CanvasWidget(Widget):
                 self.bbox_widgets.append(
                     Line(rectangle=(0, 0, win_width, win_height), width=2)
                 )
-                print("bbox#", i)
+                # print("bbox#", i)
 
                 color = [random.random() for _ in range(3)]
                 color.append(0.8)  # alpha
@@ -124,7 +156,7 @@ class CanvasWidget(Widget):
 
                 w = x2 - x1
                 h = y2 - y1
-                print("original dims:", w, h)
+                # print("original dims:", w, h)
 
                 # Reference from bottom left instead of top left
                 y1 = img_height - y1
@@ -138,19 +170,19 @@ class CanvasWidget(Widget):
 
                 w2 = w * x_scale
                 h2 = h * y_scale
-                print("new dims:", w2, h2)
+                # print("new dims:", w2, h2)
 
                 w2 = x2 - x1
                 h2 = y1 - y2
-                print("new dims by coord:", w2, h2)
+                # print("new dims by coord:", w2, h2)
 
                 rect = (x1, y2, x2, y1)
-                print(box, rect)
+                # print(box, rect)
                 self.bbox_widgets.append(
                     Line(points=[x1, y1, x1, y2, x2, y2, x2, y1, x1, y1], width=2)
                 )
                 self.bbox_widgets.append(
-                    Label(text=str(i), center=(x1, y2), color=color)
+                    Label(text=str(i), center=(x1, y2 - 20), color=color)
                 )
 
 
@@ -167,14 +199,30 @@ class ImagePreview(Image):
 
 
 class PreviewWindow(RelativeLayout):
-    def random_sample(self):
+    current_sample = ObjectProperty()
+
+    def next_sample(self):
         # show_image_with_annotations
-        img_path, bboxes = load_sample()
+        img_path, bboxes = load_sample(direction=1, last_sample=self.current_sample)
+        print("Next!", img_path)
         self.source = ""  # str(img_path.absolute())
         self.children = []
         cvs = CanvasWidget(
             image_path=img_path, bboxes=bboxes, size=self.size, pos_hint={"bottom": 0}
         )
+        self.current_sample = img_path
+        self.add_widget(cvs)
+
+    def prev_sample(self):
+        # show_image_with_annotations
+        img_path, bboxes = load_sample(direction=-1, last_sample=self.current_sample)
+        print("Prev!", img_path)
+        self.source = ""  # str(img_path.absolute())
+        self.children = []
+        cvs = CanvasWidget(
+            image_path=img_path, bboxes=bboxes, size=self.size, pos_hint={"bottom": 0}
+        )
+        self.current_sample = img_path
         self.add_widget(cvs)
 
 
