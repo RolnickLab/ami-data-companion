@@ -51,7 +51,7 @@ def choose_sample(images, direction, last_sample=None):
     return sample
 
 
-def load_sample(direction, source_dir, last_sample=None):
+def get_sequential_sample(direction, source_dir, last_sample=None):
     source_dir = pathlib.Path(source_dir)
     annotation_files = find_annotations(source_dir)
     if annotation_files:
@@ -193,46 +193,51 @@ class ImagePlaybackLayout(BoxLayout):
 class ImagePlaybackScreen(Screen):
     source_dir = ObjectProperty()
 
+    def on_source_dir(self, instance, value):
+        self.current_sample = None
+        preview = self.ids.playback_layout.ids.image_preview
+        preview.reset()
+        preview.next_sample()
+
 
 class BBox(BoxLayout):
     pass
 
 
 class PreviewWindow(RelativeLayout):
-    current_sample = ObjectProperty()
+    # @TODO save current sample for each directory, so we keep our place
+    current_sample = ObjectProperty(allownone=True)
+
+    def reset(self):
+        self.current_sample = None
+        self.clear_widgets()
+
+    def load_sample(self, img_path, annotations=None):
+        bboxes = annotations
+        self.clear_widgets()
+        cvs = AnnotatedImage(
+            image_path=img_path, bboxes=bboxes, size=self.size, pos_hint={"bottom": 0}
+        )
+        self.current_sample = img_path
+        self.add_widget(cvs)
 
     def next_sample(self):
-        # show_image_with_annotations
-        print(self.parent.parent)
-        img_path, bboxes = load_sample(
+        img_path, bboxes = get_sequential_sample(
             direction=1,
             source_dir=self.parent.parent.source_dir,
             last_sample=self.current_sample,
         )
         print("Next!", img_path)
-        self.source = ""  # str(img_path.absolute())
-        self.children = []
-        cvs = AnnotatedImage(
-            image_path=img_path, bboxes=bboxes, size=self.size, pos_hint={"bottom": 0}
-        )
-        self.current_sample = img_path
-        self.add_widget(cvs)
+        self.load_sample(img_path, annotations=bboxes)
 
     def prev_sample(self):
-        # show_image_with_annotations
-        img_path, bboxes = load_sample(
+        img_path, bboxes = get_sequential_sample(
             direction=-1,
             source_dir=self.parent.parent.source_dir,
             last_sample=self.current_sample,
         )
         print("Prev!", img_path)
-        self.source = ""  # str(img_path.absolute())
-        self.children = []
-        cvs = AnnotatedImage(
-            image_path=img_path, bboxes=bboxes, size=self.size, pos_hint={"bottom": 0}
-        )
-        self.current_sample = img_path
-        self.add_widget(cvs)
+        self.load_sample(img_path, annotations=bboxes)
 
 
 class Controls(BoxLayout):
@@ -243,7 +248,7 @@ class ImageOverlayApp(App):
     def build(self):
         self.title = "Image bbox overlay test"
         # This just loads an example dir for testing
-        img_dir = choose_root_directory(cache=True)
+        img_dir = choose_root_directory(cache=False)
         layout = ImagePlaybackScreen(source_dir=img_dir, name="playback")
         Window.clearcolor = (0, 1, 0, 1)
 

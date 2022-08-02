@@ -140,7 +140,7 @@ class DataMenuScreen(Screen):
 
     def scan_images(self, *args, **kwargs):
         if not self.root_dir:
-            self.root_dir = choose_root_directory(cache=False)
+            self.root_dir = choose_root_directory(cache=True)
 
         if self.root_dir:
             nightly_folders = find_timestamped_folders(self.root_dir)
