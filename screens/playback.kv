@@ -25,20 +25,6 @@
         pos: (self.parent.x, self.parent.y)
         text: 'Rectangle'
 
-<ImagePreview>
-    source: '/media/michael/LaCie/Camera/Metolius Camping Trip 2022/DSC_0573.JPG'
-    pos: (0, 0)
-    size_hint: (1, 1)
-    keep_ratio: True
-    allow_stretch: True 
-    canvas.before:
-        Color:
-            rgba: 1, 0, 0, 1
-        Rectangle:
-            pos: self.pos
-            size: self.size
-    BBox:
-        id: bbox1
 
 
 <PreviewWindow>

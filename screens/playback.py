@@ -142,10 +142,11 @@ class AnnotatedImage(Widget):
             self.bg = img
             self.bbox_widgets = []
             for i, box in enumerate(self.bboxes):
-                Color(1, 0, 0, 1)
-                self.bbox_widgets.append(
-                    Line(rectangle=(0, 0, win_width, win_height), width=2)
-                )
+                # Red box around canvas for debugging
+                # Color(1, 0, 0, 1)
+                # self.bbox_widgets.append(
+                #     Line(rectangle=(0, 0, win_width, win_height), width=2)
+                # )
                 # print("bbox#", i)
 
                 color = [random.random() for _ in range(3)]
@@ -197,10 +198,6 @@ class BBox(BoxLayout):
     pass
 
 
-class ImagePreview(Image):
-    pass
-
-
 class PreviewWindow(RelativeLayout):
     current_sample = ObjectProperty()
 
@@ -246,7 +243,7 @@ class ImageOverlayApp(App):
     def build(self):
         self.title = "Image bbox overlay test"
         # This just loads an example dir for testing
-        img_dir = choose_root_directory(cache=False)
+        img_dir = choose_root_directory(cache=True)
         layout = ImagePlaybackScreen(source_dir=img_dir, name="playback")
         Window.clearcolor = (0, 1, 0, 1)
 
