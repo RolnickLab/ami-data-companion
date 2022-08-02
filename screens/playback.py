@@ -1,6 +1,7 @@
 import json
 import pathlib
 import random
+import sys
 
 
 from PIL import Image as PImage
@@ -21,13 +22,14 @@ from kivy.uix.relativelayout import RelativeLayout
 from kivy.graphics import Rectangle, Color, Canvas, Line, Ellipse
 from kivy.core.window import Window
 from kivy.properties import StringProperty, ListProperty, ObjectProperty
+from kivy.uix.screenmanager import Screen
 
-Builder.load_file("image_bbox_test.kv")
+Builder.load_file("screens/playback.kv")
 
 
 from utils import *
 
-SOURCE_DIR = choose_root_directory(cache=False)
+# SOURCE_DIR = choose_root_directory(cache=False)
 
 
 def choose_sample(images, direction, last_sample=None):
@@ -49,28 +51,24 @@ def choose_sample(images, direction, last_sample=None):
     return sample
 
 
-def load_sample(direction, last_sample=None):
-    # source_dir = pathlib.Path(
-    #     # "/media/michael/LaCie/AMI/TrapData_2022/Quebec/2022_05_17"
-    #     # "/media/michael/LaCie/AMI/TrapData_2022/Vermont/test"
-    #     # "/media/michael/LaCie/Camera/Metolius Camping Trip 2022"
-    #     "/home/michael/Pictures/MetoliusCamping2022"
-    # )
-    source_dir = pathlib.Path(SOURCE_DIR)
-    annotations = json.load(
-        open(
-            # "/media/michael/LaCie/Camera/localize_classify_annotation-Metolius Camping Trip 2022.json"
-            # "/home/michael/Pictures/MetoliusCamping2022/megadetections.json"
-            source_dir
-            / "detections.json"
-        )
-    )
+def load_sample(direction, source_dir, last_sample=None):
+    source_dir = pathlib.Path(source_dir)
+    annotation_files = find_annotations(source_dir)
+    if annotation_files:
+        annotations = json.load(open(annotation_files[0]))
+    else:
+        raise Exception(f"No annotations found in directory: {source_dir}")
+
     if "images" in annotations:
         # This is from MegaDetector
-        images = list(annotations["images"])
+
+        samples = list(annotations["images"])
         # sample = random.choice(list(annotations["images"]))
-        sample = choose_sample(images, direction, last_sample)
-        img_path = source_dir / sample["file"]
+        samples = {s["file"]: s for s in samples}
+        filenames = list(samples.keys())
+        img_name = choose_sample(filenames, direction, last_sample)
+        img_path = source_dir / img_name
+        sample = samples[img_name]
         bboxes = []
         for detection in sample["detections"]:
             img_width, img_height = PImage.open(img_path).size
@@ -85,7 +83,8 @@ def load_sample(direction, last_sample=None):
             print("MegaDetector bbox converted:", bbox)
             bboxes.append(bbox)
     else:
-        # Aditya's format
+        # Assume this is Aditya's format
+
         images = list(annotations.keys())
         # sample = random.choice(list(annotations.keys()))
         sample = choose_sample(images, direction, last_sample)
@@ -96,7 +95,7 @@ def load_sample(direction, last_sample=None):
     return img_path, bboxes
 
 
-class CanvasWidget(Widget):
+class AnnotatedImage(Widget):
     # image_path = StringProperty()
     # bboxes = ListProperty()
 
@@ -105,7 +104,7 @@ class CanvasWidget(Widget):
         self.image_path = kwargs.pop("image_path")
         self.bboxes = kwargs.pop("bboxes")
 
-        super(CanvasWidget, self).__init__(**kwargs)
+        super(AnnotatedImage, self).__init__(**kwargs)
 
         # Arranging Canvas
         with self.canvas:
@@ -186,8 +185,12 @@ class CanvasWidget(Widget):
                 )
 
 
-class MainLayout(BoxLayout):
+class ImagePlaybackLayout(BoxLayout):
     pass
+
+
+class ImagePlaybackScreen(Screen):
+    source_dir = ObjectProperty()
 
 
 class BBox(BoxLayout):
@@ -203,11 +206,16 @@ class PreviewWindow(RelativeLayout):
 
     def next_sample(self):
         # show_image_with_annotations
-        img_path, bboxes = load_sample(direction=1, last_sample=self.current_sample)
+        print(self.parent.parent)
+        img_path, bboxes = load_sample(
+            direction=1,
+            source_dir=self.parent.parent.source_dir,
+            last_sample=self.current_sample,
+        )
         print("Next!", img_path)
         self.source = ""  # str(img_path.absolute())
         self.children = []
-        cvs = CanvasWidget(
+        cvs = AnnotatedImage(
             image_path=img_path, bboxes=bboxes, size=self.size, pos_hint={"bottom": 0}
         )
         self.current_sample = img_path
@@ -215,11 +223,15 @@ class PreviewWindow(RelativeLayout):
 
     def prev_sample(self):
         # show_image_with_annotations
-        img_path, bboxes = load_sample(direction=-1, last_sample=self.current_sample)
+        img_path, bboxes = load_sample(
+            direction=-1,
+            source_dir=self.parent.parent.source_dir,
+            last_sample=self.current_sample,
+        )
         print("Prev!", img_path)
         self.source = ""  # str(img_path.absolute())
         self.children = []
-        cvs = CanvasWidget(
+        cvs = AnnotatedImage(
             image_path=img_path, bboxes=bboxes, size=self.size, pos_hint={"bottom": 0}
         )
         self.current_sample = img_path
@@ -233,7 +245,9 @@ class Controls(BoxLayout):
 class ImageOverlayApp(App):
     def build(self):
         self.title = "Image bbox overlay test"
-        layout = MainLayout()
+        # This just loads an example dir for testing
+        img_dir = choose_root_directory(cache=False)
+        layout = ImagePlaybackScreen(source_dir=img_dir, name="playback")
         Window.clearcolor = (0, 1, 0, 1)
 
         label = Label(size_hint=(1, 0.05))

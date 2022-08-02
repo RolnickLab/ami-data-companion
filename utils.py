@@ -14,6 +14,7 @@ from plyer import filechooser
 
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg")
@@ -113,6 +114,7 @@ def find_timestamped_folders(path):
     >>> find_timestamped_folders("./tmp")
     [PosixPath('tmp/2022_05_14')]
     """
+    print("Looking for nightly timestamped folders")
     nights = {}
 
     def _preprocess(name):
@@ -126,6 +128,7 @@ def find_timestamped_folders(path):
             # except dateutil.parser.ParserError:
             pass
         else:
+            logger.debug(f"Found nightly folder for {date}: {d}")
             nights[date] = d
 
     # @TODO should be sorted by date
@@ -133,16 +136,23 @@ def find_timestamped_folders(path):
 
 
 def find_images(path):
-    images = [
-        f for f in path.iterdir() if f.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
-    ]
+    """
+    @TODO speed this up!
+    """
+    print("Looking for images")
+    images = list(path.glob("*.jpg"))
+    # images = [
+    #     f for f in path.iterdir() if f.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
+    # ]
     return images
 
 
 def find_annotations(path):
-    annotations = [
-        f for f in path.iterdir() if f.name.lower() in SUPPORTED_ANNOTATION_PATTERNS
-    ]
+    """
+    @TODO sort by date modified?
+    """
+    # annotations = [f for f in path.glob(SUPPORTED_ANNOTATION_PATTERNS)]
+    annotations = [f for f in path.glob("*.json")]
     return annotations
 
 

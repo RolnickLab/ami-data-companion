@@ -47,14 +47,23 @@
 <Controls>
     size_hint_y: 0.1
     Button:
-        text: "< Previous"
-        on_press: root.parent.ids.image_preview.prev_sample() 
+        text: "Exit"
+        on_press: self.parent.parent.parent.manager.current = "menu"
     Button:
-        text: "Next >"
-        on_press: root.parent.ids.image_preview.next_sample() 
+        text: "< Previous"
+        on_press: self.parent.parent.ids.image_preview.prev_sample() 
+    Button:
+        text: "Next >"   
+        on_press: self.parent.parent.ids.image_preview.next_sample() 
 
 
-<MainLayout>:
+<ImagePlaybackScreen>:
+    id: playback_screen
+    ImagePlaybackLayout:
+        id: playback_layout
+
+
+<ImagePlaybackLayout>
     orientation: "vertical"
     PreviewWindow:
         id: image_preview 
