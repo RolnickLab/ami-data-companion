@@ -21,7 +21,13 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.relativelayout import RelativeLayout
 from kivy.graphics import Rectangle, Color, Canvas, Line, Ellipse
 from kivy.core.window import Window
-from kivy.properties import StringProperty, ListProperty, ObjectProperty
+from kivy.clock import Clock
+from kivy.properties import (
+    StringProperty,
+    ListProperty,
+    ObjectProperty,
+    NumericProperty,
+)
 from kivy.uix.screenmanager import Screen
 
 
@@ -135,18 +141,44 @@ class AnnotatedImage(Widget):
                 )
 
 
-class ImagePlaybackLayout(BoxLayout):
-    pass
+DEFAULT_FPS = 2
 
 
 class ImagePlaybackScreen(Screen):
     source_dir = ObjectProperty()
+    fps = NumericProperty(defaultvalue=DEFAULT_FPS)
+    clock = ObjectProperty(allownone=True)
 
     def on_source_dir(self, instance, value):
         self.current_sample = None
-        preview = self.ids.playback_layout.ids.image_preview
+        print(self.ids)
+        preview = self.ids.image_preview
         preview.reset()
         preview.next_sample()
+        self.pause()
+
+    def _play_callback(self, dt):
+        # @TODO stop at last frame
+        self.ids.image_preview.next_sample()
+
+    def play(self):
+        if self.clock:
+            # Already running, increase framerate
+            Clock.unschedule(self.clock)
+            self.fps += 2
+        self.clock = Clock.schedule_interval(self._play_callback, 1 / self.fps)
+        self.ids.play_button.text = f"Play ({self.fps} FPS)"
+
+    def pause(self):
+        if self.clock:
+            Clock.unschedule(self.clock)
+            self.clock = None
+            self.fps = DEFAULT_FPS
+        self.ids.play_button.text = f"Play"
+
+    def exit(self):
+        self.pause()
+        self.manager.current = "menu"
 
 
 class BBox(BoxLayout):
@@ -172,7 +204,7 @@ class PreviewWindow(RelativeLayout):
         self.current_sample = img_path
         self.add_widget(cvs)
 
-    def next_sample(self):
+    def next_sample(self, *args):
         img_path, annotations = get_sequential_sample(
             direction=1,
             source_dir=self.parent.parent.source_dir,
@@ -181,7 +213,7 @@ class PreviewWindow(RelativeLayout):
         print("Next!", img_path)
         self.load_sample(img_path, annotations=annotations)
 
-    def prev_sample(self):
+    def prev_sample(self, *args):
         img_path, annotations = get_sequential_sample(
             direction=-1,
             source_dir=self.parent.parent.source_dir,
@@ -189,10 +221,6 @@ class PreviewWindow(RelativeLayout):
         )
         print("Prev!", img_path)
         self.load_sample(img_path, annotations=annotations)
-
-
-class Controls(BoxLayout):
-    pass
 
 
 class ImageOverlayApp(App):

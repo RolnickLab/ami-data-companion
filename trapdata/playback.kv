@@ -27,31 +27,32 @@
 
 
 
-<PreviewWindow>
-
-
-<Controls>
-    size_hint_y: 0.1
-    Button:
-        text: "Exit"
-        on_press: self.parent.parent.parent.manager.current = "menu"
-    Button:
-        text: "< Previous"
-        on_press: self.parent.parent.ids.image_preview.prev_sample() 
-    Button:
-        text: "Next >"   
-        on_press: self.parent.parent.ids.image_preview.next_sample() 
 
 
 <ImagePlaybackScreen>:
     id: playback_screen
-    ImagePlaybackLayout:
+    BoxLayout:
         id: playback_layout
-
-
-<ImagePlaybackLayout>
-    orientation: "vertical"
-    PreviewWindow:
-        id: image_preview 
-    Controls:
-        id: controls 
+        orientation: "vertical"
+        PreviewWindow:
+            id: image_preview 
+        BoxLayout:
+            id: controls 
+            orientation: "horizontal"
+            size_hint_y: 0.1
+            Button:
+                text: "Exit"
+                on_press: root.exit()
+            Button:
+                text: "< Previous"
+                on_press: root.ids.image_preview.prev_sample() 
+            Button:
+                text: "Next >"   
+                on_press: root.ids.image_preview.next_sample() 
+            Button:
+                text: "Pause"   
+                on_press: root.pause() 
+            Button:
+                id: play_button
+                text: "Play"   
+                on_press: root.play() 
