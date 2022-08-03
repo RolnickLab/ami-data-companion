@@ -27,7 +27,7 @@ from kivy.uix.screenmanager import Screen
 Builder.load_file("screens/playback.kv")
 
 
-from utils import *
+from ..utils import *
 
 # SOURCE_DIR = choose_root_directory(cache=False)
 

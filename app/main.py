@@ -2,8 +2,8 @@ import kivy
 from kivy.app import App
 from kivy.uix.screenmanager import ScreenManager, Screen
 
-from screens.menu import DataMenuScreen
-from screens.playback import ImagePlaybackScreen
+from .screens.menu import DataMenuScreen
+from .screens.playback import ImagePlaybackScreen
 
 
 kivy.require("2.1.0")

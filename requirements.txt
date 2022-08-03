@@ -1,3 +1,5 @@
 kivy
 plyer  # cross platform interfaces like file chooser
 black
+Pillow
+python-dateutil
