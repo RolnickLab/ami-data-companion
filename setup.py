@@ -16,5 +16,5 @@ setup(
     license="MIT",
     packages=["trapdata"],
     zip_safe=False,
-    entry_points={"console_scripts": ["trapdata=trapdata.main:main"]},
+    entry_points={"console_scripts": ["trapdata=trapdata.main:run"]},
 )

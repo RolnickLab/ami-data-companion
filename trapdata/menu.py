@@ -30,13 +30,13 @@ from kivy.uix.screenmanager import Screen
 from kivy.logger import Logger
 
 
-from ..utils import *
+from .utils import *
 
 # from ..ml import detect_and_classify
 detect_and_classify = lambda *args, **kwargs: None
 
 
-Builder.load_file("screens/menu.kv")
+Builder.load_file("menu.kv")
 
 
 class TrapSesionData(Widget):

@@ -24,12 +24,12 @@ from kivy.core.window import Window
 from kivy.properties import StringProperty, ListProperty, ObjectProperty
 from kivy.uix.screenmanager import Screen
 
-Builder.load_file("screens/playback.kv")
 
-
-from ..utils import *
+from .utils import *
 
 # SOURCE_DIR = choose_root_directory(cache=False)
+
+Builder.load_file("playback.kv")
 
 
 def choose_sample(images, direction, last_sample=None):
