@@ -3,6 +3,21 @@
 Desktop app for analyzing images from autonomous insect monitoring stations
 
 
-### Run in development
+## Development
 
+### Installation
+
+```
+python -m venv .venv
+pip install -r requirements.txt
 python -m trapdata
+```
+
+_or_
+
+```
+python -m venv .venv
+pip install -e .
+trapdata
+```
+
