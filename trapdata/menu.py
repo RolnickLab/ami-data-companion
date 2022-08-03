@@ -70,6 +70,7 @@ class AnalyzeButton(Button):
             # @TODO should we register nightly folders by ID somewhere?
             if isinstance(widget, Button):
                 widget.disabled = False
+        self.disabled = True
         # self.show_results(img_path, results)
 
     def show_results(self, img_path, results):
@@ -133,15 +134,19 @@ class PlaybackButton(Button):
 
 
 class DataMenuScreen(Screen):
-    root_dir = ObjectProperty()
+    root_dir = ObjectProperty(allownone=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         Clock.schedule_once(self.scan_images, 1)
 
-    def scan_images(self, *args, **kwargs):
+    def choose_root_directory(self, *args):
+        self.root_dir = choose_directory(cache=False, starting_path=self.root_dir)
+        self.scan_images()
+
+    def scan_images(self, *args):
         if not self.root_dir:
-            self.root_dir = choose_root_directory(cache=True)
+            self.root_dir = choose_directory(cache=True)
 
         if self.root_dir:
             nightly_folders = find_timestamped_folders(self.root_dir)
@@ -151,7 +156,7 @@ class DataMenuScreen(Screen):
         print("Displaying folders")
         grid = self.ids.nightly_folders
 
-        grid.children = []
+        grid.clear_widgets()
         for date, path in folders.items():
 
             images = find_images(path)
@@ -159,11 +164,12 @@ class DataMenuScreen(Screen):
             label = f"{date.strftime('%a, %b %-d')} \n{len(images)} images"
             bg_image = str(random.choice(images).absolute())
 
-            analyze_btn = AnalyzeButton(text="Process", path=path)
-            # analyze_btn.bind(on_release=self.analyze_callback)
-
             annotations = find_annotations(path)
             btn_disabled = False if annotations else True
+
+            analyze_btn = AnalyzeButton(
+                text="Process", path=path, disabled=not btn_disabled
+            )
 
             find_species_btn = Button(text="Summary", disabled=btn_disabled)
             playback_btn = PlaybackButton(

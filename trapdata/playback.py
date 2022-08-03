@@ -247,7 +247,7 @@ class ImageOverlayApp(App):
     def build(self):
         self.title = "Image bbox overlay test"
         # This just loads an example dir for testing
-        img_dir = choose_root_directory(cache=False)
+        img_dir = choose_directory(cache=False)
         layout = ImagePlaybackScreen(source_dir=img_dir, name="playback")
         Window.clearcolor = (0, 1, 0, 1)
 

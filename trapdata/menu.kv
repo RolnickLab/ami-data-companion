@@ -1,12 +1,13 @@
 #:kivy 2.1.0
+#:import sys sys
 
 <DataMenuScreen>
     BoxLayout:
-        orientation: "horizontal"
+        orientation: "vertical"
         size: root.width, root.height
 
-        padding: 20
-        spacing: 20
+        padding: 0
+        spacing: 0
 
         GridLayout:
             id: nightly_folders
@@ -14,3 +15,17 @@
             rows: 8
             padding: 20
             spacing: 20
+
+        BoxLayout:
+            size_hint_y: 0.1
+            Button:
+                text: "Exit"
+                on_press: sys.exit(1)
+            Button:
+                text: "Choose Directory"
+                on_press: root.choose_root_directory() 
+            Button:
+                text: "Process Queue"   
+                on_press: print("Would process all folders in the queue")
+                disabled: True
+

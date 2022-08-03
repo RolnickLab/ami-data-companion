@@ -62,7 +62,9 @@ def delete_setting(key):
         return None
 
 
-def choose_root_directory(cache=True):
+def choose_directory(
+    cache=True, setting_key="last_root_directory", starting_path=TEMPORARY_BASE_PATH
+):
     """
     Prompt the user to select a directory where trap data has been saved.
     The subfolders of this directory should be timestamped directories
@@ -72,34 +74,32 @@ def choose_root_directory(cache=True):
     """
     # @TODO Look for SDCARD / USB Devices first?
 
-    setting_key = "last_root_dir"
-
     if cache:
-        root_dir = read_setting(setting_key)
+        selected_dir = read_setting(setting_key)
     else:
-        root_dir = None
+        selected_dir = None
 
-    if root_dir:
-        root_dir = pathlib.Path(root_dir)
+    if selected_dir:
+        selected_dir = pathlib.Path(selected_dir)
 
-        if root_dir.is_dir():
-            return root_dir
+        if selected_dir.is_dir():
+            return selected_dir
         else:
             delete_setting(setting_key)
 
     selection = filechooser.choose_dir(
         title="Choose the root directory for your nightly trap data",
-        path=TEMPORARY_BASE_PATH,
+        path=starting_path,
     )
 
     if selection:
-        root_dir = selection[0]
+        selected_dir = selection[0]
     else:
         return None
 
-    save_setting(setting_key, root_dir)
+    save_setting(setting_key, selected_dir)
 
-    return root_dir
+    return selected_dir
 
 
 def find_timestamped_folders(path):
