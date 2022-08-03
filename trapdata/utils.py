@@ -8,6 +8,7 @@ import logging
 import requests
 import base64
 import io
+import json
 
 import PIL
 from plyer import filechooser
@@ -165,3 +166,70 @@ def predict_image(path):
     resp.raise_for_status()
     results = resp.json()
     return results
+
+
+def choose_sample(images, direction, last_sample=None):
+
+    if last_sample:
+        last_sample = pathlib.Path(last_sample).name
+        last_idx = images.index(last_sample)
+    else:
+        last_idx = 0
+
+    if direction > 0:
+        idx = last_idx + 1
+    elif direction < 0:
+        idx = last_idx - 1
+    print("Sample index:", idx)
+    sample = images[idx % len(images)]
+    print("Last sample :", last_sample)
+    print("Loading sample :", sample)
+    return sample
+
+
+def get_sequential_sample(direction, source_dir, last_sample=None):
+    source_dir = pathlib.Path(source_dir)
+    annotation_files = find_annotations(source_dir)
+    if annotation_files:
+        annotations = json.load(open(annotation_files[0]))
+    else:
+        raise Exception(f"No annotations found in directory: {source_dir}")
+
+    if "images" in annotations:
+        # This is from MegaDetector
+
+        samples = list(annotations["images"])
+        # sample = random.choice(list(annotations["images"]))
+        samples = {s["file"]: s for s in samples}
+        filenames = list(samples.keys())
+        img_name = choose_sample(filenames, direction, last_sample)
+        img_path = source_dir / img_name
+        sample = samples[img_name]
+        bboxes = []
+        for detection in sample["detections"]:
+            img_width, img_height = PImage.open(img_path).size
+            print("PIL image:", img_width, img_height)
+            x, y, width, height = detection["bbox"]
+            x1 = x * img_width
+            y1 = y * img_height
+            x2 = (width * img_width) + x1
+            y2 = (height * img_height) + y1
+            bbox = [x1, y1, x2, y2]
+            print("MegaDetector bbox:", detection["bbox"])
+            print("MegaDetector bbox converted:", bbox)
+            bboxes.append(bbox)
+    else:
+        # Assume this is Aditya's format
+
+        images = list(annotations.keys())
+        # sample = random.choice(list(annotations.keys()))
+        sample = choose_sample(images, direction, last_sample)
+        img_path = source_dir / sample
+        bboxes, _, binary_labels, labels, scores = annotations[sample]
+        annotations = [
+            {"bbox": bbox, "label": label, "score": score}
+            for bbox, label, score in zip(bboxes, labels, scores)
+        ]
+        print(annotations)
+
+    return img_path, annotations
