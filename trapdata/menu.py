@@ -8,6 +8,7 @@ import logging
 import requests
 import base64
 import io
+from functools import partial
 
 import kivy
 
@@ -107,9 +108,9 @@ class PlaybackButton(Button):
     screenmanager = ObjectProperty()
 
     def on_release(self):
-        self.playback()
+        self.launch()
 
-    def playback(self):
+    def launch(self):
         """
         Review images and their annotations
         """
@@ -117,20 +118,21 @@ class PlaybackButton(Button):
         self.screenmanager.current = "playback"
         self.screenmanager.get_screen("playback").source_dir = self.path
 
-        # content = GridLayout(rows=3, cols=1, spacing=20)
-        # content.add_widget(img_container)
-        # close_button = Button(text="Close", size=(100, 20))
-        # # content.add_widget(close_button)
 
-        # popup = Popup(
-        #     title="Classification results",
-        #     content=content,
-        #     auto_dismiss=True,
-        #     size_hint=(None, None),
-        #     size=(400, 400),
-        # )
-        # close_button.bind(on_press=popup.dismiss)
-        # popup.open()
+class SummaryButton(Button):
+    path = ObjectProperty()
+    screenmanager = ObjectProperty()
+
+    def on_release(self):
+        self.launch()
+
+    def launch(self):
+        """
+        Open a the species summary screen
+        """
+
+        self.screenmanager.current = "summary"
+        self.screenmanager.get_screen("summary").source_dir = self.path
 
 
 class DataMenuScreen(Screen):
@@ -171,7 +173,13 @@ class DataMenuScreen(Screen):
                 text="Process", path=path, disabled=not btn_disabled
             )
 
-            find_species_btn = Button(text="Summary", disabled=btn_disabled)
+            summary_btn = SummaryButton(
+                text="Summary",
+                path=path,
+                screenmanager=self.manager,
+                disabled=btn_disabled,
+            )
+
             playback_btn = PlaybackButton(
                 text="Playback",
                 path=path,
@@ -183,7 +191,7 @@ class DataMenuScreen(Screen):
             row.add_widget(Image(source=bg_image))
             row.add_widget(Label(text=label))
             row.add_widget(analyze_btn)
-            row.add_widget(find_species_btn)
+            row.add_widget(summary_btn)
             row.add_widget(playback_btn)
             grid.add_widget(row)
 

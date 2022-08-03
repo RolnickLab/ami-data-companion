@@ -1,0 +1,19 @@
+#:kivy 2.1.0
+
+
+<SpeciesSummaryScreen>
+    id: summary_screen
+    ScrollView:
+        id: summary_layout
+        do_scroll_y: True
+        BoxLayout:
+            id: species_list
+            orientation: "vertical" 
+    BoxLayout:
+        id: controls 
+        orientation: "horizontal"
+        size_hint_y: 0.1
+        Button:
+            text: "Exit"
+            on_press: root.exit()
+

@@ -9,6 +9,7 @@ import requests
 import base64
 import io
 import json
+import collections
 
 import PIL
 from plyer import filechooser
@@ -187,6 +188,18 @@ def choose_sample(images, direction, last_sample=None):
     return sample
 
 
+def parse_annotations(annotations, format="aditya"):
+    if format == "aditya":
+        bboxes, _, binary_labels, labels, scores = annotations
+        annotations = [
+            {"bbox": bbox, "label": label, "score": score}
+            for bbox, label, score in zip(bboxes, labels, scores)
+        ]
+        return annotations
+    else:
+        raise NotImplementedError
+
+
 def get_sequential_sample(direction, source_dir, last_sample=None):
     source_dir = pathlib.Path(source_dir)
     annotation_files = find_annotations(source_dir)
@@ -225,11 +238,23 @@ def get_sequential_sample(direction, source_dir, last_sample=None):
         # sample = random.choice(list(annotations.keys()))
         sample = choose_sample(images, direction, last_sample)
         img_path = source_dir / sample
-        bboxes, _, binary_labels, labels, scores = annotations[sample]
-        annotations = [
-            {"bbox": bbox, "label": label, "score": score}
-            for bbox, label, score in zip(bboxes, labels, scores)
-        ]
-        print(annotations)
+        parsed_annotations = parse_annotations(annotations[sample])
 
-    return img_path, annotations
+    return img_path, parsed_annotations
+
+
+def summarize_species(path):
+    """
+    Summarize the data in an annotations file
+    """
+    data = json.load(open(path))
+    species = collections.defaultdict(list)
+
+    for img_path, annotations in data.items():
+        # Aditya's format
+        ants = parse_annotations(annotations)
+        for ant in ants:
+            label = ant["label"]
+            species[label].append((img_path, ant))
+
+    return species
