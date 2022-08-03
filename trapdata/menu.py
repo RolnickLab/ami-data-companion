@@ -36,7 +36,7 @@ from .utils import *
 detect_and_classify = lambda *args, **kwargs: None
 
 
-Builder.load_file("menu.kv")
+Builder.load_file(str(pathlib.Path(__file__).parent / "menu.kv"))
 
 
 class TrapSesionData(Widget):

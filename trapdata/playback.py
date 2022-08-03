@@ -27,9 +27,8 @@ from kivy.uix.screenmanager import Screen
 
 from .utils import *
 
-# SOURCE_DIR = choose_root_directory(cache=False)
 
-Builder.load_file("playback.kv")
+Builder.load_file(str(pathlib.Path(__file__).parent / "playback.kv"))
 
 
 def choose_sample(images, direction, last_sample=None):
