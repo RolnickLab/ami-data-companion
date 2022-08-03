@@ -1,5 +1,6 @@
-kivy
+kivy[base]
 plyer  # cross platform interfaces like file chooser
 black
 Pillow
 python-dateutil
+pyobjus  # MacOSX requirement
