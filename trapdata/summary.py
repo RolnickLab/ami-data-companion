@@ -25,9 +25,19 @@ class SpeciesSummaryScreen(Screen):
             species = summarize_species(annotation_files[0])
 
         layout.clear_widgets()
-        for name, details in species.items():
-            text = f"{name} ({len(details)})"
-            line = Label(text=text, height=20)
+        layout.bind(minimum_height=layout.setter("height"))
+
+        species_counts = [(name, len(details)) for name, details in species.items()]
+        species_counts.sort(key=lambda s: s[1], reverse=True)
+
+        for name, count in species_counts:
+            text = f"{name} ({count})"
+            line = Label(
+                text=text,
+                height="20dp",
+                halign="left",
+            )
+            line.bind(size=line.setter("text_size"))
             layout.add_widget(line)
 
     def exit(self):
