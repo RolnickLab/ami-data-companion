@@ -5,11 +5,18 @@ import pathlib
 import shutil
 
 
+import sys
+
+# REPO_PATH = pathlib.Path(__file__).parent.parent
+
+# @TODO Integrate classification into project
+sys.path.append("/home/michael/Projects/AMI")
+
 from mothAI.trapdata_prediction_scripts.localization_classification import (
     localization_classification,
 )
 
-MODEL_BASE_PATH = pathlib.Path(__file__).parent / "models"
+MODEL_BASE_PATH = pathlib.Path(__file__).parent.parent / "models"
 
 
 def detect_and_classify(source_dir):

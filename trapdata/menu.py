@@ -33,8 +33,9 @@ from kivy.logger import Logger
 
 from .utils import *
 
-# from ..ml import detect_and_classify
-detect_and_classify = lambda *args, **kwargs: None
+from .ml import detect_and_classify
+
+# detect_and_classify = lambda *args, **kwargs: None
 
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "menu.kv"))
@@ -174,7 +175,7 @@ class DataMenuScreen(Screen):
             )
 
             summary_btn = SummaryButton(
-                text="Summary",
+                text="Species List",
                 path=path,
                 screenmanager=self.manager,
                 disabled=btn_disabled,

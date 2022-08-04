@@ -4,3 +4,9 @@ black
 Pillow
 python-dateutil
 pyobjus  # MacOSX requirement
+
+torch
+torchvision
+timm
+opencv_python
+matplotlib
