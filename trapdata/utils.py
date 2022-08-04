@@ -243,7 +243,7 @@ def get_sequential_sample(direction, source_dir, last_sample=None):
     return img_path, parsed_annotations
 
 
-def summarize_species(path):
+def summarize_species(path, best_only=False):
     """
     Summarize the data in an annotations file
     """
@@ -257,4 +257,72 @@ def summarize_species(path):
             label = ant["label"]
             species[label].append((img_path, ant))
 
+    def prune(species):
+        # Pick only the annotation with the top score
+        print("Pruning species")
+        filtered_species = {}
+        for label, ants in species.items():
+            print(label, ants)
+            top_score = -10000
+            for img_path, ant in ants:
+                if ant["score"] > top_score:
+                    filtered_species[label] = {
+                        "image": img_path,
+                        "count": len(ants),
+                        "bbox": ant["bbox"],
+                        "score": ant["score"],
+                    }
+                    top_score = ant["score"]
+
+        # if "nonmoth" not in filtered_species:
+        #     raise Exception("WHERE ARE YOU")
+
+        return filtered_species
+
+    if best_only:
+        species = prune(species)
+
     return species
+
+
+def slugify(s):
+    return s.replace(" ", "_").lower()
+
+
+def parse_annotations_to_kivy_atlas(path):
+    atlas = {}
+    path = pathlib.Path(path)
+    data = json.load(open(path))
+    species = summarize_species(path, best_only=True)
+    for name, ant in species.items():
+        print(name, ant)
+        # Aditya's format
+        # img_path = str(path / img_path)
+        # img_name = pathlib.Path(img_path).name
+        atlas[ant["image"]] = {}
+        img_width, img_height = PIL.Image.open(path.parent / ant["image"]).size
+
+        label = slugify(name)
+        x1, y1, x2, y2 = ant["bbox"]
+        # Reference from bottom left instead of top left
+        y1 = img_height - y1
+        y2 = img_height - y2
+        w = x2 - x1
+        h = y2 - y1
+        atlas[ant["image"]][label] = [x1, y1, w, h]
+
+    fpath = path.parent / "trapdata.atlas"
+    json.dump(atlas, open(fpath, "w"), indent=2)
+
+    print("Atlas data:")
+    print(json.dumps(atlas, indent=2))
+
+    # Test
+
+    # from kivy.atlas import Atlas
+    # atlas_ready = Atlas(str(fpath))
+    # print(atlas_ready.textures.keys())
+    # import ipdb
+
+    # ipdb.set_trace()
+    return fpath

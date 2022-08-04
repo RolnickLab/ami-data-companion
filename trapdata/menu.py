@@ -18,7 +18,7 @@ kivy.require("2.1.0")
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.label import Label
-from kivy.uix.image import Image
+from kivy.uix.image import Image, AsyncImage
 from kivy.uix.button import Button
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
@@ -188,7 +188,7 @@ class DataMenuScreen(Screen):
             )
 
             row = GridLayout(rows=1, cols=5, spacing=10)
-            row.add_widget(Image(source=bg_image))
+            row.add_widget(AsyncImage(source=bg_image))
             row.add_widget(Label(text=label))
             row.add_widget(analyze_btn)
             row.add_widget(summary_btn)
