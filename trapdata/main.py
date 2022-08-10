@@ -1,3 +1,5 @@
+# import asyncio
+
 import kivy
 from kivy.app import App
 from kivy.uix.screenmanager import ScreenManager, Screen
@@ -11,6 +13,12 @@ kivy.require("2.1.0")
 
 
 class TrapDataAnalyzer(App):
+    def on_stop(self):
+        # The Kivy event loop is about to stop, set a stop signal;
+        # otherwise the app window will close, but the Python process will
+        # keep running until all secondary threads exit.
+        self.root.stop.set()
+
     def build(self):
         self.title = "AMI Trap Data Companion"
 
@@ -23,3 +31,6 @@ class TrapDataAnalyzer(App):
 
 def run():
     TrapDataAnalyzer().run()
+    # loop = asyncio.get_event_loop()
+    # loop.run_until_complete(TrapDataAnalyzer().async_run())
+    # loop.close()

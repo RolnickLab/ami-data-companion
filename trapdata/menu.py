@@ -11,8 +11,8 @@ import logging
 import requests
 import base64
 import io
+import threading
 from functools import partial
-from threading import Thread
 
 import kivy
 
@@ -48,18 +48,6 @@ from .ml import detect_and_classify
 # detect_and_classify = lambda *args, **kwargs: None
 
 
-async def say_after(delay, what):
-    await asyncio.sleep(delay)
-    print(what)
-
-
-async def process_async_test(status):
-    print(f"started at {time.strftime('%X')}")
-    await say_after(1, "hello, one second")
-    await say_after(2, "world, two seconds")
-    print(f"completed at {time.strftime('%X')}")
-
-
 Builder.load_file(str(pathlib.Path(__file__).parent / "menu.kv"))
 
 
@@ -83,6 +71,8 @@ class AnalyzeButton(Button):
     popup = ObjectProperty()
     bgtask = ObjectProperty()
 
+    exit_event = ObjectProperty()
+
     def on_release(self):
         if not self.popup:
             self.make_popup()
@@ -93,20 +83,25 @@ class AnalyzeButton(Button):
         if not self.running:
             self.running = True
             self.progress = 0
-            self.bgtask = Thread(target=self.analyze)
+            self.exit_event = threading.Event()
+            self.bgtask = threading.Thread(
+                target=self.analyze, daemon=True, name=self.path.name
+            )
             self.bgtask.start()
 
     def stop(self, *args):
-        raise NotImplementedError
         if self.running:
             self.running = False
             if self.bgtask:
-                self.bgtask.stop()
+                self.exit_event.set()
 
     def analyze(self):
+        # annotations = detect_and_classify(self.path)
         while self.progress < 20:
             time.sleep(0.5)
             self.progress += 1
+            if self.exit_event.is_set():
+                break
         self.running = False
 
         # annotations = detect_and_classify(self.path)
