@@ -304,7 +304,9 @@ def parse_annotations_to_kivy_atlas(path):
         # Aditya's format
         # img_path = str(path / img_path)
         # img_name = pathlib.Path(img_path).name
-        atlas[ant["image"]] = {}
+        if ant["image"] not in atlas:
+            atlas[ant["image"]] = {}
+
         img_width, img_height = PIL.Image.open(path.parent / ant["image"]).size
 
         label = slugify(name)
