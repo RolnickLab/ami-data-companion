@@ -269,8 +269,15 @@ def summarize_species(path, best_only=False):
         for label, ants in species.items():
             # print(label, ants)
             top_score = -10000
+            top_pixels = 0
             for img_path, ant in ants:
-                if ant["score"] > top_score:
+                x1, y1, x2, y2 = ant["bbox"]
+                pixels = (x2 - x1) * (y2 - y1)
+                if (
+                    ant["score"] > top_score
+                    and ant["label"] not in NULL_DETECTION_LABELS
+                ):
+                    # if pixels > top_pixels:
                     filtered_species[label] = {
                         "image": img_path,
                         "count": len(ants),
@@ -278,6 +285,7 @@ def summarize_species(path, best_only=False):
                         "score": ant["score"],
                     }
                     top_score = ant["score"]
+                    top_pixels = pixels
 
         # if "nonmoth" not in filtered_species:
         #     raise Exception("WHERE ARE YOU")
