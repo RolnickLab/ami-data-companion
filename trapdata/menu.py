@@ -99,7 +99,7 @@ class AnalyzeButton(Button):
             self.exit_event.set()
 
     def increment_progress(self, clk):
-        print(self.bgtask)
+        # print(self.bgtask)
         self.progress += 1
 
     def analyze(self):
@@ -174,36 +174,38 @@ class AnalyzeButton(Button):
                 Clock.unschedule(self.progress_clock)
 
 
-class PlaybackButton(Button):
+class LaunchScreenButton(Button):
     path = ObjectProperty()
-    screenmanager = ObjectProperty()
+    screenname = StringProperty(allownone=True)
+    screenmanager = ObjectProperty(allownone=True)
 
     def on_release(self):
         self.launch()
 
     def launch(self):
         """
-        Review images and their annotations
+        Open a the the specified screen
         """
 
-        self.screenmanager.current = "playback"
-        self.screenmanager.get_screen("playback").source_dir = self.path
+        if self.screenmanager and self.screenname:
+            self.screenmanager.current = self.screenname
+            self.screenmanager.get_screen(self.screenname).source_dir = self.path
 
 
-class SummaryButton(Button):
+class ReportButton(Button):
     path = ObjectProperty()
-    screenmanager = ObjectProperty()
 
     def on_release(self):
-        self.launch()
-
-    def launch(self):
-        """
-        Open a the species summary screen
-        """
-
-        self.screenmanager.current = "summary"
-        self.screenmanager.get_screen("summary").source_dir = self.path
+        fname = export_report(self.path)
+        label_text = f"Report saved to: \n{fname}"
+        popup = Popup(
+            title="Results",
+            content=Label(text=label_text),
+            size_hint=(None, None),
+            size=(f"550dp", 400),
+            auto_dismiss=True,
+        )
+        popup.open()
 
 
 class DataMenuScreen(Screen):
@@ -245,26 +247,35 @@ class DataMenuScreen(Screen):
                 path=path,  # disabled=not btn_disabled
             )
 
-            summary_btn = SummaryButton(
+            summary_btn = LaunchScreenButton(
                 text="Species List",
                 path=path,
                 screenmanager=self.manager,
+                screenname="summary",
                 disabled=btn_disabled,
             )
 
-            playback_btn = PlaybackButton(
+            playback_btn = LaunchScreenButton(
                 text="Playback",
                 path=path,
                 screenmanager=self.manager,
+                screenname="playback",
                 disabled=btn_disabled,
             )
 
-            row = GridLayout(rows=1, cols=5, spacing=10)
+            report_btn = ReportButton(
+                text="Report",
+                path=path,
+                disabled=btn_disabled,
+            )
+
+            row = GridLayout(rows=1, cols=6, spacing=10)
             row.add_widget(AsyncImage(source=bg_image))
             row.add_widget(Label(text=label))
             row.add_widget(analyze_btn)
             row.add_widget(summary_btn)
             row.add_widget(playback_btn)
+            row.add_widget(report_btn)
             grid.add_widget(row)
 
 

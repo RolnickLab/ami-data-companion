@@ -1,17 +1,21 @@
+import os
 import pathlib
 import logging
 import pathlib
 import random
 import tempfile
 import dateutil.parser
+from dateutil import tz
 import logging
 import requests
 import base64
 import io
 import json
+import csv
 import collections
 
 import PIL
+import PIL.ExifTags
 from plyer import filechooser
 
 
@@ -22,6 +26,7 @@ logger.setLevel(logging.DEBUG)
 SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg")
 SUPPORTED_ANNOTATION_PATTERNS = ("detections.json", "megadetections.json")
 TEMPORARY_BASE_PATH = "/media/michael/LaCie/AMI/"
+NULL_DETECTION_LABELS = ["nonmoth"]
 
 
 def cache_dir(path=None):
@@ -262,7 +267,7 @@ def summarize_species(path, best_only=False):
         print("Pruning species")
         filtered_species = {}
         for label, ants in species.items():
-            print(label, ants)
+            # print(label, ants)
             top_score = -10000
             for img_path, ant in ants:
                 if ant["score"] > top_score:
@@ -295,7 +300,7 @@ def parse_annotations_to_kivy_atlas(path):
     data = json.load(open(path))
     species = summarize_species(path, best_only=True)
     for name, ant in species.items():
-        print(name, ant)
+        # print(name, ant)
         # Aditya's format
         # img_path = str(path / img_path)
         # img_name = pathlib.Path(img_path).name
@@ -314,8 +319,8 @@ def parse_annotations_to_kivy_atlas(path):
     fpath = path.parent / "trapdata.atlas"
     json.dump(atlas, open(fpath, "w"), indent=2)
 
-    print("Atlas data:")
-    print(json.dumps(atlas, indent=2))
+    # print("Atlas data:")
+    # print(json.dumps(atlas, indent=2))
 
     # Test
 
@@ -326,3 +331,65 @@ def parse_annotations_to_kivy_atlas(path):
 
     # ipdb.set_trace()
     return fpath
+
+
+def get_exif(img_path):
+    """
+    Read the EXIF tags in an image file
+    """
+    img = PIL.Image.open(img_path)
+    img_exif = img.getexif()
+    tags = {}
+
+    for key, val in img_exif.items():
+        if key in PIL.ExifTags.TAGS:
+            name = PIL.ExifTags.TAGS[key]
+            print(f"{name}: {val}")
+            tags[name] = val
+
+    return tags
+
+
+def get_image_timestamp(img_path):
+    exif = get_exif(img_path)
+    offset = exif["TimeZoneOffset"]
+    datestring = f'{exif["DateTime"]} {offset}'
+    date = dateutil.parser.parse(datestring)
+    return date
+
+
+def export_report(path, *args):
+    path = pathlib.Path(path)
+    annotation_files = find_annotations(path)
+    if not annotation_files:
+        print("No annotation files found at", path)
+        data = {}
+    else:
+        data = json.load(open(annotation_files[0]))
+
+    fname = path / "report.csv"
+    records = []
+
+    print("Generating report")
+    for img_fname, annotations in data.items():
+        # Aditya's format
+        ants = parse_annotations(annotations)
+        for ant in ants:
+            ant["image"] = img_fname
+            ant["time"] = get_image_timestamp(path / img_fname)
+            records.append(ant)
+
+    if records:
+        header = records[0].keys()
+    else:
+        header = []
+
+    print("Saving report to", fname)
+    with open(fname, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        for record in records:
+            if record["label"] not in NULL_DETECTION_LABELS:
+                writer.writerow(record.values())
+
+    return fname

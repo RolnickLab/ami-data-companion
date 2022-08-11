@@ -41,13 +41,15 @@ class SpeciesSummaryScreen(Screen):
         layout.add_widget(row)
 
     def load_species(self, path):
-        print(self.ids)
+        # print(self.ids)
         layout = self.ids.species_list
         annotation_files = find_annotations(path)
         if not annotation_files:
             species = []
         else:
-            species = summarize_species(annotation_files[0])
+            print(path)
+            print(annotation_files)
+            species = summarize_species(annotation_files[0], best_only=True)
             fname = parse_annotations_to_kivy_atlas(annotation_files[0])
 
         layout.clear_widgets()

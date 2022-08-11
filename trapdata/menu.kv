@@ -9,10 +9,9 @@
         padding: 0
         spacing: 0
 
-        GridLayout:
+        BoxLayout:
+            orientation: "vertical"
             id: nightly_folders
-            cols: 1
-            rows: 8
             padding: 20
             spacing: 20
 
@@ -24,4 +23,6 @@
             Button:
                 text: "Choose Directory"
                 on_press: root.choose_root_directory() 
+            Button:
+                text: "Settings"
 
