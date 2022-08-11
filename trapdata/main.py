@@ -1,5 +1,6 @@
 # import asyncio
 
+import asyncio
 import kivy
 from kivy.app import App
 from kivy.uix.screenmanager import ScreenManager, Screen
@@ -30,7 +31,7 @@ class TrapDataAnalyzer(App):
 
 
 def run():
-    TrapDataAnalyzer().run()
-    # loop = asyncio.get_event_loop()
-    # loop.run_until_complete(TrapDataAnalyzer().async_run())
-    # loop.close()
+    # TrapDataAnalyzer().run()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(TrapDataAnalyzer().async_run())
+    loop.close()

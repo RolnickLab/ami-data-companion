@@ -11,6 +11,7 @@ import sys
 
 # @TODO Integrate classification into project
 sys.path.append("/home/michael/Projects/AMI")
+sys.path.append("/Users/michael/Projects/AMI")
 
 from mothAI.trapdata_prediction_scripts.localization_classification import (
     localization_classification,

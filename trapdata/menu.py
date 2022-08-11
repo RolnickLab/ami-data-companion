@@ -84,25 +84,41 @@ class AnalyzeButton(Button):
             self.running = True
             self.progress = 0
             self.exit_event = threading.Event()
-            self.bgtask = threading.Thread(
-                target=self.analyze, daemon=True, name=self.path.name
+            # self.bgtask = threading.Thread(
+            #     target=self.analyze, daemon=True, name=self.path.name
+            # )
+            # self.bgtask.start()
+            print("Using asyncio again")
+            self.bgtask = asyncio.get_event_loop().create_task(
+                self.analyze(), name=self.path.name
             )
-            self.bgtask.start()
+            self.bgtask.add_done_callback(self.done)
 
     def stop(self, *args):
         if self.running:
             self.running = False
             if self.bgtask:
-                self.exit_event.set()
+                # self.exit_event.set()
+                self.bgtask.cancel()
 
-    def analyze(self):
-        # annotations = detect_and_classify(self.path)
-        while self.progress < 20:
-            time.sleep(0.5)
-            self.progress += 1
-            if self.exit_event.is_set():
-                break
-        self.running = False
+    def done(self, *args):
+        print("DONE!")
+        result = self.bgtask.result()
+        print(result)
+        self.status = f"Task Result: {result}"
+
+    async def analyze(self):
+        annotations = detect_and_classify(self.path)
+        return annotations
+        # while self.progress < 10:
+        #     # time.sleep(0.5)
+        #     await asyncio.sleep(1)
+        #     self.progress += 1
+        #     if self.exit_event.is_set():
+        #         break
+        #     print(self.bgtask)
+        # self.running = False
+        # return "You got it!"
 
         # annotations = detect_and_classify(self.path)
         # images = find_images(self.path)
