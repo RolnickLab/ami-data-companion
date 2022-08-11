@@ -70,8 +70,8 @@ class AnalyzeButton(Button):
     progress_label = ObjectProperty()
     popup = ObjectProperty()
     bgtask = ObjectProperty()
-
     exit_event = ObjectProperty()
+    progress_clock = ObjectProperty(allownone=True)
 
     def on_release(self):
         if not self.popup:
@@ -85,69 +85,93 @@ class AnalyzeButton(Button):
             self.progress = 0
             self.exit_event = threading.Event()
             self.bgtask = threading.Thread(
-                target=self.analyze, daemon=True, name=self.path.name
+                target=self.analyze,
+                daemon=True,
+                name=self.path.name,
             )
             self.bgtask.start()
+            # self.bgtask.add_done_callback(self.complete)
+            self.progress_clock = Clock.schedule_interval(self.increment_progress, 1)
 
     def stop(self, *args):
-        if self.running:
-            self.running = False
-            if self.bgtask:
-                self.exit_event.set()
+        self.running = False
+        if self.bgtask:
+            self.exit_event.set()
+
+    def increment_progress(self, clk):
+        print(self.bgtask)
+        self.progress += 1
 
     def analyze(self):
         # annotations = detect_and_classify(self.path)
-        while self.progress < 20:
-            time.sleep(0.5)
-            self.progress += 1
-            if self.exit_event.is_set():
-                break
-        self.running = False
+        # while self.progress < 20:
+        #     time.sleep(0.5)
+        #     self.progress += 1
+        #     if self.exit_event.is_set():
+        #         break
 
-        # annotations = detect_and_classify(self.path)
+        detect_and_classify(self.path)
+        # @TODO this can't be in the separate bgtask thread because it modifies properties
+        self.complete()
+        return True
         # images = find_images(self.path)
         # img_path = random.choice(images)
         # results = predict_image(img_path)
         # self.show_results(img_path, results)
 
     def complete(self):
+        self.running = False
+        self.background_color = (0, 1, 0, 1)
         for widget in self.parent.children:
             # @TODO should we register nightly folders by ID somewhere?
             if isinstance(widget, Button):
                 widget.disabled = False
-        self.disabled = False
 
     def make_popup(self):
         if not self.popup:
+            # @TODO this would be simpler in a kv file now
             content = GridLayout(rows=5, cols=1, spacing=5)
+            status = GridLayout(rows=1, cols=2, spacing=0)
             self.status_label = Label(text=f"Running: {self.running}")  # , id="status")
-            self.progress_label = Label(
-                text=f"Progress: {self.progress}"  # , id="progress"
-            )
-            content.add_widget(self.status_label)
-            content.add_widget(self.progress_label)
-            close_button = Button(text="Close progress", size=(100, 20))
+            self.progress_label = Label(text=f"")
+            status.add_widget(self.status_label)
+            status.add_widget(self.progress_label)
+            content.add_widget(status)
+            close_button = Button(text="Close", size=(100, 20))
             start_button = Button(text="Start", size=(100, 20))
             start_button.bind(on_press=self.start)
             stop_button = Button(text="Stop", size=(100, 20))
             stop_button.bind(on_press=self.stop)
             content.add_widget(start_button)
-            content.add_widget(stop_button)
+            # content.add_widget(stop_button)
             content.add_widget(close_button)
             self.popup = Popup(
-                title="Status",
+                title=f"Detect and classify moths in {self.path.name}",
                 content=content,
                 auto_dismiss=True,
                 size_hint=(None, None),
                 size=(400, 400),
             )
             close_button.bind(on_press=self.popup.dismiss)
+            self.popup.ids["start_button"] = start_button
+            self.popup.ids["stop_button"] = stop_button
 
     def on_progress(self, instance, value):
-        self.progress_label.text = f"Progress: {value}"
+        self.progress_label.text = f"{value} seconds"
 
     def on_running(self, instance, value):
         self.status_label.text = f"Running: {value}"
+        if self.popup and value == True:
+            self.popup.ids["start_button"].disabled = True
+            self.popup.ids["stop_button"].disabled = False
+            self.initial_bg_color = self.background_color
+            self.background_color = (1, 0, 0, 1)
+        else:
+            self.popup.ids["start_button"].disabled = False
+            self.popup.ids["stop_button"].disabled = True
+            self.background_color = getattr(self, "initial_bg_color", None)
+            if self.progress_clock:
+                Clock.unschedule(self.progress_clock)
 
 
 class PlaybackButton(Button):
@@ -217,7 +241,8 @@ class DataMenuScreen(Screen):
             btn_disabled = False if annotations else True
 
             analyze_btn = AnalyzeButton(
-                text="Process", path=path, disabled=not btn_disabled
+                text="Process",
+                path=path,  # disabled=not btn_disabled
             )
 
             summary_btn = SummaryButton(
