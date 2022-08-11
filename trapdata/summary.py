@@ -47,20 +47,19 @@ class SpeciesSummaryScreen(Screen):
         if not annotation_files:
             species = []
         else:
-            print(path)
-            print(annotation_files)
             species = summarize_species(annotation_files[0], best_only=True)
             fname = parse_annotations_to_kivy_atlas(annotation_files[0])
 
         layout.clear_widgets()
         layout.bind(minimum_height=layout.setter("height"))
 
-        species_counts = [(name, len(details)) for name, details in species.items()]
-        species_counts.sort(key=lambda s: s[1], reverse=True)
+        species_counts = [(name, details) for name, details in species.items()]
+        species_counts.sort(key=lambda species: species[1]["count"], reverse=True)
 
-        for i, (name, count) in enumerate(species_counts):
+        for i, (name, details) in enumerate(species_counts):
             Clock.schedule_once(
-                partial(self.add_row, layout, name, count), i / len(species_counts)
+                partial(self.add_row, layout, name, details["count"]),
+                i / len(species_counts),
             )
 
     def exit(self):
