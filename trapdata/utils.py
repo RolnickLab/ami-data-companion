@@ -122,12 +122,13 @@ def find_timestamped_folders(path):
     [PosixPath('tmp/2022_05_14')]
     """
     print("Looking for nightly timestamped folders")
-    nights = {}
+    nights = collections.OrderedDict()
 
     def _preprocess(name):
         return name.replace("_", "-")
 
-    for d in pathlib.Path(path).iterdir():
+    dirs = sorted(list(pathlib.Path(path).iterdir()))
+    for d in dirs:
         # @TODO use yield?
         try:
             date = dateutil.parser.parse(_preprocess(d.name))
@@ -216,7 +217,7 @@ def get_sequential_sample(direction, source_dir, last_sample=None):
     if "images" in annotations:
         # This is from MegaDetector
 
-        samples = list(annotations["images"])
+        samples = sorted(list(annotations["images"]))
         # sample = random.choice(list(annotations["images"]))
         samples = {s["file"]: s for s in samples}
         filenames = list(samples.keys())
@@ -239,7 +240,7 @@ def get_sequential_sample(direction, source_dir, last_sample=None):
     else:
         # Assume this is Aditya's format
 
-        images = list(annotations.keys())
+        images = sorted(list(annotations.keys()))
         # sample = random.choice(list(annotations.keys()))
         sample = choose_sample(images, direction, last_sample)
         img_path = source_dir / sample

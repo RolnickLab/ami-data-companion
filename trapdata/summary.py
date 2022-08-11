@@ -33,7 +33,7 @@ class SpeciesSummaryScreen(Screen):
         atlas_path = f"atlas://{self.source_dir}/trapdata/{slugify(name)}"
         # print("Atlas path", atlas_path)
         row = GridLayout(
-            rows=1, cols=3, spacing=20, padding=20, height=220, size_hint_y=None
+            rows=1, cols=3, spacing=20, padding=20, height=240, size_hint_y=None
         )
         row.add_widget(Image(source=atlas_path, size_hint_y=None, height=150))
         row.add_widget(label)
@@ -57,10 +57,11 @@ class SpeciesSummaryScreen(Screen):
         species_counts.sort(key=lambda species: species[1]["count"], reverse=True)
 
         for i, (name, details) in enumerate(species_counts):
-            Clock.schedule_once(
-                partial(self.add_row, layout, name, details["count"]),
-                i / len(species_counts),
-            )
+            self.add_row(layout, name, details["count"])
+            # Clock.schedule_once(
+            #     partial(self.add_row, layout, name, details["count"]),
+            #     i / len(species_counts),
+            # )
 
     def exit(self):
         self.manager.current = "menu"
