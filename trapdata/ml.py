@@ -13,7 +13,7 @@ import sys
 sys.path.append("/home/michael/Projects/AMI")
 sys.path.append("/Users/michael/Projects/AMI")
 
-from mothAI.trapdata_prediction_scripts.localization_classification import (
+from .localization_classification_batch import (
     localization_classification,
 )
 
@@ -38,3 +38,8 @@ def detect_and_classify(source_dir):
     shutil.copy(str(annotations_path), str(annotations_target_path))
     annotations = json.load(open(annotations_target_path))
     return annotations
+
+
+if __name__ == "__main__":
+    source_dir = sys.argv[1]
+    detect_and_classify(source_dir)

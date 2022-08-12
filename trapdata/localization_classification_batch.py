@@ -1,27 +1,24 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-
-"""
-Author       : Aditya Jain
-Date Started : July 15, 2022
-About        : This file does DL-based localization and classification on raw images and saves annotation information
-"""
+import pathlib
+import json
+import argparse
+import os
+import multiprocessing
+import functools
+import time
 
 import torch
+from torch.utils.data import Dataset, DataLoader
 import torchvision.models as torchmodels
 import torchvision
-import os
 import numpy as np
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision import transforms
 from PIL import Image
 import matplotlib.pyplot as plt
-import cv2
-import json
 import timm
-import argparse
 
+
+LOCALIZATION_SCORE_THRESHOLD = 0.99
 
 # Model Inference Class Definition
 class ModelInference:
@@ -41,6 +38,17 @@ class ModelInference:
 
         return id2categ
 
+    def _load_model(self, model_path, num_classes):
+        model = timm.create_model(
+            "tf_efficientnetv2_b3", weights=None, num_classes=num_classes
+        )
+        model = model.to(self.device)
+        model.load_state_dict(
+            torch.load(model_path, map_location=torch.device(self.device))
+        )
+
+        return model
+
     def _get_transforms(self):
         mean, std = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
 
@@ -52,26 +60,15 @@ class ModelInference:
             ]
         )
 
-    def _load_model(self, model_path, num_classes):
-        model = timm.create_model(
-            "tf_efficientnetv2_b3", pretrained=False, num_classes=num_classes
-        )
-        model = model.to(self.device)
-        model.load_state_dict(
-            torch.load(model_path, map_location=torch.device(self.device))
-        )
-
-        return model
-
-    def predict(self, images, confidence=False):
+    def predict(self, data, confidence=False):
         with torch.no_grad():
             # @TODO can these be done in a single batch?
-            images = [self.transforms(img) for img in images]
             images = [img.to(self.device) for img in images]
             images = [img.unsqueeze_(0) for img in images]
             images = torch.cat(images, 0)
+            data = data.to(self.device)
 
-            predictions = self.model(images)
+            predictions = self.model(data)
             predictions = torch.nn.functional.softmax(predictions, dim=1)
             predictions = predictions.cpu().numpy()
 
@@ -143,60 +140,22 @@ def predict_batch_specific(images, model_path, category_map_json, device):
 
 def prep_image(img_path):
     print("Processing image", img_path)
-    transform = transforms.Compose([transforms.ToTensor()])
-    raw_image = Image.open(img_path)
-    image_size = np.shape(raw_image)
-    total_area = image_size[0] * image_size[1]
-    image = transform(raw_image)
     return image
 
 
-def localization_classification(args):
-    """main function for localization and classification"""
+def process_batch(image_names, model, directory, device, args):
+    directory = pathlib.Path(directory)
+    annotations = {}
 
-    data_dir = args.data_dir
-    image_folder = args.image_folder
-    data_path = data_dir + image_folder + "/"
-    save_path = data_dir
-    annot_file = "localize_classify_annotation-" + image_folder + ".json"
-
-    # Get cpu or gpu device for training.
-    # device = "cuda" if torch.cuda.is_available() else "cpu"
-    device = "cpu"
-
-    # Loading Localization Model
-    model_localize = torchvision.models.detection.fasterrcnn_resnet50_fpn(
-        pretrained=False
-    )
-    num_classes = 2  # 1 class (person) + background
-    in_features = model_localize.roi_heads.box_predictor.cls_score.in_features
-    model_localize.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
-    model_path = args.model_localize
-    checkpoint = torch.load(model_path, map_location=device)
-    model_localize.load_state_dict(checkpoint["model_state_dict"])
-    model_localize = model_localize.to(device)
-    model_localize.eval()
-
-    # Prediction on data
-    annot_data = {}
-    SCORE_THR = 0.99
-    image_list = [
-        p
-        for p in os.listdir(data_path)
-        if p.lower().endswith(".jpg") and not p.startswith(".")
-    ]
-
-    images = [prep_image(data_path + img) for img in image_list]
+    images = [prep_image(directory / img) for img in image_names]
     image_batch = [torch.unsqueeze(img, 0).to(device) for img in images]
-    # @TODO need to determine batch size and not run out of memory
     image_batch = torch.cat(image_batch, 0)
 
-    print("Finding objects in image batch")
-    results = model_localize(image_batch)
-    print(results)
+    print(f"Detecting objects in {image_batch.shape[0]} images")
+    results = model(image_batch)
 
-    for img_path, img, output in zip(image_list, images, results):
-        bboxes = output["boxes"][output["scores"] > SCORE_THR]
+    for image_name, img, output in zip(image_names, images, results):
+        bboxes = output["boxes"][output["scores"] > LOCALIZATION_SCORE_THRESHOLD]
         print(f"Found {len(bboxes)} objects in", img)
 
         bbox_list = []
@@ -228,19 +187,167 @@ def localization_classification(args):
             img_crops, args.model_moth, args.category_map_moth, device
         )
 
-        annot_data[img_path] = [
+        annotations[image_name] = [
             bbox_list,
             label_list,
             class_list,
             subclass_list,
             conf_list,
         ]
+    return annotations
 
-    print("Saving annotations")
-    with open(save_path + annot_file, "w") as outfile:
-        json.dump(annot_data, outfile)
 
-    return save_path + annot_file
+def get_transforms(input_size):
+    mean, std = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
+
+    return transforms.Compose(
+        [
+            transforms.Resize((input_size, input_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean, std),
+        ]
+    )
+
+
+class ImageDataset(torch.utils.data.Dataset):
+    def __init__(self, directory, image_names, input_size):
+        super().__init__()
+
+        self.input_size = input_size
+        self.directory = pathlib.Path(directory)
+        self.image_names = image_names
+        # self.pil_imgs = pil_imgs
+        self.transform = get_transforms(input_size)  # some infer transform
+
+    def __len__(self):
+        return len(self.image_names)
+
+    def __getitem__(self, idx):
+        img_name = self.image_names[idx]
+        img_path = self.directory / img_name
+        pil_image = Image.open(img_path)
+        return str(img_path), self.transform(pil_image)
+
+
+def load_localization_model(model_path, device):
+    print(f'Loading localization model with checkpoint "{model_path}"')
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=None)
+    num_classes = 2  # 1 class (object) + background
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+    checkpoint = torch.load(model_path, map_location=device)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model = model.to(device)
+    model.eval()
+    return model
+
+
+def process_localization_output(output):
+    bboxes = output["boxes"][output["scores"] > LOCALIZATION_SCORE_THRESHOLD]
+    print(
+        f"Keeping {len(bboxes)} out of {len(output['boxes'])} objects found (threshold: {LOCALIZATION_SCORE_THRESHOLD})"
+    )
+
+    bbox_list = []
+    label_list = output["labels"]  # Should always be 1 for "object"
+    assert all([l == 1 for l in output["labels"]])
+
+    for box in bboxes:
+        box_numpy = box.detach().cpu().numpy()
+        bbox_list.append(
+            [
+                int(box_numpy[0]),
+                int(box_numpy[1]),
+                int(box_numpy[2]),
+                int(box_numpy[3]),
+            ]
+        )
+    return bboxes
+
+
+def localization_classification(args):
+    """main function for localization and classification"""
+
+    torch.cuda.synchronize()
+    start = time.time()
+
+    data_dir = pathlib.Path(args.data_dir)
+    image_folder = pathlib.Path(args.image_folder)
+    data_path = data_dir / image_folder
+    save_path = data_dir
+    annot_file = f"localize_classify_annotation-{image_folder.name}.json"
+    annotations = {}
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
+    # device = "cpu"
+    # device = "cuda"
+
+    image_list = [
+        p
+        for p in os.listdir(data_path)
+        if p.lower().endswith(".jpg") and not p.startswith(".")
+    ]
+
+    model = load_localization_model(args.model_localize, device)
+
+    input_size = 300
+    print(f"Preparing dataset of {len(image_list)} images")
+    dataset = ImageDataset(
+        directory=data_path, image_names=image_list, input_size=input_size
+    )
+
+    # @TODO need to determine batch size and not run out of memory
+    if device == "cuda":
+        batch_size = 12
+        num_workers = 1
+    else:
+        batch_size = 32
+        num_workers = multiprocessing.cpu_count()
+        # num_workers = 4
+
+    print(
+        f"Preparing dataloader with batch size of {batch_size} and {num_workers} workers on device: {device}"
+    )
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
+    results = []
+
+    with torch.no_grad():
+        for img_paths, data in dataloader:
+            print(f"Looking for objects in {len(img_paths)} images")
+            torch.cuda.synchronize()
+            batch_start = time.time()
+            data = data.to(device, non_blocking=True)
+            output = model(data)
+            output = [process_localization_output(o) for o in output]
+            results += list(zip(img_paths, output))
+            torch.cuda.synchronize()
+            batch_end = time.time()
+            elapsed = batch_end - batch_start
+            images_per_second = len(image_list) / elapsed
+            print(
+                f"Time per batch: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second"
+            )
+
+    torch.cuda.synchronize()
+    end = time.time()
+    elapsed = end - start
+    images_per_second = len(image_list) / elapsed
+    print(
+        f"Localization time: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second (with startup)"
+    )
+
+    # print("Saving annotations")
+    # with open(save_path + annot_file, "w") as outfile:
+    #     json.dump(annotations, outfile)
+
+    # return save_path / annot_file
 
 
 if __name__ == "__main__":
