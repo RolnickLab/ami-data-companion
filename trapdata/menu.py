@@ -101,6 +101,8 @@ class AnalyzeButton(Button):
     def increment_progress(self, clk):
         # print(self.bgtask)
         self.progress += 1
+        if not self.bgtask.is_alive():
+            self.stop()
 
     def analyze(self):
         # annotations = detect_and_classify(self.path)
