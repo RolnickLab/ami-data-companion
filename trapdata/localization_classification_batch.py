@@ -60,15 +60,15 @@ class ModelInference:
             ]
         )
 
-    def predict(self, data, confidence=False):
+    def predict(self, images, confidence=False):
         with torch.no_grad():
             # @TODO can these be done in a single batch?
+            images = [self.transforms(img) for img in images]
             images = [img.to(self.device) for img in images]
             images = [img.unsqueeze_(0) for img in images]
             images = torch.cat(images, 0)
-            data = data.to(self.device)
 
-            predictions = self.model(data)
+            predictions = self.model(images)
             predictions = torch.nn.functional.softmax(predictions, dim=1)
             predictions = predictions.cpu().numpy()
 
@@ -138,46 +138,19 @@ def predict_batch_specific(images, model_path, category_map_json, device):
     return labels, scores
 
 
-def prep_image(img_path):
-    print("Processing image", img_path)
-    return image
-
-
-def process_batch(image_names, model, directory, device, args):
-    directory = pathlib.Path(directory)
+def classify_bboxes(localization_results, device, args):
     annotations = {}
+    label_list = (
+        []
+    )  # Placeholder, @TODO remove from annotations. Was object detection labels.
 
-    images = [prep_image(directory / img) for img in image_names]
-    image_batch = [torch.unsqueeze(img, 0).to(device) for img in images]
-    image_batch = torch.cat(image_batch, 0)
+    for image_path, bbox_list in localization_results:
 
-    print(f"Detecting objects in {image_batch.shape[0]} images")
-    results = model(image_batch)
-
-    for image_name, img, output in zip(image_names, images, results):
-        bboxes = output["boxes"][output["scores"] > LOCALIZATION_SCORE_THRESHOLD]
-        print(f"Found {len(bboxes)} objects in", img)
-
-        bbox_list = []
-        label_list = []
-        binary_predictions = []  # moth / non-moth
-        specific_predictions = []  # moth species / non-moth
-        conf_list = []  # confidence list
-        # area_list = []  # percentage area of the sheet
-
-        for box in bboxes:
-            label_list.append(1)  # Not used?
-            box_numpy = box.detach().cpu().numpy()
-            bbox_list.append(
-                [
-                    int(box_numpy[0]),
-                    int(box_numpy[1]),
-                    int(box_numpy[2]),
-                    int(box_numpy[3]),
-                ]
-            )
-
+        print(f"Cropping bboxes")
+        img = Image.open(image_path)
+        img = transforms.ToTensor()(img)
         img_crops = crop_bboxes(img, bbox_list)
+
         print(f"Predicting {len(img_crops)} with binary classifier.")
         class_list, _ = predict_batch(
             img_crops, args.model_moth_nonmoth, args.category_map_moth_nonmoth, device
@@ -187,6 +160,7 @@ def process_batch(image_names, model, directory, device, args):
             img_crops, args.model_moth, args.category_map_moth, device
         )
 
+        image_name = pathlib.Path(image_path).name
         annotations[image_name] = [
             bbox_list,
             label_list,
@@ -197,7 +171,7 @@ def process_batch(image_names, model, directory, device, args):
     return annotations
 
 
-def get_transforms(input_size):
+def classification_transforms(input_size):
     mean, std = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
 
     return transforms.Compose(
@@ -209,18 +183,24 @@ def get_transforms(input_size):
     )
 
 
-class ImageDataset(torch.utils.data.Dataset):
-    def __init__(self, directory, image_names, input_size):
+class LocalizationDataset(torch.utils.data.Dataset):
+    def __init__(self, directory, image_names):
         super().__init__()
 
-        self.input_size = input_size
         self.directory = pathlib.Path(directory)
         self.image_names = image_names
         # self.pil_imgs = pil_imgs
-        self.transform = get_transforms(input_size)  # some infer transform
+        self.transform = self._get_transforms()
 
     def __len__(self):
         return len(self.image_names)
+
+    def _get_transforms(self):
+        return transforms.Compose(
+            [
+                transforms.ToTensor(),
+            ]
+        )
 
     def __getitem__(self, idx):
         img_name = self.image_names[idx]
@@ -262,7 +242,7 @@ def process_localization_output(output):
                 int(box_numpy[3]),
             ]
         )
-    return bboxes
+    return bboxes.cpu().numpy().tolist()
 
 
 def localization_classification(args):
@@ -293,9 +273,7 @@ def localization_classification(args):
 
     input_size = 300
     print(f"Preparing dataset of {len(image_list)} images")
-    dataset = ImageDataset(
-        directory=data_path, image_names=image_list, input_size=input_size
-    )
+    dataset = LocalizationDataset(directory=data_path, image_names=image_list)
 
     # @TODO need to determine batch size and not run out of memory
     if device == "cuda":
@@ -343,11 +321,13 @@ def localization_classification(args):
         f"Localization time: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second (with startup)"
     )
 
-    # print("Saving annotations")
-    # with open(save_path + annot_file, "w") as outfile:
-    #     json.dump(annotations, outfile)
+    annotations = classify_bboxes(results, device, args)
 
-    # return save_path / annot_file
+    print("Saving annotations")
+    with open(save_path / annot_file, "w") as outfile:
+        json.dump(annotations, outfile)
+
+    return save_path / annot_file
 
 
 if __name__ == "__main__":
