@@ -1,3 +1,4 @@
+import sys
 import os
 import re
 import pathlib
@@ -15,6 +16,7 @@ import json
 import csv
 import collections
 import time
+import datetime
 
 import PIL.ExifTags, PIL.Image
 from plyer import filechooser
@@ -22,11 +24,19 @@ from plyer import filechooser
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+logger.addHandler(logging.StreamHandler())
+
+# if hasattr(sys.modules["__main__"], "_SpoofOut"):
+#     # If running tests,
+#     logger.setLevel(logging.DEBUG)
+#     logger.addHandler(logging.StreamHandler())
 
 
 SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg")
 SUPPORTED_ANNOTATION_PATTERNS = ("detections.json", "megadetections.json")
-TEMPORARY_BASE_PATH = "/media/michael/LaCie/AMI/"
+# TEST_IMAGES_BASE_PATH = "/media/michael/LaCie/AMI/"
+# TEST_IMAGES_BASE_PATH = "/home/michael/Projects/AMI/TRAPDATA/Moth Week/"
+TEST_IMAGES_BASE_PATH = "/home/michael/Projects/AMI/TRAPDATA/Quebec/"
 NULL_DETECTION_LABELS = ["nonmoth"]
 
 
@@ -70,9 +80,7 @@ def delete_setting(key):
         return None
 
 
-def choose_directory(
-    cache=True, setting_key="last_root_directory", starting_path=TEMPORARY_BASE_PATH
-):
+def choose_directory(cache=True, setting_key="last_root_directory", starting_path=None):
     """
     Prompt the user to select a directory where trap data has been saved.
     The subfolders of this directory should be timestamped directories
@@ -120,9 +128,9 @@ def find_timestamped_folders(path):
     >>> pathlib.Path("./tmp/2022_05_14").mkdir(exist_ok=True, parents=True)
     >>> pathlib.Path("./tmp/nope").mkdir(exist_ok=True, parents=True)
     >>> find_timestamped_folders("./tmp")
-    [PosixPath('tmp/2022_05_14')]
+    OrderedDict([(datetime.datetime(2022, 5, 14, 0, 0), PosixPath('tmp/2022_05_14'))])
     """
-    print("Looking for nightly timestamped folders")
+    logger.debug("Looking for nightly timestamped folders")
     nights = collections.OrderedDict()
 
     def _preprocess(name):
@@ -140,7 +148,6 @@ def find_timestamped_folders(path):
             logger.debug(f"Found nightly folder for {date}: {d}")
             nights[date] = d
 
-    # @TODO should be sorted by date
     return nights
 
 
@@ -148,7 +155,7 @@ def find_images(path):
     """
     @TODO speed this up!
     """
-    print("Looking for images")
+    logger.debug(f"Looking for images in {path}")
     images = list(path.glob("*.jpg"))
     # images = [
     #     f for f in path.iterdir() if f.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
@@ -357,7 +364,7 @@ def get_exif(img_path):
     for key, val in img_exif.items():
         if key in PIL.ExifTags.TAGS:
             name = PIL.ExifTags.TAGS[key]
-            print(f"{name}: {val}")
+            # logger.debug(f"EXIF tag found'{name}': '{val}'")
             tags[name] = val
 
     return tags
@@ -418,7 +425,12 @@ def export_report(path, *args):
     return fname
 
 
-def find_images(path):
+def find_images(
+    path,
+    absolute_paths=False,
+    include_timestamps=True,
+    skip_bad_exif=False,
+):
 
     extensions_list = "|".join([f.lstrip(".") for f in SUPPORTED_IMAGE_EXTENSIONS])
     pattern = f"\.({extensions_list})$"
@@ -427,5 +439,71 @@ def find_images(path):
             if re.search(pattern, name, re.IGNORECASE):
                 full_path = os.path.join(root, name)
                 relative_path = full_path.split(path)[-1]
-                # yield relative_path, get_image_timestamp(full_path)
-                yield relative_path
+                path = full_path if absolute_paths else relative_path
+
+                if include_timestamps:
+                    try:
+                        date = get_image_timestamp(full_path)
+                    except Exception as e:
+                        print("Could not get EXIF date for image", full_path, e)
+                        if skip_bad_exif:
+                            continue
+                        else:
+                            date = None
+                    finally:
+                        yield path, date
+                else:
+                    yield path
+
+
+def group_images_by_session(images, maximum_gap_minutes=6 * 60):
+    """
+    Find consecutive images and group them into daily/nightly monitoring sessions.
+    If the time between two photos is greater than `maximumm_time_gap` (in minutes)
+    then start a new session group. Each new group uses the first photo's day
+    as the day of the session even if consecutive images are taken past midnight.
+
+    @TODO make fake images for this test
+    >>> images = find_images(TEST_IMAGES_BASE_PATH, skip_bad_exif=True)
+    >>> sessions = group_images_by_session(images)
+    >>> len(sessions)
+    11
+    """
+    images = sorted(images, key=lambda image_and_date: image_and_date[1])
+    if not images:
+        return []
+
+    sessions = collections.OrderedDict()
+
+    first_image, first_timestamp = images[0]
+
+    last_timestamp = datetime.datetime(1979, 1, 1).replace(tzinfo=datetime.timezone.utc)
+    current_day = None
+
+    for image, timestamp in images:
+        delta = (timestamp - last_timestamp).seconds / 60
+        # logger.debug(f"{timestamp}")
+        if delta >= maximum_gap_minutes:
+            current_day = timestamp.date()
+            logger.debug(
+                f"Gap of {round(delta/60, 1)} hours detected. Starting new session for date: {current_day}"
+            )
+            sessions[current_day] = []
+
+        sessions[current_day].append((image, timestamp))
+        last_timestamp = timestamp
+
+    # This is for debugging
+    for day, images in sessions.items():
+        _, first_date = images[0]
+        _, last_date = images[-1]
+        delta = last_date - first_date
+        hours = round(delta.seconds / 60 / 60, 1)
+        logger.debug(
+            f"Found session on {day} with {len(images)} images that ran for {hours} hours.\n"
+            f"From {first_date.strftime('%c')} to {last_date.strftime('%c')}."
+        )
+
+    return sessions
+
+    # yield relative_path, get_image_timestamp(full_path)
