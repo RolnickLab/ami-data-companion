@@ -1,4 +1,5 @@
 import os
+import re
 import pathlib
 import logging
 import pathlib
@@ -13,9 +14,9 @@ import io
 import json
 import csv
 import collections
+import time
 
-import PIL
-import PIL.ExifTags
+import PIL.ExifTags, PIL.Image
 from plyer import filechooser
 
 
@@ -363,10 +364,20 @@ def get_exif(img_path):
 
 
 def get_image_timestamp(img_path):
+    """
+    Parse the date and time a photo was taken from its EXIF data.
+
+    Also sets the timezone based on the TimeZoneOffset field if available.
+    Example EXIF offset: "-4". Some libaries expect the format to be: "-04:00"
+    However dateutil.parse seems to handle "-4" or "+4" just fine.
+    """
     exif = get_exif(img_path)
-    offset = exif["TimeZoneOffset"]
-    datestring = f'{exif["DateTime"]} {offset}'
+    datestring = exif["DateTime"].replace(":", "-", 2)
+    offset = exif.get("TimeZoneOffset")
+    if offset:
+        datestring = f"{datestring} {offset}"
     date = dateutil.parser.parse(datestring)
+    # print(date.strftime("%c %z"))
     return date
 
 
@@ -405,3 +416,16 @@ def export_report(path, *args):
                 writer.writerow(record.values())
 
     return fname
+
+
+def find_images(path):
+
+    extensions_list = "|".join([f.lstrip(".") for f in SUPPORTED_IMAGE_EXTENSIONS])
+    pattern = f"\.({extensions_list})$"
+    for root, dirs, files in os.walk(path):
+        for name in files:
+            if re.search(pattern, name, re.IGNORECASE):
+                full_path = os.path.join(root, name)
+                relative_path = full_path.split(path)[-1]
+                # yield relative_path, get_image_timestamp(full_path)
+                yield relative_path
