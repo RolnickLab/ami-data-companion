@@ -160,6 +160,7 @@ def find_annotations(path):
     @TODO sort by date modified?
     """
     # annotations = [f for f in path.glob(SUPPORTED_ANNOTATION_PATTERNS)]
+    path = pathlib.Path(path)
     annotations = [f for f in path.glob("*.json")]
     return annotations
 
