@@ -277,8 +277,8 @@ def localization_classification(args):
 
     # @TODO need to determine batch size and not run out of memory
     if device == "cuda":
-        batch_size = 12
-        num_workers = 1
+        batch_size = 6
+        num_workers = 6
     else:
         batch_size = 32
         num_workers = multiprocessing.cpu_count()
@@ -292,6 +292,7 @@ def localization_classification(args):
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
+        persistent_workers=True,
         pin_memory=True,
     )
     results = []
