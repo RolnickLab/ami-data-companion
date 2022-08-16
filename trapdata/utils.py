@@ -35,8 +35,8 @@ logger.addHandler(logging.StreamHandler())
 SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg")
 SUPPORTED_ANNOTATION_PATTERNS = ("detections.json", "megadetections.json")
 # TEST_IMAGES_BASE_PATH = "/media/michael/LaCie/AMI/"
-# TEST_IMAGES_BASE_PATH = "/home/michael/Projects/AMI/TRAPDATA/Moth Week/"
-TEST_IMAGES_BASE_PATH = "/home/michael/Projects/AMI/TRAPDATA/Quebec/"
+TEST_IMAGES_BASE_PATH = "/home/michael/Projects/AMI/TRAPDATA/Moth Week/"
+# TEST_IMAGES_BASE_PATH = "/home/michael/Projects/AMI/TRAPDATA/Quebec/"
 NULL_DETECTION_LABELS = ["nonmoth"]
 
 
@@ -477,12 +477,17 @@ def group_images_by_session(images, maximum_gap_minutes=6 * 60):
 
     first_image, first_timestamp = images[0]
 
-    last_timestamp = datetime.datetime(1979, 1, 1).replace(tzinfo=datetime.timezone.utc)
+    last_timestamp = None
     current_day = None
 
     for image, timestamp in images:
-        delta = (timestamp - last_timestamp).seconds / 60
-        # logger.debug(f"{timestamp}")
+        if last_timestamp:
+            delta = (timestamp - last_timestamp).seconds / 60
+        else:
+            delta = maximum_gap_minutes
+
+        logger.debug(f"{timestamp}, {round(delta, 2)}")
+
         if delta >= maximum_gap_minutes:
             current_day = timestamp.date()
             logger.debug(
