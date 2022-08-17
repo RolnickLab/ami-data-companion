@@ -226,20 +226,23 @@ class DataMenuScreen(Screen):
             self.root_dir = choose_directory(cache=True)
 
         if self.root_dir:
-            nightly_folders = find_timestamped_folders(self.root_dir)
-            self.display_folders(nightly_folders)
+            images = find_images(self.root_dir)
+            sessions = group_images_by_session(images)
+            self.display_trap_sessions(sessions)
 
-    def display_folders(self, folders):
+    def display_trap_sessions(self, sessions):
         print("Displaying folders")
         grid = self.ids.nightly_folders
 
         grid.clear_widgets()
-        for date, path in folders.items():
+        for date, images_and_dates in sessions.items():
 
-            images = find_images(path)
+            label = f"{date.strftime('%a, %b %-d')} \n{len(images_and_dates)} images"
+            first_image = pathlib.Path(images_and_dates[0][0])
+            bg_image = str(first_image.absolute())
 
-            label = f"{date.strftime('%a, %b %-d')} \n{len(images)} images"
-            bg_image = str(random.choice(images).absolute())
+            # Temporay until methods use a list of images in DB instead of a path
+            path = first_image.parent
 
             annotations = find_annotations(path)
             btn_disabled = False if annotations else True

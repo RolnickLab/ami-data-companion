@@ -429,16 +429,17 @@ def find_images(
     path,
     absolute_paths=False,
     include_timestamps=True,
-    skip_bad_exif=False,
+    skip_bad_exif=True,
 ):
 
+    path = pathlib.Path(path)
     extensions_list = "|".join([f.lstrip(".") for f in SUPPORTED_IMAGE_EXTENSIONS])
     pattern = f"\.({extensions_list})$"
     for root, dirs, files in os.walk(path):
         for name in files:
             if re.search(pattern, name, re.IGNORECASE):
                 full_path = os.path.join(root, name)
-                relative_path = full_path.split(path)[-1]
+                relative_path = full_path.split(str(path))[-1]
                 path = full_path if absolute_paths else relative_path
 
                 if include_timestamps:
@@ -486,7 +487,7 @@ def group_images_by_session(images, maximum_gap_minutes=6 * 60):
         else:
             delta = maximum_gap_minutes
 
-        logger.debug(f"{timestamp}, {round(delta, 2)}")
+        # logger.debug(f"{timestamp}, {round(delta, 2)}")
 
         if delta >= maximum_gap_minutes:
             current_day = timestamp.date()
