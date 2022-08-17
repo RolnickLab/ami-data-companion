@@ -108,11 +108,16 @@ def predict_batch(images, model_path, category_map_json, device):
     # prediction for moth / non-moth
     print(f"Predicting {len(images)} with binary classifier.")
 
-    # Loading Binary Classification Model (moth / non-moth)
-    model = ModelInference(model_path, category_map_json, device)
+    if len(images):
+        # Loading Binary Classification Model (moth / non-moth)
+        model = ModelInference(model_path, category_map_json, device)
 
-    labels, scores = model.predict(images, confidence=True)
-    print(labels, scores)
+        labels, scores = model.predict(images, confidence=True)
+        print(labels, scores)
+    else:
+        labels = []
+        scores = []
+
     # labels, scores = [], []
     # for img in images:
     #     categ, conf = model.predict(img, confidence=True)
@@ -184,23 +189,51 @@ def classification_transforms(input_size):
 
 
 class LocalizationDataset(torch.utils.data.Dataset):
-    def __init__(self, directory, image_names):
+    def __init__(self, directory, image_names, max_image_size=1333):
         super().__init__()
 
         self.directory = pathlib.Path(directory)
         self.image_names = image_names
-        # self.pil_imgs = pil_imgs
-        self.transform = self._get_transforms()
+        self.max_image_size = max_image_size
+        self.compare_image_sizes()
+        self.transform = self.get_transforms()
 
     def __len__(self):
         return len(self.image_names)
 
-    def _get_transforms(self):
-        return transforms.Compose(
-            [
-                transforms.ToTensor(),
-            ]
-        )
+    def compare_image_sizes(self):
+        """
+        @TODO what should we do about images with different dimensions?
+        The model can handle that fine, however we can't load them in the same batch.
+        batch_size = 1 works
+
+        In this _test_ we are resizing all photos to the smallest image size, proportionally.
+        Another option would be to drop anything that is different, put them in different batches, or pad them?
+        Might have to make a custom pytorch Sampler class
+        """
+        image_sizes = {
+            Image.open(self.directory / img).size for img in self.image_names
+        }
+        min_size = self.max_image_size
+        min_dims = (self.max_image_size, self.max_image_size)
+        for dims in image_sizes:
+            size = np.prod(dims)
+            if size < min_size:
+                min_size = size
+                min_dims = dims
+
+        self.max_image_dim = min(min_dims)
+        self.image_sizes = image_sizes
+
+    def get_transforms(self):
+        transform_list = [transforms.ToTensor()]
+        if len(self.image_sizes) > 1:
+            print(
+                f"Multiple image sizes detected! {self.image_sizes}. Resizing all images to match."
+            )
+            transform_list.insert(0, transforms.Resize(size=[self.max_image_dim]))
+
+        return transforms.Compose(transform_list)
 
     def __getitem__(self, idx):
         img_name = self.image_names[idx]
@@ -270,15 +303,20 @@ def localization_classification(args):
     ]
 
     model = load_localization_model(args.model_localize, device)
+    max_image_size = model.transform.max_size
 
     input_size = 300
     print(f"Preparing dataset of {len(image_list)} images")
-    dataset = LocalizationDataset(directory=data_path, image_names=image_list)
+    dataset = LocalizationDataset(
+        directory=data_path,
+        image_names=image_list,
+        max_image_size=max_image_size,
+    )
 
     # @TODO need to determine batch size and not run out of memory
     if device == "cuda":
-        batch_size = 6
-        num_workers = 6
+        batch_size = 8
+        num_workers = 2
     else:
         batch_size = 32
         num_workers = multiprocessing.cpu_count()
@@ -298,7 +336,8 @@ def localization_classification(args):
     results = []
 
     with torch.no_grad():
-        for img_paths, data in dataloader:
+        for i, (img_paths, data) in enumerate(dataloader):
+            print(f"Batch {i+1} out of {len(dataloader)}")
             print(f"Looking for objects in {len(img_paths)} images")
             torch.cuda.synchronize()
             batch_start = time.time()
