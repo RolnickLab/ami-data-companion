@@ -5,6 +5,7 @@ Pillow
 python-dateutil
 pyobjus  # macOS requirement for Kivy
 sqlalchemy
+sqlalchemy_utils
 
 torch
 torchvision
