@@ -218,9 +218,9 @@ class DataMenuScreen(Screen):
         Clock.schedule_once(self.display_trap_sessions, 1)
 
     def choose_root_directory(self, *args):
-        self.root_dir = choose_directory(cache=False, starting_path=self.root_dir)
+        self.root_dir = choose_directory(cache=False)  # , starting_path=self.root_dir)
         save_monitoring_sessions(self.root_dir)
-        self.scan_images()
+        self.display_trap_sessions()
 
     def display_trap_sessions(self, *args):
         if not self.root_dir:
@@ -234,7 +234,7 @@ class DataMenuScreen(Screen):
         for ms in sessions:
 
             label = f"{ms.day.strftime('%a, %b %-d')} \n{ms.num_images} images"
-            if len(ms.images):
+            if ms.images:
                 first_image = pathlib.Path(ms.images[0].path)
                 bg_image = str(self.root_dir / first_image)
             else:

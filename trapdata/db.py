@@ -70,7 +70,7 @@ class Image(Base):
         "DetectedObject",
         back_populates="image",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="dynamic",
     )
 
     monitoring_session = orm.relationship(
