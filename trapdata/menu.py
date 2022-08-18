@@ -226,26 +226,30 @@ class DataMenuScreen(Screen):
             self.root_dir = choose_directory(cache=True)
 
         if self.root_dir:
-            images = find_images(self.root_dir)
-            sessions = group_images_by_session(images)
-            self.display_trap_sessions(sessions)
+            save_monitoring_sessions(self.root_dir)
+            self.display_trap_sessions(self.root_dir)
 
-    def display_trap_sessions(self, sessions):
+    def display_trap_sessions(self, root_dir):
         print("Displaying folders")
         grid = self.ids.nightly_folders
-
         grid.clear_widgets()
-        for date, images_and_dates in sessions.items():
 
-            label = f"{date.strftime('%a, %b %-d')} \n{len(images_and_dates)} images"
-            first_image = pathlib.Path(images_and_dates[0][0])
-            bg_image = str(first_image.absolute())
+        sessions = get_monitoring_sessions(root_dir)
+
+        for ms in sessions:
+
+            label = f"{ms.day.strftime('%a, %b %-d')} \n{ms.num_images} images"
+            if len(ms.images):
+                first_image = pathlib.Path(ms.images[0].path)
+                bg_image = str(root_dir / first_image)
+            else:
+                continue
 
             # Temporay until methods use a list of images in DB instead of a path
             path = first_image.parent
 
-            annotations = find_annotations(path)
-            btn_disabled = False if annotations else True
+            # Check if there are unprocessed images in monitoring session?
+            btn_disabled = False
 
             analyze_btn = AnalyzeButton(
                 text="Process",

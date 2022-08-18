@@ -1,4 +1,5 @@
 import datetime
+import pathlib
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -13,6 +14,7 @@ class MonitoringSession(Base):
     __tablename__ = "monitoring_sessions"
 
     id = sa.Column(sa.Integer, primary_key=True)
+    day = sa.Column(sa.Date)
     base_directory = sa.Column(sa.String(255))
     start_time = sa.Column(sa.DateTime(timezone=True))
     end_time = sa.Column(sa.DateTime(timezone=True))
@@ -43,7 +45,7 @@ class MonitoringSession(Base):
     def __repr__(self):
         return (
             f"MonitoringSession("
-            f"start_time={self.start_time.strftime('%c')!r}, end_time={self.end_time.strftime('%c')!r}, "
+            f"start_time={self.start_time.strftime('%c') if self.start_time else None !r}, end_time={self.end_time.strftime('%c') if self.end_time else None!r}, "
             f"num_images={self.num_images!r}, num_detected_objects={self.num_detected_objects!r})"
         )
 
@@ -63,8 +65,12 @@ class Image(Base):
     def num_detected_objects(self):
         return sa.func.count("1")
 
+    # @TODO let's keep the precious detected objects, even if the Monitoring Session or Image is deleted?
     detected_objects = orm.relationship(
-        "DetectedObject", back_populates="image", cascade="all, delete-orphan"
+        "DetectedObject",
+        back_populates="image",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
     monitoring_session = orm.relationship(
@@ -73,7 +79,7 @@ class Image(Base):
     )
 
     def __repr__(self):
-        return f"Image(path={self.path!r}, timestamp={self.timestamp.strftime('%c')!r}, num_detected_objects={self.num_detected_objects!r})"
+        return f"Image(path={self.path!r}, timestamp={self.timestamp.strftime('%c') if self.timestamp else None !r}, num_detected_objects={self.num_detected_objects!r})"
 
 
 class DetectedObject(Base):
@@ -93,21 +99,60 @@ class DetectedObject(Base):
         return f"DetectedObject(image={self.image.path!r}, specific_label={self.specific_label!r}, bbox={self.bbox!r})"
 
 
-def init_db(location=":memory:"):
-    engine = sa.create_engine(
+def get_db(base_directory=None, create=True):
+    db_name = "trapdata.db"
+
+    if base_directory:
+        location = pathlib.Path(base_directory) / db_name
+        if location.exists():
+            create = False
+
+    else:
+        # Only works in a scoped session. Used for tests.
+        location = ":memory:"
+
+    db = sa.create_engine(
         f"sqlite+pysqlite:///{location}",
         echo=False,
         future=True,
     )
-    Base.metadata.create_all(engine)
-    return engine
+
+    if create:
+        Base.metadata.create_all(db)
+
+    return db
+
+
+def get_session(base_directory):
+    db = get_db(base_directory)
+    # return orm.sessionmaker(db)
+    return orm.Session(db)
+
+
+def get_or_create(session, model, defaults=None, **kwargs):
+    # https://stackoverflow.com/a/2587041/966058
+    instance = session.query(model).filter_by(**kwargs).one_or_none()
+    if instance:
+        return instance, False
+    else:
+        kwargs |= defaults or {}
+        instance = model(**kwargs)
+        try:
+            session.add(instance)
+            session.commit()
+        except Exception:  # The actual exception depends on the specific database so we catch all exceptions. This is similar to the official documentation: https://docs.sqlalchemy.org/en/latest/orm/session_transaction.html
+            session.rollback()
+            instance = session.query(model).filter_by(**kwargs).one()
+            return instance, False
+        else:
+            return instance, True
 
 
 def test_db():
     from .utils import TEST_IMAGES_BASE_PATH
 
-    engine = init_db(location=":memory:")
-    with orm.Session(engine) as session:
+    db = get_db()
+    with orm.Session(db) as session:
         new_ms = MonitoringSession(
             base_directory=TEST_IMAGES_BASE_PATH,
         )

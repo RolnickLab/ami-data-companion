@@ -20,9 +20,11 @@ import datetime
 
 import PIL.ExifTags, PIL.Image
 from plyer import filechooser
+from kivy.logger import Logger
 
+from . import db
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger().getChild(__name__)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler())
 
@@ -426,27 +428,29 @@ def export_report(path, *args):
 
 
 def find_images(
-    path,
+    base_directory,
     absolute_paths=False,
     include_timestamps=True,
     skip_bad_exif=True,
 ):
 
-    path = pathlib.Path(path)
+    base_directory = pathlib.Path(base_directory)
     extensions_list = "|".join([f.lstrip(".") for f in SUPPORTED_IMAGE_EXTENSIONS])
     pattern = f"\.({extensions_list})$"
-    for root, dirs, files in os.walk(path):
+    for walk_path, dirs, files in os.walk(base_directory):
         for name in files:
             if re.search(pattern, name, re.IGNORECASE):
-                full_path = os.path.join(root, name)
-                relative_path = full_path.split(str(path))[-1]
+                relative_path = pathlib.Path(walk_path) / name
+                full_path = base_directory / relative_path
                 path = full_path if absolute_paths else relative_path
 
                 if include_timestamps:
                     try:
                         date = get_image_timestamp(full_path)
                     except Exception as e:
-                        print("Could not get EXIF date for image", full_path, e)
+                        logger.error(
+                            f"Could not get EXIF date for image: {full_path}\n {e}"
+                        )
                         if skip_bad_exif:
                             continue
                         else:
@@ -457,7 +461,7 @@ def find_images(
                     yield path
 
 
-def group_images_by_session(images, maximum_gap_minutes=6 * 60):
+def group_images_by_day(images, maximum_gap_minutes=6 * 60):
     """
     Find consecutive images and group them into daily/nightly monitoring sessions.
     If the time between two photos is greater than `maximumm_time_gap` (in minutes)
@@ -513,3 +517,64 @@ def group_images_by_session(images, maximum_gap_minutes=6 * 60):
     return sessions
 
     # yield relative_path, get_image_timestamp(full_path)
+
+
+def save_monitoring_sessions(base_directory, monitoring_sessions):
+
+    new_ms = []
+    for day, images in monitoring_sessions.items():
+        ms = MonitoringSession(base_directory=str(base_directory), day=day)
+        for path, timestamp in images:
+            img = Image(path=str(path), timestamp=timestamp)
+            ms.images.append(img)
+        new_ms.append(ms)
+
+    db = init_db()
+    save_all(new_ms, db=db)
+    return new_ms
+
+
+def save_monitoring_sessions(base_directory):
+    images = find_images(base_directory)
+    groups = group_images_by_day(images)
+
+    sess = db.get_session(base_directory)
+
+    for day, images_and_dates in groups.items():
+        ms_kwargs = {"base_directory": str(base_directory), "day": day}
+        ms = sess.query(db.MonitoringSession).filter_by(**ms_kwargs).one_or_none()
+        if ms:
+            logger.debug(f"Found existing Monitoring Session in db: {ms}")
+        else:
+            ms = db.MonitoringSession(**ms_kwargs)
+            logger.debug(f"Adding new Monitoring Session to db: {ms}")
+            sess.add(ms)
+
+        for path, timestamp in images_and_dates:
+            path = pathlib.Path(path).relative_to(base_directory)
+            img_kwargs = {
+                "path": str(path),
+                "timestamp": timestamp,
+            }
+            img = sess.query(db.Image).filter_by(**img_kwargs).one_or_none()
+            if img:
+                # logger.debug(f"Found existing Image in db: {img}")
+                pass
+            else:
+                img = db.Image(**img_kwargs)
+                logger.debug(f"Adding new Image to db: {img}")
+                ms.images.append(img)
+
+        sess.commit()
+
+    return get_monitoring_sessions(base_directory)
+
+
+def get_monitoring_sessions(base_directory):
+    sess = db.get_session(base_directory)
+
+    return (
+        sess.query(db.MonitoringSession)
+        .filter_by(base_directory=str(base_directory))
+        .all()
+    )
