@@ -20,13 +20,13 @@ import datetime
 
 import PIL.ExifTags, PIL.Image
 from plyer import filechooser
-from kivy.logger import Logger
+from kivy.logger import Logger as logger
 
 from . import db
 
-logger = logging.getLogger().getChild(__name__)
+# logger = logging.getLogger().getChild(__name__)
 logger.setLevel(logging.DEBUG)
-logger.addHandler(logging.StreamHandler())
+# logger.addHandler(logging.StreamHandler())
 
 # if hasattr(sys.modules["__main__"], "_SpoofOut"):
 #     # If running tests,
@@ -535,6 +535,7 @@ def save_monitoring_sessions(base_directory, monitoring_sessions):
 
 
 def save_monitoring_sessions(base_directory):
+    logger.info("Scanning and saving new images to DB")
     images = find_images(base_directory)
     groups = group_images_by_day(images)
 
@@ -550,6 +551,7 @@ def save_monitoring_sessions(base_directory):
             logger.debug(f"Adding new Monitoring Session to db: {ms}")
             sess.add(ms)
 
+        ms_images = []
         for path, timestamp in images_and_dates:
             path = pathlib.Path(path).relative_to(base_directory)
             img_kwargs = {
@@ -563,8 +565,11 @@ def save_monitoring_sessions(base_directory):
             else:
                 img = db.Image(**img_kwargs)
                 logger.debug(f"Adding new Image to db: {img}")
-                ms.images.append(img)
+            ms_images.append(img)
+        ms.images = ms_images
 
+        logger.debug("Comitting changes to DB")
+        # @TODO use bulk_save_objects? This is slow
         sess.commit()
 
     return get_monitoring_sessions(base_directory)

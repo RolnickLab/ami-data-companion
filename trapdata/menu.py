@@ -215,33 +215,28 @@ class DataMenuScreen(Screen):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        Clock.schedule_once(self.scan_images, 1)
+        Clock.schedule_once(self.display_trap_sessions, 1)
 
     def choose_root_directory(self, *args):
         self.root_dir = choose_directory(cache=False, starting_path=self.root_dir)
+        save_monitoring_sessions(self.root_dir)
         self.scan_images()
 
-    def scan_images(self, *args):
+    def display_trap_sessions(self, *args):
         if not self.root_dir:
             self.root_dir = choose_directory(cache=True)
 
-        if self.root_dir:
-            save_monitoring_sessions(self.root_dir)
-            self.display_trap_sessions(self.root_dir)
-
-    def display_trap_sessions(self, root_dir):
-        print("Displaying folders")
         grid = self.ids.nightly_folders
         grid.clear_widgets()
 
-        sessions = get_monitoring_sessions(root_dir)
+        sessions = get_monitoring_sessions(self.root_dir)
 
         for ms in sessions:
 
             label = f"{ms.day.strftime('%a, %b %-d')} \n{ms.num_images} images"
             if len(ms.images):
                 first_image = pathlib.Path(ms.images[0].path)
-                bg_image = str(root_dir / first_image)
+                bg_image = str(self.root_dir / first_image)
             else:
                 continue
 
