@@ -129,7 +129,9 @@ class AnnotatedImage(Widget):
                 self.bbox_widgets.append(
                     Line(points=[x1, y1, x1, y2, x2, y2, x2, y1, x1, y1], width=2)
                 )
-                label_text = f"{annotation['label']} ({annotation['score']}%)"
+                label_text = (
+                    f"{annotation['label']} ({int(round(annotation['score']*100))}%)"
+                )
                 self.bbox_widgets.append(
                     Label(
                         text=label_text,
