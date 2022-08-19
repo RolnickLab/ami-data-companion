@@ -218,7 +218,7 @@ class DataMenuScreen(Screen):
         Clock.schedule_once(self.scan_images, 1)
 
     def choose_root_directory(self, *args):
-        self.root_dir = choose_directory(cache=False, starting_path=self.root_dir)
+        self.root_dir = choose_directory(cache=False)  # , starting_path=self.root_dir)
         self.scan_images()
 
     def scan_images(self, *args):
