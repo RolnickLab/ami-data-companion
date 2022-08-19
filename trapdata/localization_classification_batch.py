@@ -106,7 +106,6 @@ def crop_bboxes(image, bboxes):
 
 def predict_batch(images, model_path, category_map_json, device):
     # prediction for moth / non-moth
-    print(f"Predicting {len(images)} with binary classifier.")
 
     if len(images):
         # Loading Binary Classification Model (moth / non-moth)
@@ -118,29 +117,7 @@ def predict_batch(images, model_path, category_map_json, device):
         labels = []
         scores = []
 
-    # labels, scores = [], []
-    # for img in images:
-    #     categ, conf = model.predict(img, confidence=True)
-    #     print(categ, conf)
-    #     labels.append(categ)
-    #     scores.append(float(conf))
     return list(labels), list(scores)
-
-
-def predict_batch_specific(images, model_path, category_map_json, device):
-    # prediction of specific moth species
-    print(f"Predicting {len(images)} with species classifer.")
-
-    # Loading Moth Classification Model
-    model_moth = ModelInference(model_path, category_map_json, device)
-
-    labels, scores = [], []
-    for img in images:
-        categ, conf = model_moth.predict(img, confidence=True)
-        print(categ, conf)
-        labels.append(categ)
-        scores.append(float(conf))
-    return labels, scores
 
 
 def classify_bboxes(localization_results, device, args):
@@ -244,44 +221,64 @@ class LocalizationDataset(torch.utils.data.Dataset):
 
 def load_localization_model(model_path, device):
     print(f'Loading localization model with checkpoint "{model_path}"')
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=None)
-    num_classes = 2  # 1 class (object) + background
-    in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
-    checkpoint = torch.load(model_path, map_location=device)
-    model.load_state_dict(checkpoint["model_state_dict"])
+    # model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=None)
+    # model = torchvision.models.detection.ssdlite320_mobilenet_v3_large(
+    #     weights="DEFAULT", num_classes=91
+    # )
+    model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(
+        weights="DEFAULT"
+    )
+
+    # num_classes = 2  # 1 class (object) + background
+    # in_features = model.roi_heads.box_predictor.cls_score.in_features
+    # model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+    # checkpoint = torch.load(model_path, map_location=device)
+    # model.load_state_dict(checkpoint["model_state_dict"])
     model = model.to(device)
     model.eval()
     return model
 
 
-def process_localization_output(output):
-    bboxes = output["boxes"][output["scores"] > LOCALIZATION_SCORE_THRESHOLD]
+def process_localization_output(img_path, output):
+    # bboxes = output["boxes"][output["scores"] > LOCALIZATION_SCORE_THRESHOLD]
+
+    # Filter out background label, if using pretrained model only!
+    bboxes = output["boxes"][output["labels"] > 1]
+    # bboxes = output["boxes"]
+    print(list(zip(output["labels"], output["scores"])))
+
     print(
         f"Keeping {len(bboxes)} out of {len(output['boxes'])} objects found (threshold: {LOCALIZATION_SCORE_THRESHOLD})"
     )
 
-    bbox_list = []
-    label_list = output["labels"]  # Should always be 1 for "object"
-    assert all([l == 1 for l in output["labels"]])
+    bbox_percents = []
+    label_list = output[
+        "labels"
+    ]  # Should always be 1 for "object" if using custom trained weights
+    # assert all([l == 1 for l in output["labels"]])
 
+    img_width, img_height = Image.open(img_path).size
+    print("IMAGE DIMENSIONS", img_width, img_height)
     for box in bboxes:
         box_numpy = box.detach().cpu().numpy()
-        bbox_list.append(
+        bbox_percents.append(
             [
-                int(box_numpy[0]),
-                int(box_numpy[1]),
-                int(box_numpy[2]),
-                int(box_numpy[3]),
+                round(box_numpy[0] / img_width, 4),
+                round(box_numpy[1] / img_height, 4),
+                round(box_numpy[2] / img_width, 4),
+                round(box_numpy[3] / img_height, 4),
             ]
         )
-    return bboxes.cpu().numpy().tolist()
+
+    bboxes = bboxes.cpu().numpy().astype(int).tolist()
+    # print(list(zip(bboxes, bbox_percents)))
+    return bboxes
 
 
 def localization_classification(args):
     """main function for localization and classification"""
 
-    torch.cuda.synchronize()
+    # torch.cuda.synchronize()
     start = time.time()
 
     data_dir = pathlib.Path(args.data_dir)
@@ -303,6 +300,7 @@ def localization_classification(args):
     ]
 
     model = load_localization_model(args.model_localize, device)
+    print(model)
     max_image_size = model.transform.max_size
 
     input_size = 300
@@ -318,9 +316,9 @@ def localization_classification(args):
         batch_size = 8
         num_workers = 2
     else:
-        batch_size = 32
+        batch_size = 12
         num_workers = multiprocessing.cpu_count()
-        # num_workers = 4
+        num_workers = 4
 
     print(
         f"Preparing dataloader with batch size of {batch_size} and {num_workers} workers on device: {device}"
@@ -339,13 +337,16 @@ def localization_classification(args):
         for i, (img_paths, data) in enumerate(dataloader):
             print(f"Batch {i+1} out of {len(dataloader)}")
             print(f"Looking for objects in {len(img_paths)} images")
-            torch.cuda.synchronize()
+            # torch.cuda.synchronize()
             batch_start = time.time()
             data = data.to(device, non_blocking=True)
             output = model(data)
-            output = [process_localization_output(o) for o in output]
+            output = [
+                process_localization_output(img_path, o)
+                for img_path, o in zip(img_paths, output)
+            ]
             results += list(zip(img_paths, output))
-            torch.cuda.synchronize()
+            # torch.cuda.synchronize()
             batch_end = time.time()
             elapsed = batch_end - batch_start
             images_per_second = len(image_list) / elapsed
@@ -353,7 +354,7 @@ def localization_classification(args):
                 f"Time per batch: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second"
             )
 
-    torch.cuda.synchronize()
+    # torch.cuda.synchronize()
     end = time.time()
     elapsed = end - start
     images_per_second = len(image_list) / elapsed
