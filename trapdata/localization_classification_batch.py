@@ -245,7 +245,7 @@ def process_localization_output(img_path, output):
     # Filter out background label, if using pretrained model only!
     bboxes = output["boxes"][output["labels"] > 1]
     # bboxes = output["boxes"]
-    print(list(zip(output["labels"], output["scores"])))
+    # print(list(zip(output["labels"], output["scores"])))
 
     print(
         f"Keeping {len(bboxes)} out of {len(output['boxes'])} objects found (threshold: {LOCALIZATION_SCORE_THRESHOLD})"
@@ -350,16 +350,18 @@ def localization_classification(args):
             batch_end = time.time()
             elapsed = batch_end - batch_start
             images_per_second = len(image_list) / elapsed
+            seconds_per_image = elapsed / len(image_list)
             print(
-                f"Time per batch: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second"
+                f"Time per batch: {round(elapsed, 1)} seconds. {round(seconds_per_image, 1)} seconds per image"
             )
 
     # torch.cuda.synchronize()
     end = time.time()
     elapsed = end - start
     images_per_second = len(image_list) / elapsed
+    seconds_per_image = elapsed / len(image_list)
     print(
-        f"Localization time: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second (with startup)"
+        f"Localization time: {round(elapsed, 1)} seconds. {round(seconds_per_image, 1)} seconds per image (with startup)"
     )
 
     annotations = classify_bboxes(results, device, args)
