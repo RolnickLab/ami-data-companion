@@ -10,6 +10,44 @@ from . import utils
 Base = orm.declarative_base()
 
 
+class DetectedObject:
+    # image
+    # model_used
+    # parameters_used
+    # date_detected
+    # top
+    # left
+    # width
+    # height
+    # size
+    # centroid
+    # CNN features (from which model)
+    # methods for pixels and percent, height and width vs x1, y1, x2, y2 (different bbox formats)
+    # relative to top-left (web, PIL)
+    # relative to bottom-left (kivy, canvas)
+    # classifications
+    # resolved_tracks / individuals
+    pass
+
+
+class Classification:
+    # image
+    # model_used
+    # parameters_used
+    # date_detected
+    # label_text
+    # label_index
+    pass
+
+
+class DetectedTrack:  # Deduplicted objects, resolved individual
+    # images
+    # objects
+    # classifications
+    # consensus_label
+    pass
+
+
 class MonitoringSession(Base):
     __tablename__ = "monitoring_sessions"
 
@@ -53,6 +91,8 @@ class MonitoringSession(Base):
 class Image(Base):
     __tablename__ = "images"
 
+    # filename
+    # md5 hash
     id = sa.Column(sa.Integer, primary_key=True)
     monitoring_session_id = sa.Column(sa.ForeignKey("monitoring_sessions.id"))
     path = sa.Column(sa.String(255))
