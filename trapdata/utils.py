@@ -555,23 +555,33 @@ def save_monitoring_session(base_directory, session):
             sess.add(ms)
             sess.flush()
 
-        ms_images = []
-        for image in session["images"]:
-            path = pathlib.Path(image["path"]).relative_to(base_directory)
-            img_kwargs = {
-                "monitoring_session_id": ms.id,
-                "path": str(image["path"]),
-                "timestamp": image["timestamp"],
-            }
-            db_img = sess.query(db.Image).filter_by(**img_kwargs).one_or_none()
-            if db_img:
-                # logger.debug(f"Found existing Image in db: {img}")
-                pass
-            else:
-                db_img = db.Image(**img_kwargs)
-                logger.debug(f"Adding new Image to db: {db_img}")
-            ms_images.append(db_img)
-        sess.bulk_save_objects(ms_images)
+        num_existing_images = (
+            sess.query(db.Image).filter_by(monitoring_session_id=ms.id).count()
+        )
+        if session["num_images"] > num_existing_images:
+            logger.info(
+                f"session images: {session['num_images']}, saved count: {num_existing_images}"
+            )
+            # Compare the number of images known in this session
+            # Only scan & add images if there is a difference.
+            # This does not delete missing images.
+            ms_images = []
+            for image in session["images"]:
+                path = pathlib.Path(image["path"]).relative_to(base_directory)
+                img_kwargs = {
+                    "monitoring_session_id": ms.id,
+                    "path": str(image["path"]),
+                    "timestamp": image["timestamp"],
+                }
+                db_img = sess.query(db.Image).filter_by(**img_kwargs).one_or_none()
+                if db_img:
+                    # logger.debug(f"Found existing Image in db: {img}")
+                    pass
+                else:
+                    db_img = db.Image(**img_kwargs)
+                    logger.debug(f"Adding new Image to db: {db_img}")
+                ms_images.append(db_img)
+            sess.bulk_save_objects(ms_images)
 
         logger.debug("Comitting changes to DB")
         sess.commit()

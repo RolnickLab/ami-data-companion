@@ -8,6 +8,11 @@
 
         padding: 0
         spacing: 0
+        
+        Label:
+            size_hint_y: 0.05
+            id: status 
+            text: "Loading"
 
         BoxLayout:
             orientation: "vertical"
@@ -23,6 +28,8 @@
             Button:
                 text: "Choose Directory"
                 on_press: root.choose_root_directory() 
+            Button:
+                text: "Rescan"  # Use what is saved in DB without scanning
             Button:
                 text: "Settings"
 

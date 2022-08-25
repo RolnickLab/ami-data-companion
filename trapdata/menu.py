@@ -51,6 +51,18 @@ from .ml import detect_and_classify
 Builder.load_file(str(pathlib.Path(__file__).parent / "menu.kv"))
 
 
+class ThreadWithStatus(threading.Thread):
+    exception = None
+
+    def run(self):
+        try:
+            super().run()
+        except Exception as e:
+            self.exception = e
+            logger.error(f"Thread {self} exited with an exception: {e}")
+            raise e
+
+
 class TrapSesionData(Widget):
     """
     One night / session of trap data.
@@ -239,8 +251,8 @@ class DataMenuScreen(Screen):
                 title="Status",
                 content=Label(text=label_text),
                 size_hint=(None, None),
-                size=(f"550dp", 400),
-                auto_dismiss=True,
+                size=("550dp", "200dp"),
+                auto_dismiss=False,
                 on_open=self.get_monitoring_sessions,
                 on_pre_dismiss=self.display_monitoring_sessions,
             )
@@ -262,7 +274,7 @@ class DataMenuScreen(Screen):
         self.sessions = get_monitoring_sessions_from_filesystem(self.root_dir)
         self.status_popup.dismiss()
         logger.info("Writing monitoring data to DB in the background")
-        bgtask = threading.Thread(
+        bgtask = ThreadWithStatus(
             target=partial(save_monitoring_sessions, self.root_dir, self.sessions),
             daemon=True,
             name="writing_monitoring_sessions_to_db",
@@ -273,10 +285,16 @@ class DataMenuScreen(Screen):
         )
 
     def watch_db_progress(self, bgtask, *args):
-        logger.info(f"Checking DB write status: {bgtask}")
+        logger.debug(f"Checking DB write status: {bgtask}")
+        self.ids.status.text = "Writing capture data to the database..."
         if bgtask and not bgtask.is_alive():
-            self.data_ready = True
+            logger.debug(f"Thread has exited: {bgtask}")
             Clock.unschedule(self.status_clock)
+            if bgtask.exception:
+                self.ids.status.text = "Failed to write capture data to the database"
+            else:
+                self.data_ready = True
+                self.ids.status.text = "Ready"
 
     def display_monitoring_sessions(self, *args):
         grid = self.ids.monitoring_sessions
@@ -333,6 +351,8 @@ class DataMenuScreen(Screen):
             row.add_widget(playback_btn)
             row.add_widget(report_btn)
             grid.add_widget(row)
+
+        self.ids.status.text = "Ready"
 
 
 class DataMenuApp(App):
