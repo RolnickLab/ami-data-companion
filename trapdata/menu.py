@@ -212,30 +212,51 @@ class ReportButton(Button):
 
 class DataMenuScreen(Screen):
     root_dir = ObjectProperty(allownone=True)
+    sessions = ListProperty()
+    status_popup = ObjectProperty()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        Clock.schedule_once(self.display_trap_sessions, 1)
+        Clock.schedule_once(self.setup, 1)
 
-    def choose_root_directory(self, *args):
-        self.root_dir = choose_directory(cache=False)  # , starting_path=self.root_dir)
-        save_monitoring_sessions(self.root_dir)
-        self.display_trap_sessions()
-
-    def display_trap_sessions(self, *args):
+    def setup(self, *args):
         if not self.root_dir:
             self.root_dir = choose_directory(cache=True)
 
+    def choose_root_directory(self, *args):
+        try:
+            self.root_dir = choose_directory(cache=False, starting_path=self.root_dir)
+        except Exception as e:
+            logger.error("Failed to choose directory with a starting path")
+            self.root_dir = choose_directory(cache=False)
+
+    def on_root_dir(self, *args):
+        if self.root_dir:
+            label_text = f"Scanning directory for images\n{self.root_dir}"
+            self.status_popup = Popup(
+                title="Status",
+                content=Label(text=label_text),
+                size_hint=(None, None),
+                size=(f"550dp", 400),
+                auto_dismiss=True,
+                on_open=self.get_monitoring_sessions,
+                on_pre_dismiss=self.display_monitoring_sessions,
+            )
+            self.status_popup.open()
+
+    def get_monitoring_sessions(self, *args):
+        self.sessions = get_monitoring_sessions_from_filesystem(self.root_dir)
+        self.status_popup.dismiss()
+
+    def display_monitoring_sessions(self, *args):
         grid = self.ids.nightly_folders
         grid.clear_widgets()
 
-        sessions = get_monitoring_sessions(self.root_dir)
+        for ms in self.sessions:
 
-        for ms in sessions:
-
-            label = f"{ms.day.strftime('%a, %b %-d')} \n{ms.num_images} images"
-            if ms.images:
-                first_image = pathlib.Path(ms.images[0].path)
+            label = f"{ms['day'].strftime('%a, %b %-d')} \n{ms['num_images']} images"
+            if ms["images"]:
+                first_image = pathlib.Path(ms["images"][0])
                 bg_image = str(self.root_dir / first_image)
             else:
                 continue

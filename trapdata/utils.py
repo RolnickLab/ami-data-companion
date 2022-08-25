@@ -433,7 +433,7 @@ def find_images(
     include_timestamps=True,
     skip_bad_exif=True,
 ):
-
+    logger.info(f"Scanning '{base_directory}' for images")
     base_directory = pathlib.Path(base_directory)
     extensions_list = "|".join([f.lstrip(".") for f in SUPPORTED_IMAGE_EXTENSIONS])
     pattern = f"\.({extensions_list})$"
@@ -474,11 +474,14 @@ def group_images_by_day(images, maximum_gap_minutes=6 * 60):
     >>> len(sessions)
     11
     """
+    logger.info(
+        f"Grouping images into date-based groups with a maximum gap of {maximum_gap_minutes} minutes"
+    )
     images = sorted(images, key=lambda image_and_date: image_and_date[1])
     if not images:
         return []
 
-    sessions = collections.OrderedDict()
+    groups = collections.OrderedDict()
 
     first_image, first_timestamp = images[0]
 
@@ -498,13 +501,13 @@ def group_images_by_day(images, maximum_gap_minutes=6 * 60):
             logger.debug(
                 f"Gap of {round(delta/60, 1)} hours detected. Starting new session for date: {current_day}"
             )
-            sessions[current_day] = []
+            groups[current_day] = []
 
-        sessions[current_day].append((image, timestamp))
+        groups[current_day].append((image, timestamp))
         last_timestamp = timestamp
 
     # This is for debugging
-    for day, images in sessions.items():
+    for day, images in groups.items():
         _, first_date = images[0]
         _, last_date = images[-1]
         delta = last_date - first_date
@@ -514,9 +517,28 @@ def group_images_by_day(images, maximum_gap_minutes=6 * 60):
             f"From {first_date.strftime('%c')} to {last_date.strftime('%c')}."
         )
 
-    return sessions
+    return groups
 
     # yield relative_path, get_image_timestamp(full_path)
+
+
+def get_monitoring_sessions_from_filesystem(base_directory):
+    images = find_images(base_directory)
+    sessions = []
+    groups = group_images_by_day(images)
+    for day, images in groups.items():
+        sessions.append(
+            {
+                "base_directory": str(base_directory),
+                "day": day,
+                "num_images": len(images),
+                "start_time": images[0][1],
+                "end_time": images[-1][1],
+                "images": [image for image, timestamp in images],
+            }
+        )
+    sessions.sort(key=lambda s: s["day"])
+    return sessions
 
 
 def save_monitoring_sessions(base_directory, monitoring_sessions):
