@@ -240,10 +240,13 @@ def load_localization_model(model_path, device):
 
 
 def process_localization_output(img_path, output):
-    # bboxes = output["boxes"][output["scores"] > LOCALIZATION_SCORE_THRESHOLD]
+    LOCALIZATION_SCORE_THRESHOLD = 0.01
+    bboxes = output["boxes"][
+        (output["scores"] > LOCALIZATION_SCORE_THRESHOLD) & (output["labels"] > 1)
+    ]
 
     # Filter out background label, if using pretrained model only!
-    bboxes = output["boxes"][output["labels"] > 1]
+    # bboxes = output["boxes"][output["labels"] > 1]
     # bboxes = output["boxes"]
     # print(list(zip(output["labels"], output["scores"])))
 
