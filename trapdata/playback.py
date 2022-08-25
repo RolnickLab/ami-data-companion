@@ -65,15 +65,21 @@ class AnnotatedImage(Widget):
 
     def draw(self, *args):
         self.canvas.clear()
+
+        if not self.image_path.exists():
+            logger.error(f"Image not found: {self.image_path}")
+            return None
+
         with self.canvas:
             img = Image(
-                source=str(self.image_path.absolute()),
+                source=str(self.image_path),
                 pos=(0, 0),
                 size=self.size,
                 pos_hint={"bottom": 0},
                 keep_ratio=False,
                 allow_stretch=True,
             )
+            logging.info(self.image_path.absolute())
             print("Image sizes:")
             print(img.width, img.size, img.norm_image_size, img.texture_size)
             print()
@@ -145,13 +151,19 @@ DEFAULT_FPS = 2
 
 
 class ImagePlaybackScreen(Screen):
-    source_dir = ObjectProperty()
+    monitoring_session = ObjectProperty()
+    images = ListProperty()
     fps = NumericProperty(defaultvalue=DEFAULT_FPS)
     clock = ObjectProperty(allownone=True)
 
-    def on_source_dir(self, instance, value):
+    def on_monitoring_session(self, instance, value):
         self.current_sample = None
-        print(self.ids)
+        ms = value
+        with db.get_session(ms.base_directory) as sess:
+            self.images = list(
+                sess.query(db.Image).filter_by(monitoring_session_id=ms.id).all()
+            )
+            logger.info(f"Found {len(self.images)} images in Monitoring Session: {ms}")
         preview = self.ids.image_preview
         preview.reset()
         preview.next_sample()
@@ -193,34 +205,38 @@ class PreviewWindow(RelativeLayout):
         self.current_sample = None
         self.clear_widgets()
 
-    def load_sample(self, img_path, annotations=None):
+    def load_sample(self, image, annotations=list()):
+        base_directory = pathlib.Path(
+            self.parent.parent.monitoring_session.base_directory
+        )
+        image_path = base_directory / image.path
         self.clear_widgets()
         cvs = AnnotatedImage(
-            image_path=img_path,
+            image_path=image_path,
             annotations=annotations,
             size=self.size,
             pos_hint={"bottom": 0},
         )
-        self.current_sample = img_path
+        self.current_sample = image
         self.add_widget(cvs)
 
     def next_sample(self, *args):
-        img_path, annotations = get_sequential_sample(
+        image = get_sequential_sample(
             direction=1,
-            source_dir=self.parent.parent.source_dir,
+            images=self.parent.parent.images,
             last_sample=self.current_sample,
         )
-        print("Next!", img_path)
-        self.load_sample(img_path, annotations=annotations)
+        print("Next!", image)
+        self.load_sample(image)
 
     def prev_sample(self, *args):
-        img_path, annotations = get_sequential_sample(
+        image = get_sequential_sample(
             direction=-1,
-            source_dir=self.parent.parent.source_dir,
+            images=self.parent.parent.images,
             last_sample=self.current_sample,
         )
-        print("Prev!", img_path)
-        self.load_sample(img_path, annotations=annotations)
+        print("Prev!", image)
+        self.load_sample(image)
 
 
 class ImageOverlayApp(App):

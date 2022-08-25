@@ -41,6 +41,7 @@ class MonitoringSession(Base):
         back_populates="monitoring_session",
         cascade="all, delete-orphan",
         order_by="Image.timestamp",
+        # lazy="joined",
     )
 
     def __repr__(self):
@@ -49,6 +50,17 @@ class MonitoringSession(Base):
             f"start_time={self.start_time.strftime('%c') if self.start_time else None !r}, end_time={self.end_time.strftime('%c') if self.end_time else None!r}, "
             f"num_images={self.num_images!r}, num_detected_objects={self.num_detected_objects!r})"
         )
+
+
+# These are aparently needed because none of the fancy stuff seems to work
+def monitoring_session_images(ms):
+    with get_session(ms.base_directory) as sess:
+        return list(sess.query(Image).filter_by(monitoring_session_id=ms.id).all())
+
+
+def monitoring_session_images_count(ms):
+    with get_session(ms.base_directory) as sess:
+        return int(sess.query(Image).filter_by(monitoring_session_id=ms.id).count())
 
 
 class Image(Base):
@@ -130,6 +142,12 @@ def get_session(base_directory):
     session = orm.Session(db)
     yield session
     session.close()
+    # return orm.sessionmaker(db).begin()
+
+
+def query(base_directory, q, **kwargs):
+    with get_session(base_directory) as sess:
+        return list(sess.query(q, **kwargs))
 
 
 def get_or_create(session, model, defaults=None, **kwargs):

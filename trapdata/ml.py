@@ -21,6 +21,7 @@ MODEL_BASE_PATH = pathlib.Path(__file__).parent.parent / "models"
 
 
 def detect_and_classify(source_dir):
+    # @TODO needs to support list of images instead
     source_dir = pathlib.Path(source_dir)
     args = argparse.Namespace(
         data_dir=str(source_dir.parent)

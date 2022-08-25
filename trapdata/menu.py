@@ -75,7 +75,7 @@ class TrapSesionData(Widget):
 
 
 class AnalyzeButton(Button):
-    path = ObjectProperty()
+    monitoring_session = ObjectProperty()
     running = BooleanProperty(defaultvalue=False)
     progress = NumericProperty(defaultvalue=0)
     status_label = ObjectProperty()
@@ -189,7 +189,7 @@ class AnalyzeButton(Button):
 
 
 class LaunchScreenButton(Button):
-    path = ObjectProperty()
+    monitoring_session = ObjectProperty()
     screenname = StringProperty(allownone=True)
     screenmanager = ObjectProperty(allownone=True)
 
@@ -203,14 +203,16 @@ class LaunchScreenButton(Button):
 
         if self.screenmanager and self.screenname:
             self.screenmanager.current = self.screenname
-            self.screenmanager.get_screen(self.screenname).source_dir = self.path
+            self.screenmanager.get_screen(
+                self.screenname
+            ).monitoring_session = self.monitoring_session
 
 
 class ReportButton(Button):
-    path = ObjectProperty()
+    monitoring_session = ObjectProperty()
 
     def on_release(self):
-        fname = export_report(self.path)
+        fname = export_report(self.monitoring_session.base_directory)
         label_text = f"Report saved to: \n{fname}"
         popup = Popup(
             title="Results",
@@ -246,7 +248,7 @@ class DataMenuScreen(Screen):
 
     def on_root_dir(self, *args):
         if self.root_dir:
-            label_text = f"Scanning directory for images\n{self.root_dir}"
+            label_text = f"Looking for capture data in \n\n{self.root_dir}"
             self.status_popup = Popup(
                 title="Status",
                 content=Label(text=label_text),
@@ -254,25 +256,35 @@ class DataMenuScreen(Screen):
                 size=("550dp", "200dp"),
                 auto_dismiss=False,
                 on_open=self.get_monitoring_sessions,
-                on_pre_dismiss=self.display_monitoring_sessions,
             )
             self.status_popup.open()
 
     def on_data_ready(self, *args):
         if self.data_ready:
             logger.info("Data is ready for other methods")
-            self.enable_buttons()
+            # Buttons aren't available immediately
+            self.display_monitoring_sessions()
+            Clock.schedule_once(self.enable_buttons, 1)
 
-    def enable_buttons(self):
-        logger.debug("Enabling all buttons")
+    def enable_buttons(self, *args):
+        logger.info("Enabling all buttons")
         for row in self.ids.monitoring_sessions.children:
             for child in row.children:
                 if isinstance(child, Button):
                     child.disabled = False
 
     def get_monitoring_sessions(self, *args):
-        self.sessions = get_monitoring_sessions_from_filesystem(self.root_dir)
+        self.sessions = get_monitoring_sessions_from_db(self.root_dir)
+        if self.sessions:
+            self.data_ready = True
+        else:
+            self.sessions = get_monitoring_sessions_from_filesystem(self.root_dir)
+            # @TODO just wait for the DB to save, don't worry about background task
+            # Rescan will trigger a scan an resave.
+            self.save_monitoring_sessions_in_background()
         self.status_popup.dismiss()
+
+    def save_monitoring_sessions_in_background(self):
         logger.info("Writing monitoring data to DB in the background")
         bgtask = ThreadWithStatus(
             target=partial(save_monitoring_sessions, self.root_dir, self.sessions),
@@ -293,6 +305,7 @@ class DataMenuScreen(Screen):
             if bgtask.exception:
                 self.ids.status.text = "Failed to write capture data to the database"
             else:
+                self.sessions = get_monitoring_sessions_from_db(self.root_dir)
                 self.data_ready = True
                 self.ids.status.text = "Ready"
 
@@ -302,9 +315,16 @@ class DataMenuScreen(Screen):
 
         for ms in self.sessions:
 
-            label = f"{ms['day'].strftime('%a, %b %-d')} \n{ms['num_images']} images"
-            if ms["images"]:
-                first_image_path = pathlib.Path(ms["images"][0]["path"])
+            # num_images = db.monitoring_session_images_count(ms)
+            label = f"{ms.day.strftime('%a, %b %-d')} \n{ms.num_images} images"
+
+            with db.get_session(self.root_dir) as sess:
+                first_image = (
+                    sess.query(db.Image).filter_by(monitoring_session_id=ms.id).first()
+                )
+
+            if first_image:
+                first_image_path = pathlib.Path(first_image.path)
                 bg_image = str(self.root_dir / first_image_path)
             else:
                 continue
@@ -317,13 +337,13 @@ class DataMenuScreen(Screen):
 
             analyze_btn = AnalyzeButton(
                 text="Process",
-                path=path,  # disabled=not btn_disabled
+                monitoring_session=ms,
                 disabled=btn_disabled,
             )
 
             summary_btn = LaunchScreenButton(
                 text="Species List",
-                path=path,
+                monitoring_session=ms,
                 screenmanager=self.manager,
                 screenname="summary",
                 disabled=btn_disabled,
@@ -331,7 +351,7 @@ class DataMenuScreen(Screen):
 
             playback_btn = LaunchScreenButton(
                 text="Playback",
-                path=path,
+                monitoring_session=ms,
                 screenmanager=self.manager,
                 screenname="playback",
                 disabled=btn_disabled,
@@ -339,7 +359,7 @@ class DataMenuScreen(Screen):
 
             report_btn = ReportButton(
                 text="Report",
-                path=path,
+                monitoring_session=ms,
                 disabled=btn_disabled,
             )
 

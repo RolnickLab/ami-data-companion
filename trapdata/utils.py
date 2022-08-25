@@ -186,7 +186,7 @@ def predict_image(path):
     return results
 
 
-def choose_sample(images, direction, last_sample=None):
+def choose_sample_from_filesystem(images, direction, last_sample=None):
 
     if last_sample:
         last_sample = pathlib.Path(last_sample).name
@@ -217,7 +217,25 @@ def parse_annotations(annotations, format="aditya"):
         raise NotImplementedError
 
 
-def get_sequential_sample(direction, source_dir, last_sample=None):
+def get_sequential_sample(direction, images, last_sample=None):
+    if not images:
+        return None
+
+    if last_sample:
+        last_idx = images.index(last_sample)
+    else:
+        last_idx = 0
+
+    if direction > 0:
+        idx = last_idx + 1
+    elif direction < 0:
+        idx = last_idx - 1
+
+    sample = images[idx % len(images)]
+    return sample
+
+
+def get_sequential_sample_from_filesystem(direction, source_dir, last_sample=None):
     source_dir = pathlib.Path(source_dir)
     annotation_files = find_annotations(source_dir)
     if annotation_files:
@@ -232,7 +250,7 @@ def get_sequential_sample(direction, source_dir, last_sample=None):
         # sample = random.choice(list(annotations["images"]))
         samples = {s["file"]: s for s in samples}
         filenames = list(samples.keys())
-        img_name = choose_sample(filenames, direction, last_sample)
+        img_name = choose_sample_from_filesystem(filenames, direction, last_sample)
         img_path = source_dir / img_name
         sample = samples[img_name]
         bboxes = []
@@ -253,7 +271,7 @@ def get_sequential_sample(direction, source_dir, last_sample=None):
 
         images = sorted(list(annotations.keys()))
         # sample = random.choice(list(annotations.keys()))
-        sample = choose_sample(images, direction, last_sample)
+        sample = choose_sample_from_filesystem(images, direction, last_sample)
         img_path = source_dir / sample
         parsed_annotations = parse_annotations(annotations[sample])
 
@@ -582,6 +600,7 @@ def save_monitoring_session(base_directory, session):
                     logger.debug(f"Adding new Image to db: {db_img}")
                 ms_images.append(db_img)
             sess.bulk_save_objects(ms_images)
+            ms.num_images = len(ms_images)
 
         logger.debug("Comitting changes to DB")
         sess.commit()
@@ -593,14 +612,15 @@ def save_monitoring_sessions(base_directory, sessions):
     for session in sessions:
         save_monitoring_session(base_directory, session)
 
-    return get_monitoring_sessions(base_directory)
+    return get_monitoring_sessions_from_db(base_directory)
 
 
-def get_monitoring_sessions(base_directory):
+def get_monitoring_sessions_from_db(base_directory):
+    logger.info("Quering existing sessions in DB")
     with db.get_session(base_directory) as sess:
         results = (
             sess.query(db.MonitoringSession)
             .filter_by(base_directory=str(base_directory))
             .all()
         )
-    return results
+    return list(results)
