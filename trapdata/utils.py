@@ -455,10 +455,10 @@ def find_images(
                             continue
                         else:
                             date = None
-                    finally:
-                        yield path, date
                 else:
-                    yield path
+                    date = None
+
+                yield {"path": path, "timestamp": date}
 
 
 def group_images_by_day(images, maximum_gap_minutes=6 * 60):
@@ -477,39 +477,39 @@ def group_images_by_day(images, maximum_gap_minutes=6 * 60):
     logger.info(
         f"Grouping images into date-based groups with a maximum gap of {maximum_gap_minutes} minutes"
     )
-    images = sorted(images, key=lambda image_and_date: image_and_date[1])
+    images = sorted(images, key=lambda image: image["timestamp"])
     if not images:
         return []
 
     groups = collections.OrderedDict()
 
-    first_image, first_timestamp = images[0]
+    first_image = images[0]
 
     last_timestamp = None
     current_day = None
 
-    for image, timestamp in images:
+    for image in images:
         if last_timestamp:
-            delta = (timestamp - last_timestamp).seconds / 60
+            delta = (image["timestamp"] - last_timestamp).seconds / 60
         else:
             delta = maximum_gap_minutes
 
         # logger.debug(f"{timestamp}, {round(delta, 2)}")
 
         if delta >= maximum_gap_minutes:
-            current_day = timestamp.date()
+            current_day = image["timestamp"].date()
             logger.debug(
                 f"Gap of {round(delta/60, 1)} hours detected. Starting new session for date: {current_day}"
             )
             groups[current_day] = []
 
-        groups[current_day].append((image, timestamp))
-        last_timestamp = timestamp
+        groups[current_day].append(image)
+        last_timestamp = image["timestamp"]
 
     # This is for debugging
     for day, images in groups.items():
-        _, first_date = images[0]
-        _, last_date = images[-1]
+        first_date = images[0]["timestamp"]
+        last_date = images[-1]["timestamp"]
         delta = last_date - first_date
         hours = round(delta.seconds / 60 / 60, 1)
         logger.debug(
@@ -523,6 +523,8 @@ def group_images_by_day(images, maximum_gap_minutes=6 * 60):
 
 
 def get_monitoring_sessions_from_filesystem(base_directory):
+    # @TODO can we use the sqlalchemy classes for sessions & images before
+    # they are saved to the DB?
     images = find_images(base_directory)
     sessions = []
     groups = group_images_by_day(images)
@@ -532,39 +534,18 @@ def get_monitoring_sessions_from_filesystem(base_directory):
                 "base_directory": str(base_directory),
                 "day": day,
                 "num_images": len(images),
-                "start_time": images[0][1],
-                "end_time": images[-1][1],
-                "images": [image for image, timestamp in images],
+                "start_time": images[0]["timestamp"],
+                "end_time": images[-1]["timestamp"],
+                "images": images,
             }
         )
     sessions.sort(key=lambda s: s["day"])
     return sessions
 
 
-def save_monitoring_sessions(base_directory, monitoring_sessions):
-
-    new_ms = []
-    for day, images in monitoring_sessions.items():
-        ms = MonitoringSession(base_directory=str(base_directory), day=day)
-        for path, timestamp in images:
-            img = Image(path=str(path), timestamp=timestamp)
-            ms.images.append(img)
-        new_ms.append(ms)
-
-    db = init_db()
-    save_all(new_ms, db=db)
-    return new_ms
-
-
-def save_monitoring_sessions(base_directory):
-    logger.info("Scanning and saving new images to DB")
-    images = find_images(base_directory)
-    groups = group_images_by_day(images)
-
-    sess = db.get_session(base_directory)
-
-    for day, images_and_dates in groups.items():
-        ms_kwargs = {"base_directory": str(base_directory), "day": day}
+def save_monitoring_session(base_directory, session):
+    with db.get_session(base_directory) as sess:
+        ms_kwargs = {"base_directory": str(base_directory), "day": session["day"]}
         ms = sess.query(db.MonitoringSession).filter_by(**ms_kwargs).one_or_none()
         if ms:
             logger.debug(f"Found existing Monitoring Session in db: {ms}")
@@ -572,36 +553,44 @@ def save_monitoring_sessions(base_directory):
             ms = db.MonitoringSession(**ms_kwargs)
             logger.debug(f"Adding new Monitoring Session to db: {ms}")
             sess.add(ms)
+            sess.flush()
 
         ms_images = []
-        for path, timestamp in images_and_dates:
-            path = pathlib.Path(path).relative_to(base_directory)
+        for image in session["images"]:
+            path = pathlib.Path(image["path"]).relative_to(base_directory)
             img_kwargs = {
-                "path": str(path),
-                "timestamp": timestamp,
+                "monitoring_session_id": ms.id,
+                "path": str(image["path"]),
+                "timestamp": image["timestamp"],
             }
-            img = sess.query(db.Image).filter_by(**img_kwargs).one_or_none()
-            if img:
+            db_img = sess.query(db.Image).filter_by(**img_kwargs).one_or_none()
+            if db_img:
                 # logger.debug(f"Found existing Image in db: {img}")
                 pass
             else:
-                img = db.Image(**img_kwargs)
-                logger.debug(f"Adding new Image to db: {img}")
-            ms_images.append(img)
-        ms.images = ms_images
+                db_img = db.Image(**img_kwargs)
+                logger.debug(f"Adding new Image to db: {db_img}")
+            ms_images.append(db_img)
+        sess.bulk_save_objects(ms_images)
 
         logger.debug("Comitting changes to DB")
-        # @TODO use bulk_save_objects? This is slow
         sess.commit()
+        logger.debug("Done committing")
+
+
+def save_monitoring_sessions(base_directory, sessions):
+
+    for session in sessions:
+        save_monitoring_session(base_directory, session)
 
     return get_monitoring_sessions(base_directory)
 
 
 def get_monitoring_sessions(base_directory):
-    sess = db.get_session(base_directory)
-
-    return (
-        sess.query(db.MonitoringSession)
-        .filter_by(base_directory=str(base_directory))
-        .all()
-    )
+    with db.get_session(base_directory) as sess:
+        results = (
+            sess.query(db.MonitoringSession)
+            .filter_by(base_directory=str(base_directory))
+            .all()
+        )
+    return results

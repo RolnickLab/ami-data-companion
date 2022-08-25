@@ -212,8 +212,10 @@ class ReportButton(Button):
 
 class DataMenuScreen(Screen):
     root_dir = ObjectProperty(allownone=True)
-    sessions = ListProperty()
+    sessions = ObjectProperty()
     status_popup = ObjectProperty()
+    status_clock = ObjectProperty()
+    data_ready = BooleanProperty(defaultvalue=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -244,32 +246,61 @@ class DataMenuScreen(Screen):
             )
             self.status_popup.open()
 
+    def on_data_ready(self, *args):
+        if self.data_ready:
+            logger.info("Data is ready for other methods")
+            self.enable_buttons()
+
+    def enable_buttons(self):
+        logger.debug("Enabling all buttons")
+        for row in self.ids.monitoring_sessions.children:
+            for child in row.children:
+                if isinstance(child, Button):
+                    child.disabled = False
+
     def get_monitoring_sessions(self, *args):
         self.sessions = get_monitoring_sessions_from_filesystem(self.root_dir)
         self.status_popup.dismiss()
+        logger.info("Writing monitoring data to DB in the background")
+        bgtask = threading.Thread(
+            target=partial(save_monitoring_sessions, self.root_dir, self.sessions),
+            daemon=True,
+            name="writing_monitoring_sessions_to_db",
+        )
+        bgtask.start()
+        self.status_clock = Clock.schedule_interval(
+            partial(self.watch_db_progress, bgtask), 1
+        )
+
+    def watch_db_progress(self, bgtask, *args):
+        logger.info(f"Checking DB write status: {bgtask}")
+        if bgtask and not bgtask.is_alive():
+            self.data_ready = True
+            Clock.unschedule(self.status_clock)
 
     def display_monitoring_sessions(self, *args):
-        grid = self.ids.nightly_folders
+        grid = self.ids.monitoring_sessions
         grid.clear_widgets()
 
         for ms in self.sessions:
 
             label = f"{ms['day'].strftime('%a, %b %-d')} \n{ms['num_images']} images"
             if ms["images"]:
-                first_image = pathlib.Path(ms["images"][0])
-                bg_image = str(self.root_dir / first_image)
+                first_image_path = pathlib.Path(ms["images"][0]["path"])
+                bg_image = str(self.root_dir / first_image_path)
             else:
                 continue
 
-            # Temporay until methods use a list of images in DB instead of a path
-            path = first_image.parent
+            # TEMPORARY until methods use a list of images in DB instead of a path
+            path = first_image_path.parent
 
             # Check if there are unprocessed images in monitoring session?
-            btn_disabled = False
+            btn_disabled = True
 
             analyze_btn = AnalyzeButton(
                 text="Process",
                 path=path,  # disabled=not btn_disabled
+                disabled=btn_disabled,
             )
 
             summary_btn = LaunchScreenButton(

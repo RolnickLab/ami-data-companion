@@ -1,5 +1,6 @@
 import datetime
 import pathlib
+import contextlib
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -9,7 +10,7 @@ from . import utils
 
 Base = orm.declarative_base()
 
-
+# Rename to CapturePeriod? shorter? less confusing with other types of Sessions. CaptureSession?
 class MonitoringSession(Base):
     __tablename__ = "monitoring_sessions"
 
@@ -123,10 +124,12 @@ def get_db(base_directory=None, create=True):
     return db
 
 
+@contextlib.contextmanager
 def get_session(base_directory):
     db = get_db(base_directory)
-    # return orm.sessionmaker(db)
-    return orm.Session(db)
+    session = orm.Session(db)
+    yield session
+    session.close()
 
 
 def get_or_create(session, model, defaults=None, **kwargs):
