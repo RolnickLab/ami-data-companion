@@ -332,8 +332,7 @@ class DataMenuScreen(Screen):
 
         for ms in self.sessions:
 
-            # num_images = db.monitoring_session_images_count(ms)
-            label = f"{ms.day.strftime('%a, %b %-d')} \n{ms.num_images} images"
+            label = f"{ms.day.strftime('%a, %b %-d')} \n{ms.num_images or 0} images\n{ms.duration_label}"
 
             with db.get_session(self.root_dir) as sess:
                 first_image = (
@@ -380,7 +379,7 @@ class DataMenuScreen(Screen):
                 disabled=btn_disabled,
             )
 
-            row = GridLayout(rows=1, cols=6, spacing=10)
+            row = GridLayout(rows=1, cols=6, spacing=20)
             row.add_widget(AsyncImage(source=bg_image))
             row.add_widget(Label(text=label))
             row.add_widget(analyze_btn)

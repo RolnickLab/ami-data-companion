@@ -60,6 +60,22 @@ class MonitoringSession(Base):
         self.start_time = images[0].timestamp
         self.end_time = images[-1].timestamp
 
+    def duration(self):
+        if self.start_time and self.end_time:
+            return self.end_time - self.start_time
+        else:
+            return None
+
+    @property
+    def duration_label(self):
+        if self.duration():
+            hours = int(round(self.duration().seconds / 60 / 60, 0))
+            unit = "hour" if hours == 1 else "hours"
+            duration = f"{hours} {unit}"
+        else:
+            duration = "Unknown duration"
+        return duration
+
 
 # These are aparently needed because none of the fancy stuff seems to work
 def monitoring_session_images(ms):
