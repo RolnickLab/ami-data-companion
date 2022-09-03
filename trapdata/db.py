@@ -68,7 +68,9 @@ class Image(Base):
 
     id = sa.Column(sa.Integer, primary_key=True)
     monitoring_session_id = sa.Column(sa.ForeignKey("monitoring_sessions.id"))
-    path = sa.Column(sa.String(255))
+    path = sa.Column(
+        sa.String(255)
+    )  # @TODO store these as relative paths to the base_directory
     timestamp = sa.Column(sa.DateTime(timezone=True))
     last_read = sa.Column(sa.DateTime)
     last_processed = sa.Column(sa.DateTime)

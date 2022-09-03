@@ -479,6 +479,7 @@ def find_images(
                 yield {"path": path, "timestamp": date}
 
 
+# @TODO add other group by methods? like image size, camera model, random sample batches, etc. Add to UI settings
 def group_images_by_day(images, maximum_gap_minutes=6 * 60):
     """
     Find consecutive images and group them into daily/nightly monitoring sessions.
@@ -588,7 +589,7 @@ def save_monitoring_session(base_directory, session):
                 path = pathlib.Path(image["path"]).relative_to(base_directory)
                 img_kwargs = {
                     "monitoring_session_id": ms.id,
-                    "path": str(image["path"]),
+                    "path": str(image["path"]),  # @TODO these should be relative paths!
                     "timestamp": image["timestamp"],
                 }
                 db_img = sess.query(db.Image).filter_by(**img_kwargs).one_or_none()
@@ -600,11 +601,25 @@ def save_monitoring_session(base_directory, session):
                     logger.debug(f"Adding new Image to db: {db_img}")
                 ms_images.append(db_img)
             sess.bulk_save_objects(ms_images)
+
+            # Manually update aggregate / cached values after bulk update
+            # @TODO move these to resuable function, or avoid the need all together (bulk insert instead?)
             ms.num_images = len(ms_images)
+            ms.start_time = ms_images[1].timestamp
+            ms.end_time = ms_images[-1].timestamp
+            # sess.refresh(ms)
 
         logger.debug("Comitting changes to DB")
         sess.commit()
         logger.debug("Done committing")
+
+    # @TODO how can we re-trigger all aggregrates and observables after a bulk update
+    # logger.debug("Updating monitoring session aggregated values")
+    # with db.get_session(base_directory) as sess:
+    #     ms_kwargs = {"base_directory": str(base_directory), "day": session["day"]}
+    #     ms = sess.query(db.MonitoringSession).filter_by(**ms_kwargs).one_or_none()
+    #     sess.add(ms)
+    #     sess.commit()
 
 
 def save_monitoring_sessions(base_directory, sessions):
@@ -624,3 +639,30 @@ def get_monitoring_sessions_from_db(base_directory):
             .all()
         )
     return list(results)
+
+
+def get_monitoring_session_images(ms):
+    with db.get_session(ms.base_directory) as sess:
+        images = list(sess.query(db.Image).filter_by(monitoring_session_id=ms.id).all())
+    logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")
+    return images
+
+
+def save_image_annotations(monitoring_session, image_paths, image_data):
+    logger.debug(
+        f"Callback was called! {monitoring_session}, {image_paths}, {image_data}"
+    )
+    base_directory = monitoring_session.base_directory
+    with db.get_session(base_directory) as sess:
+        for image_path, data in zip(image_paths, image_data):
+            kwargs = {
+                "path": str(image_path),
+                "monitoring_session_id": monitoring_session.id,
+            }
+            image = sess.query(db.Image).filter_by(**kwargs).one_or_none()
+            if image:
+                for k, v in data.items():
+                    logger.debug(f"Updating {k} for image {image_path}")
+                    setattr(image, k, v)
+                sess.add(image)
+        sess.commit()

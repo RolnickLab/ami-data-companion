@@ -159,11 +159,7 @@ class ImagePlaybackScreen(Screen):
     def on_monitoring_session(self, instance, value):
         self.current_sample = None
         ms = value
-        with db.get_session(ms.base_directory) as sess:
-            self.images = list(
-                sess.query(db.Image).filter_by(monitoring_session_id=ms.id).all()
-            )
-            logger.info(f"Found {len(self.images)} images in Monitoring Session: {ms}")
+        self.images = get_monitoring_session_images(ms)
         preview = self.ids.image_preview
         preview.reset()
         preview.next_sample()

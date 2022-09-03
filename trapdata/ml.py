@@ -3,6 +3,7 @@ import json
 import argparse
 import pathlib
 import shutil
+import glob
 
 
 import sys
@@ -17,16 +18,15 @@ from .localization_classification_batch import (
     localization_classification,
 )
 
-MODEL_BASE_PATH = pathlib.Path(__file__).parent.parent / "models"
+# @TODO make this a configurable setting
+MODEL_BASE_PATH = pathlib.Path(__file__).parent.parent.parent / "data/models"
 
 
-def detect_and_classify(source_dir):
-    # @TODO needs to support list of images instead
-    source_dir = pathlib.Path(source_dir)
+def detect_and_classify(base_directory, image_list, results_callback=None):
+    base_directory = pathlib.Path(base_directory)
     args = argparse.Namespace(
-        data_dir=str(source_dir.parent)
-        + os.sep,  # Add trailing slash or other OS-native separator
-        image_folder=str(source_dir.name),
+        base_directory=base_directory,
+        image_list=image_list,
         model_localize=MODEL_BASE_PATH / "v1_localizmodel_2021-08-17-12-06.pt",
         model_moth=MODEL_BASE_PATH / "mothsv2_20220421_110638_30.pth",
         model_moth_nonmoth=MODEL_BASE_PATH
@@ -34,13 +34,11 @@ def detect_and_classify(source_dir):
         category_map_moth=MODEL_BASE_PATH / "03-mothsv2_category_map.json",
         category_map_moth_nonmoth=MODEL_BASE_PATH / "05-moth-nonmoth_category_map.json",
     )
-    annotations_path = localization_classification(args)
-    annotations_target_path = source_dir / "detections.json"
-    shutil.copy(str(annotations_path), str(annotations_target_path))
-    annotations = json.load(open(annotations_target_path))
-    return annotations
+
+    localization_classification(args, results_callback=results_callback)
 
 
 if __name__ == "__main__":
     source_dir = sys.argv[1]
-    detect_and_classify(source_dir)
+    image_list = glob(source_dir)
+    detect_and_classify(source_dir, image_list)

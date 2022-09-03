@@ -76,6 +76,7 @@ class TrapSesionData(Widget):
 
 class AnalyzeButton(Button):
     monitoring_session = ObjectProperty()
+    images = ListProperty()
     running = BooleanProperty(defaultvalue=False)
     progress = NumericProperty(defaultvalue=0)
     status_label = ObjectProperty()
@@ -90,16 +91,21 @@ class AnalyzeButton(Button):
             self.make_popup()
         self.popup.open()
 
+    def on_monitoring_session(self, instance, value):
+        ms = value
+        self.images = get_monitoring_session_images(ms)
+
     def start(self, *args):
         # @TODO can use the status property of the bgtask thread instead
         if not self.running:
             self.running = True
             self.progress = 0
             self.exit_event = threading.Event()
+            task_name = str(self.monitoring_session)
             self.bgtask = threading.Thread(
                 target=self.analyze,
                 daemon=True,
-                name=self.path.name,
+                name=task_name,
             )
             self.bgtask.start()
             # self.bgtask.add_done_callback(self.complete)
@@ -124,7 +130,18 @@ class AnalyzeButton(Button):
         #     if self.exit_event.is_set():
         #         break
 
-        detect_and_classify(self.path)
+        # @TODO can the results callback (DB save) happen in another thread? Does it help or hinder?
+        results_callback = partial(save_image_annotations, self.monitoring_session)
+        detect_and_classify(
+            base_directory=self.monitoring_session.base_directory,
+            image_list=[
+                pathlib.Path(image.path).relative_to(
+                    self.monitoring_session.base_directory
+                )
+                for image in self.images
+            ],
+            results_callback=results_callback,
+        )
         # @TODO this can't be in the separate bgtask thread because it modifies properties
         self.complete()
         return True
@@ -160,7 +177,7 @@ class AnalyzeButton(Button):
             # content.add_widget(stop_button)
             content.add_widget(close_button)
             self.popup = Popup(
-                title=f"Detect and classify moths in {self.path.name}",
+                title=f"Detect and classify moths in {str(self.monitoring_session)}",
                 content=content,
                 auto_dismiss=True,
                 size_hint=(None, None),

@@ -143,7 +143,7 @@ def predict_batch_specific(images, model_path, category_map_json, device):
     return labels, scores
 
 
-def classify_bboxes(localization_results, device, args):
+def classify_bboxes(localization_results, device, args, results_callback):
     annotations = {}
     label_list = (
         []
@@ -160,10 +160,20 @@ def classify_bboxes(localization_results, device, args):
         class_list, _ = predict_batch(
             img_crops, args.model_moth_nonmoth, args.category_map_moth_nonmoth, device
         )
+
         print(f"Predicting {len(img_crops)} with species classifier.")
         subclass_list, conf_list = predict_batch(
             img_crops, args.model_moth, args.category_map_moth, device
         )
+
+        if results_callback:
+            print("=== Saving results from classifiers for single image == ")
+            image_data = [
+                {"notes": str(labels)}
+                for labels in zip(bbox_list, class_list, subclass_list)
+            ]
+            results_callback([image_path], image_data)
+            print("=== CALLBACK END == ")
 
         image_name = pathlib.Path(image_path).name
         annotations[image_name] = [
@@ -278,17 +288,15 @@ def process_localization_output(output):
     return bboxes.cpu().numpy().tolist()
 
 
-def localization_classification(args):
+def localization_classification(args, results_callback=None):
     """main function for localization and classification"""
 
     torch.cuda.synchronize()
     start = time.time()
 
-    data_dir = pathlib.Path(args.data_dir)
-    image_folder = pathlib.Path(args.image_folder)
-    data_path = data_dir / image_folder
-    save_path = data_dir
-    annot_file = f"localize_classify_annotation-{image_folder.name}.json"
+    image_list = args.image_list
+    base_directory = pathlib.Path(args.base_directory)
+    annot_file = f"localize_classify_annotation-{base_directory.name}.json"
     annotations = {}
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -296,19 +304,13 @@ def localization_classification(args):
     # device = "cpu"
     # device = "cuda"
 
-    image_list = [
-        p
-        for p in os.listdir(data_path)
-        if p.lower().endswith(".jpg") and not p.startswith(".")
-    ]
-
     model = load_localization_model(args.model_localize, device)
     max_image_size = model.transform.max_size
 
     input_size = 300
     print(f"Preparing dataset of {len(image_list)} images")
     dataset = LocalizationDataset(
-        directory=data_path,
+        directory=base_directory,
         image_names=image_list,
         max_image_size=max_image_size,
     )
@@ -344,7 +346,8 @@ def localization_classification(args):
             data = data.to(device, non_blocking=True)
             output = model(data)
             output = [process_localization_output(o) for o in output]
-            results += list(zip(img_paths, output))
+            batch_results = list(zip(img_paths, output))
+            results += batch_results
             torch.cuda.synchronize()
             batch_end = time.time()
             elapsed = batch_end - batch_start
@@ -352,6 +355,11 @@ def localization_classification(args):
             print(
                 f"Time per batch: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second"
             )
+            if results_callback:
+                print("=== CALLBACK START == ")
+                img_data = [{"notes": image_bboxes} for image_bboxes in output]
+                results_callback(img_paths, img_data)
+                print("=== CALLBACK END == ")
 
     torch.cuda.synchronize()
     end = time.time()
@@ -361,23 +369,30 @@ def localization_classification(args):
         f"Localization time: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second (with startup)"
     )
 
-    annotations = classify_bboxes(results, device, args)
+    annotations = classify_bboxes(
+        results,
+        device,
+        args,
+        results_callback=results_callback,
+    )
 
     print("Saving annotations")
-    with open(save_path / annot_file, "w") as outfile:
+    with open(base_directory / annot_file, "w") as outfile:
         json.dump(annotations, outfile)
 
-    return save_path / annot_file
+    return base_directory / annot_file
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--data_dir", help="root directory containing the trap data", required=True
+        "--base_directory",
+        help="root directory containing the trap data",
+        required=True,
     )
     parser.add_argument(
-        "--image_folder",
-        help="date folder within root directory containing the images",
+        "--image_list",
+        help="list of images paths relative to the base directory",
         required=True,
     )
     parser.add_argument(
