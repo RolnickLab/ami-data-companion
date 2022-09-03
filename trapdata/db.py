@@ -7,6 +7,7 @@ from sqlalchemy import orm
 from sqlalchemy_utils import aggregated, observes
 
 from . import utils
+from .utils import logger
 
 Base = orm.declarative_base()
 
@@ -51,6 +52,14 @@ class MonitoringSession(Base):
             f"num_images={self.num_images!r}, num_detected_objects={self.num_detected_objects!r})"
         )
 
+    def update_aggregates(self):
+        # Requires and active session
+        logger.info(f"Updating cached values for {self}")
+        images = self.images
+        self.num_images = len(images)
+        self.start_time = images[0].timestamp
+        self.end_time = images[-1].timestamp
+
 
 # These are aparently needed because none of the fancy stuff seems to work
 def monitoring_session_images(ms):
@@ -61,6 +70,13 @@ def monitoring_session_images(ms):
 def monitoring_session_images_count(ms):
     with get_session(ms.base_directory) as sess:
         return int(sess.query(Image).filter_by(monitoring_session_id=ms.id).count())
+
+
+def update_all_aggregates(base_directory):
+    with get_session(base_directory) as sess:
+        for ms in sess.query(MonitoringSession).all():
+            ms.update_aggregates()
+        sess.commit()
 
 
 class Image(Base):

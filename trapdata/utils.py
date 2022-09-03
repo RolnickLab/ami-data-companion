@@ -602,24 +602,12 @@ def save_monitoring_session(base_directory, session):
                 ms_images.append(db_img)
             sess.bulk_save_objects(ms_images)
 
-            # Manually update aggregate / cached values after bulk update
-            # @TODO move these to resuable function, or avoid the need all together (bulk insert instead?)
-            ms.num_images = len(ms_images)
-            ms.start_time = ms_images[1].timestamp
-            ms.end_time = ms_images[-1].timestamp
-            # sess.refresh(ms)
+            # Manually update aggregate & cached values after bulk update
+            ms.update_aggregates()
 
         logger.debug("Comitting changes to DB")
         sess.commit()
         logger.debug("Done committing")
-
-    # @TODO how can we re-trigger all aggregrates and observables after a bulk update
-    # logger.debug("Updating monitoring session aggregated values")
-    # with db.get_session(base_directory) as sess:
-    #     ms_kwargs = {"base_directory": str(base_directory), "day": session["day"]}
-    #     ms = sess.query(db.MonitoringSession).filter_by(**ms_kwargs).one_or_none()
-    #     sess.add(ms)
-    #     sess.commit()
 
 
 def save_monitoring_sessions(base_directory, sessions):
