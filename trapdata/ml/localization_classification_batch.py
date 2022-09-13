@@ -18,8 +18,6 @@ import matplotlib.pyplot as plt
 import timm
 
 
-LOCALIZATION_SCORE_THRESHOLD = 0.99
-
 # Model Inference Class Definition
 class ModelInference:
     def __init__(self, model_path, category_map_json, device, input_size=300):
@@ -252,7 +250,7 @@ class LocalizationDataset(torch.utils.data.Dataset):
         return str(img_path), self.transform(pil_image)
 
 
-def load_localization_model(model_path, device):
+def fasterrcnn_mobilenet(model_path, device):
     print(f'Loading localization model with checkpoint "{model_path}"')
     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=None)
     num_classes = 2  # 1 class (object) + background
@@ -265,7 +263,36 @@ def load_localization_model(model_path, device):
     return model
 
 
-def process_localization_output(output):
+def fasterrcnn_mobilenet(model_path, device):
+    print(f'Loading "fasterrcnn_mobilenet" localization model with default weights')
+    model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(
+        weights="DEFAULT"
+    )
+    model = model.to(device)
+    model.eval()
+    return model
+
+
+def fastercnn(model_path, device):
+    print(f'Loading "fasterrcnn" localization model with checkpoint "{model_path}"')
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=None)
+    num_classes = 2  # 1 class (object) + background
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+    checkpoint = torch.load(model_path, map_location=device)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model = model.to(device)
+    model.eval()
+    return model
+
+
+def load_localization_model(model_path, device):
+    # @TODO move to modules or something modular
+    return fasterrcnn_mobilenet(model_path, device)
+
+
+def process_fasterrcnn_localization_output(img_path, output):
+    LOCALIZATION_SCORE_THRESHOLD = 0.99
     bboxes = output["boxes"][output["scores"] > LOCALIZATION_SCORE_THRESHOLD]
     print(
         f"Keeping {len(bboxes)} out of {len(output['boxes'])} objects found (threshold: {LOCALIZATION_SCORE_THRESHOLD})"
@@ -286,6 +313,45 @@ def process_localization_output(output):
             ]
         )
     return bboxes.cpu().numpy().tolist()
+
+
+def process_fasterrcnn_mobilenet_localization_output(img_path, output):
+    LOCALIZATION_SCORE_THRESHOLD = 0.01
+    bboxes = output["boxes"][
+        (output["scores"] > LOCALIZATION_SCORE_THRESHOLD) & (output["labels"] > 1)
+    ]
+
+    # Filter out background label, if using pretrained model only!
+    bboxes = output["boxes"][output["labels"] > 1]
+
+    print(
+        f"Keeping {len(bboxes)} out of {len(output['boxes'])} objects found (threshold: {LOCALIZATION_SCORE_THRESHOLD})"
+    )
+
+    bbox_percents = []
+    label_list = output["labels"]
+
+    img_width, img_height = Image.open(img_path).size
+    print("IMAGE DIMENSIONS", img_width, img_height)
+    for box in bboxes:
+        box_numpy = box.detach().cpu().numpy()
+        bbox_percents.append(
+            [
+                round(box_numpy[0] / img_width, 4),
+                round(box_numpy[1] / img_height, 4),
+                round(box_numpy[2] / img_width, 4),
+                round(box_numpy[3] / img_height, 4),
+            ]
+        )
+
+    bboxes = bboxes.cpu().numpy().astype(int).tolist()
+    # print(list(zip(bboxes, bbox_percents)))
+    return bboxes
+
+
+def process_localization_output(img_path, output):
+    # @TODO move to module or something
+    return process_fasterrcnn_mobilenet_localization_output(img_path, output)
 
 
 def synchronize_clocks():
@@ -323,13 +389,14 @@ def localization_classification(args, results_callback=None):
     )
 
     # @TODO need to determine batch size and not run out of memory
+    # @TODO make this configurable by user in settings
     if device == "cuda":
         batch_size = 8
         num_workers = 2
     else:
-        batch_size = 32
-        num_workers = multiprocessing.cpu_count()
-        # num_workers = 4
+        batch_size = 8
+        # num_workers = m   ultiprocessing.cpu_count()
+        num_workers = 4
 
     print(
         f"Preparing dataloader with batch size of {batch_size} and {num_workers} workers on device: {device}"
@@ -352,15 +419,19 @@ def localization_classification(args, results_callback=None):
             batch_start = time.time()
             data = data.to(device, non_blocking=True)
             output = model(data)
-            output = [process_localization_output(o) for o in output]
+            output = [
+                process_localization_output(img_path, o)
+                for img_path, o in zip(img_paths, output)
+            ]
             batch_results = list(zip(img_paths, output))
             results += batch_results
             synchronize_clocks()
             batch_end = time.time()
             elapsed = batch_end - batch_start
             images_per_second = len(image_list) / elapsed
+            seconds_per_image = elapsed / len(image_list)
             print(
-                f"Time per batch: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second"
+                f"Time per batch: {round(elapsed, 1)} seconds. {round(seconds_per_image, 1)} seconds per image"
             )
             if results_callback:
                 print("=== CALLBACK START == ")
@@ -372,8 +443,9 @@ def localization_classification(args, results_callback=None):
     end = time.time()
     elapsed = end - start
     images_per_second = len(image_list) / elapsed
+    seconds_per_image = elapsed / len(image_list)
     print(
-        f"Localization time: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second (with startup)"
+        f"Localization time: {round(elapsed, 1)} seconds. {round(seconds_per_image, 1)} seconds per image (with startup)"
     )
 
     annotations = classify_bboxes(
