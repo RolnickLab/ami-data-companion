@@ -288,10 +288,17 @@ def process_localization_output(output):
     return bboxes.cpu().numpy().tolist()
 
 
+def synchronize_clocks():
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    else:
+        pass
+
+
 def localization_classification(args, results_callback=None):
     """main function for localization and classification"""
 
-    torch.cuda.synchronize()
+    synchronize_clocks()
     start = time.time()
 
     image_list = args.image_list
@@ -341,14 +348,14 @@ def localization_classification(args, results_callback=None):
         for i, (img_paths, data) in enumerate(dataloader):
             print(f"Batch {i+1} out of {len(dataloader)}")
             print(f"Looking for objects in {len(img_paths)} images")
-            torch.cuda.synchronize()
+            synchronize_clocks()
             batch_start = time.time()
             data = data.to(device, non_blocking=True)
             output = model(data)
             output = [process_localization_output(o) for o in output]
             batch_results = list(zip(img_paths, output))
             results += batch_results
-            torch.cuda.synchronize()
+            synchronize_clocks()
             batch_end = time.time()
             elapsed = batch_end - batch_start
             images_per_second = len(image_list) / elapsed
@@ -361,7 +368,7 @@ def localization_classification(args, results_callback=None):
                 results_callback(img_paths, img_data)
                 print("=== CALLBACK END == ")
 
-    torch.cuda.synchronize()
+    synchronize_clocks()
     end = time.time()
     elapsed = end - start
     images_per_second = len(image_list) / elapsed
