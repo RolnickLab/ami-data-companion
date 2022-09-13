@@ -181,7 +181,7 @@ class AnalyzeButton(Button):
                 content=content,
                 auto_dismiss=True,
                 size_hint=(None, None),
-                size=(400, 400),
+                size=(600, 600),
             )
             close_button.bind(on_press=self.popup.dismiss)
             self.popup.ids["start_button"] = start_button
