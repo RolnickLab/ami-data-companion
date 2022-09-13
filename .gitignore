@@ -131,3 +131,7 @@ dmypy.json
 # Trap data project
 models/
 vendor/
+
+# macOS
+
+.DS_Store
