@@ -165,12 +165,24 @@ def classify_bboxes(localization_results, device, args, results_callback):
         )
 
         if results_callback:
-            print("=== Saving results from classifiers for single image == ")
-            image_data = [
-                {"notes": str(labels)}
-                for labels in zip(bbox_list, class_list, subclass_list)
+            print(
+                "=== CALLBACK START: Saving results from classifiers for single image == "
+            )
+            detected_objects_data = [
+                {
+                    "bbox": bbox,
+                    "binary_label": binary_label,
+                    "specific_label": specific_label,
+                    "specific_label_score": specific_label_score,
+                }
+                for bbox, binary_label, specific_label, specific_label_score in zip(
+                    bbox_list,
+                    class_list,
+                    subclass_list,
+                    conf_list,
+                )
             ]
-            results_callback([image_path], image_data)
+            results_callback([image_path], [detected_objects_data])
             print("=== CALLBACK END == ")
 
         image_name = pathlib.Path(image_path).name
@@ -434,9 +446,14 @@ def localization_classification(args, results_callback=None):
                 f"Time per batch: {round(elapsed, 1)} seconds. {round(seconds_per_image, 1)} seconds per image"
             )
             if results_callback:
-                print("=== CALLBACK START == ")
-                img_data = [{"notes": image_bboxes} for image_bboxes in output]
-                results_callback(img_paths, img_data)
+                print("=== CALLBACK START: Save only bboxes of detected objects == ")
+                # Format data to be saved in DB
+                # Here we are just saving the bboxes of detected objects
+                detected_objects_data = []
+                for image_output in output:
+                    detected_objects = [{"bbox": bbox} for bbox in image_output]
+                    detected_objects_data.append(detected_objects)
+                results_callback(img_paths, detected_objects_data)
                 print("=== CALLBACK END == ")
 
     synchronize_clocks()

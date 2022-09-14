@@ -37,10 +37,6 @@ from .utils import *
 Builder.load_file(str(pathlib.Path(__file__).parent / "playback.kv"))
 
 
-NONMOTH_COLOR = [0, 100 / 255, 1, 0.8]  # Blue
-MOTH_COLOR = [1, 0, 162 / 255, 1]  # Pink
-
-
 class AnnotatedImage(Widget):
     image_path = ObjectProperty()
     annotations = ListProperty()
@@ -98,15 +94,22 @@ class AnnotatedImage(Widget):
                 # )
                 # print("bbox#", i)
 
-                if "nonmoth" in annotation["label"]:
-                    color = NONMOTH_COLOR
+                if annotation.binary_label == POSITIVE_BINARY_LABEL:
+                    color = POSITIVE_COLOR
                 else:
-                    color = MOTH_COLOR
+                    color = NEGATIVE_COLOR
 
                 # color = [random.random() for _ in range(3)]
                 # color.append(0.8)  # alpha
                 Color(*color)
-                x1, y1, x2, y2 = annotation["bbox"]
+
+                if not annotation.bbox:
+                    logging.warn(
+                        f"No bbox for detected object {annotation.id}. Skipping."
+                    )
+                    continue
+
+                x1, y1, x2, y2 = annotation.bbox
 
                 w = x2 - x1
                 h = y2 - y1
@@ -135,7 +138,29 @@ class AnnotatedImage(Widget):
                 self.bbox_widgets.append(
                     Line(points=[x1, y1, x1, y2, x2, y2, x2, y1, x1, y1], width=2)
                 )
-                label_text = f"{annotation['label']} ({annotation['score']}%)"
+
+                if annotation.binary_label == NEGATIVE_BINARY_LABEL:
+                    label_text = ""
+
+                elif annotation.specific_label:
+                    # If there is a binary label and it's nonmoth, don't show
+                    # the specific label, even if one exists.
+                    if annotation.specific_label_score:
+                        score = round(annotation.specific_label_score * 100, 1)
+                        label_text = f"{annotation.specific_label} ({score}%)"
+                    else:
+                        label_text = f"{annotation.specific_label}"
+
+                elif annotation.binary_label:
+                    if annotation.binary_label_score:
+                        score = round(annotation.binary_label_score * 100, 1)
+                        label_text = f"{annotation.binary_label} ({score}%)"
+                    else:
+                        label_text = f"{annotation.binary_label}"
+
+                else:
+                    label_text = ""
+
                 self.bbox_widgets.append(
                     Label(
                         text=label_text,
@@ -202,14 +227,13 @@ class PreviewWindow(RelativeLayout):
         self.clear_widgets()
 
     def load_sample(self, image, annotations=list()):
-        base_directory = pathlib.Path(
-            self.parent.parent.monitoring_session.base_directory
-        )
-        image_path = base_directory / image.path
+        ms = self.parent.parent.monitoring_session
+        # Refetch image with associated detected objects
+        image = get_image_with_objects(ms, image.path)
         self.clear_widgets()
         cvs = AnnotatedImage(
-            image_path=image_path,
-            annotations=annotations,
+            image_path=image.absolute_path(ms.base_directory),
+            annotations=image.detected_objects,
             size=self.size,
             pos_hint={"bottom": 0},
         )

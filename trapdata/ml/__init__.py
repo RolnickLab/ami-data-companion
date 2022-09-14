@@ -19,7 +19,7 @@ from .localization_classification_batch import (
 )
 
 # @TODO make this a configurable setting
-MODEL_BASE_PATH = pathlib.Path(__file__).parent.parent.parent / "models"
+MODEL_BASE_PATH = pathlib.Path(__file__).parent.parent.parent.parent / "models"
 
 
 def detect_and_classify(base_directory, image_list, results_callback=None):

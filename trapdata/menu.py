@@ -131,7 +131,7 @@ class AnalyzeButton(Button):
         #         break
 
         # @TODO can the results callback (DB save) happen in another thread? Does it help or hinder?
-        results_callback = partial(save_image_annotations, self.monitoring_session)
+        results_callback = partial(save_detected_objects, self.monitoring_session)
         detect_and_classify(
             base_directory=self.monitoring_session.base_directory,
             image_list=[

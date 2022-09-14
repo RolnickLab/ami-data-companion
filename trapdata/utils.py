@@ -39,7 +39,13 @@ SUPPORTED_ANNOTATION_PATTERNS = ("detections.json", "megadetections.json")
 # TEST_IMAGES_BASE_PATH = "/media/michael/LaCie/AMI/"
 TEST_IMAGES_BASE_PATH = "/home/michael/Projects/AMI/TRAPDATA/Moth Week/"
 # TEST_IMAGES_BASE_PATH = "/home/michael/Projects/AMI/TRAPDATA/Quebec/"
-NULL_DETECTION_LABELS = ["nonmoth"]
+
+POSITIVE_BINARY_LABEL = "moth"
+NEGATIVE_BINARY_LABEL = "nonmoth"
+NULL_DETECTION_LABELS = [NEGATIVE_BINARY_LABEL]
+
+POSITIVE_COLOR = [0, 100 / 255, 1, 0.8]  # Blue
+NEGATIVE_COLOR = [1, 0, 162 / 255, 1]  # Pink
 
 
 def cache_dir(path=None):
@@ -255,7 +261,7 @@ def get_sequential_sample_from_filesystem(direction, source_dir, last_sample=Non
         sample = samples[img_name]
         bboxes = []
         for detection in sample["detections"]:
-            img_width, img_height = PImage.open(img_path).size
+            img_width, img_height = PIL.Image.open(img_path).size
             print("PIL image:", img_width, img_height)
             x, y, width, height = detection["bbox"]
             x1 = x * img_width
@@ -636,21 +642,49 @@ def get_monitoring_session_images(ms):
     return images
 
 
-def save_image_annotations(monitoring_session, image_paths, image_data):
+def save_detected_objects(monitoring_session, image_paths, detected_objects_data):
     logger.debug(
-        f"Callback was called! {monitoring_session}, {image_paths}, {image_data}"
+        f"Callback was called! {monitoring_session}, {image_paths}, {detected_objects_data}"
     )
     base_directory = monitoring_session.base_directory
     with db.get_session(base_directory) as sess:
-        for image_path, data in zip(image_paths, image_data):
-            kwargs = {
+        timestamp = datetime.datetime.now()
+        for image_path, detected_objects in zip(image_paths, detected_objects_data):
+            image_kwargs = {
                 "path": str(image_path),
                 "monitoring_session_id": monitoring_session.id,
             }
-            image = sess.query(db.Image).filter_by(**kwargs).one_or_none()
-            if image:
-                for k, v in data.items():
-                    logger.debug(f"Updating {k} for image {image_path}")
-                    setattr(image, k, v)
-                sess.add(image)
+            image = sess.query(db.Image).filter_by(**image_kwargs).one()
+            image.last_processed = timestamp
+            sess.add(image)
+            for object_data in detected_objects:
+                print("OBJECT DATA:", object_data)
+                detection = db.DetectedObject(
+                    last_detected=timestamp,
+                )
+                for k, v in object_data.items():
+                    logger.debug(f"Adding {k}: {v} to detected object {detection.id}")
+                    setattr(detection, k, v)
+                sess.add(detection)
+                logger.debug(f"Saving detected object {detection} for image {image}")
+                detection.image_id = image.id
         sess.commit()
+
+
+def get_image_with_objects(monitoring_session, image_path):
+    base_directory = monitoring_session.base_directory
+    with db.get_session(base_directory) as sess:
+        image_kwargs = {
+            "path": str(image_path),
+            "monitoring_session_id": monitoring_session.id,
+        }
+        image = (
+            sess.query(db.Image)
+            .filter_by(**image_kwargs)
+            .options(db.orm.joinedload(db.Image.detected_objects))
+            .one_or_none()
+        )
+        logger.debug(
+            f"Found image {image} with {len(image.detected_objects)} detected objects"
+        )
+        return image

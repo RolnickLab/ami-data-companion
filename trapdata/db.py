@@ -108,6 +108,11 @@ class Image(Base):
     last_processed = sa.Column(sa.DateTime)
     notes = sa.Column(sa.JSON)
 
+    def absolute_path(self, base_directory=None):
+        if not base_directory:
+            base_directory = self.monitoring_session.base_directory
+        return pathlib.Path(base_directory) / self.path
+
     @aggregated("detected_objects", sa.Column(sa.Integer))
     def num_detected_objects(self):
         return sa.func.count("1")
@@ -116,13 +121,14 @@ class Image(Base):
     detected_objects = orm.relationship(
         "DetectedObject",
         back_populates="image",
-        cascade="all, delete-orphan",
-        lazy="dynamic",
+        cascade="all, delete-orphan",  # @TODO no! do not delete orphans? processing time is precious
+        lazy="joined",
     )
 
     monitoring_session = orm.relationship(
         "MonitoringSession",
         back_populates="images",
+        lazy="joined",
     )
 
     def __repr__(self):
@@ -136,14 +142,18 @@ class DetectedObject(Base):
     image_id = sa.Column(sa.ForeignKey("images.id"))
     bbox = sa.Column(sa.JSON)
     specific_label = sa.Column(sa.String(255))
-    binary_label = sa.Column(sa.Boolean)
+    specific_label_score = sa.Column(sa.Numeric)
+    binary_label = sa.Column(sa.String(255))
+    binary_label_score = sa.Column(sa.Numeric)
     last_detected = sa.Column(sa.DateTime)
+    model_name = sa.Column(sa.String(255))
     notes = sa.Column(sa.JSON)
 
     image = orm.relationship("Image", back_populates="detected_objects")
 
     def __repr__(self):
-        return f"DetectedObject(image={self.image.path!r}, specific_label={self.specific_label!r}, bbox={self.bbox!r})"
+        image = self.image.path if self.image else None
+        return f"DetectedObject(image={image!r}, specific_label={self.specific_label!r}, bbox={self.bbox!r})"
 
 
 def get_db(base_directory=None, create=True):
