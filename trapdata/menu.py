@@ -263,9 +263,12 @@ class DataMenuScreen(Screen):
             logger.error("Failed to choose directory with a starting path")
             self.root_dir = choose_directory(cache=False)
 
-    def on_root_dir(self, *args):
-        if self.root_dir:
-            label_text = f"Looking for capture data in \n\n{self.root_dir}"
+    def on_root_dir(self, instance, value):
+        root_dir = value
+        logger.info("Base directory changed!")
+        self.data_ready = False
+        if root_dir:
+            label_text = f"Looking for capture data in \n\n{root_dir}"
             self.status_popup = Popup(
                 title="Status",
                 content=Label(text=label_text),
@@ -274,6 +277,7 @@ class DataMenuScreen(Screen):
                 auto_dismiss=False,
                 on_open=self.get_monitoring_sessions,
             )
+            logger.info(self.status_popup)
             self.status_popup.open()
 
     def on_data_ready(self, *args):
@@ -282,6 +286,8 @@ class DataMenuScreen(Screen):
             # Buttons aren't available immediately
             self.display_monitoring_sessions()
             Clock.schedule_once(self.enable_buttons, 1)
+        else:
+            self.disable_buttons()
 
     def enable_buttons(self, *args):
         logger.info("Enabling all buttons")
@@ -289,6 +295,13 @@ class DataMenuScreen(Screen):
             for child in row.children:
                 if isinstance(child, Button):
                     child.disabled = False
+
+    def disable_buttons(self, *args):
+        logger.info("Disabling all buttons")
+        for row in self.ids.monitoring_sessions.children:
+            for child in row.children:
+                if isinstance(child, Button):
+                    child.disabled = True
 
     def get_monitoring_sessions(self, *args):
         self.sessions = get_monitoring_sessions_from_db(self.root_dir)
