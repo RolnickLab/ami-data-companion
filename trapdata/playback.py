@@ -75,15 +75,10 @@ class AnnotatedImage(Widget):
                 keep_ratio=False,
                 allow_stretch=True,
             )
-            logging.info(self.image_path.absolute())
-            print("Image sizes:")
-            print(img.width, img.size, img.norm_image_size, img.texture_size)
-            print()
             win_width, win_height = img.norm_image_size
             img_width, img_height = img.texture_size
             x_scale = win_width / img_width
             y_scale = win_height / img_height
-            print("x scale:", x_scale, "y_scale:", y_scale)
             self.bg = img
             self.bbox_widgets = []
             for i, annotation in enumerate(self.annotations):
@@ -177,18 +172,21 @@ DEFAULT_FPS = 2
 
 class ImagePlaybackScreen(Screen):
     monitoring_session = ObjectProperty()
-    images = ListProperty()
+    image_ids = ListProperty()
     fps = NumericProperty(defaultvalue=DEFAULT_FPS)
     clock = ObjectProperty(allownone=True)
 
-    def on_monitoring_session(self, instance, value):
+    def reload(self, ms):
         self.current_sample = None
-        ms = value
-        self.images = get_monitoring_session_images(ms)
+        self.image_ids = [img.id for img in get_monitoring_session_image_ids(ms)]
         preview = self.ids.image_preview
         preview.reset()
         preview.next_sample()
         self.pause()
+
+    def on_monitoring_session(self, instance, value):
+        ms = value
+        self.reload(ms)
 
     def _play_callback(self, dt):
         # @TODO stop at last frame
@@ -226,10 +224,10 @@ class PreviewWindow(RelativeLayout):
         self.current_sample = None
         self.clear_widgets()
 
-    def load_sample(self, image, annotations=list()):
+    def load_sample(self, image_id):
         ms = self.parent.parent.monitoring_session
         # Refetch image with associated detected objects
-        image = get_image_with_objects(ms, image.path)
+        image = get_image_with_objects(ms, image_id)
         self.clear_widgets()
         cvs = AnnotatedImage(
             image_path=image.absolute_path(ms.base_directory),
@@ -241,22 +239,20 @@ class PreviewWindow(RelativeLayout):
         self.add_widget(cvs)
 
     def next_sample(self, *args):
-        image = get_sequential_sample(
+        image_id = get_sequential_sample(
             direction=1,
-            images=self.parent.parent.images,
-            last_sample=self.current_sample,
+            images=self.parent.parent.image_ids,
+            last_sample=self.current_sample.id if self.current_sample else None,
         )
-        print("Next!", image)
-        self.load_sample(image)
+        self.load_sample(image_id)
 
     def prev_sample(self, *args):
-        image = get_sequential_sample(
+        image_id = get_sequential_sample(
             direction=-1,
-            images=self.parent.parent.images,
-            last_sample=self.current_sample,
+            images=self.parent.parent.image_ids,
+            last_sample=self.current_sample.id if self.current_sample else None,
         )
-        print("Prev!", image)
-        self.load_sample(image)
+        self.load_sample(image_id)
 
 
 class ImageOverlayApp(App):

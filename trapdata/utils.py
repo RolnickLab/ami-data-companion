@@ -636,8 +636,23 @@ def get_monitoring_sessions_from_db(base_directory):
 
 
 def get_monitoring_session_images(ms):
+    # @TODO this is likely to slow things down. Some monitoring sessions have thousands of images.
     with db.get_session(ms.base_directory) as sess:
         images = list(sess.query(db.Image).filter_by(monitoring_session_id=ms.id).all())
+    logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")
+    return images
+
+
+def get_monitoring_session_image_ids(ms):
+    # Get a list of image IDs in order of timestamps as quickly as possible
+    # This could be in the thousands
+    with db.get_session(ms.base_directory) as sess:
+        images = list(
+            sess.query(db.Image.id)
+            .filter_by(monitoring_session_id=ms.id)
+            .order_by(db.Image.timestamp)
+            .all()
+        )
     logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")
     return images
 
@@ -671,12 +686,13 @@ def save_detected_objects(monitoring_session, image_paths, detected_objects_data
         sess.commit()
 
 
-def get_image_with_objects(monitoring_session, image_path):
+def get_image_with_objects(monitoring_session, image_id):
     base_directory = monitoring_session.base_directory
     with db.get_session(base_directory) as sess:
         image_kwargs = {
-            "path": str(image_path),
-            "monitoring_session_id": monitoring_session.id,
+            "id": image_id,
+            # "path": str(image_path),
+            # "monitoring_session_id": monitoring_session.id,
         }
         image = (
             sess.query(db.Image)
