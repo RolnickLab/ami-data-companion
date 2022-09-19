@@ -143,7 +143,6 @@ class DetectedObject(Base):
     image_id = sa.Column(sa.ForeignKey("images.id"))
     bbox = sa.Column(sa.JSON)
     area_pixels = sa.Column(sa.Integer)
-    new_col = sa.Column(sa.Integer)
     specific_label = sa.Column(sa.String(255))
     specific_label_score = sa.Column(sa.Numeric(asdecimal=False))
     binary_label = sa.Column(sa.String(255))
@@ -172,11 +171,16 @@ def archive_file(filepath):
         return backup_filepath
 
 
-def get_db(directory=None, create=False):
+def db_path(directory):
     db_name = "trapdata.db"
+    filepath = pathlib.Path(directory) / db_name
+    return filepath
+
+
+def get_db(directory=None, create=False):
 
     if directory:
-        filepath = pathlib.Path(directory) / db_name
+        filepath = db_path(directory)
         if filepath.exists():
             if create:
                 archive_file(filepath)

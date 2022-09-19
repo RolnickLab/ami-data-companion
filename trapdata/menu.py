@@ -272,8 +272,8 @@ class DataMenuScreen(Screen):
                 title="Error reading database",
                 content=Label(
                     text=(
-                        f"Error reading database in directory: \n\n"
-                        f"{self.root_dir} \n\n"
+                        f"Error reading database: \n\n"
+                        f"{db.db_path(self.root_dir)} \n\n"
                         f"Trying deleting the DB file and it will be recreated on next launch."
                     )
                 ),
@@ -281,7 +281,6 @@ class DataMenuScreen(Screen):
                 size=("550dp", "200dp"),
                 on_dismiss=sys.exit,
             ).open()
-            return False
         else:
             return True
 
@@ -290,7 +289,7 @@ class DataMenuScreen(Screen):
         logger.info("Base directory changed!")
         self.data_ready = False
 
-        if self.db_ready():
+        if root_dir and self.db_ready():
             label_text = f"Looking for capture data in \n\n{root_dir}"
             self.status_popup = Popup(
                 title="Status",
