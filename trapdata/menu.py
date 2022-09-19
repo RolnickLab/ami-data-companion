@@ -300,7 +300,6 @@ class DataMenuScreen(Screen):
                 auto_dismiss=False,
                 on_open=self.get_monitoring_sessions,
             )
-            logger.info(self.status_popup)
             self.status_popup.open()
 
     def on_data_ready(self, *args):
