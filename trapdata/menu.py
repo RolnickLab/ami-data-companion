@@ -263,11 +263,34 @@ class DataMenuScreen(Screen):
             logger.error("Failed to choose directory with a starting path")
             self.root_dir = choose_directory(cache=False)
 
+    def db_ready(self):
+        # Try to open a database session. @TODO add GUI indicator and ask to recreate if fails.
+        try:
+            db.check_db(self.root_dir)
+        except Exception:
+            Popup(
+                title="Error reading database",
+                content=Label(
+                    text=(
+                        f"Error reading database in directory: \n\n"
+                        f"{self.root_dir} \n\n"
+                        f"Trying deleting the DB file and it will be recreated on next launch."
+                    )
+                ),
+                size_hint=(None, None),
+                size=("550dp", "200dp"),
+                on_dismiss=sys.exit,
+            ).open()
+            return False
+        else:
+            return True
+
     def on_root_dir(self, instance, value):
         root_dir = value
         logger.info("Base directory changed!")
         self.data_ready = False
-        if root_dir:
+
+        if self.db_ready():
             label_text = f"Looking for capture data in \n\n{root_dir}"
             self.status_popup = Popup(
                 title="Status",

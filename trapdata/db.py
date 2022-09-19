@@ -1,4 +1,5 @@
 import datetime
+import time
 import pathlib
 import contextlib
 
@@ -88,8 +89,8 @@ def monitoring_session_images_count(ms):
         return int(sess.query(Image).filter_by(monitoring_session_id=ms.id).count())
 
 
-def update_all_aggregates(base_directory):
-    with get_session(base_directory) as sess:
+def update_all_aggregates(directory):
+    with get_session(directory) as sess:
         for ms in sess.query(MonitoringSession).all():
             ms.update_aggregates()
         sess.commit()
@@ -102,16 +103,16 @@ class Image(Base):
     monitoring_session_id = sa.Column(sa.ForeignKey("monitoring_sessions.id"))
     path = sa.Column(
         sa.String(255)
-    )  # @TODO store these as relative paths to the base_directory
+    )  # @TODO store these as relative paths to the directory
     timestamp = sa.Column(sa.DateTime(timezone=True))
     last_read = sa.Column(sa.DateTime)
     last_processed = sa.Column(sa.DateTime)
     notes = sa.Column(sa.JSON)
 
-    def absolute_path(self, base_directory=None):
-        if not base_directory:
-            base_directory = self.monitoring_session.base_directory
-        return pathlib.Path(base_directory) / self.path
+    def absolute_path(self, directory=None):
+        if not directory:
+            directory = self.monitoring_session.base_directory
+        return pathlib.Path(directory) / self.path
 
     @aggregated("detected_objects", sa.Column(sa.Integer))
     def num_detected_objects(self):
@@ -141,6 +142,8 @@ class DetectedObject(Base):
     id = sa.Column(sa.Integer, primary_key=True)
     image_id = sa.Column(sa.ForeignKey("images.id"))
     bbox = sa.Column(sa.JSON)
+    area_pixels = sa.Column(sa.Integer)
+    new_col = sa.Column(sa.Integer)
     specific_label = sa.Column(sa.String(255))
     specific_label_score = sa.Column(sa.Numeric)
     binary_label = sa.Column(sa.String(255))
@@ -156,13 +159,30 @@ class DetectedObject(Base):
         return f"DetectedObject(image={image!r}, specific_label={self.specific_label!r}, bbox={self.bbox!r})"
 
 
-def get_db(base_directory=None, create=True):
+def archive_file(filepath):
+    """
+    Rename an existing file to `<filepath>/<filename>.bak.<timestamp>`
+    """
+    filepath = pathlib.Path(filepath)
+    if filepath.exists():
+        suffix = f".{filepath.suffix}.backup.{str(int(time.time()))}"
+        backup_filepath = filepath.with_suffix(suffix)
+        logger.info(f"Moving existing file to {backup_filepath}")
+        filepath.rename(backup_filepath)
+        return backup_filepath
+
+
+def get_db(directory=None, create=False):
     db_name = "trapdata.db"
 
-    if base_directory:
-        location = pathlib.Path(base_directory) / db_name
-        if location.exists():
-            create = False
+    if directory:
+        filepath = pathlib.Path(directory) / db_name
+        if filepath.exists():
+            if create:
+                archive_file(filepath)
+        else:
+            create = True
+        location = filepath
 
     else:
         # Only works in a scoped session. Used for tests.
@@ -181,16 +201,53 @@ def get_db(base_directory=None, create=True):
 
 
 @contextlib.contextmanager
-def get_session(base_directory):
-    db = get_db(base_directory)
-    session = orm.Session(db)
-    yield session
-    session.close()
+def get_session(directory):
+    """
+    Convience method to start and close a database session.
+
+    The database is a file-based sqlite database, so we store
+    in the base directory of the trap images.
+    All image paths in the database will be relative to the location
+    of this base directory.
+
+
+    SQL Alchemy also has a sessionmaker utility that could be used.
     # return orm.sessionmaker(db).begin()
 
+    Usage:
 
-def query(base_directory, q, **kwargs):
-    with get_session(base_directory) as sess:
+    >>> directory = "/tmp/images"
+    >>> with get_session(directory) as sess:
+    >>>     num_images = sess.query(Image).filter_by().count()
+    >>> num_images
+    0
+    """
+    db = get_db(directory)
+    session = orm.Session(db)
+
+    yield session
+
+    session.close()
+
+
+def check_db(directory):
+    """
+    Try opening a database session.
+    """
+    try:
+        with get_session(directory) as sess:
+            # May have to check each model to detect schema changes
+            # @TODO probably a better way to do this!
+            sess.query(MonitoringSession).first()
+            sess.query(Image).first()
+            sess.query(DetectedObject).first()
+    except sa.exc.OperationalError as e:
+        logger.error(f"Error opening database session: {e}")
+        raise
+
+
+def query(directory, q, **kwargs):
+    with get_session(directory) as sess:
         return list(sess.query(q, **kwargs))
 
 
