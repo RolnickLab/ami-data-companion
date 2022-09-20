@@ -438,6 +438,9 @@ class DataMenuScreen(Screen):
 
         self.ids.status.text = "Ready"
 
+    def open_settings(self):
+        self.manager.current = "settings"
+
 
 class DataMenuApp(App):
     def build(self):
