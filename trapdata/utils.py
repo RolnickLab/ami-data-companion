@@ -37,7 +37,7 @@ logger.setLevel(logging.DEBUG)
 SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg")
 SUPPORTED_ANNOTATION_PATTERNS = ("detections.json", "megadetections.json")
 # TEST_IMAGES_BASE_PATH = "/media/michael/LaCie/AMI/"
-TEST_IMAGES_BASE_PATH = "/home/michael/Projects/AMI/TRAPDATA/Moth Week/"
+TEST_IMAGES_BASE_PATH = "/home/michael/Projects/AMI/TRAPDATA/Test/"
 # TEST_IMAGES_BASE_PATH = "/home/michael/Projects/AMI/TRAPDATA/Quebec/"
 
 POSITIVE_BINARY_LABEL = "moth"
@@ -86,6 +86,19 @@ def delete_setting(key):
         return f.unlink()
     else:
         return None
+
+
+def archive_file(filepath):
+    """
+    Rename an existing file to `<filepath>/<filename>.bak.<timestamp>`
+    """
+    filepath = pathlib.Path(filepath)
+    if filepath.exists():
+        suffix = f".{filepath.suffix}.backup.{str(int(time.time()))}"
+        backup_filepath = filepath.with_suffix(suffix)
+        logger.info(f"Moving existing file to {backup_filepath}")
+        filepath.rename(backup_filepath)
+        return backup_filepath
 
 
 def choose_directory(cache=True, setting_key="last_root_directory", starting_path=None):
@@ -284,7 +297,57 @@ def get_sequential_sample_from_filesystem(direction, source_dir, last_sample=Non
     return img_path, parsed_annotations
 
 
-def summarize_species(path, best_only=False):
+def summarize_species(ms, best_only=False):
+    """
+    Summarize the data in an annotations file
+    """
+
+    species = collections.defaultdict(list)
+
+    for img_path, annotations in data.items():
+        # Aditya's format
+        ants = parse_annotations(annotations)
+        for ant in ants:
+            label = ant["label"]
+            species[label].append((img_path, ant))
+
+    def prune(species):
+        # Pick only the annotation with the top score
+        print("Pruning species")
+        filtered_species = {}
+        for label, ants in species.items():
+            # print(label, ants)
+            top_score = -10000
+            top_pixels = 0
+            for img_path, ant in ants:
+                x1, y1, x2, y2 = ant["bbox"]
+                pixels = (x2 - x1) * (y2 - y1)
+                if (
+                    ant["score"] > top_score
+                    and ant["label"] not in NULL_DETECTION_LABELS
+                ):
+                    # if pixels > top_pixels:
+                    filtered_species[label] = {
+                        "image": img_path,
+                        "count": len(ants),
+                        "bbox": ant["bbox"],
+                        "score": ant["score"],
+                    }
+                    top_score = ant["score"]
+                    top_pixels = pixels
+
+        # if "nonmoth" not in filtered_species:
+        #     raise Exception("WHERE ARE YOU")
+
+        return filtered_species
+
+    if best_only:
+        species = prune(species)
+
+    return species
+
+
+def summarize_species_from_file(path, best_only=False):
     """
     Summarize the data in an annotations file
     """
@@ -485,6 +548,19 @@ def find_images(
                 yield {"path": path, "timestamp": date}
 
 
+def bbox_area(bbox):
+    """
+    Return the area of a bounding box.
+
+    Bounding boxes are assumed to be in the format:
+    [(top-left-coordinate-pair), (bottom-right-coordinate-pair)]
+    or: [x1, y1, x2, y2]
+    """
+    x1, y1, x2, y2 = bbox
+    area = (y2 - y1) * (x2 - x1)
+    return area
+
+
 # @TODO add other group by methods? like image size, camera model, random sample batches, etc. Add to UI settings
 def group_images_by_day(images, maximum_gap_minutes=6 * 60):
     """
@@ -673,17 +749,33 @@ def save_detected_objects(monitoring_session, image_paths, detected_objects_data
             image.last_processed = timestamp
             sess.add(image)
             for object_data in detected_objects:
-                print("OBJECT DATA:", object_data)
                 detection = db.DetectedObject(
                     last_detected=timestamp,
                 )
+
+                if "bbox" in object_data:
+                    area_pixels = bbox_area(object_data["bbox"])
+                    object_data["area_pixels"] = area_pixels
+
                 for k, v in object_data.items():
                     logger.debug(f"Adding {k}: {v} to detected object {detection.id}")
                     setattr(detection, k, v)
-                sess.add(detection)
+
                 logger.debug(f"Saving detected object {detection} for image {image}")
+                sess.add(detection)
+                detection.monitoring_session_id = monitoring_session.id
                 detection.image_id = image.id
         sess.commit()
+
+
+def get_detected_objects(monitoring_session):
+    base_directory = monitoring_session.base_directory
+    with db.get_session(base_directory) as sess:
+        query_kwargs = {
+            "monitoring_session_id": monitoring_session.id,
+        }
+        for obj in sess.query(db.DetectedObject).filter_by(**query_kwargs).all():
+            yield obj
 
 
 def get_image_with_objects(monitoring_session, image_id):

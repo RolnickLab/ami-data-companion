@@ -13,6 +13,8 @@ from kivy.clock import Clock
 
 from .utils import *
 
+from . import db
+
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "summary.kv"))
 
@@ -24,7 +26,10 @@ class SpeciesRow(BoxLayout):
         super().__init__(**kwargs)
 
     def on_species(self, instance, value):
-        self.make_row(value)
+        species = value
+        print(species)
+        if value:
+            self.make_row(value)
 
     def make_row(self, species):
         self.clear_widgets()
@@ -35,73 +40,73 @@ class SpeciesRow(BoxLayout):
         )
         label.bind(size=label.setter("text_size"))
 
-        self.add_widget(
-            Image(
-                source=species["atlas_path"],
-                size_hint_y=None,
-                height=species["image_height"],
-            )
-        )
+        # self.add_widget(
+        #     Image(
+        #         source=species["atlas_path"],
+        #         size_hint_y=None,
+        #         height=species["image_height"],
+        #     )
+        # )
         self.add_widget(label)
         self.add_widget(Label(text=str(species["count"]), valign="top"))
 
 
 class SpeciesListLayout(RecycleView):
-    source_dir = ObjectProperty()
+    monitoring_session = ObjectProperty()
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.data = []
 
-    def on_source_dir(self, instance, value):
-        print("SPECIES LAYOUT SOURCE_DIR CHANGED!", value)
+    def on_monitoring_session(self, instance, value):
         self.data = self.load_species(value)
         self.refresh_from_data()
 
-    def load_species(self, path):
+    def load_species(self, ms):
         """
         Return a list of species in the format that the "viewclass" widget
         expects. In this case the viewclass is a `SpeciesRow` object.
         """
-        if not path:
-            return []
-
-        annotation_files = find_annotations(path)
-        if not annotation_files:
-            species = []
-        else:
-            species = summarize_species(annotation_files[0], best_only=True)
-            fname = parse_annotations_to_kivy_atlas(annotation_files[0])
-
-        species_counts = [(name, details) for name, details in species.items()]
-        species_counts.sort(key=lambda species: species[1]["count"], reverse=True)
+        species_counts = db.queries.count_species(ms)
 
         row_height = 200  # @TODO make dynamic? Or fit images to specific size
+        # widget_attrs = [
+        #     {
+        #         "species": {
+        #             "atlas_path": f"atlas://{self.source_dir}/trapdata/{slugify(name)}",
+        #             "name": name,
+        #             "count": details["count"],
+        #             "image_height": row_height,
+        #         },
+        #         "height": row_height,
+        #     }
+        #     for name, details in species_counts
+        # ]
+
         widget_attrs = [
             {
                 "species": {
-                    "atlas_path": f"atlas://{self.source_dir}/trapdata/{slugify(name)}",
-                    "name": name,
-                    "count": details["count"],
+                    "name": label or "Unknown",
+                    "count": count,
                     "image_height": row_height,
                 },
                 "height": row_height,
             }
-            for name, details in species_counts
+            for label, count in species_counts
         ]
 
         return widget_attrs
 
 
 class SpeciesSummaryScreen(Screen):
-    source_dir = ObjectProperty()
+    monitoring_session = ObjectProperty()
 
-    def on_source_dir(self, instance, value):
+    def on_monitoring_session(self, instance, value):
         """
-        Update the source dir of the child SpeciesListLayout
-        when the source_dir of this screen changes.
+        Update the monitoring session of the child SpeciesListLayout
+        when the monitoring session of this screen changes.
         """
-        self.ids.species_list.source_dir = self.source_dir
+        self.ids.species_list.monitoring_session = self.monitoring_session
 
     def exit(self):
         self.manager.current = "menu"

@@ -215,7 +215,7 @@ class LaunchScreenButton(Button):
 
     def launch(self):
         """
-        Open a the the specified screen
+        Open the specified screen
         """
 
         if self.screenmanager and self.screenname:
@@ -268,6 +268,7 @@ class DataMenuScreen(Screen):
         try:
             db.check_db(self.root_dir)
         except Exception:
+            raise
             Popup(
                 title="Error reading database",
                 content=Label(
@@ -366,7 +367,12 @@ class DataMenuScreen(Screen):
 
         for ms in self.sessions:
 
-            label = f"{ms.day.strftime('%a, %b %-d')} \n{ms.num_images or 0} images\n{ms.duration_label}"
+            label = (
+                f"{ms.day.strftime('%a, %b %-d')} \n"
+                f"{ms.num_images or 0} images\n"
+                f"{ms.duration_label}\n"
+                f"{ms.num_detected_objects} objects\n"
+            )
 
             with db.get_session(self.root_dir) as sess:
                 first_image = (

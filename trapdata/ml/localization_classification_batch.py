@@ -80,26 +80,30 @@ class ModelInference:
 
 
 def crop_bboxes(image, bboxes):
-    cropped_images = []
-    bbox_list = []
+    """
+    Create cropped images from regions specified in a list of bounding boxes.
 
-    for box_numpy in bboxes:
-        # label_list.append(1)
-        # insect_area = (int(box_numpy[2]) - int(box_numpy[0])) * (
-        #     int(box_numpy[3]) - int(box_numpy[1])
-        # )
-        # area_per = int(insect_area / total_area * 100)
+    Bounding boxes are assumed to be in the format:
+    [(top-left-coordinate-pair), (bottom-right-coordinate-pair)]
+    or: [x1, y1, x2, y2]
+
+    The image is assumed to be a numpy array that can be indexed using the
+    coordinate pairs.
+    """
+
+    for (x1, y1, x2, y2) in bboxes:
+
+        object_area = (int(y2) - int(y1)) * (int(x2) - int(x1))
+        # area_percent = int(object_area / total_area * 100)
 
         cropped_image = image[
             :,
-            int(box_numpy[1]) : int(box_numpy[3]),
-            int(box_numpy[0]) : int(box_numpy[2]),
+            int(y1) : int(y2),
+            int(x1) : int(x2),
         ]
         transform_to_PIL = transforms.ToPILImage()
         cropped_image = transform_to_PIL(cropped_image)
-        cropped_images.append(cropped_image)
-
-    return cropped_images
+        yield cropped_image
 
 
 def predict_batch(images, model_path, category_map_json, device):
@@ -152,7 +156,7 @@ def classify_bboxes(localization_results, device, args, results_callback):
         print(f"Cropping bboxes")
         img = Image.open(image_path)
         img = transforms.ToTensor()(img)
-        img_crops = crop_bboxes(img, bbox_list)
+        img_crops = list(crop_bboxes(img, bbox_list))
 
         print(f"Predicting {len(img_crops)} with binary classifier.")
         class_list, _ = predict_batch(
