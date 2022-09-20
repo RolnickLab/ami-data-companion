@@ -138,8 +138,8 @@ class SpeciesSummaryScreen(Screen):
     def reload(self):
         self.ids.species_list.refresh()
 
-    def on_enter(self):
+    def on_enter(self, *args):
         self.ids.species_list.start_auto_refresh()
 
-    def on_leave(self):
+    def on_leave(self, *args):
         self.ids.species_list.stop_auto_refresh()

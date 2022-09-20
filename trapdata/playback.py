@@ -212,7 +212,7 @@ class ImagePlaybackScreen(Screen):
     def exit(self):
         self.manager.current = "menu"
 
-    def on_leave():
+    def on_leave(self, *args):
         self.pause()
 
 
