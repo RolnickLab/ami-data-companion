@@ -193,6 +193,7 @@ class ImagePlaybackScreen(Screen):
         self.ids.image_preview.next_sample()
 
     def play(self):
+        logger.debug("Starting playback")
         if self.clock:
             # Already running, increase framerate
             Clock.unschedule(self.clock)
@@ -201,6 +202,7 @@ class ImagePlaybackScreen(Screen):
         self.ids.play_button.text = f"Play ({self.fps} FPS)"
 
     def pause(self):
+        logger.debug("Stopping playback")
         if self.clock:
             Clock.unschedule(self.clock)
             self.clock = None
@@ -208,8 +210,10 @@ class ImagePlaybackScreen(Screen):
         self.ids.play_button.text = f"Play"
 
     def exit(self):
-        self.pause()
         self.manager.current = "menu"
+
+    def on_leave():
+        self.pause()
 
 
 class BBox(BoxLayout):

@@ -263,6 +263,14 @@ class DataMenuScreen(Screen):
             logger.error("Failed to choose directory with a starting path")
             self.root_dir = choose_directory(cache=False)
 
+    def reload(self):
+        """
+        Reload the view by changing the root dir.
+        """
+        root_dir = self.root_dir
+        self.root_dir = None
+        self.root_dir = root_dir
+
     def db_ready(self):
         # Try to open a database session. @TODO add GUI indicator and ask to recreate if fails.
         try:

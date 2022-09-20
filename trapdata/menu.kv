@@ -24,12 +24,13 @@
             size_hint_y: 0.1
             Button:
                 text: "Exit"
-                on_press: sys.exit(1)
+                on_press: sys.exit(0)
             Button:
                 text: "Choose Directory"
                 on_press: root.choose_root_directory() 
             Button:
                 text: "Rescan"  # Use what is saved in DB without scanning
+                on_press: root.reload()
             Button:
                 text: "Settings"
 

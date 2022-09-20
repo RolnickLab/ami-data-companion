@@ -53,13 +53,37 @@ class SpeciesRow(BoxLayout):
 
 class SpeciesListLayout(RecycleView):
     monitoring_session = ObjectProperty()
+    refresh_clock = ObjectProperty(allownone=True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.data = []
 
     def on_monitoring_session(self, instance, value):
-        self.data = self.load_species(value)
+        self.refresh()
+        self.start_auto_refresh()
+
+    def start_auto_refresh(self):
+        refresh_interval_seconds = 2
+
+        if self.refresh_clock:
+            Clock.unschedule(self.refresh_clock)
+
+        logger.debug(
+            f"Scheduling auto-refresh of species list every {refresh_interval_seconds} seconds"
+        )
+        self.refresh_clock = Clock.schedule_interval(
+            self.refresh, refresh_interval_seconds
+        )
+
+    def stop_auto_refresh(self):
+        logger.debug("Stopping auto-refresh of species list")
+        if self.refresh_clock:
+            Clock.unschedule(self.refresh_clock)
+
+    def refresh(self, *args):
+        logger.debug("Refreshing species list")
+        self.data = self.load_species(self.monitoring_session)
         self.refresh_from_data()
 
     def load_species(self, ms):
@@ -110,3 +134,12 @@ class SpeciesSummaryScreen(Screen):
 
     def exit(self):
         self.manager.current = "menu"
+
+    def reload(self):
+        self.ids.species_list.refresh()
+
+    def on_enter(self):
+        self.ids.species_list.start_auto_refresh()
+
+    def on_leave(self):
+        self.ids.species_list.stop_auto_refresh()
