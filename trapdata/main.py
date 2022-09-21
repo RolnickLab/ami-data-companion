@@ -56,6 +56,7 @@ class TrapDataAnalyzer(App):
                 "localization_model": None,
                 "binary_classification_model": None,
                 "taxon_classification_model": None,
+                "tracking_algorithm": None,
             },
         )
         config.setdefaults(
@@ -75,7 +76,7 @@ class TrapDataAnalyzer(App):
                 "key": "localization_model",
                 "type": "options",
                 "title": "Localization model",
-                "desc": "Model to use for object detection in original images from camera trap.",
+                "desc": "Model & settings to use for object detection in original images from camera trap.",
                 "options": ["model1", "model2", "model3"],
                 "section": "models",
             },
@@ -83,7 +84,7 @@ class TrapDataAnalyzer(App):
                 "key": "binary_classification_model",
                 "type": "options",
                 "title": "Binary classification model",
-                "desc": "Model to use for moth / non-moth classification of cropped images after object detection.",
+                "desc": "Model & settings to use for moth / non-moth classification of cropped images after object detection.",
                 "options": ["model1", "model2", "model3"],
                 "section": "models",
             },
@@ -91,8 +92,16 @@ class TrapDataAnalyzer(App):
                 "key": "taxon_classification_model",
                 "type": "options",
                 "title": "Species classification model",
-                "desc": "Model to use for fine-grained species or taxon-level classification of cropped images after moth/non-moth detection.",
+                "desc": "Model & settings to use for fine-grained species or taxon-level classification of cropped images after moth/non-moth detection.",
                 "options": ["model1", "model2", "model3"],
+                "section": "models",
+            },
+            {
+                "key": "tracking_algorithm",
+                "type": "options",
+                "title": "Occurence tracking algorithm (de-duplication)",
+                "desc": "Method of identifying and tracking the same individual moth accross multiple images.",
+                "options": [],
                 "section": "models",
             },
         ]
