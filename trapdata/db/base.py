@@ -85,7 +85,8 @@ def check_db(directory):
             # @TODO probably a better way to do this!
             for ModelClass in models.__models__:
                 logger.debug(f"Testing model {ModelClass}")
-                sess.query(ModelClass).first()
+                count = sess.query(ModelClass).count()
+                logger.debug(f"Found {count} records in table '{ModelClass.__tablename__}'")
     except sa.exc.OperationalError as e:
         logger.error(f"Error opening database session: {e}")
         return False
