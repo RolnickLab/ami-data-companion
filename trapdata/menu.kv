@@ -24,7 +24,7 @@
             size_hint_y: 0.1
             Button:
                 text: "Exit"
-                on_press: sys.exit(0)
+                on_press: app.stop() 
             Button:
                 text: "Choose Directory"
                 on_press: root.choose_root_directory() 
@@ -33,5 +33,5 @@
                 on_press: root.reload()
             Button:
                 text: "Settings"
-                on_press: root.open_settings()
+                on_press: app.open_settings()
 

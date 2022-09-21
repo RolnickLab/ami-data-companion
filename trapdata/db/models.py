@@ -22,6 +22,7 @@ __all__ = [
 Base = orm.declarative_base()
 
 # Rename to CapturePeriod? shorter? less confusing with other types of Sessions. CaptureSession?
+# Or SurveyEvent or Survey?
 class MonitoringSession(Base):
     __tablename__ = "monitoring_sessions"
 
