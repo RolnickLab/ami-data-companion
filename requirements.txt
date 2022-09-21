@@ -3,7 +3,7 @@ plyer  # cross platform interfaces like file chooser
 black
 Pillow
 python-dateutil
-pyobjus  # macOS requirement for Kivy
+# pyobjus  # macOS requirement for Kivy
 sqlalchemy
 sqlalchemy_utils
 

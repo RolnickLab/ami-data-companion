@@ -38,7 +38,10 @@ class ModelInference:
 
     def _load_model(self, model_path, num_classes):
         model = timm.create_model(
-            "tf_efficientnetv2_b3", weights=None, num_classes=num_classes
+            "tf_efficientnetv2_b3", 
+            num_classes=num_classes,
+            pretrained=False,
+            # weights=None,  # For versions >0.13
         )
         model = model.to(self.device)
         model.load_state_dict(
@@ -268,7 +271,10 @@ class LocalizationDataset(torch.utils.data.Dataset):
 
 def fasterrcnn_mobilenet(model_path, device):
     print(f'Loading localization model with checkpoint "{model_path}"')
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=None)
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
+        pretrained=False,
+        # weights=None,  # For versions >0.13
+    )
     num_classes = 2  # 1 class (object) + background
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
@@ -282,7 +288,7 @@ def fasterrcnn_mobilenet(model_path, device):
 def fasterrcnn_mobilenet(model_path, device):
     print(f'Loading "fasterrcnn_mobilenet" localization model with default weights')
     model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(
-        weights="DEFAULT"
+        # weights="DEFAULT"  # For versions >0.13
     )
     model = model.to(device)
     model.eval()
@@ -291,7 +297,10 @@ def fasterrcnn_mobilenet(model_path, device):
 
 def fastercnn(model_path, device):
     print(f'Loading "fasterrcnn" localization model with checkpoint "{model_path}"')
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=None)
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
+        pretrained=False,
+        # weights=None,  # For versions >0.13
+    )
     num_classes = 2  # 1 class (object) + background
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)

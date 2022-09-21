@@ -373,7 +373,7 @@ class DataMenuScreen(Screen):
         for ms in self.sessions:
 
             label = (
-                f"{ms.day.strftime('%a, %b %-d')} \n"
+                f"{ms.day.strftime('%a, %b %e')} \n"
                 f"{ms.num_images or 0} images\n"
                 f"{ms.duration_label}\n"
                 f"{ms.num_detected_objects} objects\n"
