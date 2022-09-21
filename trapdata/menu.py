@@ -273,10 +273,7 @@ class DataMenuScreen(Screen):
 
     def db_ready(self):
         # Try to open a database session. @TODO add GUI indicator and ask to recreate if fails.
-        try:
-            db.check_db(self.root_dir)
-        except Exception:
-            raise
+        if not db.check_db(self.root_dir):
             Popup(
                 title="Error reading database",
                 content=Label(

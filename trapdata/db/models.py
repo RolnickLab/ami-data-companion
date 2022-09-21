@@ -11,15 +11,10 @@ from .. import utils
 from ..utils import logger
 from sqlalchemy import orm
 
-__all__ = [
-    "Base",
-    "MonitoringSession",
-    "Image",
-    "DetectedObject",
-]
 
 # Only call this once & reuse it
 Base = orm.declarative_base()
+
 
 # Rename to CapturePeriod? shorter? less confusing with other types of Sessions. CaptureSession?
 # Or SurveyEvent or Survey?
@@ -166,3 +161,11 @@ class DetectedObject(Base):
     def __repr__(self):
         image = self.image.path if self.image else None
         return f"DetectedObject(image={image!r}, specific_label={self.specific_label!r}, bbox={self.bbox!r})"
+
+
+__models__ = [
+    # @TODO can this be dynamic?
+    MonitoringSession,
+    Image,
+    DetectedObject,
+]

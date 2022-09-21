@@ -7,6 +7,7 @@ from sqlalchemy import orm
 
 
 from . import models
+from .. import utils
 from ..utils import logger
 
 
@@ -22,7 +23,7 @@ def get_db(directory=None, create=False):
         filepath = db_path(directory)
         if filepath.exists():
             if create:
-                archive_file(filepath)
+                utils.archive_file(filepath)
         else:
             create = True
         location = filepath
@@ -82,13 +83,14 @@ def check_db(directory):
         with get_session(directory) as sess:
             # May have to check each model to detect schema changes
             # @TODO probably a better way to do this!
-            for attr in dir(models):
-                if isinstance(attr, orm.DeclarativeMeta):
-                    ModelClass = attr
-                    sess.query(ModelClass).first()
+            for ModelClass in models.__models__:
+                logger.debug(f"Testing model {ModelClass}")
+                sess.query(ModelClass).first()
     except sa.exc.OperationalError as e:
         logger.error(f"Error opening database session: {e}")
-        raise
+        return False
+    else:
+        return True
 
 
 def query(directory, q, **kwargs):
