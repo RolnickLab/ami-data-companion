@@ -131,6 +131,7 @@ dmypy.json
 # Trap data project
 models/
 vendor/
+trapdataanalyzer.ini
 
 # macOS
 
