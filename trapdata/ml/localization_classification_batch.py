@@ -1,9 +1,5 @@
 import pathlib
 import json
-import argparse
-import os
-import multiprocessing
-import functools
 import time
 
 import torch
@@ -14,7 +10,6 @@ import numpy as np
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision import transforms
 from PIL import Image
-import matplotlib.pyplot as plt
 import timm
 
 
@@ -38,7 +33,7 @@ class ModelInference:
 
     def _load_model(self, model_path, num_classes):
         model = timm.create_model(
-            "tf_efficientnetv2_b3", 
+            "tf_efficientnetv2_b3",
             num_classes=num_classes,
             pretrained=False,
             # weights=None,  # For versions >0.13
@@ -380,13 +375,6 @@ def process_localization_output(img_path, output):
     return process_fasterrcnn_mobilenet_localization_output(img_path, output)
 
 
-def synchronize_clocks():
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    else:
-        pass
-
-
 def localization_classification(args, results_callback=None):
     """main function for localization and classification"""
 
@@ -491,40 +479,3 @@ def localization_classification(args, results_callback=None):
         json.dump(annotations, outfile)
 
     return base_directory / annot_file
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--base_directory",
-        help="root directory containing the trap data",
-        required=True,
-    )
-    parser.add_argument(
-        "--image_list",
-        help="list of images paths relative to the base directory",
-        required=True,
-    )
-    parser.add_argument(
-        "--model_localize", help="path to the localization model", required=True
-    )
-    parser.add_argument(
-        "--model_moth",
-        help="path to the fine-grained moth classification model",
-        required=True,
-    )
-    parser.add_argument(
-        "--model_moth_nonmoth", help="path to the moth-nonmoth model", required=True
-    )
-    parser.add_argument(
-        "--category_map_moth",
-        help="path to the moth category map for converting integer labels to name labels",
-        required=True,
-    )
-    parser.add_argument(
-        "--category_map_moth_nonmoth",
-        help="path to the moth-nonmoth category map for converting integer labels to name labels",
-        required=True,
-    )
-    args = parser.parse_args()
-    localization_classification(args)

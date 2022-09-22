@@ -43,7 +43,7 @@ from kivy.logger import Logger
 
 from .utils import *
 
-from .ml import detect_and_classify
+from .ml import detect_objects
 
 # detect_and_classify = lambda *args, **kwargs: None
 
@@ -132,7 +132,8 @@ class AnalyzeButton(Button):
 
         # @TODO can the results callback (DB save) happen in another thread? Does it help or hinder?
         results_callback = partial(save_detected_objects, self.monitoring_session)
-        detect_and_classify(
+        detect_objects(
+            model_name="fasterrcnn_mobilenet",
             base_directory=self.monitoring_session.base_directory,
             image_list=[
                 pathlib.Path(image.path).relative_to(
