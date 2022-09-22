@@ -77,6 +77,7 @@ def predict(
     num_workers=2,
     weights="DEFAULT",
     device=None,
+    # Dataset=None,
     results_callback=None,
 ):
     """"""
@@ -91,6 +92,7 @@ def predict(
     dataset = Dataset(
         directory=base_directory,
         image_names=image_list,
+        # transforms=weights.transforms,
     )
 
     logger.info(

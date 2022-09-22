@@ -101,6 +101,7 @@ class Image(Base):
     timestamp = sa.Column(sa.DateTime(timezone=True))
     last_read = sa.Column(sa.DateTime)
     last_processed = sa.Column(sa.DateTime)
+    in_queue = sa.Column(sa.Boolean, default=False)
     notes = sa.Column(sa.JSON)
 
     def absolute_path(self, directory=None):
