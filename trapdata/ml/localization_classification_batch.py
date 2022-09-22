@@ -269,7 +269,7 @@ class LocalizationDataset(torch.utils.data.Dataset):
         return str(img_path), self.transform(pil_image)
 
 
-def fasterrcnn_mobilenet(model_path, device):
+def fasterrcnn(model_path, device):
     print(f'Loading localization model with checkpoint "{model_path}"')
     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
         pretrained=False,
@@ -288,7 +288,8 @@ def fasterrcnn_mobilenet(model_path, device):
 def fasterrcnn_mobilenet(model_path, device):
     print(f'Loading "fasterrcnn_mobilenet" localization model with default weights')
     model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(
-        # weights="DEFAULT"  # For versions >0.13
+        # pretained=True,
+        weights="DEFAULT"  # For versions >0.13
     )
     model = model.to(device)
     model.eval()
