@@ -20,6 +20,7 @@ kivy.require("2.1.0")
 
 
 from kivy.app import App
+from kivy.config import Config
 from kivy.clock import Clock
 from kivy.uix.label import Label
 from kivy.uix.image import Image, AsyncImage
@@ -132,8 +133,9 @@ class AnalyzeButton(Button):
 
         # @TODO can the results callback (DB save) happen in another thread? Does it help or hinder?
         results_callback = partial(save_detected_objects, self.monitoring_session)
+        app = App.get_running_app()
         detect_objects(
-            model_name="fasterrcnn_mobilenet",
+            model_name=app.config.get("models", "localization_model"),
             base_directory=self.monitoring_session.base_directory,
             image_list=[
                 pathlib.Path(image.path).relative_to(

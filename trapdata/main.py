@@ -12,7 +12,7 @@ from kivy.config import Config
 from .menu import DataMenuScreen
 from .playback import ImagePlaybackScreen
 from .summary import SpeciesSummaryScreen
-from .db import get_session
+from . import ml
 
 
 kivy.require("2.1.0")
@@ -53,9 +53,13 @@ class TrapDataAnalyzer(App):
             "models",
             {
                 "booltest": True,
-                "localization_model": None,
-                "binary_classification_model": None,
-                "taxon_classification_model": None,
+                "localization_model": list(ml.LOCALIZATION_MODELS.keys())[0],
+                "binary_classification_model": list(
+                    ml.BINARY_CLASSIFICATION_MODELS.keys()
+                )[0],
+                "taxon_classification_model": list(
+                    ml.TAXON_CLASSIFICATION_MODELS.keys()
+                )[0],
                 "tracking_algorithm": None,
             },
         )
@@ -77,7 +81,7 @@ class TrapDataAnalyzer(App):
                 "type": "options",
                 "title": "Localization model",
                 "desc": "Model & settings to use for object detection in original images from camera trap.",
-                "options": ["model1", "model2", "model3"],
+                "options": list(ml.LOCALIZATION_MODELS.keys()),
                 "section": "models",
             },
             {
@@ -85,7 +89,7 @@ class TrapDataAnalyzer(App):
                 "type": "options",
                 "title": "Binary classification model",
                 "desc": "Model & settings to use for moth / non-moth classification of cropped images after object detection.",
-                "options": ["model1", "model2", "model3"],
+                "options": list(ml.BINARY_CLASSIFICATION_MODELS.keys()),
                 "section": "models",
             },
             {
@@ -93,7 +97,7 @@ class TrapDataAnalyzer(App):
                 "type": "options",
                 "title": "Species classification model",
                 "desc": "Model & settings to use for fine-grained species or taxon-level classification of cropped images after moth/non-moth detection.",
-                "options": ["model1", "model2", "model3"],
+                "options": list(ml.TAXON_CLASSIFICATION_MODELS.keys()),
                 "section": "models",
             },
             {

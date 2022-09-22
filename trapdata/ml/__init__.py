@@ -8,19 +8,20 @@ from ..utils import logger
 from . import localization
 
 
-LOCALIZATION_MODELS = [
-    "fasterrcnn",
-    "fasterrcnn_mobilenet",
-]
+LOCALIZATION_MODELS = {
+    "FasterRCNN MobileNet": "trapdata.ml.localization.fasterrcnn_mobilenet",
+    "Custom FasterRCNN": "trapdata.ml.localization.fasterrcnn",
+    "MegaDectector v5": "trapdata.ml.localization.megadetectorv5",
+}
 
-BINARY_CLASSIFICATION_MODELS = [
-    "moth_nonmoth",
-    "insect_noninsect",
-]
 
-TAXON_CLASSIFICATION_MODELS = [
-    "efficientnetv4",
-]
+BINARY_CLASSIFICATION_MODELS = {
+    "Moth / Non-Moth": "trapdata.ml.classification.moth_nonmoth",
+}
+
+TAXON_CLASSIFICATION_MODELS = {
+    "Ottawa & Vermont Macromoth Species": "trapdata.ml.classification.ottawa_macromoths",
+}
 
 # Original model weight paths:
 # model_localize=MODEL_BASE_PATH / "v1_localizmodel_2021-08-17-12-06.pt",
@@ -33,11 +34,13 @@ TAXON_CLASSIFICATION_MODELS = [
 
 def detect_objects(model_name, **kwargs):
 
-    logger.debug(f"Loading object detection model: {model_name}")
-    model_module = importlib.import_module("." + model_name, "trapdata.ml.localization")
+    module_path = LOCALIZATION_MODELS[model_name]
+    logger.debug(f"Loading object detection model: {module_path}")
+    model_module = importlib.import_module(module_path)
 
     logger.debug(f"Calling predict with arguments: {kwargs}")
     model_module.predict(**kwargs)
+    logger.debug("Predict complete")
 
 
 def classify_objects(model_name, **kwargs):
