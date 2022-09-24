@@ -194,7 +194,12 @@ def find_annotations(path):
     return annotations
 
 
-def predict_image(path):
+def predict_image_from_service(path):
+    """
+    Simple method for getting predictions from a webservice.
+
+    No longer used.
+    """
     img = PIL.Image.open(path)
     buffered = io.BytesIO()
     img.save(buffered, format="JPEG")
@@ -751,6 +756,7 @@ def save_detected_objects(monitoring_session, image_paths, detected_objects_data
             for object_data in detected_objects:
                 detection = db.DetectedObject(
                     last_detected=timestamp,
+                    in_queue=True,
                 )
 
                 if "bbox" in object_data:
@@ -765,6 +771,27 @@ def save_detected_objects(monitoring_session, image_paths, detected_objects_data
                 sess.add(detection)
                 detection.monitoring_session_id = monitoring_session.id
                 detection.image_id = image.id
+        sess.commit()
+
+
+def save_classified_objects(monitoring_session, object_ids, classified_objects_data):
+    logger.debug(
+        f"Callback was called! {monitoring_session}, {object_ids}, {classified_objects_data}"
+    )
+    base_directory = monitoring_session.base_directory
+    with db.get_session(base_directory) as sess:
+        timestamp = datetime.datetime.now()
+        for object_id, object_data in zip(object_ids, classified_objects_data):
+            obj = sess.get(db.DetectedObject, object_id)
+            obj.last_processed = timestamp
+            sess.add(obj)
+
+            for k, v in object_data.items():
+                logger.debug(f"Adding {k}: {v} to detected object {obj.id}")
+                setattr(obj, k, v)
+
+            logger.debug(f"Saving classifed object {obj}")
+
         sess.commit()
 
 
@@ -796,3 +823,49 @@ def get_image_with_objects(monitoring_session, image_id):
             f"Found image {image} with {len(image.detected_objects)} detected objects"
         )
         return image
+
+
+def add_sample_to_queue(monitoring_session, sample_size=10):
+    # if sample_size:
+    #     order = db.func.random()
+    # else:
+    #     order = db.Image.timestamp
+
+    ms = monitoring_session
+
+    # image_ids = get_monitoring_session_image_ids(ms)
+    # logger.info(f"Adding {len(image_ids)} images into queue")
+
+    # with db.get_session(ms.base_directory) as sess:
+    #     sess.execute(
+    #         db.sa.update(db.Image)
+    #         .where(db.Image.monitoring_session_id == ms.id)
+    #         .values(in_queue=True)
+    #     )
+
+    # Add random images to queue if the queue has fewer than n samples
+
+    with db.get_session(ms.base_directory) as sess:
+        num_in_queue = (
+            sess.query(db.Image)
+            .filter_by(in_queue=True, monitoring_session_id=ms.id)
+            .count()
+        )
+        if num_in_queue < sample_size:
+            for image in (
+                sess.query(db.Image)
+                .filter_by(
+                    in_queue=False,
+                    monitoring_session_id=ms.id,
+                )
+                .order_by(db.sa.func.random())
+                .limit(sample_size - num_in_queue)
+                .all()
+            ):
+                image.in_queue = True
+                sess.add(image)
+            sess.commit()
+
+
+def clear_queue():
+    pass

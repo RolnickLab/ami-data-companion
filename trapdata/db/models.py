@@ -145,6 +145,7 @@ class DetectedObject(Base):
     binary_label_score = sa.Column(sa.Numeric(asdecimal=False))
     last_detected = sa.Column(sa.DateTime)
     model_name = sa.Column(sa.String(255))
+    in_queue = sa.Column(sa.Boolean, default=False)
     notes = sa.Column(sa.JSON)
 
     image = orm.relationship(

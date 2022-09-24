@@ -6,7 +6,7 @@ from kivy.app import App
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.uix.settings import SettingsWithSidebar
 from kivy.core.window import Window
-from kivy.properties import ObjectProperty
+from kivy.properties import ObjectProperty, StringProperty
 from kivy.config import Config
 
 from .menu import DataMenuScreen
@@ -22,6 +22,9 @@ class TrapDataAnalyzer(App):
     # @TODO this db_session is not currently used, but may be more
     # convenient that the current usage of DB sessions.
     db_session = ObjectProperty()
+    status_text = (
+        StringProperty()
+    )  # @TODO listen for changes to this and update status message?
     use_kivy_settings = False
 
     def on_stop(self):

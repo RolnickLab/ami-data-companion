@@ -3,39 +3,13 @@ import time
 
 import torch
 import torchvision
-from torchvision import transforms
 from PIL import Image
 
-from trapdata.ml.utils import get_device, synchronize_clocks
-from trapdata.utils import logger
+from ...ml.utils import get_device, synchronize_clocks
+from ...utils import logger
+from .dataloaders import LocalizationDatabaseDataset
 
 LOCALIZATION_SCORE_THRESHOLD = 0.01
-
-
-class Dataset(torch.utils.data.Dataset):
-    def __init__(self, directory, image_names):
-        super().__init__()
-
-        self.directory = pathlib.Path(directory)
-        self.image_names = image_names
-        self.transform = self.get_transforms()
-
-    def __len__(self):
-        return len(self.image_names)
-
-    def get_transforms(self):
-        transform_list = [transforms.ToTensor()]
-        return transforms.Compose(transform_list)
-
-    def __getitem__(self, idx):
-        img_name = self.image_names[idx]
-        img_path = self.directory / img_name
-        pil_image = Image.open(img_path)
-        return str(img_path), self.transform(pil_image)
-
-
-class DataLoader(torch.utils.data.DataLoader):
-    pass
 
 
 def get_model(weights, device):
@@ -45,9 +19,18 @@ def get_model(weights, device):
     model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(
         weights=weights
     )
+    # @TODO can I use load_state_dict here with weights="DEFAULT"?
     model = model.to(device)
     model.eval()
     return model
+
+
+def get_transforms():
+    return torchvision.transforms.Compose(
+        [
+            torchvision.transforms.ToTensor(),
+        ]
+    )
 
 
 def postprocess(img_path, output):
@@ -72,33 +55,26 @@ def postprocess(img_path, output):
 
 def predict(
     base_directory,
-    image_list=list(),
     batch_size=4,
     num_workers=2,
     weights="DEFAULT",
     device=None,
-    # Dataset=None,
     results_callback=None,
 ):
     """"""
 
-    synchronize_clocks()
-    start = time.time()
-
     device = device or get_device()
     model = get_model(weights=weights, device=device)
 
-    logger.info(f"Preparing dataset of {len(image_list)} images")
-    dataset = Dataset(
-        directory=base_directory,
-        image_names=image_list,
-        # transforms=weights.transforms,
+    dataset = LocalizationDatabaseDataset(
+        base_directory=base_directory,
+        image_transforms=get_transforms(),
     )
 
     logger.info(
         f"Preparing dataloader with batch size of {batch_size} and {num_workers} workers on device: {device}"
     )
-    dataloader = DataLoader(
+    dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=False,
@@ -107,19 +83,24 @@ def predict(
         pin_memory=True,
     )
 
+    synchronize_clocks()
+    start = time.time()
+
     results = []
     with torch.no_grad():
-        for i, (img_paths, data) in enumerate(dataloader):
+        for i, (img_paths, input_data_batch) in enumerate(dataloader):
             logger.debug(f"Batch {i+1} out of {len(dataloader)}")
             logger.debug(f"Looking for objects in {len(img_paths)} images")
 
             synchronize_clocks()
             batch_start = time.time()
 
-            data = data.to(device, non_blocking=True)
-            output = model(data)
+            input_data_batch = input_data_batch.to(device, non_blocking=True)
+            output_data_batch = model(input_data_batch)
+
             output = [
-                postprocess(img_path, o) for img_path, o in zip(img_paths, output)
+                postprocess(img_path, o)
+                for img_path, o in zip(img_paths, output_data_batch)
             ]
             batch_results = list(zip(img_paths, output))
             results += batch_results
@@ -128,7 +109,7 @@ def predict(
             batch_end = time.time()
 
             elapsed = batch_end - batch_start
-            images_per_second = len(image_list) / elapsed
+            images_per_second = len(img_paths) / elapsed
 
             logger.info(
                 f"Time per batch: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second"
@@ -150,8 +131,8 @@ def predict(
     end = time.time()
 
     elapsed = end - start
-    images_per_second = len(image_list) / elapsed
+    images_per_second = len(results) / elapsed
 
     logger.info(
-        f"Localization time: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second (with startup)"
+        f"Localization time: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second"
     )

@@ -44,7 +44,13 @@ def detect_objects(model_name, **kwargs):
 
 
 def classify_objects(model_name, **kwargs):
-    pass
+    module_path = BINARY_CLASSIFICATION_MODELS[model_name]
+    logger.debug(f"Loading classification model: {module_path}")
+    model_module = importlib.import_module(module_path)
+
+    logger.debug(f"Calling predict with arguments: {kwargs}")
+    model_module.predict(**kwargs)
+    logger.debug("Predict complete")
 
 
 def watch_queue(db):

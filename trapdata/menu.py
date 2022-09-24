@@ -44,7 +44,7 @@ from kivy.logger import Logger
 
 from .utils import *
 
-from .ml import detect_objects
+from .ml import detect_objects, classify_objects
 
 # detect_and_classify = lambda *args, **kwargs: None
 
@@ -124,34 +124,30 @@ class AnalyzeButton(Button):
             self.stop()
 
     def analyze(self):
-        # annotations = detect_and_classify(self.path)
-        # while self.progress < 20:
-        #     time.sleep(0.5)
-        #     self.progress += 1
-        #     if self.exit_event.is_set():
-        #         break
+        add_sample_to_queue(self.monitoring_session, sample_size=1)
 
-        # @TODO can the results callback (DB save) happen in another thread? Does it help or hinder?
-        results_callback = partial(save_detected_objects, self.monitoring_session)
         app = App.get_running_app()
+
+        localization_results_callback = partial(
+            save_detected_objects, self.monitoring_session
+        )
         detect_objects(
             model_name=app.config.get("models", "localization_model"),
             base_directory=self.monitoring_session.base_directory,
-            image_list=[
-                pathlib.Path(image.path).relative_to(
-                    self.monitoring_session.base_directory
-                )
-                for image in self.images
-            ],
-            results_callback=results_callback,
+            results_callback=localization_results_callback,
         )
-        # @TODO this can't be in the separate bgtask thread because it modifies properties
+
+        classification_results_callback = partial(
+            save_classified_objects, self.monitoring_session
+        )
+        classify_objects(
+            model_name=app.config.get("models", "binary_classification_model"),
+            base_directory=self.monitoring_session.base_directory,
+            results_callback=classification_results_callback,
+        )
+
         self.complete()
         return True
-        # images = find_images(self.path)
-        # img_path = random.choice(images)
-        # results = predict_image(img_path)
-        # self.show_results(img_path, results)
 
     def complete(self):
         self.running = False
@@ -288,8 +284,9 @@ class DataMenuScreen(Screen):
                 ),
                 size_hint=(None, None),
                 size=("550dp", "200dp"),
-                on_dismiss=sys.exit,
+                # on_dismiss=sys.exit,
             ).open()
+            return False
         else:
             return True
 
