@@ -21,10 +21,11 @@ def count_species(monitoring_session):
     with get_session(monitoring_session.base_directory) as sess:
         return (
             sess.query(
-                DetectedObject.specific_label,
+                DetectedObject.binary_label,
+                # DetectedObject.specific_label,
                 sa.func.count().label("count"),
             )
-            .group_by(DetectedObject.specific_label)
+            .group_by(DetectedObject.binary_label)
             .order_by(sa.desc("count"))
             .filter_by(monitoring_session=monitoring_session)
             .all()
