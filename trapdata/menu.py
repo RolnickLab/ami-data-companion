@@ -402,6 +402,7 @@ class DataMenuScreen(Screen):
             # Check if there are unprocessed images in monitoring session?
             btn_disabled = True
 
+            queue_btn = Button(text="Add to Queue")
             analyze_btn = AnalyzeButton(
                 text="Process",
                 monitoring_session=ms,
@@ -430,9 +431,10 @@ class DataMenuScreen(Screen):
                 disabled=btn_disabled,
             )
 
-            row = GridLayout(rows=1, cols=6, spacing=20)
+            row = GridLayout(rows=1, cols=7, spacing=20)
             row.add_widget(AsyncImage(source=bg_image))
             row.add_widget(Label(text=label))
+            row.add_widget(queue_btn)
             row.add_widget(analyze_btn)
             row.add_widget(summary_btn)
             row.add_widget(playback_btn)
