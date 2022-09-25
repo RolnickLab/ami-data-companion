@@ -748,7 +748,7 @@ def save_detected_objects(monitoring_session, image_paths, detected_objects_data
         for image_path, detected_objects in zip(image_paths, detected_objects_data):
             image_kwargs = {
                 "path": str(image_path),
-                "monitoring_session_id": monitoring_session.id,
+                # "monitoring_session_id": monitoring_session.id,
             }
             image = sess.query(db.Image).filter_by(**image_kwargs).one()
             image.last_processed = timestamp
