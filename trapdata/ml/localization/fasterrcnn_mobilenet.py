@@ -55,6 +55,7 @@ def postprocess(img_path, output):
 
 def predict(
     base_directory,
+    models_dir,
     batch_size=4,
     num_workers=2,
     weights="DEFAULT",

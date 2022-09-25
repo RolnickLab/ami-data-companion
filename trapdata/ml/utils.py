@@ -1,5 +1,6 @@
 import pathlib
 import json
+import urllib.request
 
 import torch
 import torchvision
@@ -24,8 +25,35 @@ def get_device(device_str=None):
     return device
 
 
-def get_weights(weights_path):
-    return LOCAL_WEIGHTS_PATH / weights_path
+def get_or_download_file(path, destination_dir=None):
+    """
+    >>> filename, headers = get_weights("https://drive.google.com/file/d/1KdQc56WtnMWX9PUapy6cS0CdjC8VSdVe/view?usp=sharing")
+
+    """
+    # If path is a local path instead of a URL then urlretrieve will just return that path
+    fname = path.rsplit("/", 1)[-1]
+    if destination_dir:
+        destination_dir = pathlib.Path(destination_dir)
+        if not destination_dir.exists():
+            logger.info(f"Creating local directory {str(destination_dir)}")
+            destination_dir.mkdir(parents=True, exist_ok=True)
+        local_filepath = pathlib.Path(destination_dir) / fname
+    else:
+        # If local_filepath is None, file will be downloaded to a temporary location
+        # But will likely be downloaded every time the model is invoked
+        local_filepath = None
+
+    if local_filepath and local_filepath.exists():
+        logger.info(f"Using existing {local_filepath}")
+        return local_filepath
+
+    else:
+        logger.info(f"Downloading {path}")
+        resulting_filepath, headers = urllib.request.urlretrieve(
+            url=path, filename=local_filepath
+        )
+        logger.info(f"Downloaded to {resulting_filepath}")
+        return resulting_filepath
 
 
 def get_category_map(labels_path):

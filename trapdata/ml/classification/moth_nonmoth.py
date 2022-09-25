@@ -6,7 +6,7 @@ import timm
 
 from ...ml.utils import (
     get_device,
-    get_weights,
+    get_or_download_file,
     get_category_map,
     synchronize_clocks,
 )
@@ -14,8 +14,12 @@ from ...utils import logger
 
 from .dataloaders import BinaryClassificationDatabaseDataset
 
-WEIGHTS = ["moth-nonmoth-effv2b3_20220506_061527_30.pth"]
-LABELS = ["05-moth-nonmoth_category_map.json"]
+WEIGHTS = [
+    "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/moth-nonmoth-effv2b3_20220506_061527_30.pth"
+]
+LABELS = [
+    "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/05-moth-nonmoth_category_map.json"
+]
 
 
 def get_model(weights, device):
@@ -76,6 +80,7 @@ def postprocess(object_ids, output, category_map):
 
 def predict(
     base_directory,
+    models_dir,
     weights_path=WEIGHTS[0],
     labels_path=LABELS[0],
     batch_size=4,
@@ -84,11 +89,12 @@ def predict(
     results_callback=None,
 ):
 
-    weights = get_weights(weights_path)
+    weights_path = get_or_download_file(weights_path, destination_dir=models_dir)
+    labels_path = get_or_download_file(labels_path, destination_dir=models_dir)
     device = get_device(device)
     category_map = get_category_map(labels_path)
 
-    model = get_model(weights=weights, device=device)
+    model = get_model(weights=weights_path, device=device)
 
     dataset = BinaryClassificationDatabaseDataset(
         base_directory=base_directory,
@@ -148,6 +154,8 @@ def predict(
                     }
                     for object_id, label, score in batch_results
                 ]
+                object_ids = object_ids.tolist()
+                print("OBJECT IDS", object_ids)
                 results_callback(object_ids, classified_objects_data)
                 print("=== CALLBACK END == ")
 

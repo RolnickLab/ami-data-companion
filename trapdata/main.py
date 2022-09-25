@@ -55,7 +55,7 @@ class TrapDataAnalyzer(App):
         config.setdefaults(
             "models",
             {
-                "booltest": True,
+                "user_data_directory": self.user_data_dir,
                 "localization_model": list(ml.LOCALIZATION_MODELS.keys())[0],
                 "binary_classification_model": list(
                     ml.BINARY_CLASSIFICATION_MODELS.keys()
@@ -79,6 +79,13 @@ class TrapDataAnalyzer(App):
 
     def build_settings(self, settings):
         model_settings = [
+            {
+                "key": "user_data_directory",
+                "type": "path",
+                "title": "Local directory for model data",
+                "desc": "Model weights are between 100-200Mb and will be downloaded the first time a model is used.",
+                "section": "models",
+            },
             {
                 "key": "localization_model",
                 "type": "options",

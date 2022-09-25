@@ -128,11 +128,16 @@ class AnalyzeButton(Button):
 
         app = App.get_running_app()
 
+        models_dir = (
+            pathlib.Path(app.config.get("models", "user_data_directory")) / "models"
+        )
+
         localization_results_callback = partial(
             save_detected_objects, self.monitoring_session
         )
         detect_objects(
             model_name=app.config.get("models", "localization_model"),
+            models_dir=models_dir,
             base_directory=self.monitoring_session.base_directory,
             results_callback=localization_results_callback,
         )
@@ -142,6 +147,7 @@ class AnalyzeButton(Button):
         )
         classify_objects(
             model_name=app.config.get("models", "binary_classification_model"),
+            models_dir=models_dir,
             base_directory=self.monitoring_session.base_directory,
             results_callback=classification_results_callback,
         )
