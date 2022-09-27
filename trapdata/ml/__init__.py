@@ -10,7 +10,7 @@ from . import localization
 
 LOCALIZATION_MODELS = {
     "FasterRCNN MobileNet": "trapdata.ml.localization.fasterrcnn_mobilenet",
-    "Custom FasterRCNN": "trapdata.ml.localization.fasterrcnn",
+    "Custom FasterRCNN": "trapdata.ml.localization.fasterrcnn_full",
     "MegaDectector v5": "trapdata.ml.localization.megadetectorv5",
 }
 
