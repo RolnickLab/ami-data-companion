@@ -26,13 +26,10 @@
                 text: "Exit"
                 on_press: app.stop() 
             Button:
-                text: "Choose Directory"
+                text: "Start Queue"
+            Button:
+                text: "Rescan Directory"  # Use what is saved in DB without scanning
                 on_press: root.choose_root_directory() 
-            Button:
-                text: "Rescan"  # Use what is saved in DB without scanning
-                on_press: root.reload()
-            Button:
-                text: "View Queue"
             Button:
                 text: "Settings"
                 on_press: app.open_settings()

@@ -110,7 +110,7 @@ class SpeciesListLayout(RecycleView):
         widget_attrs = [
             {
                 "species": {
-                    "name": label or "Unknown",
+                    "name": label.title() if label else "Unclassified",
                     "count": count,
                     "image_height": row_height,
                 },

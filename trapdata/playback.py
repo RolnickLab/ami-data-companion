@@ -91,6 +91,10 @@ class AnnotatedImage(Widget):
 
                 if annotation.binary_label == POSITIVE_BINARY_LABEL:
                     color = POSITIVE_COLOR
+                # elif annotation.binary_label == NEGATIVE_BINARY_LABEL:
+                #     color = NEGATIVE_COLOR
+                # else:
+                #     color = NEUTRAL_COLOR
                 else:
                     color = NEGATIVE_COLOR
 

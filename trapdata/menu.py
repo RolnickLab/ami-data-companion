@@ -124,7 +124,7 @@ class AnalyzeButton(Button):
             self.stop()
 
     def analyze(self):
-        add_sample_to_queue(self.monitoring_session, sample_size=1)
+        # add_sample_to_queue(self.monitoring_session, sample_size=10)
 
         app = App.get_running_app()
 
@@ -412,21 +412,6 @@ class DataMenuScreen(Screen):
             # Check if there are unprocessed images in monitoring session?
             btn_disabled = True
 
-            queue_btn = Button(text="Add to Queue")
-            analyze_btn = AnalyzeButton(
-                text="Process",
-                monitoring_session=ms,
-                disabled=btn_disabled,
-            )
-
-            summary_btn = LaunchScreenButton(
-                text="Species List",
-                monitoring_session=ms,
-                screenmanager=self.manager,
-                screenname="summary",
-                disabled=btn_disabled,
-            )
-
             playback_btn = LaunchScreenButton(
                 text="Playback",
                 monitoring_session=ms,
@@ -435,20 +420,26 @@ class DataMenuScreen(Screen):
                 disabled=btn_disabled,
             )
 
-            report_btn = ReportButton(
-                text="Report",
+            analyze_btn = AnalyzeButton(
+                text="Add to Queue",
                 monitoring_session=ms,
                 disabled=btn_disabled,
             )
 
-            row = GridLayout(rows=1, cols=7, spacing=20)
+            summary_btn = LaunchScreenButton(
+                text="Summary",
+                monitoring_session=ms,
+                screenmanager=self.manager,
+                screenname="summary",
+                disabled=btn_disabled,
+            )
+
+            row = GridLayout(rows=1, cols=5, spacing=20)
             row.add_widget(AsyncImage(source=bg_image))
             row.add_widget(Label(text=label))
-            row.add_widget(queue_btn)
+            row.add_widget(playback_btn)
             row.add_widget(analyze_btn)
             row.add_widget(summary_btn)
-            row.add_widget(playback_btn)
-            row.add_widget(report_btn)
             grid.add_widget(row)
 
         self.ids.status.text = "Ready"

@@ -46,6 +46,7 @@ NULL_DETECTION_LABELS = [NEGATIVE_BINARY_LABEL]
 
 POSITIVE_COLOR = [0, 100 / 255, 1, 0.8]  # Blue
 NEGATIVE_COLOR = [1, 0, 162 / 255, 1]  # Pink
+NEUTRAL_COLOR = [1, 1, 1, 1]  # White
 
 
 def cache_dir(path=None):
