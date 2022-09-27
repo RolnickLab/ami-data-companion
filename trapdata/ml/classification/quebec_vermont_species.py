@@ -4,31 +4,33 @@ import torch
 import torchvision
 import timm
 
-from ...ml.utils import (
+from ..utils import (
     get_device,
     get_or_download_file,
     get_category_map,
     synchronize_clocks,
 )
-from ...utils import logger, POSITIVE_BINARY_LABEL
+from ...utils import logger
 
-from .dataloaders import BinaryClassificationDatabaseDataset
+from .dataloaders import SpeciesClassificationDatabaseDataset
 
 WEIGHTS = [
-    "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/moth-nonmoth-effv2b3_20220506_061527_30.pth"
+    # "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/quebec-vermont-moth-model_v02_efficientnetv2-b3_2022-09-08-15-44.pt"
+    "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/mothsv2_20220421_110638_30.pth"
 ]
 LABELS = [
-    "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/05-moth-nonmoth_category_map.json"
+    # "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/quebec-vermont-moth_category-map_4Aug2022.json"
+    "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/03-mothsv2_category_map.json"
 ]
 
 
-def get_model(weights, device):
+def get_model(weights, num_classes, device):
     logger.info(
-        f'Loading "tf_efficientnetv2_b3" binary classification model with weights: {weights}'
+        f'Loading "tf_efficientnetv2_b3" species classification model with weights: {weights}'
     )
     model = timm.create_model(
         "tf_efficientnetv2_b3",
-        num_classes=2,
+        num_classes=num_classes,
         weights=None,
     )
     model = model.to(device)
@@ -94,9 +96,13 @@ def predict(
     device = get_device(device)
     category_map = get_category_map(labels_path)
 
-    model = get_model(weights=weights_path, device=device)
+    model = get_model(
+        weights=weights_path,
+        num_classes=len(category_map),
+        device=device,
+    )
 
-    dataset = BinaryClassificationDatabaseDataset(
+    dataset = SpeciesClassificationDatabaseDataset(
         base_directory=base_directory,
         image_transforms=get_transforms(),
     )
@@ -120,7 +126,7 @@ def predict(
     with torch.no_grad():
         for i, (object_ids, input_data_batch) in enumerate(dataloader):
             logger.debug(f"Batch {i+1} out of {len(dataloader)}")
-            logger.debug(f"Binary classifying {len(object_ids)} detected objects")
+            logger.debug(f"Classifying {len(object_ids)} detected objects")
 
             synchronize_clocks()
             batch_start = time.time()
@@ -143,15 +149,14 @@ def predict(
             # @TODO this doesn't need to be a callback anymore, or at least simplify it
             if results_callback:
                 logger.debug(
-                    "=== CALLBACK START: Save binary labels of classified objects == "
+                    "=== CALLBACK START: Save species labels of classified objects == "
                 )
                 # Here we are saving the moth/non-moth labels
                 classified_objects_data = [
                     {
                         # "id": object_id,
-                        "binary_label": label,
-                        "binary_label_score": score,
-                        "in_queue": True if label == POSITIVE_BINARY_LABEL else False,
+                        "specific_label": label,
+                        "specific_label_score": score,
                     }
                     for object_id, label, score in batch_results
                 ]
@@ -167,5 +172,5 @@ def predict(
     images_per_second = len(results) / elapsed
 
     logger.info(
-        f"Binary classification time: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second"
+        f"Species classification time: {round(elapsed, 1)} seconds. {round(images_per_second, 1)} images per second"
     )

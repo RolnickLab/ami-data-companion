@@ -152,6 +152,16 @@ class AnalyzeButton(Button):
             results_callback=classification_results_callback,
         )
 
+        classification_results_callback = partial(
+            save_classified_objects, self.monitoring_session
+        )
+        classify_objects(
+            model_name=app.config.get("models", "taxon_classification_model"),
+            models_dir=models_dir,
+            base_directory=self.monitoring_session.base_directory,
+            results_callback=classification_results_callback,
+        )
+
         self.complete()
         return True
 

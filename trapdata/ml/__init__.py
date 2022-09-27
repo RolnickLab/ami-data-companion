@@ -15,13 +15,20 @@ LOCALIZATION_MODELS = {
 }
 
 
+# These are separate for the settings choices
 BINARY_CLASSIFICATION_MODELS = {
     "Moth / Non-Moth": "trapdata.ml.classification.moth_nonmoth",
 }
 
 TAXON_CLASSIFICATION_MODELS = {
-    "Ottawa & Vermont Macromoth Species": "trapdata.ml.classification.ottawa_macromoths",
+    "Quebec & Vermont Species": "trapdata.ml.classification.quebec_vermont_species",
 }
+
+# These are combined for selecting a model with the same function
+CLASSIFICATION_MODELS = {}
+CLASSIFICATION_MODELS.update(BINARY_CLASSIFICATION_MODELS)
+CLASSIFICATION_MODELS.update(TAXON_CLASSIFICATION_MODELS)
+
 
 # Original model weight paths:
 # model_localize=MODEL_BASE_PATH / "v1_localizmodel_2021-08-17-12-06.pt",
@@ -44,7 +51,7 @@ def detect_objects(model_name, **kwargs):
 
 
 def classify_objects(model_name, **kwargs):
-    module_path = BINARY_CLASSIFICATION_MODELS[model_name]
+    module_path = CLASSIFICATION_MODELS[model_name]
     logger.debug(f"Loading classification model: {module_path}")
     model_module = importlib.import_module(module_path)
 
