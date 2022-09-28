@@ -465,7 +465,7 @@ def get_exif(img_path):
     return tags
 
 
-def get_image_timestamp(img_path):
+def get_image_timestamp(img_path, default_offset=0):
     """
     Parse the date and time a photo was taken from its EXIF data.
 
@@ -475,11 +475,9 @@ def get_image_timestamp(img_path):
     """
     exif = get_exif(img_path)
     datestring = exif["DateTime"].replace(":", "-", 2)
-    offset = exif.get("TimeZoneOffset")
-    if offset:
-        datestring = f"{datestring} {offset}"
+    offset = exif.get("TimeZoneOffset") or str(default_offset)
+    datestring = f"{datestring} {offset}"
     date = dateutil.parser.parse(datestring)
-    # print(date.strftime("%c %z"))
     return date
 
 
@@ -935,6 +933,8 @@ def unprocessed_counts(base_path):
 
 
 def clear_queue(base_path):
+
+    logger.info("Clearing images in queue")
 
     with db.get_session(base_path) as sess:
         for image in sess.query(db.Image).filter_by(in_queue=True).all():
