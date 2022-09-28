@@ -27,7 +27,6 @@ class SpeciesRow(BoxLayout):
 
     def on_species(self, instance, value):
         species = value
-        print(species)
         if value:
             self.make_row(value)
 
