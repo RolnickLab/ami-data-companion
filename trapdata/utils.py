@@ -883,10 +883,55 @@ def add_monitoring_session_to_queue(monitoring_session, limit=None):
         sess.commit()
 
 
-def total_in_queue(base_directory):
+def images_in_queue(base_path):
 
-    with db.get_session(base_directory) as sess:
+    with db.get_session(base_path) as sess:
         return sess.query(db.Image).filter_by(in_queue=True).count()
+
+
+def queue_counts(base_path):
+
+    counts = {}
+    with db.get_session(base_path) as sess:
+        counts["images"] = sess.query(db.Image).filter_by(in_queue=True).count()
+        counts["unclassified_objects"] = (
+            sess.query(db.DetectedObject)
+            .filter_by(in_queue=True, binary_label=None)
+            .count()
+        )
+        counts["unclassified_moths"] = (
+            sess.query(db.DetectedObject)
+            .filter_by(
+                in_queue=True,
+                specific_label=None,
+            )
+            .filter(
+                db.DetectedObject.binary_label.is_not(None),
+            )
+            .count()
+        )
+    return counts
+
+
+def unprocessed_counts(base_path):
+
+    counts = {}
+    with db.get_session(base_path) as sess:
+        counts["images"] = sess.query(db.Image).filter_by(last_processed=None).count()
+        counts["unclassified_objects"] = (
+            sess.query(db.DetectedObject).filter_by(binary_label=None).count()
+        )
+        counts["unclassified_moths"] = (
+            sess.query(db.DetectedObject)
+            .filter_by(
+                specific_label=None,
+            )
+            .filter(
+                db.DetectedObject.binary_label.is_not(None),
+            )
+            .count()
+        )
+    return counts
 
 
 def clear_queue(base_path):

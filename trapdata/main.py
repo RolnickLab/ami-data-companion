@@ -45,13 +45,14 @@ class Queue(Label):
         logger.debug("Initializing queue status and starting DB polling")
 
     def on_total_in_queue(self, *args):
-        logger.debug("Updating queue status")
         msg = f"{self.total_in_queue} images in queue"
         logger.debug(msg)
         self.status_str = msg
 
     def check_queue(self, *args):
-        self.total_in_queue = total_in_queue(self.app.base_path)
+        logger.debug("Checking queue")
+        logger.info(queue_counts(self.app.base_path))
+        self.total_in_queue = images_in_queue(self.app.base_path)
 
     def process_queue(self):
         base_path = self.app.base_path
@@ -68,36 +69,36 @@ class Queue(Label):
             base_directory=base_path,  # base path for relative images
             results_callback=localization_results_callback,
         )
+        logger.info("Localization complete")
 
-        classification_results_callback = partial(
-            save_classified_objects, self.monitoring_session
-        )
+        classification_results_callback = partial(save_classified_objects, base_path)
         ml.classify_objects(
             model_name=self.app.config.get("models", "binary_classification_model"),
             models_dir=models_dir,
             base_directory=base_path,
             results_callback=classification_results_callback,
         )
+        logger.info("Binary classification complete")
 
-        classification_results_callback = partial(
-            save_classified_objects, self.monitoring_session
-        )
+        classification_results_callback = partial(save_classified_objects, base_path)
         ml.classify_objects(
             model_name=self.app.config.get("models", "taxon_classification_model"),
             models_dir=models_dir,
             base_directory=base_path,
             results_callback=classification_results_callback,
         )
+        logger.info("Species classification complete")
 
         self.complete_queue()
 
     def on_running(self, *args):
         if self.running:
             if not self.clock:
+                logger.debug("Scheduling queue check")
                 self.clock = Clock.schedule_interval(self.check_queue, 1)
         else:
-            if self.clock:
-                Clock.unschedule(self.clock)
+            logger.debug("Unscheduling queue check")
+            Clock.unschedule(self.clock)
 
     def complete_queue(self):
         logger.info("Queue complete. Stopping until manually started again")
@@ -105,9 +106,9 @@ class Queue(Label):
 
     def start(self, *args):
         # @NOTE can't change a widget property from a bg thread
+        logger.info("Starting queue")
         if not self.running:
             self.running = True
-            self.exit_event = threading.Event()
             task_name = "Mr. Queue"
             self.bgtask = threading.Thread(
                 target=self.process_queue,
@@ -115,11 +116,6 @@ class Queue(Label):
                 name=task_name,
             )
             self.bgtask.start()
-
-    def stop(self, *args):
-        self.running = False
-        if self.bgtask:
-            self.exit_event.set()
 
     def clear(self):
         clear_queue(self.app.base_path)
@@ -136,8 +132,9 @@ class TrapDataAnalyzer(App):
         # The Kivy event loop is about to stop, set a stop signal;
         # otherwise the app window will close, but the Python process will
         # keep running until all secondary threads exit.
-        if hasattr(self.root, "stop"):
-            self.root.stop.set()
+        # @TODO Set stop byte in the database
+        # @TODO stop background threads
+        pass
 
     def build(self):
         self.title = "AMI Trap Data Companion"
