@@ -50,7 +50,8 @@ class Queue(Label):
         self.status_str = msg
 
     def check_queue(self, *args):
-        logger.debug("Checking queue")
+        self.running = self.bgtask.is_alive()
+        logger.debug(f"Checking queue, running: {self.running}")
         logger.info(queue_counts(self.app.base_path))
         self.total_in_queue = images_in_queue(self.app.base_path)
 
@@ -89,8 +90,6 @@ class Queue(Label):
         )
         logger.info("Species classification complete")
 
-        self.complete_queue()
-
     def on_running(self, *args):
         if self.running:
             if not self.clock:
@@ -99,10 +98,6 @@ class Queue(Label):
         else:
             logger.debug("Unscheduling queue check")
             Clock.unschedule(self.clock)
-
-    def complete_queue(self):
-        logger.info("Queue complete. Stopping until manually started again")
-        self.running = False
 
     def start(self, *args):
         # @NOTE can't change a widget property from a bg thread
