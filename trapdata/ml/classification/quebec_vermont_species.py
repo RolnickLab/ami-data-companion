@@ -15,12 +15,10 @@ from ...utils import logger
 from .dataloaders import SpeciesClassificationDatabaseDataset
 
 WEIGHTS = [
-    # "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/quebec-vermont-moth-model_v02_efficientnetv2-b3_2022-09-08-15-44.pt"
-    "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/mothsv2_20220421_110638_30.pth"
+    "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/quebec-vermont-moth-model_v02_efficientnetv2-b3_2022-09-08-15-44.pt"
 ]
 LABELS = [
-    # "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/quebec-vermont-moth_category-map_4Aug2022.json"
-    "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/03-mothsv2_category_map.json"
+    "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/quebec-vermont-moth_category-map_4Aug2022.json"
 ]
 
 
@@ -36,6 +34,7 @@ def get_model(weights, num_classes, device):
     model = model.to(device)
     # state_dict = torch.hub.load_state_dict_from_url(weights_url)
     state_dict = torch.load(weights, map_location=device)
+    state_dict = state_dict["model_state_dict"]
     model.load_state_dict(state_dict)
     model.eval()
     return model

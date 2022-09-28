@@ -22,7 +22,7 @@ BINARY_CLASSIFICATION_MODELS = {
 
 TAXON_CLASSIFICATION_MODELS = {
     "Quebec & Vermont Species": "trapdata.ml.classification.quebec_vermont_species",
-    "UK & Danemark Species": "trapdata.ml.classification.quebec_vermont_species",
+    "UK & Denmark Species": "trapdata.ml.classification.quebec_vermont_species",
 }
 
 # These are combined for selecting a model with the same function
