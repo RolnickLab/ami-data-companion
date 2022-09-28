@@ -42,9 +42,9 @@ from kivy.uix.screenmanager import Screen
 from kivy.logger import Logger
 
 
-from .utils import *
+from ..utils import *
 
-from .ml import detect_objects, classify_objects
+from ..ml import detect_objects, classify_objects
 
 # detect_and_classify = lambda *args, **kwargs: None
 

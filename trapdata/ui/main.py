@@ -22,8 +22,8 @@ from kivy.config import Config
 from .menu import DataMenuScreen
 from .playback import ImagePlaybackScreen
 from .summary import SpeciesSummaryScreen
-from . import ml
-from .utils import *
+from .. import ml
+from ..utils import *
 
 
 kivy.require("2.1.0")

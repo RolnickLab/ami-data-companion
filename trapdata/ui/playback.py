@@ -31,7 +31,7 @@ from kivy.properties import (
 from kivy.uix.screenmanager import Screen
 
 
-from .utils import *
+from ..utils import *
 
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "playback.kv"))

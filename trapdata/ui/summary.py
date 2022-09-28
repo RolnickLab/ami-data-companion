@@ -1,3 +1,4 @@
+import pathlib
 from functools import partial
 
 
@@ -11,9 +12,9 @@ from kivy.uix.image import Image, AsyncImage
 from kivy.lang import Builder
 from kivy.clock import Clock
 
-from .utils import *
+from ..utils import *
 
-from . import db
+from .. import db
 
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "summary.kv"))
