@@ -75,149 +75,20 @@ class TrapSesionData(Widget):
     pass
 
 
-class AnalyzeButton(Button):
+class AddToQueueButton(Button):
     monitoring_session = ObjectProperty()
-    images = ListProperty()
-    running = BooleanProperty(defaultvalue=False)
-    progress = NumericProperty(defaultvalue=0)
-    status_label = ObjectProperty()
-    progress_label = ObjectProperty()
-    popup = ObjectProperty()
-    bgtask = ObjectProperty()
-    exit_event = ObjectProperty()
-    progress_clock = ObjectProperty(allownone=True)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        Clock.schedule_interval(self.update_status, 1)
 
     def on_release(self):
-        if not self.popup:
-            self.make_popup()
-        self.popup.open()
+        add_monitoring_session_to_queue(self.monitoring_session)
 
-    def on_monitoring_session(self, instance, value):
-        ms = value
-        self.images = get_monitoring_session_images(ms)
-
-    def start(self, *args):
-        # @TODO can use the status property of the bgtask thread instead
-        if not self.running:
-            self.running = True
-            self.progress = 0
-            self.exit_event = threading.Event()
-            task_name = str(self.monitoring_session)
-            self.bgtask = threading.Thread(
-                target=self.analyze,
-                daemon=True,
-                name=task_name,
-            )
-            self.bgtask.start()
-            # self.bgtask.add_done_callback(self.complete)
-            self.progress_clock = Clock.schedule_interval(self.increment_progress, 1)
-
-    def stop(self, *args):
-        self.running = False
-        if self.bgtask:
-            self.exit_event.set()
-
-    def increment_progress(self, clk):
-        # print(self.bgtask)
-        self.progress += 1
-        if not self.bgtask.is_alive():
-            self.stop()
-
-    def analyze(self):
-        # add_sample_to_queue(self.monitoring_session, sample_size=10)
-
+    def update_status(self, *args):
         app = App.get_running_app()
-
-        models_dir = (
-            pathlib.Path(app.config.get("models", "user_data_directory")) / "models"
-        )
-
-        localization_results_callback = partial(
-            save_detected_objects, self.monitoring_session
-        )
-        detect_objects(
-            model_name=app.config.get("models", "localization_model"),
-            models_dir=models_dir,
-            base_directory=self.monitoring_session.base_directory,
-            results_callback=localization_results_callback,
-        )
-
-        classification_results_callback = partial(
-            save_classified_objects, self.monitoring_session
-        )
-        classify_objects(
-            model_name=app.config.get("models", "binary_classification_model"),
-            models_dir=models_dir,
-            base_directory=self.monitoring_session.base_directory,
-            results_callback=classification_results_callback,
-        )
-
-        classification_results_callback = partial(
-            save_classified_objects, self.monitoring_session
-        )
-        classify_objects(
-            model_name=app.config.get("models", "taxon_classification_model"),
-            models_dir=models_dir,
-            base_directory=self.monitoring_session.base_directory,
-            results_callback=classification_results_callback,
-        )
-
-        self.complete()
-        return True
-
-    def complete(self):
-        self.running = False
-        self.background_color = (0, 1, 0, 1)
-        for widget in self.parent.children:
-            # @TODO should we register nightly folders by ID somewhere?
-            if isinstance(widget, Button):
-                widget.disabled = False
-
-    def make_popup(self):
-        if not self.popup:
-            # @TODO this would be simpler in a kv file now
-            content = GridLayout(rows=5, cols=1, spacing=5)
-            status = GridLayout(rows=1, cols=2, spacing=0)
-            self.status_label = Label(text=f"Running: {self.running}")  # , id="status")
-            self.progress_label = Label(text=f"")
-            status.add_widget(self.status_label)
-            status.add_widget(self.progress_label)
-            content.add_widget(status)
-            close_button = Button(text="Close", size=(100, 20))
-            start_button = Button(text="Start", size=(100, 20))
-            start_button.bind(on_press=self.start)
-            stop_button = Button(text="Stop", size=(100, 20))
-            stop_button.bind(on_press=self.stop)
-            content.add_widget(start_button)
-            # content.add_widget(stop_button)
-            content.add_widget(close_button)
-            self.popup = Popup(
-                title=f"Detect and classify moths in {str(self.monitoring_session)}",
-                content=content,
-                auto_dismiss=True,
-                size_hint=(None, None),
-                size=(600, 600),
-            )
-            close_button.bind(on_press=self.popup.dismiss)
-            self.popup.ids["start_button"] = start_button
-            self.popup.ids["stop_button"] = stop_button
-
-    def on_progress(self, instance, value):
-        self.progress_label.text = f"{value} seconds"
-
-    def on_running(self, instance, value):
-        self.status_label.text = f"Running: {value}"
-        if self.popup and value == True:
-            self.popup.ids["start_button"].disabled = True
-            self.popup.ids["stop_button"].disabled = False
-            self.initial_bg_color = self.background_color
-            self.background_color = (1, 0, 0, 1)
-        else:
-            self.popup.ids["start_button"].disabled = False
-            self.popup.ids["stop_button"].disabled = True
-            self.background_color = getattr(self, "initial_bg_color", None)
-            if self.progress_clock:
-                Clock.unschedule(self.progress_clock)
+        if app.queue:
+            self.text = app.queue.status_str
 
 
 class LaunchScreenButton(Button):
@@ -309,6 +180,9 @@ class DataMenuScreen(Screen):
     def on_root_dir(self, instance, value):
         root_dir = value
         logger.info("Base directory changed!")
+
+        App.get_running_app().base_path = str(root_dir)
+
         self.data_ready = False
 
         if root_dir and self.db_ready():
@@ -420,7 +294,7 @@ class DataMenuScreen(Screen):
                 disabled=btn_disabled,
             )
 
-            analyze_btn = AnalyzeButton(
+            add_to_queue_btn = AddToQueueButton(
                 text="Add to Queue",
                 monitoring_session=ms,
                 disabled=btn_disabled,
@@ -438,7 +312,7 @@ class DataMenuScreen(Screen):
             row.add_widget(AsyncImage(source=bg_image))
             row.add_widget(Label(text=label))
             row.add_widget(playback_btn)
-            row.add_widget(analyze_btn)
+            row.add_widget(add_to_queue_btn)
             row.add_widget(summary_btn)
             grid.add_widget(row)
 

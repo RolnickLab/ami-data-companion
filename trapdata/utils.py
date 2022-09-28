@@ -46,7 +46,7 @@ NULL_DETECTION_LABELS = [NEGATIVE_BINARY_LABEL]
 
 POSITIVE_COLOR = [0, 100 / 255, 1, 0.8]  # Blue
 NEGATIVE_COLOR = [1, 0, 162 / 255, 1]  # Pink
-NEUTRAL_COLOR = [1, 1, 1, 1]  # White
+NEUTRAL_COLOR = [1, 1, 1, 0.5]  # White
 
 
 def cache_dir(path=None):
@@ -739,12 +739,10 @@ def get_monitoring_session_image_ids(ms):
     return images
 
 
-def save_detected_objects(monitoring_session, image_paths, detected_objects_data):
-    logger.debug(
-        f"Callback was called! {monitoring_session}, {image_paths}, {detected_objects_data}"
-    )
-    base_directory = monitoring_session.base_directory
-    with db.get_session(base_directory) as sess:
+def save_detected_objects(db_path, image_paths, detected_objects_data):
+    logger.debug(f"Callback was called! {image_paths}, {detected_objects_data}")
+
+    with db.get_session(db_path) as sess:
         timestamp = datetime.datetime.now()
         for image_path, detected_objects in zip(image_paths, detected_objects_data):
             image_kwargs = {
@@ -770,17 +768,15 @@ def save_detected_objects(monitoring_session, image_paths, detected_objects_data
 
                 logger.debug(f"Saving detected object {detection} for image {image}")
                 sess.add(detection)
-                detection.monitoring_session_id = monitoring_session.id
+                detection.monitoring_session_id = image.monitoring_session_id
                 detection.image_id = image.id
         sess.commit()
 
 
-def save_classified_objects(monitoring_session, object_ids, classified_objects_data):
-    logger.debug(
-        f"Callback was called! {monitoring_session}, {object_ids}, {classified_objects_data}"
-    )
-    base_directory = monitoring_session.base_directory
-    with db.get_session(base_directory) as sess:
+def save_classified_objects(db_path, object_ids, classified_objects_data):
+    logger.debug(f"Callback was called! {object_ids}, {classified_objects_data}")
+
+    with db.get_session(db_path) as sess:
         timestamp = datetime.datetime.now()
         for object_id, object_data in zip(object_ids, classified_objects_data):
             obj = sess.get(db.DetectedObject, object_id)
@@ -827,24 +823,7 @@ def get_image_with_objects(monitoring_session, image_id):
 
 
 def add_sample_to_queue(monitoring_session, sample_size=10):
-    # if sample_size:
-    #     order = db.func.random()
-    # else:
-    #     order = db.Image.timestamp
-
     ms = monitoring_session
-
-    # image_ids = get_monitoring_session_image_ids(ms)
-    # logger.info(f"Adding {len(image_ids)} images into queue")
-
-    # with db.get_session(ms.base_directory) as sess:
-    #     sess.execute(
-    #         db.sa.update(db.Image)
-    #         .where(db.Image.monitoring_session_id == ms.id)
-    #         .values(in_queue=True)
-    #     )
-
-    # Add random images to queue if the queue has fewer than n samples
 
     with db.get_session(ms.base_directory) as sess:
         num_in_queue = (
@@ -868,5 +847,52 @@ def add_sample_to_queue(monitoring_session, sample_size=10):
             sess.commit()
 
 
-def clear_queue():
-    pass
+def add_monitoring_session_to_queue(monitoring_session, limit=None):
+    """
+    Add images captured during a give Monitoring Session to the
+    processing queue. If a limit is specified, only add that many
+    additional images to the queue. Will not add duplicates to the queue.
+    """
+    ms = monitoring_session
+
+    # @TODO This may be a faster way to add all images to the queue
+    # image_ids = get_monitoring_session_image_ids(ms)
+    # logger.info(f"Adding {len(image_ids)} images into queue")
+
+    # with db.get_session(ms.base_directory) as sess:
+    #     sess.execute(
+    #         db.sa.update(db.Image)
+    #         .where(db.Image.monitoring_session_id == ms.id)
+    #         .values(in_queue=True)
+    #     )
+
+    logger.info(f"Adding all images for Monitoring Session {ms.id} to queue")
+    with db.get_session(ms.base_directory) as sess:
+        for image in (
+            sess.query(db.Image)
+            .filter_by(
+                in_queue=False,
+                monitoring_session_id=ms.id,
+            )
+            .order_by(db.Image.timestamp)
+            .limit(limit)
+            .all()
+        ):
+            image.in_queue = True
+            sess.add(image)
+        sess.commit()
+
+
+def total_in_queue(base_directory):
+
+    with db.get_session(base_directory) as sess:
+        return sess.query(db.Image).filter_by(in_queue=True).count()
+
+
+def clear_queue(base_path):
+
+    with db.get_session(base_path) as sess:
+        for image in sess.query(db.Image).filter_by(in_queue=True).all():
+            image.in_queue = False
+            sess.add(image)
+        sess.commit()

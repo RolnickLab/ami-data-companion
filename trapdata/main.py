@@ -1,30 +1,135 @@
 # import asyncio
 import json
+import pathlib
+from functools import partial
+import threading
 
 import kivy
 from kivy.app import App
+from kivy.clock import Clock
+from kivy.uix.label import Label
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.uix.settings import SettingsWithSidebar
 from kivy.core.window import Window
-from kivy.properties import ObjectProperty, StringProperty
+from kivy.properties import (
+    ObjectProperty,
+    StringProperty,
+    NumericProperty,
+    BooleanProperty,
+)
 from kivy.config import Config
 
 from .menu import DataMenuScreen
 from .playback import ImagePlaybackScreen
 from .summary import SpeciesSummaryScreen
 from . import ml
+from .utils import *
 
 
 kivy.require("2.1.0")
 
 
+class Queue(Label):
+    app = ObjectProperty()
+    status_str = StringProperty(defaultvalue="")
+    total_in_queue = NumericProperty(defaultvalue=0)
+    clock = ObjectProperty(allownone=True)
+
+    running = BooleanProperty(defaultvalue=False)
+    bgtask = ObjectProperty()
+
+    exit_event = ObjectProperty()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        logger.debug("Initializing queue status and starting DB polling")
+
+    def on_total_in_queue(self, *args):
+        logger.debug("Updating queue status")
+        msg = f"{self.total_in_queue} images in queue"
+        logger.debug(msg)
+        self.status_str = msg
+
+    def check_queue(self, *args):
+        self.total_in_queue = total_in_queue(self.app.base_path)
+
+    def process_queue(self):
+        base_path = self.app.base_path
+
+        models_dir = (
+            pathlib.Path(self.app.config.get("models", "user_data_directory"))
+            / "models"
+        )
+
+        localization_results_callback = partial(save_detected_objects, base_path)
+        ml.detect_objects(
+            model_name=self.app.config.get("models", "localization_model"),
+            models_dir=models_dir,
+            base_directory=base_path,  # base path for relative images
+            results_callback=localization_results_callback,
+        )
+
+        classification_results_callback = partial(
+            save_classified_objects, self.monitoring_session
+        )
+        ml.classify_objects(
+            model_name=self.app.config.get("models", "binary_classification_model"),
+            models_dir=models_dir,
+            base_directory=base_path,
+            results_callback=classification_results_callback,
+        )
+
+        classification_results_callback = partial(
+            save_classified_objects, self.monitoring_session
+        )
+        ml.classify_objects(
+            model_name=self.app.config.get("models", "taxon_classification_model"),
+            models_dir=models_dir,
+            base_directory=base_path,
+            results_callback=classification_results_callback,
+        )
+
+        self.complete_queue()
+
+    def on_running(self, *args):
+        if self.running:
+            if not self.clock:
+                self.clock = Clock.schedule_interval(self.check_queue, 1)
+        else:
+            if self.clock:
+                Clock.unschedule(self.clock)
+
+    def complete_queue(self):
+        logger.info("Queue complete. Stopping until manually started again")
+        self.running = False
+
+    def start(self, *args):
+        # @NOTE can't change a widget property from a bg thread
+        if not self.running:
+            self.running = True
+            self.exit_event = threading.Event()
+            task_name = "Mr. Queue"
+            self.bgtask = threading.Thread(
+                target=self.process_queue,
+                daemon=True,
+                name=task_name,
+            )
+            self.bgtask.start()
+
+    def stop(self, *args):
+        self.running = False
+        if self.bgtask:
+            self.exit_event.set()
+
+    def clear(self):
+        clear_queue(self.app.base_path)
+
+
 class TrapDataAnalyzer(App):
     # @TODO this db_session is not currently used, but may be more
     # convenient that the current usage of DB sessions.
-    db_session = ObjectProperty()
-    status_text = (
-        StringProperty()
-    )  # @TODO listen for changes to this and update status message?
+    queue = ObjectProperty()
+    base_path = StringProperty(allownone=True)
     use_kivy_settings = False
 
     def on_stop(self):
@@ -33,8 +138,6 @@ class TrapDataAnalyzer(App):
         # keep running until all secondary threads exit.
         if hasattr(self.root, "stop"):
             self.root.stop.set()
-        if self.db_session:
-            self.db_session.close()
 
     def build(self):
         self.title = "AMI Trap Data Companion"
@@ -50,6 +153,20 @@ class TrapDataAnalyzer(App):
         sm.add_widget(SpeciesSummaryScreen(name="summary"))
 
         return sm
+
+    def on_base_path(self, *args):
+        """
+        When a DB path is set, create a queue status
+        """
+        if self.queue and self.queue.clock:
+            Clock.unschedule(self.queue.clock)
+        self.queue = Queue(app=self)
+
+    def start_queue(self):
+        if self.queue:
+            self.queue.start()
+        else:
+            logger.warn("No queue found!")
 
     def build_config(self, config):
         config.setdefaults(
