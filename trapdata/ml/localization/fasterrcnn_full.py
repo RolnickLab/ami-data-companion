@@ -14,7 +14,7 @@ LOCALIZATION_SCORE_THRESHOLD = 0.99
 
 
 WEIGHTS = [
-    "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/v1_localizmodel_2021-08-17-12-06.pt"
+    "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/localization/v1_localizmodel_2021-08-17-12-06.pt"
 ]
 
 LABELS = []
