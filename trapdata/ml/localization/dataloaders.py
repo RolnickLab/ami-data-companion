@@ -2,10 +2,11 @@ import pathlib
 
 import torch
 import torchvision
-from PIL import Image
+import PIL.Image
 
-from ... import db
-from ...utils import logger
+from trapdata import db
+from trapdata import logger
+from trapdata import models
 
 
 class LocalizationDatabaseDataset(torch.utils.data.Dataset):
@@ -18,16 +19,16 @@ class LocalizationDatabaseDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         with db.get_session(self.directory) as sess:
-            count = sess.query(db.Image).filter_by(**self.query_args).count()
+            count = sess.query(models.Image).filter_by(**self.query_args).count()
             logger.info(f"Images found in queue: {count}")
             return count
 
     def __getitem__(self, idx):
         with db.get_session(self.directory) as sess:
-            next_image = sess.query(db.Image).filter_by(**self.query_args).first()
+            next_image = sess.query(models.Image).filter_by(**self.query_args).first()
             if next_image:
                 img_path = self.directory / next_image.path
-                pil_image = Image.open(img_path)
+                pil_image = PIL.Image.open(img_path)
                 next_image.in_queue = False
                 item = (str(img_path), self.transform(pil_image))
                 sess.add(next_image)

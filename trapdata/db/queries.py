@@ -1,7 +1,7 @@
 import sqlalchemy as sa
 
 from .base import get_session
-from .models import *
+from . import models
 
 
 def count_species(monitoring_session):
@@ -24,7 +24,8 @@ def count_species(monitoring_session):
                 # DetectedObject.binary_label,
                 # DetectedObject.specific_label,
                 sa.func.coalesce(
-                    DetectedObject.specific_label, DetectedObject.binary_label
+                    models.DetectedObject.specific_label,
+                    models.DetectedObject.binary_label,
                 ).label("label"),
                 sa.func.count().label("count"),
             )
@@ -35,19 +36,11 @@ def count_species(monitoring_session):
         )
 
 
-# These are aparently needed because none of the fancy stuff seems to work
-def monitoring_session_images(ms):
-    with get_session(ms.base_directory) as sess:
-        return list(sess.query(Image).filter_by(monitoring_session_id=ms.id).all())
-
-
-def monitoring_session_images_count(ms):
-    with get_session(ms.base_directory) as sess:
-        return int(sess.query(Image).filter_by(monitoring_session_id=ms.id).count())
-
-
 def update_all_aggregates(directory):
+    # Call the update_aggregates method of every model
+    raise NotImplementedError
+
     with get_session(directory) as sess:
-        for ms in sess.query(MonitoringSession).all():
+        for ms in sess.query(None).all():
             ms.update_aggregates()
         sess.commit()

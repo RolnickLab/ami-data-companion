@@ -1,10 +1,8 @@
-import pathlib
 import time
 
 import torch
 import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from PIL import Image
 
 from ...ml.utils import get_device, synchronize_clocks, get_or_download_file
 from ...utils import logger
@@ -44,7 +42,7 @@ def get_transforms():
 def postprocess(img_path, output):
     # This model does not use the labels from the object detection model
     _ = output["labels"]
-    assert all([l == 1 for l in output["labels"]])
+    assert all([label == 1 for label in output["labels"]])
 
     # Filter out objects if their score is under score threshold
     bboxes = output["boxes"][output["scores"] > LOCALIZATION_SCORE_THRESHOLD]

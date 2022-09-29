@@ -1,13 +1,9 @@
-import datetime
-import time
-import pathlib
-import contextlib
-
 import sqlalchemy as sa
 from sqlalchemy import orm
-from sqlalchemy_utils import aggregated, observes
+from .base import check_db, get_session
 
 
-from .base import *
-from .models import *
-from . import queries
+__all__ = [sa, orm, check_db, get_session]
+
+# Only call this once & reuse it
+Base = orm.declarative_base()

@@ -8,7 +8,7 @@ import kivy
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.label import Label
-from kivy.uix.screenmanager import ScreenManager, Screen
+from kivy.uix.screenmanager import ScreenManager
 from kivy.uix.settings import SettingsWithSidebar
 from kivy.core.window import Window
 from kivy.properties import (
@@ -17,16 +17,30 @@ from kivy.properties import (
     NumericProperty,
     BooleanProperty,
 )
-from kivy.config import Config
+
+from trapdata import logger
+from trapdata import ml
+from trapdata.models.queue import queue_counts, images_in_queue, clear_queue
+from trapdata.models.detections import save_detected_objects, save_classified_objects
 
 from .menu import DataMenuScreen
 from .playback import ImagePlaybackScreen
 from .summary import SpeciesSummaryScreen
-from .. import ml
-from ..utils import *
 
 
 kivy.require("2.1.0")
+
+
+class ThreadWithStatus(threading.Thread):
+    exception = None
+
+    def run(self):
+        try:
+            super().run()
+        except Exception as e:
+            self.exception = e
+            logger.error(f"Thread {self} exited with an exception: {e}")
+            raise e
 
 
 class Queue(Label):
