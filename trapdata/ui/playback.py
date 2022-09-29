@@ -103,7 +103,7 @@ class AnnotatedImage(Widget):
                 x1, y1, x2, y2 = annotation.bbox
 
                 w = x2 - x1
-                h = y2 - y1
+                # h = y2 - y1
                 # print("original dims:", w, h)
 
                 # Reference from bottom left instead of top left
