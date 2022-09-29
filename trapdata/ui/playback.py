@@ -1,4 +1,5 @@
 import pathlib
+import datetime
 
 import kivy
 from kivy.app import App
@@ -20,7 +21,8 @@ from kivy.uix.screenmanager import Screen
 from trapdata import logger
 from trapdata import constants
 from trapdata.models.events import get_monitoring_session_image_ids
-from trapdata.models.images import get_image_with_objects
+from trapdata.models.images import get_image_with_objects, completely_classified
+from trapdata.models.detections import get_detections_for_image, get_species_for_image
 from trapdata.models.queue import add_image_to_queue
 from trapdata.common.utils import get_sequential_sample
 
@@ -34,6 +36,7 @@ Builder.load_file(str(pathlib.Path(__file__).parent / "playback.kv"))
 class AnnotatedImage(Widget):
     image_path = ObjectProperty()
     annotations = ListProperty()
+    image = ObjectProperty()
 
     def __init__(self, *args, **kwargs):
 
@@ -164,6 +167,33 @@ class AnnotatedImage(Widget):
                     )
                 )
 
+            app = App.get_running_app()
+            detections = get_detections_for_image(app.base_path, self.image.id).count()
+            species = get_species_for_image(app.base_path, self.image.id).count()
+            if self.image.last_processed:
+                time_delta = f"{(datetime.datetime.now() - self.image.last_processed).seconds}s ago"
+            else:
+                time_delta = "Never"
+
+            label_text = (
+                f"{self.image.timestamp} | "
+                f"In Queue: {self.image.in_queue} | "
+                f"Detections: {detections} | "
+                f"Species: {species} | "
+                f"Complete: {completely_classified(app.base_path, self.image.id)} | "
+                f"Processed: {time_delta}"
+            )
+            label = Label(
+                text=label_text,
+                color=[0, 0, 0, 1],
+                halign="left",
+                size=self.size,
+                center=(self.size[0] / 2, 20),
+                font_size="14sp",
+            )
+            # label.center = (label.center[0] + label.width * 2, 30)
+            self.add_widget(label)
+
 
 DEFAULT_FPS = 2
 
@@ -240,6 +270,7 @@ class PreviewWindow(RelativeLayout):
             annotations=image.detected_objects,
             size=self.size,
             pos_hint={"bottom": 0},
+            image=image,
         )
         self.current_sample = image
         self.add_widget(cvs)

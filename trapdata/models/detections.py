@@ -4,6 +4,7 @@ import sqlalchemy as sa
 from sqlalchemy import orm
 
 from trapdata import db
+from trapdata import constants
 from trapdata.models.images import Image
 from trapdata.common.logs import logger
 from trapdata.common.utils import bbox_area
@@ -103,9 +104,35 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
 
 def get_detected_objects(monitoring_session):
     base_directory = monitoring_session.base_directory
+    query_kwargs = {
+        "monitoring_session_id": monitoring_session.id,
+    }
     with db.get_session(base_directory) as sess:
-        query_kwargs = {
-            "monitoring_session_id": monitoring_session.id,
-        }
         for obj in sess.query(DetectedObject).filter_by(**query_kwargs).all():
             yield obj
+
+
+def get_objects_for_image(db_path, image_id):
+    with db.get_session(db_path) as sess:
+        return (
+            sess.query(DetectedObject.binary_label)
+            .filter_by(image_id=image_id)
+            .filter(DetectedObject.binary_label.is_not(None))
+        )
+
+
+def get_detections_for_image(db_path, image_id):
+    with db.get_session(db_path) as sess:
+        return sess.query(DetectedObject.binary_label).filter_by(
+            image_id=image_id, binary_label=constants.POSITIVE_BINARY_LABEL
+        )
+
+
+def get_species_for_image(db_path, image_id):
+    with db.get_session(db_path) as sess:
+        return (
+            sess.query(DetectedObject.specific_label)
+            .filter_by(image_id=image_id)
+            .filter(DetectedObject.specific_label.is_not(None))
+            .distinct()
+        )
