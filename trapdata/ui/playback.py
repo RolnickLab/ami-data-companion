@@ -1,6 +1,7 @@
 import pathlib
 
 import kivy
+from kivy.app import App
 from kivy.lang import Builder
 from kivy.uix.widget import Widget
 from kivy.uix.image import Image
@@ -20,6 +21,7 @@ from trapdata import logger
 from trapdata import constants
 from trapdata.models.events import get_monitoring_session_image_ids
 from trapdata.models.images import get_image_with_objects
+from trapdata.models.queue import add_image_to_queue
 from trapdata.common.utils import get_sequential_sample
 
 
@@ -219,10 +221,14 @@ class BBox(BoxLayout):
 class PreviewWindow(RelativeLayout):
     # @TODO save current sample for each directory, so we keep our place
     current_sample = ObjectProperty(allownone=True)
+    queue_clock = ObjectProperty()
 
     def reset(self):
         self.current_sample = None
         self.clear_widgets()
+
+    def refresh(self, *args):
+        self.load_sample(self.current_sample.id)
 
     def load_sample(self, image_id):
         ms = self.parent.parent.monitoring_session
@@ -253,3 +259,16 @@ class PreviewWindow(RelativeLayout):
             last_sample=self.current_sample.id if self.current_sample else None,
         )
         self.load_sample(image_id)
+
+    def add_sample_to_queue(self):
+        app = App.get_running_app()
+        add_image_to_queue(app.base_path, self.current_sample.id)
+        app.start_queue()
+        # @TODO kill clock when all objects have been classified!
+        Clock.schedule_interval(self.refresh, 1)
+
+    def button_text(self):
+        if self.current_sample and self.current_sample.in_queue:
+            return "(In Queue)"
+        else:
+            return "Add to Queue"

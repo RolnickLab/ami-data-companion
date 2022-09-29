@@ -17,6 +17,7 @@ class Image(Base):
         sa.String(255)
     )  # @TODO store these as relative paths to the directory
     timestamp = sa.Column(sa.DateTime(timezone=True))
+    # filesize = sa.Column(sa.Integer)
     last_read = sa.Column(sa.DateTime)
     last_processed = sa.Column(sa.DateTime)
     in_queue = sa.Column(sa.Boolean, default=False)
