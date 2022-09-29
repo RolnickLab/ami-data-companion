@@ -4,8 +4,10 @@ import torch
 import torchvision
 from PIL import Image
 
-from ... import db
-from ...utils import logger, POSITIVE_BINARY_LABEL
+from trapdata import db
+from trapdata import logger
+from trapdata import constants
+from trapdata import models
 
 
 class BinaryClassificationDatabaseDataset(torch.utils.data.Dataset):
@@ -22,8 +24,8 @@ class BinaryClassificationDatabaseDataset(torch.utils.data.Dataset):
     def __len__(self):
         with db.get_session(self.directory) as sess:
             count = (
-                sess.query(db.DetectedObject)
-                .filter(db.DetectedObject.bbox.is_not(None))
+                sess.query(models.DetectedObject)
+                .filter(models.DetectedObject.bbox.is_not(None))
                 .filter_by(**self.query_args)
                 .count()
             )
@@ -33,10 +35,10 @@ class BinaryClassificationDatabaseDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         with db.get_session(self.directory) as sess:
             next_obj = (
-                sess.query(db.DetectedObject)
-                .filter(db.DetectedObject.bbox.is_not(None))
+                sess.query(models.DetectedObject)
+                .filter(models.DetectedObject.bbox.is_not(None))
                 .filter_by(**self.query_args)
-                .options(db.orm.joinedload(db.DetectedObject.image))
+                .options(db.orm.joinedload(models.DetectedObject.image))
                 .first()
             )
             if next_obj:
@@ -69,14 +71,14 @@ class SpeciesClassificationDatabaseDataset(torch.utils.data.Dataset):
         self.query_args = {
             "in_queue": True,
             "specific_label": None,
-            "binary_label": POSITIVE_BINARY_LABEL,
+            "binary_label": constants.POSITIVE_BINARY_LABEL,
         }
 
     def __len__(self):
         with db.get_session(self.directory) as sess:
             count = (
-                sess.query(db.DetectedObject)
-                .filter(db.DetectedObject.bbox.is_not(None))
+                sess.query(models.DetectedObject)
+                .filter(models.DetectedObject.bbox.is_not(None))
                 .filter_by(**self.query_args)
                 .count()
             )
@@ -86,10 +88,10 @@ class SpeciesClassificationDatabaseDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         with db.get_session(self.directory) as sess:
             next_obj = (
-                sess.query(db.DetectedObject)
-                .filter(db.DetectedObject.bbox.is_not(None))
+                sess.query(models.DetectedObject)
+                .filter(models.DetectedObject.bbox.is_not(None))
                 .filter_by(**self.query_args)
-                .options(db.orm.joinedload(db.DetectedObject.image))
+                .options(db.orm.joinedload(models.DetectedObject.image))
                 .first()
             )
             if next_obj:

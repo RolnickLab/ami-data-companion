@@ -10,7 +10,8 @@ from ...ml.utils import (
     get_category_map,
     synchronize_clocks,
 )
-from ...utils import logger, POSITIVE_BINARY_LABEL
+from trapdata import logger
+from trapdata import constants
 
 from .dataloaders import BinaryClassificationDatabaseDataset
 
@@ -151,7 +152,9 @@ def predict(
                         # "id": object_id,
                         "binary_label": label,
                         "binary_label_score": score,
-                        "in_queue": True if label == POSITIVE_BINARY_LABEL else False,
+                        "in_queue": True
+                        if label == constants.POSITIVE_BINARY_LABEL
+                        else False,
                     }
                     for object_id, label, score in batch_results
                 ]

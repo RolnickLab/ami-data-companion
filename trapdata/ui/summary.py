@@ -9,7 +9,7 @@ from kivy.lang import Builder
 from kivy.clock import Clock
 
 from trapdata import logger
-from trapdata import db
+from trapdata.db import queries
 
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "summary.kv"))
@@ -86,7 +86,7 @@ class SpeciesListLayout(RecycleView):
         Return a list of species in the format that the "viewclass" widget
         expects. In this case the viewclass is a `SpeciesRow` object.
         """
-        species_counts = db.queries.count_species(ms)
+        species_counts = queries.count_species(ms)
 
         row_height = 200  # @TODO make dynamic? Or fit images to specific size
         # widget_attrs = [

@@ -88,7 +88,7 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
     with db.get_session(db_path) as sess:
         timestamp = datetime.datetime.now()
         for object_id, object_data in zip(object_ids, classified_objects_data):
-            obj = sess.get(db.DetectedObject, object_id)
+            obj = sess.get(DetectedObject, object_id)
             obj.last_processed = timestamp
             sess.add(obj)
 

@@ -1,7 +1,7 @@
 import sqlalchemy as sa
 
 from .base import get_session
-from . import models
+from trapdata import models
 
 
 def count_species(monitoring_session):

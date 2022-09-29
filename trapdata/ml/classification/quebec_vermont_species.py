@@ -10,7 +10,7 @@ from ..utils import (
     get_category_map,
     synchronize_clocks,
 )
-from ...utils import logger
+from trapdata import logger
 
 from .dataloaders import SpeciesClassificationDatabaseDataset
 

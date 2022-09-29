@@ -4,8 +4,9 @@ import torch
 import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
-from ...ml.utils import get_device, synchronize_clocks, get_or_download_file
-from ...utils import logger
+from trapdata import logger
+from trapdata.ml.utils import get_device, synchronize_clocks, get_or_download_file
+
 from .dataloaders import LocalizationDatabaseDataset
 
 LOCALIZATION_SCORE_THRESHOLD = 0.99
