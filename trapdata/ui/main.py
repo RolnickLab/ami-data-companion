@@ -31,18 +31,6 @@ from .summary import SpeciesSummaryScreen
 kivy.require("2.1.0")
 
 
-class ThreadWithStatus(threading.Thread):
-    exception = None
-
-    def run(self):
-        try:
-            super().run()
-        except Exception as e:
-            self.exception = e
-            logger.error(f"Thread {self} exited with an exception: {e}")
-            raise e
-
-
 class Queue(Label):
     app = ObjectProperty()
     status_str = StringProperty(defaultvalue="")
@@ -76,6 +64,7 @@ class Queue(Label):
             pathlib.Path(self.app.config.get("models", "user_data_directory"))
             / "models"
         )
+        num_workers = int(self.app.config.get("performance", "num_workers"))
 
         localization_results_callback = partial(save_detected_objects, base_path)
         ml.detect_objects(
@@ -83,6 +72,10 @@ class Queue(Label):
             models_dir=models_dir,
             base_directory=base_path,  # base path for relative images
             results_callback=localization_results_callback,
+            batch_size=int(
+                self.app.config.get("performance", "localization_batch_size")
+            ),
+            num_workers=num_workers,
         )
         logger.info("Localization complete")
 
@@ -92,6 +85,10 @@ class Queue(Label):
             models_dir=models_dir,
             base_directory=base_path,
             results_callback=classification_results_callback,
+            batch_size=int(
+                self.app.config.get("performance", "classification_batch_size")
+            ),
+            num_workers=num_workers,
         )
         logger.info("Binary classification complete")
 
@@ -101,6 +98,10 @@ class Queue(Label):
             models_dir=models_dir,
             base_directory=base_path,
             results_callback=classification_results_callback,
+            batch_size=int(
+                self.app.config.get("performance", "classification_batch_size")
+            ),
+            num_workers=num_workers,
         )
         logger.info("Species classification complete")
 
@@ -195,7 +196,7 @@ class TrapDataAnalyzer(App):
                 "use_gpu": 1,
                 "localization_batch_size": 2,
                 "classification_batch_size": 20,
-                "num_workers": 4,
+                "num_workers": 2,
             },
         )
         # config.write()
