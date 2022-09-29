@@ -1,50 +1,38 @@
-#! /usr/bin/env python3
-
-import asyncio
-import time
 import pathlib
-import random
-import tempfile
-from xmlrpc.client import Boolean
-import dateutil.parser
-import logging
-import requests
-import base64
-import io
 import threading
 from functools import partial
 
 import kivy
-
-kivy.require("2.1.0")
-
-
 from kivy.app import App
-from kivy.config import Config
 from kivy.clock import Clock
 from kivy.uix.label import Label
-from kivy.uix.image import Image, AsyncImage
+from kivy.uix.image import AsyncImage
 from kivy.uix.button import Button
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
-from kivy.graphics import Rectangle, Color, Canvas, Line
 from kivy.uix.gridlayout import GridLayout
-from kivy.uix.relativelayout import RelativeLayout
 from kivy.lang import Builder
 from kivy.properties import (
     StringProperty,
-    ListProperty,
     ObjectProperty,
-    NumericProperty,
     BooleanProperty,
 )
 from kivy.uix.screenmanager import Screen
-from kivy.logger import Logger
+from plyer import filechooser
+
+from trapdata import logger
+from trapdata import db
+from trapdata import models
+from trapdata.common import settings
+from trapdata.models.queue import add_monitoring_session_to_queue
+from trapdata.models.events import (
+    get_monitoring_sessions_from_db,
+    get_monitoring_sessions_from_filesystem,
+    save_monitoring_sessions,
+)
 
 
-from ..utils import *
-
-from ..ml import detect_objects, classify_objects
+kivy.require("2.1.0")
 
 # detect_and_classify = lambda *args, **kwargs: None
 
@@ -52,16 +40,42 @@ from ..ml import detect_objects, classify_objects
 Builder.load_file(str(pathlib.Path(__file__).parent / "menu.kv"))
 
 
-class ThreadWithStatus(threading.Thread):
-    exception = None
+def choose_directory(cache=True, setting_key="last_root_directory", starting_path=None):
+    """
+    Prompt the user to select a directory where trap data has been saved.
+    The subfolders of this directory should be timestamped directories
+    with nightly trap images.
 
-    def run(self):
-        try:
-            super().run()
-        except Exception as e:
-            self.exception = e
-            logger.error(f"Thread {self} exited with an exception: {e}")
-            raise e
+    The user's selection is saved and reused on the subsequent launch.
+    """
+    # @TODO Look for SDCARD / USB Devices first?
+
+    if cache:
+        selected_dir = settings.read_setting(setting_key)
+    else:
+        selected_dir = None
+
+    if selected_dir:
+        selected_dir = pathlib.Path(selected_dir)
+
+        if selected_dir.is_dir():
+            return selected_dir
+        else:
+            settings.delete_setting(setting_key)
+
+    selection = filechooser.choose_dir(
+        title="Choose the root directory for your nightly trap data",
+        path=starting_path,
+    )
+
+    if selection:
+        selected_dir = selection[0]
+    else:
+        return None
+
+    settings.save_setting(setting_key, selected_dir)
+
+    return selected_dir
 
 
 class TrapSesionData(Widget):
@@ -111,22 +125,6 @@ class LaunchScreenButton(Button):
             ).monitoring_session = self.monitoring_session
 
 
-class ReportButton(Button):
-    monitoring_session = ObjectProperty()
-
-    def on_release(self):
-        fname = export_report(self.monitoring_session.base_directory)
-        label_text = f"Report saved to: \n{fname}"
-        popup = Popup(
-            title="Results",
-            content=Label(text=label_text),
-            size_hint=(None, None),
-            size=(f"550dp", 400),
-            auto_dismiss=True,
-        )
-        popup.open()
-
-
 class DataMenuScreen(Screen):
     root_dir = ObjectProperty(allownone=True)
     sessions = ObjectProperty()
@@ -146,7 +144,7 @@ class DataMenuScreen(Screen):
         try:
             self.root_dir = choose_directory(cache=False, starting_path=self.root_dir)
         except Exception as e:
-            logger.error("Failed to choose directory with a starting path")
+            logger.error(f"Failed to choose directory with a starting path: {e}")
             self.root_dir = choose_directory(cache=False)
 
     def reload(self):
@@ -271,7 +269,9 @@ class DataMenuScreen(Screen):
 
             with db.get_session(self.root_dir) as sess:
                 first_image = (
-                    sess.query(db.Image).filter_by(monitoring_session_id=ms.id).first()
+                    sess.query(models.Image)
+                    .filter_by(monitoring_session_id=ms.id)
+                    .first()
                 )
 
             if first_image:
@@ -279,9 +279,6 @@ class DataMenuScreen(Screen):
                 bg_image = str(self.root_dir / first_image_path)
             else:
                 continue
-
-            # TEMPORARY until methods use a list of images in DB instead of a path
-            path = first_image_path.parent
 
             # Check if there are unprocessed images in monitoring session?
             btn_disabled = True
@@ -320,12 +317,3 @@ class DataMenuScreen(Screen):
 
     def open_settings(self):
         self.manager.current = "settings"
-
-
-class DataMenuApp(App):
-    def build(self):
-        return DataMenuScreen()
-
-
-if __name__ == "__main__":
-    DataMenuApp().run()

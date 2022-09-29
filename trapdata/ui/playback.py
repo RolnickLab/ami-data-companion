@@ -1,37 +1,26 @@
-import json
 import pathlib
-import random
-import sys
-
-
-from PIL import Image as PImage
 
 import kivy
-
-kivy.require("2.1.0")
-
-
 from kivy.app import App
 from kivy.lang import Builder
 from kivy.uix.widget import Widget
 from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
 from kivy.uix.relativelayout import RelativeLayout
-from kivy.graphics import Rectangle, Color, Canvas, Line, Ellipse
+from kivy.graphics import Color, Line
 from kivy.core.window import Window
 from kivy.clock import Clock
 from kivy.properties import (
-    StringProperty,
     ListProperty,
     ObjectProperty,
     NumericProperty,
 )
 from kivy.uix.screenmanager import Screen
 
+from trapdata import logger
 
-from ..utils import *
+kivy.require("2.1.0")
 
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "playback.kv"))

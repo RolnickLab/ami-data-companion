@@ -1,4 +1,3 @@
-import datetime
 import contextlib
 import pathlib
 
@@ -6,9 +5,9 @@ import sqlalchemy as sa
 from sqlalchemy import orm
 
 
-from . import models
-from .. import utils
-from ..utils import logger
+from trapdata import models
+from trapdata import logger
+from trapdata.common.files import archive_file
 
 
 def db_path(directory):
@@ -23,7 +22,7 @@ def get_db(directory=None, create=False):
         filepath = db_path(directory)
         if filepath.exists():
             if create:
-                utils.archive_file(filepath)
+                archive_file(filepath)
         else:
             create = True
         location = filepath
@@ -86,7 +85,9 @@ def check_db(directory):
             for ModelClass in models.__models__:
                 logger.debug(f"Testing model {ModelClass}")
                 count = sess.query(ModelClass).count()
-                logger.debug(f"Found {count} records in table '{ModelClass.__tablename__}'")
+                logger.debug(
+                    f"Found {count} records in table '{ModelClass.__tablename__}'"
+                )
     except sa.exc.OperationalError as e:
         logger.error(f"Error opening database session: {e}")
         return False
@@ -110,7 +111,9 @@ def get_or_create(session, model, defaults=None, **kwargs):
         try:
             session.add(instance)
             session.commit()
-        except Exception:  # The actual exception depends on the specific database so we catch all exceptions. This is similar to the official documentation: https://docs.sqlalchemy.org/en/latest/orm/session_transaction.html
+        except Exception:
+            # The actual exception depends on the specific database so we catch all exceptions.
+            # This is similar to the official documentation: https://docs.sqlalchemy.org/en/latest/orm/session_transaction.html
             session.rollback()
             instance = session.query(model).filter_by(**kwargs).one()
             return instance, False

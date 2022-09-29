@@ -1,13 +1,11 @@
-import pathlib
 import glob
-import torch
 import sys
 import importlib
 
-from ..utils import logger
-from . import localization
+from trapdata import logger
 
 
+# @TODO move this to the model registry
 LOCALIZATION_MODELS = {
     "FasterRCNN MobileNet": "trapdata.ml.localization.fasterrcnn_mobilenet",
     "Custom FasterRCNN": "trapdata.ml.localization.fasterrcnn_full",
@@ -29,15 +27,6 @@ TAXON_CLASSIFICATION_MODELS = {
 CLASSIFICATION_MODELS = {}
 CLASSIFICATION_MODELS.update(BINARY_CLASSIFICATION_MODELS)
 CLASSIFICATION_MODELS.update(TAXON_CLASSIFICATION_MODELS)
-
-
-# Original model weight paths:
-# model_localize=MODEL_BASE_PATH / "v1_localizmodel_2021-08-17-12-06.pt",
-# model_moth=MODEL_BASE_PATH / "mothsv2_20220421_110638_30.pth",
-# model_moth_nonmoth=MODEL_BASE_PATH / "moth-nonmoth-effv2b3_20220506_061527_30.pth",
-# category_map_moth=MODEL_BASE_PATH / "03-mothsv2_category_map.json",
-# category_map_moth_nonmoth=MODEL_BASE_PATH / "05-moth-nonmoth_category_map.json",
-# LOCAL_WEIGHTS_PATH = pathlib.Path(torch.hub.get_dir())
 
 
 def detect_objects(model_name, **kwargs):
