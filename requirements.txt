@@ -1,6 +1,7 @@
 kivy[base]
 plyer  # cross platform interfaces like file chooser
 black
+flake8
 Pillow
 python-dateutil
 # pyobjus  # macOS requirement for Kivy
