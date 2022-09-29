@@ -5,7 +5,7 @@ import urllib.request
 import torch
 import torchvision
 
-from ..utils import logger
+from trapdata import logger
 
 LOCAL_WEIGHTS_PATH = pathlib.Path(torch.hub.get_dir())
 logger.info(f"LOCAL WEIGHTS PATH: {LOCAL_WEIGHTS_PATH}")

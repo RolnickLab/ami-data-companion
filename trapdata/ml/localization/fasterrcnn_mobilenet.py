@@ -1,12 +1,11 @@
-import pathlib
 import time
 
 import torch
 import torchvision
-from PIL import Image
 
-from ...ml.utils import get_device, synchronize_clocks
-from ...utils import logger
+from trapdata import logger
+from trapdata.ml.utils import get_device, synchronize_clocks
+
 from .dataloaders import LocalizationDatabaseDataset
 
 LOCALIZATION_SCORE_THRESHOLD = 0.01

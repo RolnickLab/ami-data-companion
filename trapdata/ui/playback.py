@@ -1,7 +1,6 @@
 import pathlib
 
 import kivy
-from kivy.app import App
 from kivy.lang import Builder
 from kivy.uix.widget import Widget
 from kivy.uix.image import Image
@@ -9,7 +8,6 @@ from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.relativelayout import RelativeLayout
 from kivy.graphics import Color, Line
-from kivy.core.window import Window
 from kivy.clock import Clock
 from kivy.properties import (
     ListProperty,
@@ -19,6 +17,11 @@ from kivy.properties import (
 from kivy.uix.screenmanager import Screen
 
 from trapdata import logger
+from trapdata import constants
+from trapdata.models.events import get_monitoring_session_image_ids
+from trapdata.models.images import get_image_with_objects
+from trapdata.common.utils import get_sequential_sample
+
 
 kivy.require("2.1.0")
 
@@ -78,21 +81,21 @@ class AnnotatedImage(Widget):
                 # )
                 # print("bbox#", i)
 
-                if annotation.binary_label == POSITIVE_BINARY_LABEL:
-                    color = POSITIVE_COLOR
+                if annotation.binary_label == constants.POSITIVE_BINARY_LABEL:
+                    color = constants.POSITIVE_COLOR
                 # elif annotation.binary_label == NEGATIVE_BINARY_LABEL:
                 #     color = NEGATIVE_COLOR
                 # else:
                 #     color = NEUTRAL_COLOR
                 else:
-                    color = NEGATIVE_COLOR
+                    color = constants.NEGATIVE_COLOR
 
                 # color = [random.random() for _ in range(3)]
                 # color.append(0.8)  # alpha
                 Color(*color)
 
                 if not annotation.bbox:
-                    logging.warn(
+                    logger.warn(
                         f"No bbox for detected object {annotation.id}. Skipping."
                     )
                     continue
@@ -114,20 +117,20 @@ class AnnotatedImage(Widget):
                 y2 *= y_scale
 
                 w2 = w * x_scale
-                h2 = h * y_scale
+                # h2 = h * y_scale
                 # print("new dims:", w2, h2)
 
                 w2 = x2 - x1
-                h2 = y1 - y2
+                # h2 = y1 - y2
                 # print("new dims by coord:", w2, h2)
 
-                rect = (x1, y2, x2, y1)
-                # print(box, rect)
+                # rect = (x1, y2, x2, y1)
+
                 self.bbox_widgets.append(
                     Line(points=[x1, y1, x1, y2, x2, y2, x2, y1, x1, y1], width=2)
                 )
 
-                if annotation.binary_label == NEGATIVE_BINARY_LABEL:
+                if annotation.binary_label == constants.NEGATIVE_BINARY_LABEL:
                     label_text = ""
 
                 elif annotation.specific_label:
@@ -200,7 +203,7 @@ class ImagePlaybackScreen(Screen):
             Clock.unschedule(self.clock)
             self.clock = None
             self.fps = DEFAULT_FPS
-        self.ids.play_button.text = f"Play"
+        self.ids.play_button.text = "Play"
 
     def exit(self):
         self.manager.current = "menu"
@@ -250,22 +253,3 @@ class PreviewWindow(RelativeLayout):
             last_sample=self.current_sample.id if self.current_sample else None,
         )
         self.load_sample(image_id)
-
-
-class ImageOverlayApp(App):
-    def build(self):
-        self.title = "Image bbox overlay test"
-        # This just loads an example dir for testing
-        img_dir = choose_directory(cache=False)
-        layout = ImagePlaybackScreen(source_dir=img_dir, name="playback")
-        Window.clearcolor = (0, 1, 0, 1)
-
-        label = Label(size_hint=(1, 0.05))
-        Window.bind(mouse_pos=lambda w, p: setattr(label, "text", str(p)))
-        layout.add_widget(label)
-
-        return layout
-
-
-if __name__ == "__main__":
-    ImageOverlayApp().run()
