@@ -4,8 +4,6 @@ import pathlib
 import sqlalchemy as sa
 from sqlalchemy import orm
 
-
-from trapdata import models
 from trapdata import logger
 from trapdata.common.files import archive_file
 
@@ -38,8 +36,10 @@ def get_db(directory=None, create=False):
     )
 
     if create:
+        from . import Base
+
         logger.info("Creating database tables")
-        models.Base.metadata.create_all(db)
+        Base.metadata.create_all(db)
 
     return db
 
@@ -78,11 +78,13 @@ def check_db(directory):
     """
     Try opening a database session.
     """
+    from trapdata.models import __models__
+
     try:
         with get_session(directory) as sess:
             # May have to check each model to detect schema changes
             # @TODO probably a better way to do this!
-            for ModelClass in models.__models__:
+            for ModelClass in __models__:
                 logger.debug(f"Testing model {ModelClass}")
                 count = sess.query(ModelClass).count()
                 logger.debug(
