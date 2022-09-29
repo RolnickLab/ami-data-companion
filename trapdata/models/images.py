@@ -4,11 +4,11 @@ import sqlalchemy as sa
 from sqlalchemy import orm
 from sqlalchemy_utils import aggregated
 
-from trapdata import db
+from trapdata.db import Base, get_session
 from trapdata import logger
 
 
-class Image(db.Base):
+class Image(Base):
     __tablename__ = "images"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -55,7 +55,7 @@ class Image(db.Base):
 
 def get_image_with_objects(monitoring_session, image_id):
     base_directory = monitoring_session.base_directory
-    with db.get_session(base_directory) as sess:
+    with get_session(base_directory) as sess:
         image_kwargs = {
             "id": image_id,
             # "path": str(image_path),
@@ -64,7 +64,7 @@ def get_image_with_objects(monitoring_session, image_id):
         image = (
             sess.query(Image)
             .filter_by(**image_kwargs)
-            .options(db.orm.joinedload(Image.detected_objects))
+            .options(orm.joinedload(Image.detected_objects))
             .one_or_none()
         )
         logger.debug(

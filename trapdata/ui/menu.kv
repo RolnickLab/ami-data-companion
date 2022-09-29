@@ -17,8 +17,8 @@
         BoxLayout:
             orientation: "vertical"
             id: monitoring_sessions 
-            padding: 20
-            spacing: 20
+            padding: (40, 100)
+            spacing: 0
 
         BoxLayout:
             size_hint_y: 0.1
@@ -26,13 +26,10 @@
                 text: "Exit"
                 on_press: app.stop() 
             Button:
-                text: "Start Queue"
-                on_press: app.start_queue() 
+                text: "Open Queue"
+                on_press: root.manager.current = "queue"
             Button:
-                text: "Clear Queue"
-                on_press: app.queue.clear() 
-            Button:
-                text: "Rescan Directory"  # Use what is saved in DB without scanning
+                text: "Change Directory"  # Use what is saved in DB without scanning
                 on_press: root.choose_root_directory() 
             Button:
                 text: "Settings"

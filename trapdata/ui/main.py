@@ -26,6 +26,7 @@ from trapdata.models.detections import save_detected_objects, save_classified_ob
 from .menu import DataMenuScreen
 from .playback import ImagePlaybackScreen
 from .summary import SpeciesSummaryScreen
+from .queue import QueueScreen
 
 
 kivy.require("2.1.0")
@@ -46,16 +47,11 @@ class Queue(Label):
         super().__init__(*args, **kwargs)
         logger.debug("Initializing queue status and starting DB polling")
 
-    def on_total_in_queue(self, *args):
-        msg = f"{self.total_in_queue} images in queue"
-        logger.debug(msg)
-        self.status_str = msg
-
     def check_queue(self, *args):
         self.running = self.bgtask.is_alive()
-        logger.debug(f"Checking queue, running: {self.running}")
-        logger.info(queue_counts(self.app.base_path))
-        self.total_in_queue = images_in_queue(self.app.base_path)
+        # logger.debug(f"Checking queue, running: {self.running}")
+        # logger.debug(queue_counts(self.app.base_path))
+        # self.total_in_queue = images_in_queue(self.app.base_path)
 
     def process_queue(self):
         base_path = self.app.base_path
@@ -110,9 +106,11 @@ class Queue(Label):
             if not self.clock:
                 logger.debug("Scheduling queue check")
                 self.clock = Clock.schedule_interval(self.check_queue, 1)
+            self.status_str = "Running"
         else:
             logger.debug("Unscheduling queue check")
             Clock.unschedule(self.clock)
+            self.status_str = "Stopped"
 
     def start(self, *args):
         # @NOTE can't change a widget property from a bg thread
@@ -158,6 +156,7 @@ class TrapDataAnalyzer(App):
         sm.add_widget(DataMenuScreen(name="menu"))
         sm.add_widget(ImagePlaybackScreen(name="playback"))
         sm.add_widget(SpeciesSummaryScreen(name="summary"))
+        sm.add_widget(QueueScreen(name="queue"))
 
         return sm
 

@@ -106,15 +106,9 @@ class AddToQueueButton(Button):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        Clock.schedule_interval(self.update_status, 1)
 
     def on_release(self):
         add_monitoring_session_to_queue(self.monitoring_session)
-
-    def update_status(self, *args):
-        app = App.get_running_app()
-        if app.queue:
-            self.text = app.queue.status_str
 
 
 class LaunchScreenButton(Button):
@@ -317,7 +311,12 @@ class DataMenuScreen(Screen):
                 disabled=btn_disabled,
             )
 
-            row = GridLayout(rows=1, cols=5, spacing=20)
+            row = GridLayout(
+                rows=1,
+                cols=5,
+                row_default_height=120,
+                row_force_default=True,
+            )
             row.add_widget(AsyncImage(source=bg_image))
             row.add_widget(Label(text=label))
             row.add_widget(playback_btn)

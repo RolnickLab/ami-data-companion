@@ -2,7 +2,7 @@ import sqlalchemy as sa
 from sqlalchemy import orm
 from sqlalchemy_utils import aggregated, observes
 
-from trapdata import db
+from trapdata.db import Base, get_session
 from trapdata.common.logs import logger
 from trapdata.models.images import Image
 from trapdata.common.files import find_images, group_images_by_day
@@ -10,7 +10,7 @@ from trapdata.common.files import find_images, group_images_by_day
 
 # Rename to CapturePeriod? shorter? less confusing with other types of Sessions. CaptureSession?
 # Or SurveyEvent or Survey?
-class MonitoringSession(db.Base):
+class MonitoringSession(Base):
     __tablename__ = "monitoring_sessions"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -85,7 +85,7 @@ class MonitoringSession(db.Base):
 
 
 def save_monitoring_session(base_directory, session):
-    with db.get_session(base_directory) as sess:
+    with get_session(base_directory) as sess:
         ms_kwargs = {"base_directory": str(base_directory), "day": session["day"]}
         ms = sess.query(MonitoringSession).filter_by(**ms_kwargs).one_or_none()
         if ms:
@@ -163,7 +163,7 @@ def get_monitoring_sessions_from_filesystem(base_directory):
 
 def get_monitoring_sessions_from_db(base_directory):
     logger.info("Quering existing sessions in DB")
-    with db.get_session(base_directory) as sess:
+    with get_session(base_directory) as sess:
         results = (
             sess.query(MonitoringSession)
             .filter_by(base_directory=str(base_directory))
@@ -174,7 +174,7 @@ def get_monitoring_sessions_from_db(base_directory):
 
 def get_monitoring_session_images(ms):
     # @TODO this is likely to slow things down. Some monitoring sessions have thousands of images.
-    with db.get_session(ms.base_directory) as sess:
+    with get_session(ms.base_directory) as sess:
         images = list(sess.query(Image).filter_by(monitoring_session_id=ms.id).all())
     logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")
     return images
@@ -182,19 +182,19 @@ def get_monitoring_session_images(ms):
 
 # # These are aparently needed because none of the fancy stuff seems to work
 # def monitoring_session_images(ms):
-#     with db.get_session(ms.base_directory) as sess:
+#     with get_session(ms.base_directory) as sess:
 #         return list(sess.query(Image).filter_by(monitoring_session_id=ms.id).all())
 #
 #
 # def monitoring_session_images_count(ms):
-#     with db.get_session(ms.base_directory) as sess:
+#     with get_session(ms.base_directory) as sess:
 #         return int(sess.query(Image).filter_by(monitoring_session_id=ms.id).count())
 
 
 def get_monitoring_session_image_ids(ms):
     # Get a list of image IDs in order of timestamps as quickly as possible
     # This could be in the thousands
-    with db.get_session(ms.base_directory) as sess:
+    with get_session(ms.base_directory) as sess:
         images = list(
             sess.query(Image.id)
             .filter_by(monitoring_session_id=ms.id)
