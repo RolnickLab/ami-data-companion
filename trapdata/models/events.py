@@ -18,6 +18,7 @@ class MonitoringSession(Base):
     base_directory = sa.Column(sa.String(255))
     start_time = sa.Column(sa.DateTime(timezone=True))
     end_time = sa.Column(sa.DateTime(timezone=True))
+    # num_species = sa.Column(sa.Integer)
     notes = sa.Column(sa.JSON)
 
     @aggregated("images", sa.Column(sa.Integer))

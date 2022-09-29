@@ -42,6 +42,10 @@
                 text: "Back"
                 on_press: root.exit()
             Button:
+                id: queue_button
+                text: root.ids.image_preview.button_text()
+                on_press: root.ids.image_preview.add_sample_to_queue() 
+            Button:
                 text: "< Previous"
                 on_press: root.ids.image_preview.prev_sample() 
             Button:

@@ -266,17 +266,11 @@ class DataMenuScreen(Screen):
 
         for ms in self.sessions:
 
-            label = (
-                f"{ms.day.strftime('%a, %b %e')} \n"
-                f"{ms.num_images or 0} images\n"
-                f"{ms.duration_label}\n"
-                f"{ms.num_detected_objects} objects\n"
-            )
-
             with db.get_session(self.root_dir) as sess:
                 first_image = (
                     sess.query(models.Image)
                     .filter_by(monitoring_session_id=ms.id)
+                    .order_by(db.sa.func.random())
                     .first()
                 )
 
@@ -286,8 +280,14 @@ class DataMenuScreen(Screen):
             else:
                 continue
 
+            labels = [
+                f"{ms.day.strftime('%a, %b %e')} \n{ms.duration_label} \n{ms.start_time.strftime('%H:%M')} - {ms.end_time.strftime('%H:%M')}",
+                f"{ms.num_images or '0'} images\n",
+            ]
+
             # Check if there are unprocessed images in monitoring session?
-            btn_disabled = True
+            # btn_disabled = True
+            btn_disabled = False
 
             playback_btn = LaunchScreenButton(
                 text="Playback",
@@ -311,17 +311,26 @@ class DataMenuScreen(Screen):
                 disabled=btn_disabled,
             )
 
+            buttons = [playback_btn, add_to_queue_btn, summary_btn]
+
             row = GridLayout(
                 rows=1,
-                cols=5,
-                row_default_height=120,
-                row_force_default=True,
+                cols=4 + len(labels),
+                spacing=10,
+                padding=20,
+                # row_default_height=120,
+                # row_force_default=True,
             )
             row.add_widget(AsyncImage(source=bg_image))
-            row.add_widget(Label(text=label))
-            row.add_widget(playback_btn)
-            row.add_widget(add_to_queue_btn)
-            row.add_widget(summary_btn)
+            for label in labels:
+                row.add_widget(Label(text=label, valign="top"))
+
+            button_grid = GridLayout(rows=len(buttons), cols=1, padding=5, spacing=10)
+            for button in buttons:
+                button_grid.add_widget(button)
+
+            row.add_widget(button_grid)
+
             grid.add_widget(row)
 
         self.ids.status.text = "Ready"

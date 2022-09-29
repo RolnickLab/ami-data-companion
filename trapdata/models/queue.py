@@ -208,6 +208,17 @@ def all_queues(db_path):
     }
 
 
+def add_image_to_queue(db_path, image_id):
+
+    with get_session(db_path) as sess:
+        image = sess.query(Image).get(image_id)
+        logger.info(f"Addding image to queue: {image}")
+        if not image.in_queue:
+            image.in_queue = True
+            sess.add(image)
+            sess.commit()
+
+
 def add_sample_to_queue(monitoring_session, sample_size=10):
     ms = monitoring_session
 
