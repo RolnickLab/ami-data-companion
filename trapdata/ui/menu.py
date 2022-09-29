@@ -1,5 +1,4 @@
 import pathlib
-import threading
 from functools import partial
 
 import kivy
@@ -30,6 +29,7 @@ from trapdata.models.events import (
     get_monitoring_sessions_from_filesystem,
     save_monitoring_sessions,
 )
+from .main import ThreadWithStatus
 
 
 kivy.require("2.1.0")
