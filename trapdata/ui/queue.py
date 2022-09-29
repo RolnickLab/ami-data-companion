@@ -118,7 +118,7 @@ class QueueStatusTable(BoxLayout):
         for i, (name, queue) in enumerate(queues):
             clear_button = Button(text="Clear")
             clear_button.bind(on_release=partial(queue.clear_queue))
-            add_button = Button(text="Add \nUnprocessed")  # Add remaining unprocessed
+            add_button = Button(text="Add to Queue")  # Add remaining unprocessed
             add_button.bind(on_release=partial(queue.add_unprocessed))
 
             # try:

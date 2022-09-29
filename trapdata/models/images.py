@@ -5,7 +5,7 @@ from sqlalchemy import orm
 from sqlalchemy_utils import aggregated
 
 from trapdata.db import Base, get_session
-from trapdata import logger
+from trapdata import constants
 
 
 class Image(Base):
@@ -46,6 +46,11 @@ class Image(Base):
         lazy="joined",
     )
 
+    @property
+    def classified(self):
+        """Have all detected objects been classified"""
+        pass
+
     def __repr__(self):
         return (
             f"Image(path={self.path!r}, \n"
@@ -68,7 +73,39 @@ def get_image_with_objects(monitoring_session, image_id):
             .options(orm.joinedload(Image.detected_objects))
             .one_or_none()
         )
-        logger.debug(
-            f"Found image {image} with {len(image.detected_objects)} detected objects"
-        )
+        # logger.debug(
+        #     f"Found image {image} with {len(image.detected_objects)} detected objects"
+        # )
         return image
+
+
+def completely_classified(db_path, image_id):
+    from trapdata.models.detections import DetectedObject
+
+    with get_session(db_path) as sess:
+        img = sess.query(Image).get(image_id)
+        if img.in_queue or not img.last_processed:
+            return False
+
+        else:
+            classified_objs = (
+                sess.query(DetectedObject)
+                .filter_by(
+                    image_id=image_id, binary_label=constants.POSITIVE_BINARY_LABEL
+                )
+                .filter(
+                    DetectedObject.specific_label.is_not(None),
+                )
+                .count()
+            )
+            detections = (
+                sess.query(DetectedObject)
+                .filter_by(
+                    image_id=image_id, binary_label=constants.POSITIVE_BINARY_LABEL
+                )
+                .count()
+            )
+            if int(classified_objs) == int(detections):
+                return True
+            else:
+                return False
