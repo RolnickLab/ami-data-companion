@@ -1,4 +1,5 @@
 import pathlib
+import threading
 from functools import partial
 
 import kivy
@@ -29,7 +30,6 @@ from trapdata.models.events import (
     get_monitoring_sessions_from_filesystem,
     save_monitoring_sessions,
 )
-from .main import ThreadWithStatus
 
 
 kivy.require("2.1.0")
@@ -38,6 +38,18 @@ kivy.require("2.1.0")
 
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "menu.kv"))
+
+
+class ThreadWithStatus(threading.Thread):
+    exception = None
+
+    def run(self):
+        try:
+            super().run()
+        except Exception as e:
+            self.exception = e
+            logger.error(f"Thread {self} exited with an exception: {e}")
+            raise e
 
 
 def choose_directory(cache=True, setting_key="last_root_directory", starting_path=None):
