@@ -114,8 +114,8 @@ class Queue(Label):
 
     def start(self, *args):
         # @NOTE can't change a widget property from a bg thread
-        logger.info("Starting queue")
         if not self.running:
+            logger.info("Starting queue")
             self.running = True
             task_name = "Mr. Queue"
             self.bgtask = threading.Thread(

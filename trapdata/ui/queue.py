@@ -96,18 +96,45 @@ class QueueStatusTable(BoxLayout):
         ]
         app = App.get_running_app()
 
-        for name, queue in all_queues(app.base_path).items():
+        queues = list(all_queues(app.base_path).items())
+
+        def hacky_status(queue, previous_queue=None):
+            # Temporary solution until we have a process for each queue
+            if not app.queue:
+                return "Not Ready"
+            elif not app.queue.running:
+                return "Stopped"
+            elif queue.queue_count() <= 0:
+                return "Stopped"
+            elif previous_queue and previous_queue.queue_count() > 0:
+                return "Stopped"
+            elif not previous_queue and queue.queue_count() > 0:
+                return "Running"
+            elif queue.queue_count() > 0:
+                return "Running"
+            else:
+                return "Unknown"
+
+        for i, (name, queue) in enumerate(queues):
             clear_button = Button(text="Clear")
             clear_button.bind(on_release=partial(queue.clear_queue))
             add_button = Button(text="Add \nUnprocessed")  # Add remaining unprocessed
             add_button.bind(on_release=partial(queue.add_unprocessed))
+
+            # try:
+            #     previous_queue = queues[i - 1][1]
+            # except IndexError:
+            #     previous_queue = None
+            # status = hacky_status(queue, previous_queue)
+            status = "Running" if app.queue and app.queue.running else "Stopped"
+
             rows.append(
                 [
                     name.replace(" ", " \n"),
                     queue.unprocessed_count(),
                     queue.queue_count(),
                     queue.done_count(),
-                    "Running" if app.queue and app.queue.running else "Stopped",
+                    status,
                     [add_button, clear_button],
                 ]
             )
