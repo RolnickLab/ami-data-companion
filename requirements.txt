@@ -12,3 +12,4 @@ torchvision
 timm
 opencv_python
 matplotlib
+structlog
