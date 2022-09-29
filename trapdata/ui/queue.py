@@ -51,7 +51,7 @@ class QueueStatusTable(BoxLayout):
             cols=num_cols,
             padding=0,
             spacing=0,
-            row_default_height=80,
+            row_default_height=120,
             row_force_default=True,
         )
 
@@ -68,7 +68,7 @@ class QueueStatusTable(BoxLayout):
                 text = str(field_value)
                 label = Label(
                     text=text,
-                    halign="left",
+                    halign="center",
                     markup=True,
                 )
                 table.add_widget(label)
@@ -85,7 +85,7 @@ class QueueStatusTable(BoxLayout):
 
         rows = [
             [
-                "Data Type",
+                "",
                 "Unprocessed",
                 "Queued",
                 "Complete",
@@ -99,11 +99,11 @@ class QueueStatusTable(BoxLayout):
         for name, queue in all_queues(app.base_path).items():
             clear_button = Button(text="Clear")
             clear_button.bind(on_release=partial(queue.clear_queue))
-            add_button = Button(text="Add")  # Add remaining unprocessed
+            add_button = Button(text="Add \nUnprocessed")  # Add remaining unprocessed
             add_button.bind(on_release=partial(queue.add_unprocessed))
             rows.append(
                 [
-                    name,
+                    name.replace(" ", " \n"),
                     queue.unprocessed_count(),
                     queue.queue_count(),
                     queue.done_count(),
