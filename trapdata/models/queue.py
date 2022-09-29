@@ -2,6 +2,7 @@ import sqlalchemy as sa
 
 from trapdata.db import get_session
 from trapdata import logger
+from trapdata import constants
 from trapdata.models.images import Image
 from trapdata.models.detections import DetectedObject
 
@@ -141,9 +142,7 @@ class UnclassifiedObjectQueue(QueueManager):
                 .filter_by(
                     in_queue=True,
                     specific_label=None,
-                )
-                .filter(
-                    DetectedObject.binary_label.is_not(None),
+                    binary_label=constants.POSITIVE_BINARY_LABEL,
                 )
                 .count()
             )
@@ -154,9 +153,7 @@ class UnclassifiedObjectQueue(QueueManager):
                 sess.query(DetectedObject)
                 .filter_by(
                     specific_label=None,
-                )
-                .filter(
-                    DetectedObject.binary_label.is_not(None),
+                    binary_label=constants.POSITIVE_BINARY_LABEL,
                 )
                 .count()
             )
@@ -174,9 +171,10 @@ class UnclassifiedObjectQueue(QueueManager):
             # @TODO switch to bulk update method
             for obj in (
                 sess.query(DetectedObject)
-                .filter_by(in_queue=False, specific_label=None)
-                .filter(
-                    DetectedObject.binary_label.is_not(None),
+                .filter_by(
+                    in_queue=False,
+                    specific_label=None,
+                    binary_label=constants.POSITIVE_BINARY_LABEL,
                 )
                 .all()
             ):
