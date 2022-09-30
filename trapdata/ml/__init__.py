@@ -9,18 +9,22 @@ from trapdata import logger
 LOCALIZATION_MODELS = {
     "FasterRCNN MobileNet": "trapdata.ml.localization.fasterrcnn_mobilenet",
     "Custom FasterRCNN": "trapdata.ml.localization.fasterrcnn_full",
-    "MegaDectector v5": "trapdata.ml.localization.megadetectorv5",
+    "SSDlite": "trapdata.ml.localization.ssdlite",
+    # "MegaDectector v5": "trapdata.ml.localization.megadetectorv5",
+    "Disabled": None,
 }
 
 
 # These are separate for the settings choices
 BINARY_CLASSIFICATION_MODELS = {
     "Moth / Non-Moth": "trapdata.ml.classification.moth_nonmoth",
+    "Disabled": None,
 }
 
 TAXON_CLASSIFICATION_MODELS = {
     "Quebec & Vermont Species": "trapdata.ml.classification.quebec_vermont_species",
     "UK & Denmark Species": "trapdata.ml.classification.uk_denmark_species",
+    "Disabled": None,
 }
 
 # These are combined for selecting a model with the same function
@@ -32,6 +36,9 @@ CLASSIFICATION_MODELS.update(TAXON_CLASSIFICATION_MODELS)
 def detect_objects(model_name, **kwargs):
 
     module_path = LOCALIZATION_MODELS[model_name]
+    if not module_path:
+        logger.info("Skipping classification")
+        return None
     logger.debug(f"Loading object detection model: {module_path}")
     model_module = importlib.import_module(module_path)
 
@@ -42,6 +49,10 @@ def detect_objects(model_name, **kwargs):
 
 def classify_objects(model_name, **kwargs):
     module_path = CLASSIFICATION_MODELS[model_name]
+    if not module_path:
+        logger.info("Skipping classification")
+        return None
+
     logger.debug(f"Loading classification model: {module_path}")
     model_module = importlib.import_module(module_path)
 
