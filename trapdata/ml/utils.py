@@ -1,5 +1,7 @@
 import pathlib
 import json
+import time
+import datetime
 import urllib.request
 
 import torch
@@ -115,3 +117,32 @@ def crop_bbox(image, bbox):
     transform_to_PIL = torchvision.transforms.ToPILImage()
     cropped_image = transform_to_PIL(cropped_image)
     yield cropped_image
+
+
+class StopWatch:
+    """
+    Measure inference time with GPU support.
+
+    >>> with stopwatch() as t:
+    >>>     sleep(5)
+    >>> int(t.duration)
+    >>> 5
+    """
+
+    def __enter__(self):
+        synchronize_clocks()
+        # self.start = time.perf_counter()
+        self.start = time.time()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        synchronize_clocks()
+        # self.end = time.perf_counter()
+        self.end = time.time()
+        self.duration = self.end - self.start
+
+    def __repr__(self):
+        start = datetime.datetime.fromtimestamp(self.start).strftime("%H:%M:%S")
+        end = datetime.datetime.fromtimestamp(self.end).strftime("%H:%M:%S")
+        seconds = int(round(self.duration, 0))
+        return f"Started: {start}, Ended: {end}, Duration: {seconds} seconds"
