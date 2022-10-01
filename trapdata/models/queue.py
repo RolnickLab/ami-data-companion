@@ -5,6 +5,7 @@ from trapdata import logger
 from trapdata import constants
 from trapdata.models.images import Image
 from trapdata.models.detections import DetectedObject
+from trapdata import ml
 
 
 class QueueManager:
@@ -30,6 +31,9 @@ class QueueManager:
 
     def status(self):
         return NotImplementedError
+
+    def process_queue(self, **kwargs):
+        ml.detect_objects(**kwargs)
 
 
 class ImageQueue(QueueManager):
