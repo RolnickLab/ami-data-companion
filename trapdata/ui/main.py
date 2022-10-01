@@ -20,7 +20,7 @@ from kivy.properties import (
 
 from trapdata import logger
 from trapdata import ml
-from trapdata.models.queue import queue_counts, images_in_queue, clear_queue
+from trapdata.models.queue import clear_queue
 from trapdata.models.detections import save_detected_objects, save_classified_objects
 
 from .menu import DataMenuScreen
@@ -41,8 +41,6 @@ class Queue(Label):
     running = BooleanProperty(defaultvalue=False)
     bgtask = ObjectProperty()
 
-    exit_event = ObjectProperty()
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         logger.debug("Initializing queue status and starting DB polling")
@@ -60,6 +58,7 @@ class Queue(Label):
             pathlib.Path(self.app.config.get("models", "user_data_directory"))
             / "models"
         )
+        logger.info(f"Local models path: {models_dir}")
         num_workers = int(self.app.config.get("performance", "num_workers"))
 
         localization_results_callback = partial(save_detected_objects, base_path)
