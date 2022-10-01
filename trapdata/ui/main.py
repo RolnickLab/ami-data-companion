@@ -107,15 +107,15 @@ class Queue(Label):
                 self.clock = Clock.schedule_interval(self.check_queue, 1)
             self.status_str = "Running"
         else:
-            logger.debug("Unscheduling queue check")
-            Clock.unschedule(self.clock)
+            logger.debug("NOT Unscheduling queue check!")
+            # logger.debug("Unscheduling queue check")
+            # Clock.unschedule(self.clock)
             self.status_str = "Stopped"
 
     def start(self, *args):
         # @NOTE can't change a widget property from a bg thread
         if not self.running:
             logger.info("Starting queue")
-            self.running = True
             task_name = "Mr. Queue"
             self.bgtask = threading.Thread(
                 target=self.process_queue,
@@ -123,6 +123,7 @@ class Queue(Label):
                 name=task_name,
             )
             self.bgtask.start()
+            self.running = True
 
     def clear(self):
         clear_queue(self.app.base_path)
