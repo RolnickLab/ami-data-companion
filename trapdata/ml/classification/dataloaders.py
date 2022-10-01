@@ -57,9 +57,7 @@ class BinaryClassificationDatabaseDataset(torch.utils.data.Dataset):
                 item = (next_obj.id, self.transform(cropped_image))
                 sess.add(next_obj)
                 sess.commit()
-            else:
-                item = (None, None)
-        return item
+                return item
 
 
 class SpeciesClassificationDatabaseDataset(torch.utils.data.Dataset):

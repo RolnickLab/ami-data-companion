@@ -33,9 +33,7 @@ class LocalizationDatabaseDataset(torch.utils.data.Dataset):
                 item = (str(img_path), self.transform(pil_image))
                 sess.add(next_image)
                 sess.commit()
-            else:
-                item = (None, None)
-        return item
+                return item
 
 
 class LocalizationFilesystemDataset(torch.utils.data.Dataset):
