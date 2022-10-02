@@ -22,6 +22,7 @@ class Image(Base):
     in_queue = sa.Column(sa.Boolean, default=False)
     notes = sa.Column(sa.JSON)
 
+    @property
     def absolute_path(self, directory=None):
         # @TODO this directory argument can be removed once the image has the base
         # path stored in itself

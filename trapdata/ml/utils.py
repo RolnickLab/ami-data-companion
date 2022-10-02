@@ -1,3 +1,5 @@
+import os
+
 import pathlib
 import json
 import time
@@ -8,9 +10,6 @@ import torch
 import torchvision
 
 from trapdata import logger
-
-LOCAL_WEIGHTS_PATH = pathlib.Path(torch.hub.get_dir())
-logger.info(f"LOCAL WEIGHTS PATH: {LOCAL_WEIGHTS_PATH}")
 
 
 def get_device(device_str=None):
@@ -33,6 +32,7 @@ def get_or_download_file(path, destination_dir=None):
 
     """
     # If path is a local path instead of a URL then urlretrieve will just return that path
+    destination_dir = destination_dir or os.environ["LOCAL_WEIGHTS_PATH"]
     fname = path.rsplit("/", 1)[-1]
     if destination_dir:
         destination_dir = pathlib.Path(destination_dir)
@@ -41,16 +41,16 @@ def get_or_download_file(path, destination_dir=None):
             destination_dir.mkdir(parents=True, exist_ok=True)
         local_filepath = pathlib.Path(destination_dir) / fname
     else:
-        # If local_filepath is None, file will be downloaded to a temporary location
-        # But will likely be downloaded every time the model is invoked
-        local_filepath = None
+        raise Exception(
+            "No destination directory specified by LOCAL_WEIGHTS_PATH or app settings."
+        )
 
     if local_filepath and local_filepath.exists():
         logger.info(f"Using existing {local_filepath}")
         return local_filepath
 
     else:
-        logger.info(f"Downloading {path}")
+        logger.info(f"Downloading {path} to {destination_dir}")
         resulting_filepath, headers = urllib.request.urlretrieve(
             url=path, filename=local_filepath
         )

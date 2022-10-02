@@ -2,16 +2,24 @@ import torch
 import torchvision
 
 from trapdata import logger
-from trapdata.ml.utils import get_device, StopWatch
+from trapdata.ml.utils import (
+    get_device,
+    get_or_download_file,
+    get_category_map,
+    StopWatch,
+)
 
 
 class InferenceModel:
     key = None
     title = None
     description = None
+    model_type = None
     device = None
+    weights_path = None
     weights = None
-    labels = None
+    labels_path = None
+    category_map = None
     model = None
     transforms = None
     batch_size = 4
@@ -19,23 +27,33 @@ class InferenceModel:
     description = str()
     db_path = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, db_path, **kwargs):
+        self.db_path = db_path
+
         for k, v in kwargs:
             setattr(self, k, v)
 
-        logger.info(
-            f"Initializing model {self.name} on device: {self.device} with weights: {self.weights}"
-        )
-
         self.device = self.device or get_device()
-        self.model = self.get_model(self.weights)
+        self.weights = self.get_weights(self.weights_path)
         self.transforms = self.get_transforms()
         self.dataset = self.get_dataset()
         self.dataloader = self.get_dataloader()
 
-    def get_model(self, weights):
+    def get_weights(self, weights_path):
+        if not weights_path:
+            raise Exception(
+                "Missing parameter `weights_path`. "
+                "Specify a URL or local path to a model checkpoint"
+            )
+        return get_or_download_file(weights_path)
+
+    def load_model(self):
+        logger.info(
+            f"Loading model {self.name} on device: {self.device} with weights: {self.weights}"
+        )
         model = torch.nn.Module()
-        model.load_state_dict(weights)
+        checkpoint = torch.load(self.weights, map_location=self.device)
+        model.load_state_dict(checkpoint["model_state_dict"])
         model = model.to(self.device)
         model.eval()
         return model
@@ -106,64 +124,3 @@ class InferenceModel:
                 )
 
                 self.save_results(batch_output)
-
-
-import importlib
-
-from trapdata import logger
-
-
-# @TODO move this to the model registry
-LOCALIZATION_MODELS = {
-    "FasterRCNN MobileNet": "trapdata.ml.localization.fasterrcnn_mobilenet",
-    "Custom FasterRCNN": "trapdata.ml.localization.fasterrcnn_full",
-    "SSDlite": "trapdata.ml.localization.ssdlite",
-    # "MegaDectector v5": "trapdata.ml.localization.megadetectorv5",
-    "Disabled": None,
-}
-
-
-# These are separate for the settings choices
-BINARY_CLASSIFICATION_MODELS = {
-    "Moth / Non-Moth": "trapdata.ml.classification.moth_nonmoth",
-    "Disabled": None,
-}
-
-TAXON_CLASSIFICATION_MODELS = {
-    "Quebec & Vermont Species": "trapdata.ml.classification.quebec_vermont_species",
-    "UK & Denmark Species": "trapdata.ml.classification.uk_denmark_species",
-    "Disabled": None,
-}
-
-# These are combined for selecting a model with the same function
-CLASSIFICATION_MODELS = {}
-CLASSIFICATION_MODELS.update(BINARY_CLASSIFICATION_MODELS)
-CLASSIFICATION_MODELS.update(TAXON_CLASSIFICATION_MODELS)
-
-
-def detect_objects(model_name, **kwargs):
-
-    module_path = LOCALIZATION_MODELS[model_name]
-    if not module_path:
-        logger.info("Skipping classification")
-        return None
-    logger.debug(f"Loading object detection model: {module_path}")
-    model_module = importlib.import_module(module_path)
-
-    logger.debug(f"Calling predict with arguments: {kwargs}")
-    model_module.predict(**kwargs)
-    logger.debug("Predict complete")
-
-
-def classify_objects(model_name, **kwargs):
-    module_path = CLASSIFICATION_MODELS[model_name]
-    if not module_path:
-        logger.info("Skipping classification")
-        return None
-
-    logger.debug(f"Loading classification model: {module_path}")
-    model_module = importlib.import_module(module_path)
-
-    logger.debug(f"Calling predict with arguments: {kwargs}")
-    model_module.predict(**kwargs)
-    logger.debug("Predict complete")
