@@ -1,6 +1,5 @@
 import pathlib
 import threading
-from functools import partial
 
 import kivy
 from kivy.app import App
@@ -25,11 +24,7 @@ from trapdata import db
 from trapdata import models
 from trapdata.common import settings
 from trapdata.models.queue import add_monitoring_session_to_queue
-from trapdata.models.events import (
-    get_monitoring_sessions_from_db,
-    get_monitoring_sessions_from_filesystem,
-    save_monitoring_sessions,
-)
+from trapdata.models.events import get_or_create_monitoring_sessions
 
 
 kivy.require("2.1.0")
@@ -225,40 +220,10 @@ class DataMenuScreen(Screen):
                     child.disabled = True
 
     def get_monitoring_sessions(self, *args):
-        self.sessions = get_monitoring_sessions_from_db(self.root_dir)
-        if self.sessions:
-            self.data_ready = True
-        else:
-            self.sessions = get_monitoring_sessions_from_filesystem(self.root_dir)
-            # @TODO just wait for the DB to save, don't worry about background task
-            # Rescan will trigger a scan an resave.
-            self.save_monitoring_sessions_in_background()
+        self.sessions = get_or_create_monitoring_sessions(self.root_dir)
+        self.data_ready = True
         self.status_popup.dismiss()
-
-    def save_monitoring_sessions_in_background(self):
-        logger.info("Writing monitoring data to DB in the background")
-        bgtask = ThreadWithStatus(
-            target=partial(save_monitoring_sessions, self.root_dir, self.sessions),
-            daemon=True,
-            name="writing_monitoring_sessions_to_db",
-        )
-        bgtask.start()
-        self.status_clock = Clock.schedule_interval(
-            partial(self.watch_db_progress, bgtask), 1
-        )
-
-    def watch_db_progress(self, bgtask, *args):
-        logger.debug(f"Checking DB write status: {bgtask}")
-        self.ids.status.text = "Writing capture data to the database..."
-        if bgtask and not bgtask.is_alive():
-            logger.debug(f"Thread has exited: {bgtask}")
-            Clock.unschedule(self.status_clock)
-            if bgtask.exception:
-                self.ids.status.text = "Failed to write capture data to the database"
-            else:
-                self.sessions = get_monitoring_sessions_from_db(self.root_dir)
-                self.data_ready = True
-                self.ids.status.text = "Ready"
+        return self.sessions
 
     def display_monitoring_sessions(self, *args):
         grid = self.ids.monitoring_sessions

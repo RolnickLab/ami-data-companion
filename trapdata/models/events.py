@@ -165,12 +165,27 @@ def get_monitoring_sessions_from_filesystem(base_directory):
 def get_monitoring_sessions_from_db(base_directory):
     logger.info("Quering existing sessions in DB")
     with get_session(base_directory) as sess:
-        results = (
+        return (
             sess.query(MonitoringSession)
             .filter_by(base_directory=str(base_directory))
             .all()
         )
-    return list(results)
+
+
+def monitoring_sessions_exist(base_directory):
+    with get_session(base_directory) as sess:
+        return (
+            sess.query(MonitoringSession)
+            .filter_by(base_directory=str(base_directory))
+            .count()
+        )
+
+
+def get_or_create_monitoring_sessions(base_directory):
+    if not monitoring_sessions_exist(base_directory):
+        sessions = get_monitoring_sessions_from_filesystem(base_directory)
+        save_monitoring_sessions(base_directory, sessions)
+    return get_monitoring_sessions_from_db(base_directory)
 
 
 def get_monitoring_session_images(ms):
@@ -181,17 +196,7 @@ def get_monitoring_session_images(ms):
     return images
 
 
-# # These are aparently needed because none of the fancy stuff seems to work
-# def monitoring_session_images(ms):
-#     with get_session(ms.base_directory) as sess:
-#         return list(sess.query(Image).filter_by(monitoring_session_id=ms.id).all())
-#
-#
-# def monitoring_session_images_count(ms):
-#     with get_session(ms.base_directory) as sess:
-#         return int(sess.query(Image).filter_by(monitoring_session_id=ms.id).count())
-
-
+# # These are apparently needed because none of the fancy stuff seems to work
 def get_monitoring_session_image_ids(ms):
     # Get a list of image IDs in order of timestamps as quickly as possible
     # This could be in the thousands
