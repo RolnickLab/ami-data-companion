@@ -235,7 +235,7 @@ class DataMenuScreen(Screen):
                 first_image = (
                     sess.query(models.Image)
                     .filter_by(monitoring_session_id=ms.id)
-                    .order_by(db.sa.func.random())
+                    .order_by(models.Image.filesize.desc())
                     .first()
                 )
 
@@ -250,7 +250,6 @@ class DataMenuScreen(Screen):
                 f"{ms.num_images or '0'} images\n",
             ]
 
-            # Check if there are unprocessed images in monitoring session?
             # btn_disabled = True
             btn_disabled = False
 

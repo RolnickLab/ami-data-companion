@@ -1,3 +1,5 @@
+import pathlib
+
 import sqlalchemy as sa
 from sqlalchemy import orm
 from sqlalchemy_utils import aggregated, observes
@@ -86,6 +88,8 @@ class MonitoringSession(Base):
 
 
 def save_monitoring_session(base_directory, session):
+    # @TODO find & save all images to the DB first, then
+    # group by timestamp and construct monitoring sessions. window function?
     with get_session(base_directory) as sess:
         ms_kwargs = {"base_directory": str(base_directory), "day": session["day"]}
         ms = sess.query(MonitoringSession).filter_by(**ms_kwargs).one_or_none()
@@ -109,11 +113,15 @@ def save_monitoring_session(base_directory, session):
             # This does not delete missing images.
             ms_images = []
             for image in session["images"]:
-                # path = pathlib.Path(image["path"]).relative_to(base_directory)
+                path = pathlib.Path(image["path"]).relative_to(ms.base_directory)
+                absolute_path = pathlib.Path(ms.base_directory) / path
                 img_kwargs = {
                     "monitoring_session_id": ms.id,
-                    "path": str(image["path"]),  # @TODO these should be relative paths!
+                    "base_path": ms.base_directory,
+                    "path": str(path),
                     "timestamp": image["timestamp"],
+                    "filesize": absolute_path.stat().st_size,
+                    # file hash?
                 }
                 db_img = sess.query(Image).filter_by(**img_kwargs).one_or_none()
                 if db_img:
@@ -182,6 +190,7 @@ def monitoring_sessions_exist(base_directory):
 
 
 def get_or_create_monitoring_sessions(base_directory):
+    # @TODO Check if there are unprocessed images in monitoring session?
     if not monitoring_sessions_exist(base_directory):
         sessions = get_monitoring_sessions_from_filesystem(base_directory)
         save_monitoring_sessions(base_directory, sessions)
@@ -196,7 +205,7 @@ def get_monitoring_session_images(ms):
     return images
 
 
-# # These are apparently needed because none of the fancy stuff seems to work
+# # These queries are apparently needed because none of the fancy stuff seems to work
 def get_monitoring_session_image_ids(ms):
     # Get a list of image IDs in order of timestamps as quickly as possible
     # This could be in the thousands

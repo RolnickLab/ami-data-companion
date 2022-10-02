@@ -13,19 +13,20 @@ class Image(Base):
 
     id = sa.Column(sa.Integer, primary_key=True)
     monitoring_session_id = sa.Column(sa.ForeignKey("monitoring_sessions.id"))
-    path = sa.Column(
-        sa.String(255)
-    )  # @TODO store these as relative paths to the directory
+    base_path = sa.Column(sa.String(255))
+    path = sa.Column(sa.String(255))
     timestamp = sa.Column(sa.DateTime(timezone=True))
-    # filesize = sa.Column(sa.Integer)
+    filesize = sa.Column(sa.Integer)
     last_read = sa.Column(sa.DateTime)
     last_processed = sa.Column(sa.DateTime)
     in_queue = sa.Column(sa.Boolean, default=False)
     notes = sa.Column(sa.JSON)
 
     def absolute_path(self, directory=None):
+        # @TODO this directory argument can be removed once the image has the base
+        # path stored in itself
         if not directory:
-            directory = self.monitoring_session.base_directory
+            directory = self.base_path
         return pathlib.Path(directory) / self.path
 
     @aggregated("detected_objects", sa.Column(sa.Integer))
