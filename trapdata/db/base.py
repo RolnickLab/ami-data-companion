@@ -1,36 +1,31 @@
 import contextlib
-import pathlib
 
 import sqlalchemy as sa
 from sqlalchemy import orm
 
 from trapdata import logger
-from trapdata.common.filemanagement import archive_file
 
 
-def db_path(directory):
-    db_name = "trapdata.db"
-    filepath = pathlib.Path(directory) / db_name
-    return filepath
+def get_safe_db_path(db):
+    # Return filepath or URL of database without credentials
+    return db.path
 
 
-def get_db(directory=None, create=False):
-
-    if directory:
-        filepath = db_path(directory)
-        if filepath.exists():
-            if create:
-                archive_file(filepath)
-        else:
-            create = True
-        location = filepath
-
+def get_db(db_path, create=False):
+    """
+    db_path supports any database URL format supported by sqlalchemy
+    sqlite_filepath = "~/trapdata.db"
+    db_path = f"sqlite+pysqlite:///{file_path}",
+    db_path = ":memory:"
+    """
+    if not db_path:
+        Exception("No database URL specified")
     else:
-        # Only works in a scoped session. Used for tests.
-        location = ":memory:"
+        logger.debug(f"Initializing DB from path: {db_path}")
+        # logger.debug(f"Initializing DB from path: {get_safe_db_path()}")
 
     db = sa.create_engine(
-        f"sqlite+pysqlite:///{location}",
+        db_path,
         echo=False,
         future=True,
     )
@@ -45,9 +40,9 @@ def get_db(directory=None, create=False):
 
 
 @contextlib.contextmanager
-def get_session(directory):
+def get_session(db_path):
     """
-    Convience method to start and close a database session.
+    Convenience method to start and close a database session.
 
     The database is a file-based sqlite database, so we store
     in the base directory of the trap images.
@@ -61,12 +56,12 @@ def get_session(directory):
     Usage:
 
     >>> directory = "/tmp/images"
-    >>> with get_session(directory) as sess:
+    >>> with get_session(db_path) as sess:
     >>>     num_images = sess.query(Image).filter_by().count()
     >>> num_images
     0
     """
-    db = get_db(directory)
+    db = get_db(db_path)
     session = orm.Session(db)
 
     yield session
@@ -74,14 +69,14 @@ def get_session(directory):
     session.close()
 
 
-def check_db(directory):
+def check_db(db_path, quiet=False):
     """
     Try opening a database session.
     """
     from trapdata.models import __models__
 
     try:
-        with get_session(directory) as sess:
+        with get_session(db_path) as sess:
             # May have to check each model to detect schema changes
             # @TODO probably a better way to do this!
             for ModelClass in __models__:
@@ -92,13 +87,16 @@ def check_db(directory):
                 )
     except sa.exc.OperationalError as e:
         logger.error(f"Error opening database session: {e}")
-        return False
+        if quiet:
+            return False
+        else:
+            raise
     else:
         return True
 
 
-def query(directory, q, **kwargs):
-    with get_session(directory) as sess:
+def query(db_path, q, **kwargs):
+    with get_session(db_path) as sess:
         return list(sess.query(q, **kwargs))
 
 

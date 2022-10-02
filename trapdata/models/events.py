@@ -87,10 +87,10 @@ class MonitoringSession(Base):
         return duration
 
 
-def save_monitoring_session(base_directory, session):
+def save_monitoring_session(db_path, base_directory, session):
     # @TODO find & save all images to the DB first, then
     # group by timestamp and construct monitoring sessions. window function?
-    with get_session(base_directory) as sess:
+    with get_session(db_path) as sess:
         ms_kwargs = {"base_directory": str(base_directory), "day": session["day"]}
         ms = sess.query(MonitoringSession).filter_by(**ms_kwargs).one_or_none()
         if ms:
@@ -141,12 +141,12 @@ def save_monitoring_session(base_directory, session):
         logger.debug("Done committing")
 
 
-def save_monitoring_sessions(base_directory, sessions):
+def save_monitoring_sessions(db_path, base_directory, sessions):
 
     for session in sessions:
-        save_monitoring_session(base_directory, session)
+        save_monitoring_session(db_path, base_directory, session)
 
-    return get_monitoring_sessions_from_db(base_directory)
+    return get_monitoring_sessions_from_db(db_path, base_directory)
 
 
 def get_monitoring_sessions_from_filesystem(base_directory):
@@ -170,9 +170,9 @@ def get_monitoring_sessions_from_filesystem(base_directory):
     return sessions
 
 
-def get_monitoring_sessions_from_db(base_directory):
+def get_monitoring_sessions_from_db(db_path, base_directory):
     logger.info("Quering existing sessions in DB")
-    with get_session(base_directory) as sess:
+    with get_session(db_path) as sess:
         return (
             sess.query(MonitoringSession)
             .filter_by(base_directory=str(base_directory))
@@ -180,8 +180,8 @@ def get_monitoring_sessions_from_db(base_directory):
         )
 
 
-def monitoring_sessions_exist(base_directory):
-    with get_session(base_directory) as sess:
+def monitoring_sessions_exist(db_path, base_directory):
+    with get_session(db_path) as sess:
         return (
             sess.query(MonitoringSession)
             .filter_by(base_directory=str(base_directory))
@@ -189,12 +189,12 @@ def monitoring_sessions_exist(base_directory):
         )
 
 
-def get_or_create_monitoring_sessions(base_directory):
+def get_or_create_monitoring_sessions(db_path, base_directory):
     # @TODO Check if there are unprocessed images in monitoring session?
-    if not monitoring_sessions_exist(base_directory):
+    if not monitoring_sessions_exist(db_path, base_directory):
         sessions = get_monitoring_sessions_from_filesystem(base_directory)
-        save_monitoring_sessions(base_directory, sessions)
-    return get_monitoring_sessions_from_db(base_directory)
+        save_monitoring_sessions(db_path, base_directory, sessions)
+    return get_monitoring_sessions_from_db(db_path, base_directory)
 
 
 def get_monitoring_session_images(ms):
