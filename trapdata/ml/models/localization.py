@@ -29,13 +29,17 @@ class LocalizationDatabaseDataset(torch.utils.data.Dataset):
             return count
 
     def __getitem__(self, idx):
+        # @TODO this exits with an exception if there are no
+        # images in the queue.
+        # @TODO use a custom sampler instead to query all images in the batch
+        # from the DB at one, rather than one by one.
         with db.get_session(self.db_path) as sess:
             next_image = sess.query(models.Image).filter_by(**self.query_args).first()
             if next_image:
                 img_path = next_image.absolute_path
                 pil_image = PIL.Image.open(img_path)
                 next_image.in_queue = False
-                item = (str(img_path), self.transform(pil_image))
+                item = (next_image.id, self.transform(pil_image))
                 sess.add(next_image)
                 sess.commit()
                 return item
@@ -86,7 +90,8 @@ class FasterRCNN_ResNet50_FPN(InferenceModel):
         model.load_state_dict(checkpoint["model_state_dict"])
         model = model.to(self.device)
         model.eval()
-        return model
+        self.model = model
+        return self.model
 
     def get_dataset(self):
         dataset = LocalizationDatabaseDataset(
@@ -95,7 +100,7 @@ class FasterRCNN_ResNet50_FPN(InferenceModel):
         )
         return dataset
 
-    def post_process(self, img_path, output):
+    def post_process_single(self, output):
         # This model does not use the labels from the object detection model
         _ = output["labels"]
         assert all([label == 1 for label in output["labels"]])
@@ -104,20 +109,18 @@ class FasterRCNN_ResNet50_FPN(InferenceModel):
         bboxes = output["boxes"][output["scores"] > self.bbox_score_threshold]
 
         logger.info(
-            f"Keeping {len(bboxes)} out of {len(output['boxes'])} objects found (threshold: {LOCALIZATION_SCORE_THRESHOLD})"
+            f"Keeping {len(bboxes)} out of {len(output['boxes'])} objects found (threshold: {self.bbox_score_threshold})"
         )
 
         bboxes = bboxes.cpu().numpy().astype(int).tolist()
         return bboxes
 
-    def format_results(self, output):
+    def save_results(self, item_ids, batch_output):
         # Format data to be saved in DB
         # Here we are just saving the bboxes of detected objects
         detected_objects_data = []
-        for image_output in output:
+        for image_output in batch_output:
             detected_objects = [{"bbox": bbox} for bbox in image_output]
             detected_objects_data.append(detected_objects)
 
-    def save_results(self, batch_output):
-        results = self.format_results(batch_output)
-        save_detected_objects(results)
+        save_detected_objects(self.db_path, item_ids, detected_objects_data)

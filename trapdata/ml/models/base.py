@@ -56,7 +56,8 @@ class InferenceModel:
         model.load_state_dict(checkpoint["model_state_dict"])
         model = model.to(self.device)
         model.eval()
-        return model
+        self.model = model
+        return self.model
 
     def get_transforms(self):
         transforms = torchvision.transforms.Compose(
@@ -94,20 +95,23 @@ class InferenceModel:
         batch_output = self.model(batch_input)
         return batch_output
 
-    def post_process(self, batch_output):
-        return batch_output
+    def post_process_single(self, item):
+        return item
+
+    def post_process_batch(self, batch_output):
+        for item in batch_output:
+            yield self.post_process_single(item)
 
     def format_output(self, batch_output):
         return batch_output
 
     def save_results(self, batch_output):
-        _ = self.format_output(batch_output)
         logger.warn("No save method configured for model. Doing nothing with results")
         return None
 
     def run(self):
         with torch.no_grad():
-            for i, batch_input in enumerate(self.dataloader):
+            for i, (item_ids, batch_input) in enumerate(self.dataloader):
 
                 logger.info(f"Running batch {i+1} out of {len(self.dataloader)}")
 
@@ -115,12 +119,10 @@ class InferenceModel:
                     batch_output = self.predict_batch(batch_input)
 
                 seconds_per_item = batch_time.duration / len(batch_output)
-
-                batch_output = self.post_process(batch_output)
-
                 logger.info(
                     f"Inference time for batch: {batch_time}\n"
                     f"{round(seconds_per_item, 1)} seconds per item"
                 )
 
-                self.save_results(batch_output)
+                batch_output = self.post_process_batch(batch_output)
+                self.save_results(item_ids, batch_output)

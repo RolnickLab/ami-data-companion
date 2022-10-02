@@ -267,10 +267,10 @@ def add_image_to_queue(db_path, image_id):
             sess.commit()
 
 
-def add_sample_to_queue(monitoring_session, sample_size=10):
+def add_sample_to_queue(db_path, monitoring_session, sample_size=10):
     ms = monitoring_session
 
-    with get_session(ms.base_directory) as sess:
+    with get_session(db_path) as sess:
         num_in_queue = (
             sess.query(Image)
             .filter_by(in_queue=True, monitoring_session_id=ms.id)
@@ -292,7 +292,7 @@ def add_sample_to_queue(monitoring_session, sample_size=10):
             sess.commit()
 
 
-def add_monitoring_session_to_queue(monitoring_session, limit=None):
+def add_monitoring_session_to_queue(db_path, monitoring_session, limit=None):
     """
     Add images captured during a give Monitoring Session to the
     processing queue. If a limit is specified, only add that many
@@ -312,7 +312,7 @@ def add_monitoring_session_to_queue(monitoring_session, limit=None):
     #     )
 
     logger.info(f"Adding all images for Monitoring Session {ms.id} to queue")
-    with get_session(ms.base_directory) as sess:
+    with get_session(db_path) as sess:
         for image in (
             sess.query(Image)
             .filter_by(
@@ -380,11 +380,11 @@ def unprocessed_counts(base_path):
     return counts
 
 
-def clear_queue(base_path):
+def clear_queue(db_path):
 
     logger.info("Clearing images in queue")
 
-    with get_session(base_path) as sess:
+    with get_session(db_path) as sess:
         for image in sess.query(Image).filter_by(in_queue=True).all():
             image.in_queue = False
             sess.add(image)

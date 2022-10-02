@@ -21,8 +21,8 @@ def get_db(db_path, create=False):
     if not db_path:
         Exception("No database URL specified")
     else:
-        logger.debug(f"Initializing DB from path: {db_path}")
-        # logger.debug(f"Initializing DB from path: {get_safe_db_path()}")
+        logger.debug(f"Using DB from path: {db_path}")
+        # logger.debug(f"Using DB from path: {get_safe_db_path()}")
 
     db = sa.create_engine(
         db_path,
