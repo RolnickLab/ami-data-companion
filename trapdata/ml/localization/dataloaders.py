@@ -10,24 +10,24 @@ from trapdata import models
 
 
 class LocalizationDatabaseDataset(torch.utils.data.Dataset):
-    def __init__(self, base_directory, image_transforms):
+    def __init__(self, db_path, image_transforms):
         super().__init__()
 
-        self.directory = pathlib.Path(base_directory)
+        self.directory = db_path
         self.transform = image_transforms
         self.query_args = {"in_queue": True}
 
     def __len__(self):
-        with db.get_session(self.directory) as sess:
+        with db.get_session(self.db_path) as sess:
             count = sess.query(models.Image).filter_by(**self.query_args).count()
             logger.info(f"Images found in queue: {count}")
             return count
 
     def __getitem__(self, idx):
-        with db.get_session(self.directory) as sess:
+        with db.get_session(self.db_path) as sess:
             next_image = sess.query(models.Image).filter_by(**self.query_args).first()
             if next_image:
-                img_path = self.directory / next_image.path
+                img_path = next_image.absolute_path
                 pil_image = PIL.Image.open(img_path)
                 next_image.in_queue = False
                 item = (str(img_path), self.transform(pil_image))
@@ -54,5 +54,5 @@ class LocalizationFilesystemDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         img_name = self.image_names[idx]
         img_path = self.directory / img_name
-        pil_image = Image.open(img_path)
+        pil_image = PIL.Image.open(img_path)
         return str(img_path), self.transform(pil_image)
