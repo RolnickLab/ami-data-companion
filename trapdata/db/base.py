@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from sqlalchemy import orm
 
 from trapdata import logger
-from trapdata.common.files import archive_file
+from trapdata.common.filemanagement import archive_file
 
 
 def db_path(directory):

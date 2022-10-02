@@ -5,7 +5,7 @@ from sqlalchemy_utils import aggregated, observes
 from trapdata.db import Base, get_session
 from trapdata.common.logs import logger
 from trapdata.models.images import Image
-from trapdata.common.files import find_images, group_images_by_day
+from trapdata.common.filemanagement import find_images, group_images_by_day
 
 
 # Rename to CapturePeriod? shorter? less confusing with other types of Sessions. CaptureSession?
