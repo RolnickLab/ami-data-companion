@@ -54,12 +54,8 @@ def save_detected_objects(db_path, image_paths, detected_objects_data):
 
     with db.get_session(db_path) as sess:
         timestamp = datetime.datetime.now()
-        for image_path, detected_objects in zip(image_paths, detected_objects_data):
-            image_kwargs = {
-                "path": str(image_path),
-                # "monitoring_session_id": monitoring_session.id,
-            }
-            image = sess.query(Image).filter_by(**image_kwargs).one()
+        for image_id, detected_objects in zip(image_paths, detected_objects_data):
+            image = sess.query(Image).get(image_id)
             image.last_processed = timestamp
             sess.add(image)
             for object_data in detected_objects:
