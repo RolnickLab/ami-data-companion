@@ -9,6 +9,8 @@
     },
     "cSpell.words": [
         "fasterrcnn",
+        "resnet",
+        "torchvision",
         "trapdata"
     ],
 }
