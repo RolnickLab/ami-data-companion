@@ -1,3 +1,5 @@
+import json
+
 import torch
 import torchvision
 
@@ -5,7 +7,6 @@ from trapdata import logger
 from trapdata.ml.utils import (
     get_device,
     get_or_download_file,
-    get_category_map,
     StopWatch,
 )
 
@@ -23,7 +24,7 @@ class InferenceModel:
     model = None
     transforms = None
     batch_size = 4
-    num_workers = 2
+    num_workers = 1
     description = str()
     db_path = None
 
@@ -33,11 +34,15 @@ class InferenceModel:
         for k, v in kwargs:
             setattr(self, k, v)
 
+        logger.info(f"Initializing inference class {self.name}")
+
         self.device = self.device or get_device()
+        self.category_map = self.get_labels(self.labels_path)
         self.weights = self.get_weights(self.weights_path)
         self.transforms = self.get_transforms()
         self.dataset = self.get_dataset()
         self.dataloader = self.get_dataloader()
+        self.model = self.get_model()
 
     def get_weights(self, weights_path):
         if not weights_path:
@@ -47,17 +52,27 @@ class InferenceModel:
             )
         return get_or_download_file(weights_path)
 
-    def load_model(self):
-        logger.info(
-            f"Loading model {self.name} on device: {self.device} with weights: {self.weights}"
-        )
+    def get_labels(self, labels_path):
+        if labels_path:
+            local_path = get_or_download_file(labels_path)
+
+            with open(local_path) as f:
+                labels = json.load(f)
+
+            # @TODO would this be faster as a list? especially when getting the labels of multiple
+            # indexes in one prediction
+            index_to_label = {index: label for label, index in labels.items()}
+
+            print(index_to_label)
+            return index_to_label
+
+    def get_model(self):
         model = torch.nn.Module()
         checkpoint = torch.load(self.weights, map_location=self.device)
         model.load_state_dict(checkpoint["model_state_dict"])
         model = model.to(self.device)
         model.eval()
-        self.model = model
-        return self.model
+        return model
 
     def get_transforms(self):
         transforms = torchvision.transforms.Compose(

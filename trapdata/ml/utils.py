@@ -31,6 +31,9 @@ def get_or_download_file(path, destination_dir=None):
     >>> filename, headers = get_weights("https://drive.google.com/file/d/1KdQc56WtnMWX9PUapy6cS0CdjC8VSdVe/view?usp=sharing")
 
     """
+    if not path:
+        raise Exception("Specify a URL or path to fetch file from.")
+
     # If path is a local path instead of a URL then urlretrieve will just return that path
     destination_dir = destination_dir or os.environ["LOCAL_WEIGHTS_PATH"]
     fname = path.rsplit("/", 1)[-1]
@@ -56,17 +59,6 @@ def get_or_download_file(path, destination_dir=None):
         )
         logger.info(f"Downloaded to {resulting_filepath}")
         return resulting_filepath
-
-
-def get_category_map(labels_path):
-    with open(LOCAL_WEIGHTS_PATH / labels_path) as f:
-        labels = json.load(f)
-
-    # @TODO would this be faster as a list? especially when getting the labels of multiple
-    # indexes in one prediction
-    index_to_label = {index: label for label, index in labels.items()}
-
-    return index_to_label
 
 
 def synchronize_clocks():
