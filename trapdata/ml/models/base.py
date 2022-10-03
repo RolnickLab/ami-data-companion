@@ -125,4 +125,5 @@ class InferenceModel:
                 )
 
                 batch_output = self.post_process_batch(batch_output)
+                item_ids = item_ids.tolist()
                 self.save_results(item_ids, batch_output)
