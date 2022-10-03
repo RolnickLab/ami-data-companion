@@ -93,7 +93,7 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
                 logger.debug(f"Adding {k}: {v} to detected object {obj.id}")
                 setattr(obj, k, v)
 
-            logger.debug(f"Saving classifed object {obj}")
+            logger.debug(f"Saving classified object {obj}")
 
         sess.commit()
 

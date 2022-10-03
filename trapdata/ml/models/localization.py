@@ -14,6 +14,10 @@ from trapdata.models.detections import save_detected_objects
 from trapdata.ml.models.base import InferenceModel
 
 
+class ObjectDetector(InferenceModel):
+    pass
+
+
 class LocalizationDatabaseDataset(torch.utils.data.Dataset):
     def __init__(self, db_path, image_transforms):
         super().__init__()
@@ -67,7 +71,7 @@ class LocalizationFilesystemDataset(torch.utils.data.Dataset):
         return str(img_path), self.transform(pil_image)
 
 
-class FasterRCNN_ResNet50_FPN(InferenceModel):
+class MothFasterRCNNObjectDetector(ObjectDetector):
     name = "FasterRCNN for AMI Traps 2021"
     weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/localization/v1_localizmodel_2021-08-17-12-06.pt"
     model_type = "object_detection"
@@ -78,7 +82,7 @@ class FasterRCNN_ResNet50_FPN(InferenceModel):
     )
     bbox_score_threshold = 0.99
 
-    def load_model(self):
+    def get_model(self):
         logger.info(
             f'Loading "{self.name}" "{self.model_type}" model with weights {self.weights}'
         )
