@@ -97,9 +97,6 @@ class MothObjectDetector_FasterRCNN(ObjectDetector):
     bbox_score_threshold = 0.99
 
     def get_model(self):
-        logger.info(
-            f'Loading "{self.name}" "{self.model_type}" model with weights {self.weights}'
-        )
         model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=None)
         num_classes = 2  # 1 class (object) + background
         in_features = model.roi_heads.box_predictor.cls_score.in_features

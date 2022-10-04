@@ -2,9 +2,11 @@ import newrelic.agent
 
 newrelic.agent.initialize(environment="staging")
 
-import sys
+import os
 import tempfile
 import pathlib
+
+import torch
 
 from trapdata import logger
 from trapdata.db import get_db, check_db
@@ -48,6 +50,8 @@ def end_to_end(db_path, image_base_directory, sample_size):
 if __name__ == "__main__":
     image_base_directory = pathlib.Path(".")
     db_filepath = tempfile.NamedTemporaryFile(suffix=".db")
+    local_weights_path = torch.hub.get_dir()
+    os.environ["LOCAL_WEIGHTS_PATH"] = local_weights_path
     db_path = f"sqlite+pysqlite:///{db_filepath}"
     logger.info(f"Using temporary DB: {db_path}")
 
