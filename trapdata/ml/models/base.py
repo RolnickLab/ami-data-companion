@@ -135,7 +135,7 @@ class InferenceBaseClass:
     def predict_batch(self, batch):
         batch_input = batch.to(
             self.device,
-            non_blocking=True,  # Block while in development, are we already in a background process?
+            non_blocking=False,  # Block while in development, are we already in a background process?
         )
         batch_output = self.model(batch_input)
         return batch_output
@@ -155,9 +155,12 @@ class InferenceBaseClass:
         with torch.no_grad():
             for i, (item_ids, batch_input) in enumerate(self.dataloader):
 
-                logger.info(f"Running batch {i+1} out of {len(self.dataloader)}")
+                logger.info(
+                    f"Processing batch {i+1}, about {len(self.dataloader)} remaining"
+                )
 
                 with StopWatch() as batch_time:
+                    # This doesn't seem to work for the classifier batches
                     batch_output = self.predict_batch(batch_input)
 
                 seconds_per_item = batch_time.duration / len(batch_output)
