@@ -7,6 +7,8 @@ Desktop app for analyzing images from autonomous insect monitoring stations
 
 ### Installation
 
+_Requires Python 3.7 or above! Use conda if you need to maintain muliple versions of Python._
+
 #### Linux
 
 ```
