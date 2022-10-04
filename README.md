@@ -9,6 +9,8 @@ Desktop app for analyzing images from autonomous insect monitoring stations
 
 _Requires Python 3.7 or above! Use conda if you need to maintain muliple versions of Python._
 
+_`conda create -n python39 python=3.9 anaconda`_
+
 #### Linux
 
 Clone repo & create virtualenv
