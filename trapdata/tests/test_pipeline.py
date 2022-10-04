@@ -1,6 +1,5 @@
-import newrelic.agent
-
-newrelic.agent.initialize(environment="staging")
+# import newrelic.agent
+# newrelic.agent.initialize(environment="staging")
 
 import os
 import tempfile
@@ -21,7 +20,7 @@ from trapdata.ml.models.classification import (
 )
 
 
-@newrelic.agent.background_task()
+# @newrelic.agent.background_task()
 def end_to_end(db_path, image_base_directory, sample_size):
 
     # db_path = ":memory:"
@@ -49,7 +48,8 @@ def end_to_end(db_path, image_base_directory, sample_size):
 
 if __name__ == "__main__":
     image_base_directory = pathlib.Path(".")
-    db_filepath = tempfile.NamedTemporaryFile(suffix=".db")
+    print("tempfile dir", tempfile.gettempdir())
+    db_filepath = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     local_weights_path = torch.hub.get_dir()
     os.environ["LOCAL_WEIGHTS_PATH"] = local_weights_path
     db_path = f"sqlite+pysqlite:///{db_filepath}"
