@@ -13,16 +13,22 @@ _Requires Python 3.7 or above! Use conda if you need to maintain muliple version
 
 ```
 python -m venv .venv
-pip install -r requirements.txt
-python -m trapdata
+pip install -e .
+
+trapdata
 ```
 
 _or_
 
 ```
 python -m venv .venv
-pip install -e .
-trapdata
+pip install -r requirements.txt
+
+# Launch graphical interface
+python -m trapdata
+
+# Test the whole backend pipeline
+python trapdata/tests/test_pipeline.py
 ```
 
 #### MacOSX
