@@ -7,6 +7,10 @@ import pathlib
 
 import torch
 
+# import sys
+# sys.path.insert(0, full_path_to_trapdata_folder)
+# print(sys.path)
+
 from trapdata import logger
 from trapdata.db import get_db, check_db
 from trapdata.db.models.events import get_or_create_monitoring_sessions
@@ -52,7 +56,7 @@ if __name__ == "__main__":
     db_filepath = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     local_weights_path = torch.hub.get_dir()
     os.environ["LOCAL_WEIGHTS_PATH"] = local_weights_path
-    db_path = f"sqlite+pysqlite:///{db_filepath}"
+    db_path = f"sqlite+pysqlite:///{db_filepath.name}"
     logger.info(f"Using temporary DB: {db_path}")
 
     with StopWatch() as t:
