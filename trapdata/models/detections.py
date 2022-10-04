@@ -50,7 +50,7 @@ class DetectedObject(db.Base):
 
 
 def save_detected_objects(db_path, image_paths, detected_objects_data):
-    logger.debug(f"Callback was called! {image_paths}, {detected_objects_data}")
+    # logger.debug(f"Callback was called! {image_paths}, {detected_objects_data}")
 
     with db.get_session(db_path) as sess:
         timestamp = datetime.datetime.now()
@@ -80,7 +80,7 @@ def save_detected_objects(db_path, image_paths, detected_objects_data):
 
 
 def save_classified_objects(db_path, object_ids, classified_objects_data):
-    logger.debug(f"Callback was called! {object_ids}, {classified_objects_data}")
+    # logger.debug(f"Callback was called! {object_ids}, {classified_objects_data}")
 
     with db.get_session(db_path) as sess:
         timestamp = datetime.datetime.now()
