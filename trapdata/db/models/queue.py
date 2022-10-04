@@ -302,7 +302,7 @@ def add_monitoring_session_to_queue(db_path, monitoring_session, limit=None):
     # image_ids = get_monitoring_session_image_ids(ms)
     # logger.info(f"Adding {len(image_ids)} images into queue")
 
-    # with get_session(ms.base_directory) as sesh:
+    # with get_session(db_path) as sesh:
     #     sesh.execute(
     #         sa.update(Image)
     #         .where(Image.monitoring_session_id == ms.id)
@@ -336,7 +336,7 @@ def images_in_queue(db_path):
 def queue_counts(base_path):
 
     counts = {}
-    with get_session(base_path) as sesh:
+    with get_session(db_path) as sesh:
         counts["images"] = sesh.query(TrapImage).filter_by(in_queue=True).count()
         counts["unclassified_objects"] = (
             sesh.query(DetectedObject)
@@ -360,7 +360,7 @@ def queue_counts(base_path):
 def unprocessed_counts(base_path):
 
     counts = {}
-    with get_session(base_path) as sesh:
+    with get_session(db_path) as sesh:
         counts["images"] = sesh.query(TrapImage).filter_by(last_processed=None).count()
         counts["unclassified_objects"] = (
             sesh.query(DetectedObject).filter_by(binary_label=None).count()
@@ -399,16 +399,12 @@ class Queue:
 
     def check_queue(self, *args):
         self.running = self.bgtask.is_alive()
-        # logger.debug(f"Checking queue, running: {self.running}")
-        # logger.debug(queue_counts(self.app.base_path))
-        # self.total_in_queue = images_in_queue(self.app.base_path)
 
     def process_queue(self):
-        base_path = self.app.base_path
+        db_path = self.app.db_path
 
         models_dir = (
-            pathlib.Path(self.app.config.get("models", "user_data_directory"))
-            / "models"
+            pathlib.Path(self.app.config.get("paths", "user_data_path")) / "models"
         )
         logger.info(f"Local models path: {models_dir}")
         num_workers = int(self.app.config.get("performance", "num_workers"))
@@ -439,4 +435,4 @@ class Queue:
             self.running = True
 
     def clear(self):
-        clear_queue(self.app.base_path)
+        clear_queue(self.app.db_path)

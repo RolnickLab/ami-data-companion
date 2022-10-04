@@ -17,6 +17,7 @@ def get_db(db_path, create=False):
     sqlite_filepath = "~/trapdata.db"
     db_path = f"sqlite+pysqlite:///{file_path}",
     db_path = ":memory:"
+    db_path = "postgresql://[user[:password]@][netloc][:port][/dbname][?param1=value1&...]"
     """
     if not db_path:
         Exception("No database URL specified")
@@ -26,7 +27,7 @@ def get_db(db_path, create=False):
         # logger.debug(f"Using DB from path: {get_safe_db_path()}")
 
     db = sa.create_engine(
-        db_path,
+        str(db_path),
         echo=False,
         future=True,
     )
@@ -34,8 +35,8 @@ def get_db(db_path, create=False):
     if create:
         from . import Base
 
-        logger.info("Creating database tables")
-        Base.metadata.create_all(db)
+        logger.info("Creating database tables if necessary")
+        Base.metadata.create_all(db, checkfirst=True)
 
     return db
 
@@ -75,6 +76,8 @@ def check_db(db_path, quiet=False):
     Try opening a database session.
     """
     from trapdata.db.models import __models__
+
+    logger.debug(f"Checking DB {db_path}")
 
     try:
         with get_session(db_path) as sesh:
