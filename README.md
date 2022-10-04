@@ -11,23 +11,28 @@ _Requires Python 3.7 or above! Use conda if you need to maintain muliple version
 
 #### Linux
 
+Clone repo & create virtualenv
 ```
+git clone git@github.com:mihow/trapdata.git
 python -m venv .venv
-pip install -e .
+source .venv/bin/activate
+```
 
+Install as an editable package
+```
+pip install -e .
 trapdata
 ```
 
-_or_
+_Or_ install and run as source
 
 ```
-python -m venv .venv
 pip install -r requirements.txt
-
-# Launch graphical interface
 python -m trapdata
+```
 
-# Test the whole backend pipeline
+Test the whole backend pipeline without the GUI
+```
 python trapdata/tests/test_pipeline.py
 ```
 
@@ -44,6 +49,6 @@ pushd /Applications/Kivy.app/Contents/Resources/venv/bin
 source activate
 source kivy_activate
 popd
-python -m pip install -r requirements
+python -m pip install -r requirements.txt
 python -m trapdata
 ```
