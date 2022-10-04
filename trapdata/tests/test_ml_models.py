@@ -27,7 +27,7 @@ def end_to_end(db_path, image_base_directory):
     _ = get_or_create_monitoring_sessions(db_path, image_base_directory)
 
     clear_queue(db_path)
-    sample_size = 100
+    sample_size = 10
     add_sample_to_queue(db_path, sample_size=sample_size)
     num_images = images_in_queue(db_path)
     print(f"Images in queue: {num_images}")
