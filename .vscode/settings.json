@@ -8,8 +8,11 @@
         "diffEditor.codeLens": true
     },
     "cSpell.words": [
+        "argmax",
+        "astype",
         "fasterrcnn",
         "resnet",
+        "softmax",
         "torchvision",
         "trapdata"
     ],
