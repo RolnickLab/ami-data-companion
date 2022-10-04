@@ -1,5 +1,4 @@
 import sqlalchemy as sa
-from functools import partial
 
 from trapdata.db import get_session
 from trapdata import logger
@@ -7,17 +6,15 @@ from trapdata import constants
 from trapdata.db.models.images import TrapImage
 from trapdata.db.models.detections import (
     DetectedObject,
-    save_detected_objects,
-    save_classified_objects,
 )
-from trapdata import ml
 
 
 class QueueManager:
     name = "Unnamed Queue"
 
-    def __init__(self, db_path):
+    def __init__(self, db_path, model):
         self.db_path = db_path
+        self.model = model
 
     def queue_count(self):
         raise NotImplementedError
@@ -37,8 +34,10 @@ class QueueManager:
     def status(self):
         return NotImplementedError
 
-    def process_queue(self, **kwargs):
-        return NotImplementedError
+    def process_queue(self):
+        logger.info(f"Processing {self.name} queue")
+        self.model.run()
+        logger.info(f"Done processing {self.name} queue")
 
 
 class ImageQueue(QueueManager):
@@ -85,19 +84,6 @@ class ImageQueue(QueueManager):
                 image.in_queue = False
                 sesh.add(image)
             sesh.commit()
-
-    def process_queue(self, model_name, base_path, models_dir, batch_size, num_workers):
-        logger.info("Processing image queue")
-        localization_results_callback = partial(save_detected_objects, base_path)
-        ml.detect_objects(
-            model_name=model_name,
-            models_dir=models_dir,
-            base_directory=base_path,  # base path for relative images
-            results_callback=localization_results_callback,
-            batch_size=int(batch_size),
-            num_workers=num_workers,
-        )
-        logger.info("Done processing image queue")
 
 
 class DetectedObjectQueue(QueueManager):
@@ -151,19 +137,6 @@ class DetectedObjectQueue(QueueManager):
                 image.in_queue = False
                 sesh.add(image)
             sesh.commit()
-
-    def process_queue(self, model_name, base_path, models_dir, batch_size, num_workers):
-        logger.info("Processing detected objects queue")
-        classification_results_callback = partial(save_classified_objects, base_path)
-        ml.classify_objects(
-            model_name=model_name,
-            models_dir=models_dir,
-            base_directory=base_path,
-            results_callback=classification_results_callback,
-            batch_size=int(batch_size),
-            num_workers=num_workers,
-        )
-        logger.info("Done processing detected objects queue")
 
 
 class UnclassifiedObjectQueue(QueueManager):
@@ -234,19 +207,6 @@ class UnclassifiedObjectQueue(QueueManager):
                 image.in_queue = False
                 sesh.add(image)
             sesh.commit()
-
-    def process_queue(self, model_name, base_path, models_dir, batch_size, num_workers):
-        logger.info("Processing unclassified image queue")
-        classification_results_callback = partial(save_classified_objects, base_path)
-        ml.classify_objects(
-            model_name=model_name,
-            models_dir=models_dir,
-            base_directory=base_path,
-            results_callback=classification_results_callback,
-            batch_size=int(batch_size),
-            num_workers=num_workers,
-        )
-        logger.info("Done processing unclassified image queue")
 
 
 def all_queues(db_path):
@@ -333,7 +293,7 @@ def images_in_queue(db_path):
         return sesh.query(TrapImage).filter_by(in_queue=True).count()
 
 
-def queue_counts(base_path):
+def queue_counts(db_path):
 
     counts = {}
     with get_session(db_path) as sesh:
@@ -357,7 +317,7 @@ def queue_counts(base_path):
     return counts
 
 
-def unprocessed_counts(base_path):
+def unprocessed_counts(db_path):
 
     counts = {}
     with get_session(db_path) as sesh:
@@ -390,49 +350,3 @@ def clear_queue(db_path):
             obj.in_queue = False
             sesh.add(obj)
         sesh.commit()
-
-
-class Queue:
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        logger.debug("Initializing queue status and starting DB polling")
-
-    def check_queue(self, *args):
-        self.running = self.bgtask.is_alive()
-
-    def process_queue(self):
-        db_path = self.app.db_path
-
-        models_dir = (
-            pathlib.Path(self.app.config.get("paths", "user_data_path")) / "models"
-        )
-        logger.info(f"Local models path: {models_dir}")
-        num_workers = int(self.app.config.get("performance", "num_workers"))
-
-    def on_running(self, *args):
-        if self.running:
-            if not self.clock:
-                logger.debug("Scheduling queue check")
-                self.clock = Clock.schedule_interval(self.check_queue, 1)
-            self.status_str = "Running"
-        else:
-            logger.debug("NOT Unscheduling queue check!")
-            # logger.debug("Unscheduling queue check")
-            # Clock.unschedule(self.clock)
-            self.status_str = "Stopped"
-
-    def start(self, *args):
-        # @NOTE can't change a widget property from a bg thread
-        if not self.running:
-            logger.info("Starting queue")
-            task_name = "Mr. Queue"
-            self.bgtask = threading.Thread(
-                target=self.process_queue,
-                daemon=True,
-                name=task_name,
-            )
-            self.bgtask.start()
-            self.running = True
-
-    def clear(self):
-        clear_queue(self.app.db_path)
