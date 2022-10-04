@@ -382,6 +382,9 @@ def clear_queue(db_path):
         for image in sess.query(Image).filter_by(in_queue=True).all():
             image.in_queue = False
             sess.add(image)
+        for obj in sess.query(DetectedObject).filter_by(in_queue=True).all():
+            obj.in_queue = False
+            sess.add(obj)
         sess.commit()
 
 
