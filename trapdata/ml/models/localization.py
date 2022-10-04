@@ -101,8 +101,10 @@ class MothObjectDetector_FasterRCNN(ObjectDetector):
         num_classes = 2  # 1 class (object) + background
         in_features = model.roi_heads.box_predictor.cls_score.in_features
         model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+        logger.debug(f"Loading weights: {self.weights}")
         checkpoint = torch.load(self.weights, map_location=self.device)
-        model.load_state_dict(checkpoint["model_state_dict"])
+        state_dict = checkpoint.get("model_state_dict") or checkpoint
+        model.load_state_dict(state_dict)
         model = model.to(self.device)
         model.eval()
         self.model = model

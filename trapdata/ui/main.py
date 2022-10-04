@@ -1,6 +1,5 @@
-import newrelic.agent
-
-newrelic.agent.initialize(environment="staging")
+# import newrelic.agent
+# newrelic.agent.initialize(environment="staging")
 
 import json
 import pathlib
@@ -319,7 +318,7 @@ class TrapDataApp(App):
         )
 
 
-@newrelic.agent.background_task()
+# @newrelic.agent.background_task()
 def run():
     TrapDataApp().run()
     # loop = asyncio.get_event_loop()

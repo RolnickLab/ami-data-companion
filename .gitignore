@@ -131,6 +131,7 @@ dmypy.json
 # Trap data project
 vendor/
 trapdata.ini
+<tempfile.*
 
 # macOS
 
