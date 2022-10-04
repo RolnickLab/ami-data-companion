@@ -1,6 +1,7 @@
 import json
 
 import torch
+from sentry_sdk import start_transaction
 
 from trapdata import logger
 from trapdata.ml.utils import (
@@ -158,9 +159,11 @@ class InferenceBaseClass:
                     f"Processing batch {i+1}, about {len(self.dataloader)} remaining"
                 )
 
+                # @TODO the StopWatch doesn't seem to work for the classifier batches,
+                # it always returns 0 seconds
                 with StopWatch() as batch_time:
-                    # This doesn't seem to work for the classifier batches
-                    batch_output = self.predict_batch(batch_input)
+                    with start_transaction(op="inference_batch", name=self.name):
+                        batch_output = self.predict_batch(batch_input)
 
                 seconds_per_item = batch_time.duration / len(batch_output)
                 logger.info(
