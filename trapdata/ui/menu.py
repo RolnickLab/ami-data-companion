@@ -29,8 +29,6 @@ from trapdata.db.models.events import get_or_create_monitoring_sessions
 
 kivy.require("2.1.0")
 
-# detect_and_classify = lambda *args, **kwargs: None
-
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "menu.kv"))
 

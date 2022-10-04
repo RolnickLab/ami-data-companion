@@ -2,9 +2,11 @@ import newrelic.agent
 
 newrelic.agent.initialize(environment="staging")
 
-import os
 import sys
+import tempfile
+import pathlib
 
+from trapdata import logger
 from trapdata.db import get_db, check_db
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import add_sample_to_queue, images_in_queue, clear_queue
@@ -29,7 +31,7 @@ def end_to_end(db_path, image_base_directory, sample_size):
     clear_queue(db_path)
     add_sample_to_queue(db_path, sample_size=sample_size)
     num_images = images_in_queue(db_path)
-    print(f"Images in queue: {num_images}")
+    logger.info(f"Images in queue: {num_images}")
     assert num_images == sample_size
 
     object_detector = MothObjectDetector_FasterRCNN(db_path=db_path, batch_size=10)
@@ -44,10 +46,11 @@ def end_to_end(db_path, image_base_directory, sample_size):
 
 
 if __name__ == "__main__":
-    image_base_directory = sys.argv[1]
-    # db_path = os.environ["DATABASE_URL"]
-    db_path = "sqlite+pysqlite:///trapdata-test-1002.db"
+    image_base_directory = pathlib.Path(".")
+    db_filepath = tempfile.NamedTemporaryFile(suffix=".db")
+    db_path = f"sqlite+pysqlite:///{db_filepath}"
+    logger.info(f"Using temporary DB: {db_path}")
 
     with StopWatch() as t:
         end_to_end(db_path, image_base_directory, sample_size=1)
-    print(t)
+    logger.info(t)

@@ -4,7 +4,6 @@ newrelic.agent.initialize(environment="staging")
 
 import json
 import pathlib
-from functools import partial
 import threading
 
 import kivy
@@ -24,7 +23,6 @@ from kivy.properties import (
 from trapdata import logger
 from trapdata import ml
 from trapdata.db.models.queue import clear_queue
-from trapdata.db.models.detections import save_detected_objects, save_classified_objects
 
 from .menu import DataMenuScreen
 from .playback import ImagePlaybackScreen
@@ -35,6 +33,7 @@ from .queue import QueueScreen
 kivy.require("2.1.0")
 
 
+# @TODO move this class to the db.models.queue module, it shouldn't be a Kivy object
 class Queue(Label):
     app = ObjectProperty()
     status_str = StringProperty(defaultvalue="")
@@ -214,7 +213,7 @@ class TrapDataApp(App):
         # config.write()
 
     def build_settings(self, settings):
-        model_settings = [
+        path_settings = [
             {
                 "key": "user_data_path",
                 "type": "path",
@@ -229,6 +228,8 @@ class TrapDataApp(App):
                 "desc": "Defaults to a local SQLite database that will automatically be created. Supports PostgreSQL.",
                 "section": "paths",
             },
+        ]
+        model_settings = [
             {
                 "key": "localization_model",
                 "type": "options",
@@ -301,6 +302,11 @@ class TrapDataApp(App):
             },
         ]
 
+        settings.add_json_panel(
+            "Paths",
+            self.config,
+            data=json.dumps(path_settings),
+        )
         settings.add_json_panel(
             "Model selection",
             self.config,
