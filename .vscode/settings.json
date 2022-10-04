@@ -12,6 +12,7 @@
         "astype",
         "fasterrcnn",
         "resnet",
+        "sesh",
         "softmax",
         "torchvision",
         "trapdata"
