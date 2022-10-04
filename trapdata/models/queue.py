@@ -267,21 +267,15 @@ def add_image_to_queue(db_path, image_id):
             sess.commit()
 
 
-def add_sample_to_queue(db_path, monitoring_session, sample_size=10):
-    ms = monitoring_session
+def add_sample_to_queue(db_path, sample_size=10):
 
     with get_session(db_path) as sess:
-        num_in_queue = (
-            sess.query(Image)
-            .filter_by(in_queue=True, monitoring_session_id=ms.id)
-            .count()
-        )
+        num_in_queue = sess.query(Image).filter_by(in_queue=True).count()
         if num_in_queue < sample_size:
             for image in (
                 sess.query(Image)
                 .filter_by(
                     in_queue=False,
-                    monitoring_session_id=ms.id,
                 )
                 .order_by(sa.func.random())
                 .limit(sample_size - num_in_queue)
@@ -329,9 +323,9 @@ def add_monitoring_session_to_queue(db_path, monitoring_session, limit=None):
         sess.commit()
 
 
-def images_in_queue(base_path):
+def images_in_queue(db_path):
 
-    with get_session(base_path) as sess:
+    with get_session(db_path) as sess:
         return sess.query(Image).filter_by(in_queue=True).count()
 
 

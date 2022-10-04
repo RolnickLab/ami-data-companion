@@ -293,6 +293,10 @@ class TrapDataAnalyzer(App):
         )
 
 
+import newrelic.agent
+
+
+@newrelic.agent.background_task()
 def run():
     TrapDataAnalyzer().run()
     # loop = asyncio.get_event_loop()

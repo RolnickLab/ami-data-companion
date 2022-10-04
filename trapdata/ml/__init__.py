@@ -101,8 +101,8 @@ class InferenceModel:
                 batch_output = self.post_process(batch_output)
 
                 logger.info(
-                    f"Inference time for batch: {batch_time}\n"
-                    f"{round(seconds_per_item, 1)} seconds per item"
+                    f"Inference time for batch: {batch_time}, "
+                    f"Seconds per item: {round(seconds_per_item, 1)}"
                 )
 
                 self.save_results(batch_output)

@@ -31,7 +31,7 @@ class InferenceModel:
     def __init__(self, db_path, **kwargs):
         self.db_path = db_path
 
-        for k, v in kwargs:
+        for k, v in kwargs.items():
             setattr(self, k, v)
 
         logger.info(f"Initializing inference class {self.name}")
@@ -135,8 +135,8 @@ class InferenceModel:
 
                 seconds_per_item = batch_time.duration / len(batch_output)
                 logger.info(
-                    f"Inference time for batch: {batch_time}\n"
-                    f"{round(seconds_per_item, 1)} seconds per item"
+                    f"Inference time for batch: {batch_time}, "
+                    f"Seconds per item: {round(seconds_per_item, 1)}"
                 )
 
                 batch_output = self.post_process_batch(batch_output)
