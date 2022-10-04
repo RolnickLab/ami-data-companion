@@ -4,7 +4,7 @@ from .base import get_session
 from trapdata.db import models
 
 
-def count_species(monitoring_session):
+def count_species(db_path, monitoring_session):
     """
     Count number of species detected in a monitoring session.
 
@@ -18,7 +18,7 @@ def count_species(monitoring_session):
     ]).group_by(USERS.c.first_name, USERS.c.last_name)
     """
 
-    with get_session(monitoring_session.base_directory) as sesh:
+    with get_session(db_path) as sesh:
         return (
             sesh.query(
                 # DetectedObject.binary_label,

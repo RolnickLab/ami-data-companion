@@ -96,7 +96,7 @@ class QueueStatusTable(BoxLayout):
         ]
         app = App.get_running_app()
 
-        queues = list(all_queues(app.base_path).items())
+        queues = list(all_queues(app.db_path).items())
 
         def hacky_status(queue, previous_queue=None):
             # Temporary solution until we have a process for each queue

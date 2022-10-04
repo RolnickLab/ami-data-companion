@@ -171,8 +171,8 @@ class AnnotatedImage(Widget):
                 )
 
             app = App.get_running_app()
-            detections = get_detections_for_image(app.base_path, self.image.id).count()
-            species = get_species_for_image(app.base_path, self.image.id).count()
+            detections = get_detections_for_image(app.db_path, self.image.id).count()
+            species = get_species_for_image(app.db_path, self.image.id).count()
             if self.image.last_processed:
                 time_delta = f"{(datetime.datetime.now() - self.image.last_processed).seconds}s ago"
             else:
@@ -183,7 +183,7 @@ class AnnotatedImage(Widget):
                 f"In Queue: {self.image.in_queue} | "
                 f"Detections: {detections} | "
                 f"Species: {species} | "
-                f"Complete: {completely_classified(app.base_path, self.image.id)} | "
+                f"Complete: {completely_classified(app.db_path, self.image.id)} | "
                 f"Processed: {time_delta}"
             )
             label = Label(
@@ -209,7 +209,10 @@ class ImagePlaybackScreen(Screen):
 
     def reload(self, ms):
         self.current_sample = None
-        self.image_ids = [img.id for img in get_monitoring_session_image_ids(ms)]
+        app = App.get_running_app()
+        self.image_ids = [
+            img.id for img in get_monitoring_session_image_ids(app.db_path, ms)
+        ]
         preview = self.ids.image_preview
         preview.reset()
         preview.next_sample()
@@ -266,10 +269,11 @@ class PreviewWindow(RelativeLayout):
     def load_sample(self, image_id):
         ms = self.parent.parent.monitoring_session
         # Refetch image with associated detected objects
-        image = get_image_with_objects(ms, image_id)
+        app = App.get_running_app()
+        image = get_image_with_objects(app.db_path, ms, image_id)
         self.clear_widgets()
         cvs = AnnotatedImage(
-            image_path=image.absolute_path(ms.base_directory),
+            image_path=image.absolute_path,
             annotations=image.detected_objects,
             size=self.size,
             pos_hint={"bottom": 0},
@@ -296,7 +300,7 @@ class PreviewWindow(RelativeLayout):
 
     def add_sample_to_queue(self):
         app = App.get_running_app()
-        add_image_to_queue(app.base_path, self.current_sample.id)
+        add_image_to_queue(app.db_path, self.current_sample.id)
         app.start_queue()
         # @TODO kill clock when all objects have been classified!
         Clock.schedule_interval(self.refresh, 1)

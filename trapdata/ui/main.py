@@ -23,6 +23,7 @@ from kivy.properties import (
 
 from trapdata import logger
 from trapdata import ml
+from trapdata import db
 from trapdata.db.models.queue import clear_queue
 from trapdata.db.models.detections import save_detected_objects, save_classified_objects
 
@@ -50,25 +51,21 @@ class Queue(Label):
 
     def check_queue(self, *args):
         self.running = self.bgtask.is_alive()
-        # logger.debug(f"Checking queue, running: {self.running}")
-        # logger.debug(queue_counts(self.app.base_path))
-        # self.total_in_queue = images_in_queue(self.app.base_path)
 
     def process_queue(self):
-        base_path = self.app.base_path
+        db_path = self.app.db_path
 
         models_dir = (
-            pathlib.Path(self.app.config.get("models", "user_data_directory"))
-            / "models"
+            pathlib.Path(self.app.config.get("paths", "user_data_path")) / "models"
         )
         logger.info(f"Local models path: {models_dir}")
         num_workers = int(self.app.config.get("performance", "num_workers"))
 
-        localization_results_callback = partial(save_detected_objects, base_path)
+        localization_results_callback = partial(save_detected_objects, db_path)
         ml.detect_objects(
             model_name=self.app.config.get("models", "localization_model"),
             models_dir=models_dir,
-            base_directory=base_path,  # base path for relative images
+            base_directory=db_path,  # base path for relative images
             results_callback=localization_results_callback,
             batch_size=int(
                 self.app.config.get("performance", "localization_batch_size")
@@ -77,11 +74,11 @@ class Queue(Label):
         )
         logger.info("Localization complete")
 
-        classification_results_callback = partial(save_classified_objects, base_path)
+        classification_results_callback = partial(save_classified_objects, db_path)
         ml.classify_objects(
             model_name=self.app.config.get("models", "binary_classification_model"),
             models_dir=models_dir,
-            base_directory=base_path,
+            base_directory=db_path,
             results_callback=classification_results_callback,
             batch_size=int(
                 self.app.config.get("performance", "classification_batch_size")
@@ -90,11 +87,11 @@ class Queue(Label):
         )
         logger.info("Binary classification complete")
 
-        classification_results_callback = partial(save_classified_objects, base_path)
+        classification_results_callback = partial(save_classified_objects, db_path)
         ml.classify_objects(
             model_name=self.app.config.get("models", "taxon_classification_model"),
             models_dir=models_dir,
-            base_directory=base_path,
+            base_directory=db_path,
             results_callback=classification_results_callback,
             batch_size=int(
                 self.app.config.get("performance", "classification_batch_size")
@@ -129,14 +126,14 @@ class Queue(Label):
             self.running = True
 
     def clear(self):
-        clear_queue(self.app.base_path)
+        clear_queue(self.app.db_path)
 
 
-class TrapDataAnalyzer(App):
+class TrapDataApp(App):
     # @TODO this db_session is not currently used, but may be more
     # convenient that the current usage of DB sessions.
     queue = ObjectProperty()
-    base_path = StringProperty(allownone=True)
+    image_base_path = StringProperty(allownone=True)
     use_kivy_settings = False
 
     def on_stop(self):
@@ -146,6 +143,10 @@ class TrapDataAnalyzer(App):
         # @TODO Set stop byte in the database
         # @TODO stop background threads
         pass
+
+    @property
+    def db_path(self):
+        return self.config.get("paths", "database_url")
 
     def build(self):
         self.title = "AMI Trap Data Companion"
@@ -163,9 +164,9 @@ class TrapDataAnalyzer(App):
 
         return sm
 
-    def on_base_path(self, *args):
+    def on_image_base_path(self, *args):
         """
-        When a DB path is set, create a queue status
+        When a base path is set, create a queue status
         """
         if self.queue and self.queue.clock:
             Clock.unschedule(self.queue.clock)
@@ -178,10 +179,20 @@ class TrapDataAnalyzer(App):
             logger.warn("No queue found!")
 
     def build_config(self, config):
+        default_db_connection_string = (
+            f"sqlite+pysqlite:///{pathlib.Path(self.user_data_dir) / 'trapdata.db'}"
+        )
+        config.setdefaults(
+            "paths",
+            {
+                "user_data_path": self.user_data_dir,
+                # "image_base_path": self.user_data_dir,
+                "database_url": default_db_connection_string,
+            },
+        )
         config.setdefaults(
             "models",
             {
-                "user_data_directory": self.user_data_dir,
                 "localization_model": list(ml.LOCALIZATION_MODELS.keys())[0],
                 "binary_classification_model": list(
                     ml.BINARY_CLASSIFICATION_MODELS.keys()
@@ -198,7 +209,7 @@ class TrapDataAnalyzer(App):
                 "use_gpu": 1,
                 "localization_batch_size": 2,
                 "classification_batch_size": 20,
-                "num_workers": 2,
+                "num_workers": 1,
             },
         )
         # config.write()
@@ -206,11 +217,18 @@ class TrapDataAnalyzer(App):
     def build_settings(self, settings):
         model_settings = [
             {
-                "key": "user_data_directory",
+                "key": "user_data_path",
                 "type": "path",
                 "title": "Local directory for model data",
                 "desc": "Model weights are between 100-200Mb and will be downloaded the first time a model is used.",
-                "section": "models",
+                "section": "paths",
+            },
+            {
+                "key": "database_url",
+                "type": "string",
+                "title": "Database connection string",
+                "desc": "Defaults to a local SQLite database that will automatically be created. Supports PostgreSQL.",
+                "section": "paths",
             },
             {
                 "key": "localization_model",
@@ -240,7 +258,7 @@ class TrapDataAnalyzer(App):
                 "key": "tracking_algorithm",
                 "type": "options",
                 "title": "Occurence tracking algorithm (de-duplication)",
-                "desc": "Method of identifying and tracking the same individual moth accross multiple images.",
+                "desc": "Method of identifying and tracking the same individual moth across multiple images.",
                 "options": [],
                 "section": "models",
             },
@@ -298,7 +316,7 @@ class TrapDataAnalyzer(App):
 
 @newrelic.agent.background_task()
 def run():
-    TrapDataAnalyzer().run()
+    TrapDataApp().run()
     # loop = asyncio.get_event_loop()
     # loop.run_until_complete(TrapDataAnalyzer().async_run())
     # loop.close()

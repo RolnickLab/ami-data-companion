@@ -127,7 +127,7 @@ class LaunchScreenButton(Button):
 
 
 class DataMenuScreen(Screen):
-    root_dir = ObjectProperty(allownone=True)
+    image_base_path = ObjectProperty(allownone=True)
     sessions = ObjectProperty()
     status_popup = ObjectProperty()
     status_clock = ObjectProperty()
@@ -135,36 +135,40 @@ class DataMenuScreen(Screen):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.app = App.get_running_app()
         Clock.schedule_once(self.setup, 1)
 
     def setup(self, *args):
-        if not self.root_dir:
-            self.root_dir = choose_directory(cache=True)
+        if not self.image_base_path:
+            self.image_base_path = choose_directory(cache=True)
 
     def choose_root_directory(self, *args):
         try:
-            self.root_dir = choose_directory(cache=False, starting_path=self.root_dir)
+            self.image_base_path = choose_directory(
+                cache=False, starting_path=self.image_base_path
+            )
         except Exception as e:
             logger.error(f"Failed to choose directory with a starting path: {e}")
-            self.root_dir = choose_directory(cache=False)
+            self.image_base_path = choose_directory(cache=False)
 
     def reload(self):
         """
         Reload the view by changing the root dir.
         """
-        root_dir = self.root_dir
-        self.root_dir = None
-        self.root_dir = root_dir
+        root_dir = self.image_base_path
+        self.image_base_path = None
+        self.image_base_path = root_dir
 
     def db_ready(self):
         # Try to open a database session. @TODO add GUI indicator and ask to recreate if fails.
-        if not db.check_db(self.root_dir):
+        db.get_db(self.app.db_path, create=True)
+        if not db.check_db(self.app.db_path, quiet=True):
             Popup(
                 title="Error reading database",
                 content=Label(
                     text=(
                         f"Error reading database: \n\n"
-                        f"{db.db_path(self.root_dir)} \n\n"
+                        f"{self.app.db_path} \n\n"
                         f"Trying deleting the DB file and it will be recreated on next launch."
                     )
                 ),
@@ -176,16 +180,16 @@ class DataMenuScreen(Screen):
         else:
             return True
 
-    def on_root_dir(self, instance, value):
-        root_dir = value
+    def on_image_base_path(self, instance, value):
+        image_base_path = value
         logger.info("Base directory changed!")
 
-        App.get_running_app().base_path = str(root_dir)
+        self.app.image_base_path = str(image_base_path)
 
         self.data_ready = False
 
-        if root_dir and self.db_ready():
-            label_text = f"Looking for capture data in \n\n{root_dir}"
+        if image_base_path and self.db_ready():
+            label_text = f"Looking for capture data in \n\n{image_base_path}"
             self.status_popup = Popup(
                 title="Status",
                 content=Label(text=label_text),
@@ -220,7 +224,9 @@ class DataMenuScreen(Screen):
                     child.disabled = True
 
     def get_monitoring_sessions(self, *args):
-        self.sessions = get_or_create_monitoring_sessions(self.root_dir)
+        self.sessions = get_or_create_monitoring_sessions(
+            self.app.db_path, self.image_base_path
+        )
         self.data_ready = True
         self.status_popup.dismiss()
         return self.sessions
@@ -231,7 +237,7 @@ class DataMenuScreen(Screen):
 
         for ms in self.sessions:
 
-            with db.get_session(self.root_dir) as sesh:
+            with db.get_session(self.app.db_path) as sesh:
                 first_image = (
                     sesh.query(TrapImage)
                     .filter_by(monitoring_session_id=ms.id)
@@ -241,7 +247,7 @@ class DataMenuScreen(Screen):
 
             if first_image:
                 first_image_path = pathlib.Path(first_image.path)
-                bg_image = str(self.root_dir / first_image_path)
+                bg_image = str(self.image_base_path / first_image_path)
             else:
                 continue
 

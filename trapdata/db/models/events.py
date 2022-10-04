@@ -196,9 +196,9 @@ def get_or_create_monitoring_sessions(db_path, base_directory):
     return get_monitoring_sessions_from_db(db_path, base_directory)
 
 
-def get_monitoring_session_images(ms):
+def get_monitoring_session_images(db_path, ms):
     # @TODO this is likely to slow things down. Some monitoring sessions have thousands of images.
-    with get_session(ms.base_directory) as sesh:
+    with get_session(db_path) as sesh:
         images = list(
             sesh.query(TrapImage).filter_by(monitoring_session_id=ms.id).all()
         )
@@ -207,10 +207,10 @@ def get_monitoring_session_images(ms):
 
 
 # # These queries are apparently needed because none of the fancy stuff seems to work
-def get_monitoring_session_image_ids(ms):
+def get_monitoring_session_image_ids(db_path, ms):
     # Get a list of image IDs in order of timestamps as quickly as possible
     # This could be in the thousands
-    with get_session(ms.base_directory) as sesh:
+    with get_session(db_path) as sesh:
         images = list(
             sesh.query(TrapImage.id)
             .filter_by(monitoring_session_id=ms.id)

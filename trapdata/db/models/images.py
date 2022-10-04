@@ -61,9 +61,8 @@ class TrapImage(Base):
         )
 
 
-def get_image_with_objects(monitoring_session, image_id):
-    base_directory = monitoring_session.base_directory
-    with get_session(base_directory) as sesh:
+def get_image_with_objects(db_path, monitoring_session, image_id):
+    with get_session(db_path) as sesh:
         image_kwargs = {
             "id": image_id,
             # "path": str(image_path),
