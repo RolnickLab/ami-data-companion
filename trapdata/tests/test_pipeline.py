@@ -10,7 +10,7 @@ from trapdata.models.events import get_or_create_monitoring_sessions
 from trapdata.models.queue import add_sample_to_queue, images_in_queue, clear_queue
 
 from trapdata.ml.utils import StopWatch
-from trapdata.ml.models.localization import MothFasterRCNNObjectDetector
+from trapdata.ml.models.localization import MothObjectDetector_FasterRCNN
 from trapdata.ml.models.classification import (
     MothNonMothClassifier,
     UKDenmarkMothSpeciesClassifier,
@@ -33,7 +33,7 @@ def end_to_end(db_path, image_base_directory):
     print(f"Images in queue: {num_images}")
     assert num_images == sample_size
 
-    object_detector = MothFasterRCNNObjectDetector(db_path=db_path, batch_size=10)
+    object_detector = MothObjectDetector_FasterRCNN(db_path=db_path, batch_size=10)
     moth_nonmoth_classifier = MothNonMothClassifier(db_path=db_path, batch_size=300)
     species_classifier = UKDenmarkMothSpeciesClassifier(db_path=db_path, batch_size=300)
 

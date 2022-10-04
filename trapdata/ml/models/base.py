@@ -1,7 +1,6 @@
 import json
 
 import torch
-import torchvision
 
 from trapdata import logger
 from trapdata.ml.utils import (
