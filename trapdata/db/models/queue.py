@@ -4,8 +4,8 @@ from functools import partial
 from trapdata.db import get_session
 from trapdata import logger
 from trapdata import constants
-from trapdata.models.images import Image
-from trapdata.models.detections import (
+from trapdata.db.models.images import TrapImage
+from trapdata.db.models.detections import (
     DetectedObject,
     save_detected_objects,
     save_classified_objects,
@@ -45,22 +45,26 @@ class ImageQueue(QueueManager):
     name = "Images"
 
     def queue_count(self):
-        with get_session(self.db_path) as sess:
-            return sess.query(Image).filter_by(in_queue=True).count()
+        with get_session(self.db_path) as sesh:
+            return sesh.query(TrapImage).filter_by(in_queue=True).count()
 
     def unprocessed_count(self):
-        with get_session(self.db_path) as sess:
-            return sess.query(Image).filter_by(last_processed=None).count()
+        with get_session(self.db_path) as sesh:
+            return sesh.query(TrapImage).filter_by(last_processed=None).count()
 
     def done_count(self):
-        with get_session(self.db_path) as sess:
-            return sess.query(Image).filter(Image.last_processed.is_not(None)).count()
+        with get_session(self.db_path) as sesh:
+            return (
+                sesh.query(TrapImage)
+                .filter(TrapImage.last_processed.is_not(None))
+                .count()
+            )
 
     def add_unprocessed(self, *args):
-        with get_session(self.db_path) as sess:
+        with get_session(self.db_path) as sesh:
             # @TODO switch to bulk update method
             for image in (
-                sess.query(Image)
+                sesh.query(TrapImage)
                 .filter_by(
                     in_queue=False,
                     last_processed=None,
@@ -68,19 +72,19 @@ class ImageQueue(QueueManager):
                 .all()
             ):
                 image.in_queue = True
-                sess.add(image)
-            sess.commit()
-            return sess.query(Image).filter_by(last_processed=None).count()
+                sesh.add(image)
+            sesh.commit()
+            return sesh.query(TrapImage).filter_by(last_processed=None).count()
 
     def clear_queue(self, *args):
         logger.info("Clearing images in queue")
 
-        with get_session(self.db_path) as sess:
+        with get_session(self.db_path) as sesh:
             # @TODO switch to bulk update method
-            for image in sess.query(Image).filter_by(in_queue=True).all():
+            for image in sesh.query(TrapImage).filter_by(in_queue=True).all():
                 image.in_queue = False
-                sess.add(image)
-            sess.commit()
+                sesh.add(image)
+            sesh.commit()
 
     def process_queue(self, model_name, base_path, models_dir, batch_size, num_workers):
         logger.info("Processing image queue")
@@ -100,9 +104,9 @@ class DetectedObjectQueue(QueueManager):
     name = "Detected objects"
 
     def queue_count(self):
-        with get_session(self.db_path) as sess:
+        with get_session(self.db_path) as sesh:
             return (
-                sess.query(DetectedObject)
+                sesh.query(DetectedObject)
                 .filter_by(
                     in_queue=True,
                     binary_label=None,
@@ -111,42 +115,42 @@ class DetectedObjectQueue(QueueManager):
             )
 
     def unprocessed_count(self):
-        with get_session(self.db_path) as sess:
-            return sess.query(DetectedObject).filter_by(binary_label=None).count()
+        with get_session(self.db_path) as sesh:
+            return sesh.query(DetectedObject).filter_by(binary_label=None).count()
 
     def done_count(self):
-        with get_session(self.db_path) as sess:
+        with get_session(self.db_path) as sesh:
             return (
-                sess.query(DetectedObject)
+                sesh.query(DetectedObject)
                 .filter(DetectedObject.binary_label.is_not(None))
                 .count()
             )
 
     def add_unprocessed(self, *args):
-        with get_session(self.db_path) as sess:
+        with get_session(self.db_path) as sesh:
             # @TODO switch to bulk update method
             for obj in (
-                sess.query(DetectedObject)
+                sesh.query(DetectedObject)
                 .filter_by(in_queue=False, binary_label=None)
                 .all()
             ):
                 obj.in_queue = True
-                sess.add(obj)
-            sess.commit()
+                sesh.add(obj)
+            sesh.commit()
 
     def clear_queue(self, *args):
         logger.info("Clearing detected objects in queue")
 
-        with get_session(self.db_path) as sess:
+        with get_session(self.db_path) as sesh:
             # @TODO switch to bulk update method
             for image in (
-                sess.query(DetectedObject)
+                sesh.query(DetectedObject)
                 .filter_by(in_queue=True, binary_label=None)
                 .all()
             ):
                 image.in_queue = False
-                sess.add(image)
-            sess.commit()
+                sesh.add(image)
+            sesh.commit()
 
     def process_queue(self, model_name, base_path, models_dir, batch_size, num_workers):
         logger.info("Processing detected objects queue")
@@ -171,9 +175,9 @@ class UnclassifiedObjectQueue(QueueManager):
     name = "Unclassified species"
 
     def queue_count(self):
-        with get_session(self.db_path) as sess:
+        with get_session(self.db_path) as sesh:
             return (
-                sess.query(DetectedObject)
+                sesh.query(DetectedObject)
                 .filter_by(
                     in_queue=True,
                     specific_label=None,
@@ -183,9 +187,9 @@ class UnclassifiedObjectQueue(QueueManager):
             )
 
     def unprocessed_count(self):
-        with get_session(self.db_path) as sess:
+        with get_session(self.db_path) as sesh:
             return (
-                sess.query(DetectedObject)
+                sesh.query(DetectedObject)
                 .filter_by(
                     specific_label=None,
                     binary_label=constants.POSITIVE_BINARY_LABEL,
@@ -194,18 +198,18 @@ class UnclassifiedObjectQueue(QueueManager):
             )
 
     def done_count(self):
-        with get_session(self.db_path) as sess:
+        with get_session(self.db_path) as sesh:
             return (
-                sess.query(DetectedObject)
+                sesh.query(DetectedObject)
                 .filter(DetectedObject.specific_label.is_not(None))
                 .count()
             )
 
     def add_unprocessed(self, *args):
-        with get_session(self.db_path) as sess:
+        with get_session(self.db_path) as sesh:
             # @TODO switch to bulk update method
             for obj in (
-                sess.query(DetectedObject)
+                sesh.query(DetectedObject)
                 .filter_by(
                     in_queue=False,
                     specific_label=None,
@@ -214,22 +218,22 @@ class UnclassifiedObjectQueue(QueueManager):
                 .all()
             ):
                 obj.in_queue = True
-                sess.add(obj)
-            sess.commit()
+                sesh.add(obj)
+            sesh.commit()
 
     def clear_queue(self, *args):
         logger.info("Clearing unclassified objects in queue")
 
-        with get_session(self.db_path) as sess:
+        with get_session(self.db_path) as sesh:
             # @TODO switch to bulk update method
             for image in (
-                sess.query(DetectedObject)
+                sesh.query(DetectedObject)
                 .filter_by(in_queue=True, specific_label=None)
                 .all()
             ):
                 image.in_queue = False
-                sess.add(image)
-            sess.commit()
+                sesh.add(image)
+            sesh.commit()
 
     def process_queue(self, model_name, base_path, models_dir, batch_size, num_workers):
         logger.info("Processing unclassified image queue")
@@ -258,22 +262,22 @@ def all_queues(db_path):
 
 def add_image_to_queue(db_path, image_id):
 
-    with get_session(db_path) as sess:
-        image = sess.query(Image).get(image_id)
+    with get_session(db_path) as sesh:
+        image = sesh.query(TrapImage).get(image_id)
         logger.info(f"Addding image to queue: {image}")
         if not image.in_queue:
             image.in_queue = True
-            sess.add(image)
-            sess.commit()
+            sesh.add(image)
+            sesh.commit()
 
 
 def add_sample_to_queue(db_path, sample_size=10):
 
-    with get_session(db_path) as sess:
-        num_in_queue = sess.query(Image).filter_by(in_queue=True).count()
+    with get_session(db_path) as sesh:
+        num_in_queue = sesh.query(TrapImage).filter_by(in_queue=True).count()
         if num_in_queue < sample_size:
             for image in (
-                sess.query(Image)
+                sesh.query(TrapImage)
                 .filter_by(
                     in_queue=False,
                 )
@@ -282,8 +286,8 @@ def add_sample_to_queue(db_path, sample_size=10):
                 .all()
             ):
                 image.in_queue = True
-                sess.add(image)
-            sess.commit()
+                sesh.add(image)
+            sesh.commit()
 
 
 def add_monitoring_session_to_queue(db_path, monitoring_session, limit=None):
@@ -298,49 +302,49 @@ def add_monitoring_session_to_queue(db_path, monitoring_session, limit=None):
     # image_ids = get_monitoring_session_image_ids(ms)
     # logger.info(f"Adding {len(image_ids)} images into queue")
 
-    # with get_session(ms.base_directory) as sess:
-    #     sess.execute(
+    # with get_session(ms.base_directory) as sesh:
+    #     sesh.execute(
     #         sa.update(Image)
     #         .where(Image.monitoring_session_id == ms.id)
     #         .values(in_queue=True)
     #     )
 
     logger.info(f"Adding all images for Monitoring Session {ms.id} to queue")
-    with get_session(db_path) as sess:
+    with get_session(db_path) as sesh:
         for image in (
-            sess.query(Image)
+            sesh.query(TrapImage)
             .filter_by(
                 in_queue=False,
                 last_processed=None,
                 monitoring_session_id=ms.id,
             )
-            .order_by(Image.timestamp)
+            .order_by(TrapImage.timestamp)
             .limit(limit)
             .all()
         ):
             image.in_queue = True
-            sess.add(image)
-        sess.commit()
+            sesh.add(image)
+        sesh.commit()
 
 
 def images_in_queue(db_path):
 
-    with get_session(db_path) as sess:
-        return sess.query(Image).filter_by(in_queue=True).count()
+    with get_session(db_path) as sesh:
+        return sesh.query(TrapImage).filter_by(in_queue=True).count()
 
 
 def queue_counts(base_path):
 
     counts = {}
-    with get_session(base_path) as sess:
-        counts["images"] = sess.query(Image).filter_by(in_queue=True).count()
+    with get_session(base_path) as sesh:
+        counts["images"] = sesh.query(TrapImage).filter_by(in_queue=True).count()
         counts["unclassified_objects"] = (
-            sess.query(DetectedObject)
+            sesh.query(DetectedObject)
             .filter_by(in_queue=True, binary_label=None)
             .count()
         )
         counts["unclassified_species"] = (
-            sess.query(DetectedObject)
+            sesh.query(DetectedObject)
             .filter_by(
                 in_queue=True,
                 specific_label=None,
@@ -356,13 +360,13 @@ def queue_counts(base_path):
 def unprocessed_counts(base_path):
 
     counts = {}
-    with get_session(base_path) as sess:
-        counts["images"] = sess.query(Image).filter_by(last_processed=None).count()
+    with get_session(base_path) as sesh:
+        counts["images"] = sesh.query(TrapImage).filter_by(last_processed=None).count()
         counts["unclassified_objects"] = (
-            sess.query(DetectedObject).filter_by(binary_label=None).count()
+            sesh.query(DetectedObject).filter_by(binary_label=None).count()
         )
         counts["unclassified_moths"] = (
-            sess.query(DetectedObject)
+            sesh.query(DetectedObject)
             .filter_by(
                 specific_label=None,
             )
@@ -378,14 +382,14 @@ def clear_queue(db_path):
 
     logger.info("Clearing images in queue")
 
-    with get_session(db_path) as sess:
-        for image in sess.query(Image).filter_by(in_queue=True).all():
+    with get_session(db_path) as sesh:
+        for image in sesh.query(TrapImage).filter_by(in_queue=True).all():
             image.in_queue = False
-            sess.add(image)
-        for obj in sess.query(DetectedObject).filter_by(in_queue=True).all():
+            sesh.add(image)
+        for obj in sesh.query(DetectedObject).filter_by(in_queue=True).all():
             obj.in_queue = False
-            sess.add(obj)
-        sess.commit()
+            sesh.add(obj)
+        sesh.commit()
 
 
 class Queue:

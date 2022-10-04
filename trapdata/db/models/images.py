@@ -8,7 +8,7 @@ from trapdata.db import Base, get_session
 from trapdata import constants
 
 
-class Image(Base):
+class TrapImage(Base):
     __tablename__ = "images"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -63,16 +63,16 @@ class Image(Base):
 
 def get_image_with_objects(monitoring_session, image_id):
     base_directory = monitoring_session.base_directory
-    with get_session(base_directory) as sess:
+    with get_session(base_directory) as sesh:
         image_kwargs = {
             "id": image_id,
             # "path": str(image_path),
             # "monitoring_session_id": monitoring_session.id,
         }
         image = (
-            sess.query(Image)
+            sesh.query(TrapImage)
             .filter_by(**image_kwargs)
-            .options(orm.joinedload(Image.detected_objects))
+            .options(orm.joinedload(TrapImage.detected_objects))
             .one_or_none()
         )
         # logger.debug(
@@ -82,16 +82,16 @@ def get_image_with_objects(monitoring_session, image_id):
 
 
 def completely_classified(db_path, image_id):
-    from trapdata.models.detections import DetectedObject
+    from trapdata.db.models.detections import DetectedObject
 
-    with get_session(db_path) as sess:
-        img = sess.query(Image).get(image_id)
+    with get_session(db_path) as sesh:
+        img = sesh.query(TrapImage).get(image_id)
         if img.in_queue or not img.last_processed:
             return False
 
         else:
             classified_objs = (
-                sess.query(DetectedObject)
+                sesh.query(DetectedObject)
                 .filter_by(
                     image_id=image_id, binary_label=constants.POSITIVE_BINARY_LABEL
                 )
@@ -101,7 +101,7 @@ def completely_classified(db_path, image_id):
                 .count()
             )
             detections = (
-                sess.query(DetectedObject)
+                sesh.query(DetectedObject)
                 .filter_by(
                     image_id=image_id, binary_label=constants.POSITIVE_BINARY_LABEL
                 )

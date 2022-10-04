@@ -6,7 +6,7 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
 from trapdata import logger
 from trapdata.ml.utils import get_device, synchronize_clocks, get_or_download_file
-from trapdata.models.detections import save_detected_objects
+from trapdata.db.models.detections import save_detected_objects
 
 from .. import InferenceModel
 from .dataloaders import LocalizationDatabaseDataset

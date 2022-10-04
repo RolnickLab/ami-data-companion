@@ -14,7 +14,7 @@ def test_db():
 
         start_date = datetime.datetime.now()
         for i in range(3):
-            img = Image(
+            img = TrapImage(
                 path=f"2022-01-01/test_{i}.jpg",
                 timestamp=start_date + datetime.timedelta(minutes=i * 60),
             )
@@ -28,7 +28,9 @@ def test_db():
         session.add(new_ms)
 
         new_ms.images.append(
-            Image(path="test", timestamp=start_date + datetime.timedelta(minutes=120))
+            TrapImage(
+                path="test", timestamp=start_date + datetime.timedelta(minutes=120)
+            )
         )
 
         session.commit()

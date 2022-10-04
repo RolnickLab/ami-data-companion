@@ -6,12 +6,11 @@ from sqlalchemy_utils import aggregated, observes
 
 from trapdata.db import Base, get_session
 from trapdata.common.logs import logger
-from trapdata.models.images import Image
+from trapdata.db.models.images import TrapImage
 from trapdata.common.filemanagement import find_images, group_images_by_day
 
 
-# Rename to CapturePeriod? shorter? less confusing with other types of Sessions. CaptureSession?
-# Or SurveyEvent or Survey?
+# Rename to TrapEvent? CapturePeriod? less confusing with other types of Sessions. CaptureSession? Or SurveyEvent or Survey?
 class MonitoringSession(Base):
     __tablename__ = "monitoring_sessions"
 
@@ -39,10 +38,10 @@ class MonitoringSession(Base):
             self.end_time = timestamps[-1]
 
     images = orm.relationship(
-        "Image",
+        "TrapImage",
         back_populates="monitoring_session",
-        cascade="all, delete-orphan",
-        order_by="Image.timestamp",
+        cascade="all, delete-orphan",  # @TODO do not automatically cascade delete!
+        order_by="TrapImage.timestamp",
         # lazy="joined",
     )
 
@@ -90,19 +89,19 @@ class MonitoringSession(Base):
 def save_monitoring_session(db_path, base_directory, session):
     # @TODO find & save all images to the DB first, then
     # group by timestamp and construct monitoring sessions. window function?
-    with get_session(db_path) as sess:
+    with get_session(db_path) as sesh:
         ms_kwargs = {"base_directory": str(base_directory), "day": session["day"]}
-        ms = sess.query(MonitoringSession).filter_by(**ms_kwargs).one_or_none()
+        ms = sesh.query(MonitoringSession).filter_by(**ms_kwargs).one_or_none()
         if ms:
             logger.debug(f"Found existing Monitoring Session in db: {ms}")
         else:
             ms = MonitoringSession(**ms_kwargs)
             logger.debug(f"Adding new Monitoring Session to db: {ms}")
-            sess.add(ms)
-            sess.flush()
+            sesh.add(ms)
+            sesh.flush()
 
         num_existing_images = (
-            sess.query(Image).filter_by(monitoring_session_id=ms.id).count()
+            sesh.query(TrapImage).filter_by(monitoring_session_id=ms.id).count()
         )
         if session["num_images"] > num_existing_images:
             logger.info(
@@ -123,21 +122,21 @@ def save_monitoring_session(db_path, base_directory, session):
                     "filesize": absolute_path.stat().st_size,
                     # file hash?
                 }
-                db_img = sess.query(Image).filter_by(**img_kwargs).one_or_none()
+                db_img = sesh.query(TrapImage).filter_by(**img_kwargs).one_or_none()
                 if db_img:
                     # logger.debug(f"Found existing Image in db: {img}")
                     pass
                 else:
-                    db_img = Image(**img_kwargs)
+                    db_img = TrapImage(**img_kwargs)
                     logger.debug(f"Adding new Image to db: {db_img}")
                 ms_images.append(db_img)
-            sess.bulk_save_objects(ms_images)
+            sesh.bulk_save_objects(ms_images)
 
             # Manually update aggregate & cached values after bulk update
             ms.update_aggregates()
 
         logger.debug("Comitting changes to DB")
-        sess.commit()
+        sesh.commit()
         logger.debug("Done committing")
 
 
@@ -172,18 +171,18 @@ def get_monitoring_sessions_from_filesystem(base_directory):
 
 def get_monitoring_sessions_from_db(db_path, base_directory):
     logger.info("Quering existing sessions in DB")
-    with get_session(db_path) as sess:
+    with get_session(db_path) as sesh:
         return (
-            sess.query(MonitoringSession)
+            sesh.query(MonitoringSession)
             .filter_by(base_directory=str(base_directory))
             .all()
         )
 
 
 def monitoring_sessions_exist(db_path, base_directory):
-    with get_session(db_path) as sess:
+    with get_session(db_path) as sesh:
         return (
-            sess.query(MonitoringSession)
+            sesh.query(MonitoringSession)
             .filter_by(base_directory=str(base_directory))
             .count()
         )
@@ -199,8 +198,10 @@ def get_or_create_monitoring_sessions(db_path, base_directory):
 
 def get_monitoring_session_images(ms):
     # @TODO this is likely to slow things down. Some monitoring sessions have thousands of images.
-    with get_session(ms.base_directory) as sess:
-        images = list(sess.query(Image).filter_by(monitoring_session_id=ms.id).all())
+    with get_session(ms.base_directory) as sesh:
+        images = list(
+            sesh.query(TrapImage).filter_by(monitoring_session_id=ms.id).all()
+        )
     logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")
     return images
 
@@ -209,11 +210,11 @@ def get_monitoring_session_images(ms):
 def get_monitoring_session_image_ids(ms):
     # Get a list of image IDs in order of timestamps as quickly as possible
     # This could be in the thousands
-    with get_session(ms.base_directory) as sess:
+    with get_session(ms.base_directory) as sesh:
         images = list(
-            sess.query(Image.id)
+            sesh.query(TrapImage.id)
             .filter_by(monitoring_session_id=ms.id)
-            .order_by(Image.timestamp)
+            .order_by(TrapImage.timestamp)
             .all()
         )
     logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")

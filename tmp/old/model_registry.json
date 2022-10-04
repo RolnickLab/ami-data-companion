@@ -25,7 +25,7 @@
     "category_keepers": [
       "moth"
     ],
-    "description": "Trained on September 8, 2022",
+    "description": "Trained on May 6, 2022",
     "weights": "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/moth-nonmoth-effv2b3_20220506_061527_30.pth",
     "labels": "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/05-moth-nonmoth_category_map.json",
     "module_path": "trapdata.ml.classification.moth_nonmoth"

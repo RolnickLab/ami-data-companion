@@ -21,10 +21,10 @@ from plyer import filechooser
 
 from trapdata import logger
 from trapdata import db
-from trapdata import models
+from trapdata import TrapImage
 from trapdata.common import settings
-from trapdata.models.queue import add_monitoring_session_to_queue
-from trapdata.models.events import get_or_create_monitoring_sessions
+from trapdata.db.models.queue import add_monitoring_session_to_queue
+from trapdata.db.models.events import get_or_create_monitoring_sessions
 
 
 kivy.require("2.1.0")
@@ -231,11 +231,11 @@ class DataMenuScreen(Screen):
 
         for ms in self.sessions:
 
-            with db.get_session(self.root_dir) as sess:
+            with db.get_session(self.root_dir) as sesh:
                 first_image = (
-                    sess.query(models.Image)
+                    sesh.query(TrapImage)
                     .filter_by(monitoring_session_id=ms.id)
-                    .order_by(models.Image.filesize.desc())
+                    .order_by(TrapImage.filesize.desc())
                     .first()
                 )
 

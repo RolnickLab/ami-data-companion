@@ -1,4 +1,7 @@
-# import asyncio
+import newrelic.agent
+
+newrelic.agent.initialize(environment="staging")
+
 import json
 import pathlib
 from functools import partial
@@ -20,8 +23,8 @@ from kivy.properties import (
 
 from trapdata import logger
 from trapdata import ml
-from trapdata.models.queue import clear_queue
-from trapdata.models.detections import save_detected_objects, save_classified_objects
+from trapdata.db.models.queue import clear_queue
+from trapdata.db.models.detections import save_detected_objects, save_classified_objects
 
 from .menu import DataMenuScreen
 from .playback import ImagePlaybackScreen
@@ -291,9 +294,6 @@ class TrapDataAnalyzer(App):
             self.config,
             data=json.dumps(performance_settings),
         )
-
-
-import newrelic.agent
 
 
 @newrelic.agent.background_task()

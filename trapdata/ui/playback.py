@@ -20,10 +20,13 @@ from kivy.uix.screenmanager import Screen
 
 from trapdata import logger
 from trapdata import constants
-from trapdata.models.events import get_monitoring_session_image_ids
-from trapdata.models.images import get_image_with_objects, completely_classified
-from trapdata.models.detections import get_detections_for_image, get_species_for_image
-from trapdata.models.queue import add_image_to_queue
+from trapdata.db.models.events import get_monitoring_session_image_ids
+from trapdata.db.models.images import get_image_with_objects, completely_classified
+from trapdata.db.models.detections import (
+    get_detections_for_image,
+    get_species_for_image,
+)
+from trapdata.db.models.queue import add_image_to_queue
 from trapdata.common.utils import get_sequential_sample
 
 
