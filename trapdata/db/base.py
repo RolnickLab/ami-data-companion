@@ -1,4 +1,5 @@
 import contextlib
+import pathlib
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -36,6 +37,11 @@ def get_db(db_path, create=False):
         from . import Base
 
         logger.info("Creating database tables if necessary")
+        if db.dialect.name == "sqlite":
+            db_filepath = pathlib.Path(db.url.database)
+            if not db_filepath.exists():
+                logger.info(f"Creating {db_filepath} and parent directories")
+                db_filepath.parent.mkdir(parents=True, exist_ok=True)
         Base.metadata.create_all(db, checkfirst=True)
 
     return db
@@ -71,7 +77,7 @@ def get_session(db_path):
     session.close()
 
 
-def check_db(db_path, quiet=False):
+def check_db(db_path, create=True, quiet=False):
     """
     Try opening a database session.
     """
@@ -80,6 +86,7 @@ def check_db(db_path, quiet=False):
     logger.debug(f"Checking DB {db_path}")
 
     try:
+        get_db(db_path, create=True)
         with get_session(db_path) as sesh:
             # May have to check each model to detect schema changes
             # @TODO probably a better way to do this!

@@ -159,13 +159,12 @@ class DataMenuScreen(Screen):
 
     def db_ready(self):
         # Try to open a database session. @TODO add GUI indicator and ask to recreate if fails.
-        db.get_db(self.app.db_path, create=True)
-        if not db.check_db(self.app.db_path, quiet=True):
+        if not db.check_db(self.app.db_path, create=True, quiet=True):
             Popup(
-                title="Error reading database",
+                title="Error reading or creating database",
                 content=Label(
                     text=(
-                        f"Error reading database: \n\n"
+                        f"Error reading or creating database: \n\n"
                         f"{self.app.db_path} \n\n"
                         f"Trying deleting the DB file and it will be recreated on next launch."
                     )
