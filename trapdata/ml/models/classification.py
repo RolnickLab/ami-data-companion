@@ -114,7 +114,6 @@ class SpeciesClassificationDatabaseDataset(torch.utils.data.Dataset):
 
 
 class EfficientNetClassifier(InferenceBaseClass):
-    type = "classification"
     input_size = 300
 
     def get_model(self):
@@ -157,11 +156,11 @@ class EfficientNetClassifier(InferenceBaseClass):
         return result
 
 
-class MothNonMothClassifier(EfficientNetClassifier):
-    name = "Moth / Non-Moth Classifier"
-    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/moth-nonmoth-effv2b3_20220506_061527_30.pth"
-    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/05-moth-nonmoth_category_map.json"
+class BinaryClassifier(EfficientNetClassifier):
     stage = 2
+    type = "binary_classification"
+    positive_binary_label = None
+    positive_negative_label = None
 
     def get_dataset(self):
         dataset = BinaryClassificationDatabaseDataset(
@@ -183,8 +182,18 @@ class MothNonMothClassifier(EfficientNetClassifier):
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
 
 
+class MothNonMothClassifier(BinaryClassifier):
+    name = "Moth / Non-Moth Classifier"
+    description = "Trained on May 6, 2022"
+    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/moth-nonmoth-effv2b3_20220506_061527_30.pth"
+    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/05-moth-nonmoth_category_map.json"
+    positive_binary_label = "moth"
+    positive_negative_label = "nonmoth"
+
+
 class SpeciesClassifier(EfficientNetClassifier):
     stage = 3
+    type = "fine_grained_classifier"
 
     def get_dataset(self):
         dataset = SpeciesClassificationDatabaseDataset(
@@ -207,11 +216,27 @@ class SpeciesClassifier(EfficientNetClassifier):
 
 class QuebecVermontMothSpeciesClassifier(SpeciesClassifier):
     name = "Quebec & Vermont Species Classifier"
-    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/quebec-vermont-moth-model_v02_efficientnetv2-b3_2022-09-08-15-44.pt"
-    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/quebec-vermont-moth_category-map_4Aug2022.json"
+    description = "Trained on September 8, 2022 using local species checklist from GBIF"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "quebec-vermont-moth-model_v02_efficientnetv2-b3_2022-09-08-15-44.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "quebec-vermont-moth_category-map_4Aug2022.json"
+    )
 
 
 class UKDenmarkMothSpeciesClassifier(SpeciesClassifier):
     name = "Quebec & Vermont Species Classifier"
-    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/uk-denmark-moth-model_v01_efficientnetv2-b3_2022-09-08-12-54.pt"
-    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/uk-denmark-moth_category-map_13Sep2022.json"
+    description = (
+        "Trained on September 8, 2022 using local species checklist from GBIF."
+    )
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "uk-denmark-moth-model_v01_efficientnetv2-b3_2022-09-08-12-54.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "uk-denmark-moth_category-map_13Sep2022.json"
+    )

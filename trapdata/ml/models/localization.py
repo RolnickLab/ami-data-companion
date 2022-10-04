@@ -14,10 +14,6 @@ from trapdata.models.detections import save_detected_objects
 from trapdata.ml.models.base import InferenceBaseClass
 
 
-class ObjectDetector(InferenceBaseClass):
-    pass
-
-
 class LocalizationDatabaseDataset(torch.utils.data.Dataset):
     def __init__(self, db_path, image_transforms):
         super().__init__()
@@ -71,11 +67,29 @@ class LocalizationFilesystemDataset(torch.utils.data.Dataset):
         return str(img_path), self.transform(pil_image)
 
 
-class MothFasterRCNNObjectDetector(ObjectDetector):
-    name = "FasterRCNN for AMI Traps 2021"
-    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/localization/v1_localizmodel_2021-08-17-12-06.pt"
-    model_type = "object_detection"
+class ObjectDetector(InferenceBaseClass):
+    title = "Unknown Object Detector"
+    type = "object_detection"
     stage = 1
+
+    def get_transforms(self):
+        return torchvision.transforms.Compose(
+            [
+                torchvision.transforms.ToTensor(),
+            ]
+        )
+
+    def get_dataset(self):
+        dataset = LocalizationDatabaseDataset(
+            db_path=self.db_path,
+            image_transforms=self.get_transforms(),
+        )
+        return dataset
+
+
+class MothObjectDetector_FasterRCNN(ObjectDetector):
+    name = "FasterRCNN for AMI Moth Traps 2021"
+    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/localization/v1_localizmodel_2021-08-17-12-06.pt"
     description = (
         "Model trained on moth trap data in 2021. "
         "Accurate but can be slow on a machine without GPU."
@@ -96,20 +110,6 @@ class MothFasterRCNNObjectDetector(ObjectDetector):
         model.eval()
         self.model = model
         return self.model
-
-    def get_transforms(self):
-        return torchvision.transforms.Compose(
-            [
-                torchvision.transforms.ToTensor(),
-            ]
-        )
-
-    def get_dataset(self):
-        dataset = LocalizationDatabaseDataset(
-            db_path=self.db_path,
-            image_transforms=self.get_transforms(),
-        )
-        return dataset
 
     def post_process_single(self, output):
         # This model does not use the labels from the object detection model
@@ -135,3 +135,40 @@ class MothFasterRCNNObjectDetector(ObjectDetector):
             detected_objects_data.append(detected_objects)
 
         save_detected_objects(self.db_path, item_ids, detected_objects_data)
+
+
+class GenericObjectDetector_FasterRCNN_MobileNet(ObjectDetector):
+    name = "Pre-trained FasterRCNN with MobileNet backend"
+    description = (
+        "Faster version of FasterRCNN but not trained on moth trap data. "
+        "Produces multiple overlapping bounding boxes. But helpful for testing on CPU machines."
+    )
+    bbox_score_threshold = 0.01
+
+    def get_model(self):
+        model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(
+            weights="DEFAULT"
+        )
+        # @TODO can I use load_state_dict here with weights="DEFAULT"?
+        model = model.to(self.device)
+        model.eval()
+        return model
+
+    def post_process_single(self, output):
+        # This model does not use the labels from the object detection model
+        _ = output["labels"]
+
+        # Filter out objects if their score is under score threshold
+        bboxes = output["boxes"][
+            (output["scores"] > self.bbox_score_threshold) & (output["labels"] > 1)
+        ]
+
+        # Filter out background label, if using pretrained model only!
+        bboxes = output["boxes"][output["labels"] > 1]
+
+        logger.info(
+            f"Keeping {len(bboxes)} out of {len(output['boxes'])} objects found (threshold: {self.bbox_score_threshold})"
+        )
+
+        bboxes = bboxes.cpu().numpy().astype(int).tolist()
+        return bboxes
