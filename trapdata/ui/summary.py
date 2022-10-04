@@ -1,5 +1,6 @@
 import pathlib
 
+from kivy.app import App
 from kivy.uix.screenmanager import Screen
 from kivy.properties import ObjectProperty
 from kivy.uix.label import Label
@@ -59,7 +60,7 @@ class SpeciesListLayout(RecycleView):
         self.start_auto_refresh()
 
     def start_auto_refresh(self):
-        refresh_interval_seconds = 2
+        refresh_interval_seconds = 1
 
         if self.refresh_clock:
             Clock.unschedule(self.refresh_clock)
@@ -77,7 +78,7 @@ class SpeciesListLayout(RecycleView):
             Clock.unschedule(self.refresh_clock)
 
     def refresh(self, *args):
-        logger.debug("Refreshing species list")
+        # logger.debug("Refreshing species list")
         self.data = self.load_species(self.monitoring_session)
         self.refresh_from_data()
 
@@ -86,9 +87,10 @@ class SpeciesListLayout(RecycleView):
         Return a list of species in the format that the "viewclass" widget
         expects. In this case the viewclass is a `SpeciesRow` object.
         """
-        species_counts = queries.count_species(ms)
+        app = App.get_running_app()
+        species_counts = queries.count_species(app.db_path, ms)
 
-        row_height = 200  # @TODO make dynamic? Or fit images to specific size
+        row_height = 100  # @TODO make dynamic? Or fit images to specific size
         # widget_attrs = [
         #     {
         #         "species": {

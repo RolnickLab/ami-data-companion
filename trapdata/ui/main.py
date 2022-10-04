@@ -23,7 +23,6 @@ from kivy.properties import (
 
 from trapdata import logger
 from trapdata import ml
-from trapdata import db
 from trapdata.db.models.queue import clear_queue
 from trapdata.db.models.detections import save_detected_objects, save_classified_objects
 
@@ -61,43 +60,43 @@ class Queue(Label):
         logger.info(f"Local models path: {models_dir}")
         num_workers = int(self.app.config.get("performance", "num_workers"))
 
-        localization_results_callback = partial(save_detected_objects, db_path)
-        ml.detect_objects(
-            model_name=self.app.config.get("models", "localization_model"),
+        model_1_name = self.app.config.get("models", "localization_model")
+        Model_1 = ml.models.object_detectors[model_1_name]
+        model_1 = Model_1(
+            db_path=db_path,
             models_dir=models_dir,
-            base_directory=db_path,  # base path for relative images
-            results_callback=localization_results_callback,
             batch_size=int(
                 self.app.config.get("performance", "localization_batch_size")
             ),
             num_workers=num_workers,
         )
+        model_1.run()
         logger.info("Localization complete")
 
-        classification_results_callback = partial(save_classified_objects, db_path)
-        ml.classify_objects(
-            model_name=self.app.config.get("models", "binary_classification_model"),
+        model_2_name = self.app.config.get("models", "binary_classification_model")
+        Model_2 = ml.models.binary_classifiers[model_2_name]
+        model_2 = Model_2(
             models_dir=models_dir,
-            base_directory=db_path,
-            results_callback=classification_results_callback,
+            db_path=db_path,
             batch_size=int(
                 self.app.config.get("performance", "classification_batch_size")
             ),
             num_workers=num_workers,
         )
+        model_2.run()
         logger.info("Binary classification complete")
 
-        classification_results_callback = partial(save_classified_objects, db_path)
-        ml.classify_objects(
-            model_name=self.app.config.get("models", "taxon_classification_model"),
+        model_3_name = self.app.config.get("models", "taxon_classification_model")
+        Model_3 = ml.models.species_classifiers[model_3_name]
+        model_3 = Model_3(
             models_dir=models_dir,
-            base_directory=db_path,
-            results_callback=classification_results_callback,
+            db_path=db_path,
             batch_size=int(
                 self.app.config.get("performance", "classification_batch_size")
             ),
             num_workers=num_workers,
         )
+        model_3.run()
         logger.info("Species classification complete")
 
     def on_running(self, *args):
@@ -193,12 +192,12 @@ class TrapDataApp(App):
         config.setdefaults(
             "models",
             {
-                "localization_model": list(ml.LOCALIZATION_MODELS.keys())[0],
+                "localization_model": list(ml.models.object_detectors.keys())[0],
                 "binary_classification_model": list(
-                    ml.BINARY_CLASSIFICATION_MODELS.keys()
+                    ml.models.binary_classifiers.keys()
                 )[0],
                 "taxon_classification_model": list(
-                    ml.TAXON_CLASSIFICATION_MODELS.keys()
+                    ml.models.species_classifiers.keys()
                 )[0],
                 "tracking_algorithm": None,
             },
@@ -235,7 +234,7 @@ class TrapDataApp(App):
                 "type": "options",
                 "title": "Localization model",
                 "desc": "Model & settings to use for object detection in original images from camera trap.",
-                "options": list(ml.LOCALIZATION_MODELS.keys()),
+                "options": list(ml.models.object_detectors.keys()),
                 "section": "models",
             },
             {
@@ -243,7 +242,7 @@ class TrapDataApp(App):
                 "type": "options",
                 "title": "Binary classification model",
                 "desc": "Model & settings to use for moth / non-moth classification of cropped images after object detection.",
-                "options": list(ml.BINARY_CLASSIFICATION_MODELS.keys()),
+                "options": list(ml.models.binary_classifiers.keys()),
                 "section": "models",
             },
             {
@@ -251,7 +250,7 @@ class TrapDataApp(App):
                 "type": "options",
                 "title": "Species classification model",
                 "desc": "Model & settings to use for fine-grained species or taxon-level classification of cropped images after moth/non-moth detection.",
-                "options": list(ml.TAXON_CLASSIFICATION_MODELS.keys()),
+                "options": list(ml.models.species_classifiers.keys()),
                 "section": "models",
             },
             {
