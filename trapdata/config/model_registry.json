@@ -1,2 +1,0 @@
-// should include a list of models with slugs, names, descriptions, module path and weights path
-// e.g. the Vermont & Denmark models will have the same module path with different weight URLs
