@@ -57,8 +57,8 @@ def get_session(db_path):
     Usage:
 
     >>> directory = "/tmp/images"
-    >>> with get_session(db_path) as sess:
-    >>>     num_images = sess.query(Image).filter_by().count()
+    >>> with get_session(db_path) as sesh:
+    >>>     num_images = sesh.query(Image).filter_by().count()
     >>> num_images
     0
     """
@@ -74,15 +74,15 @@ def check_db(db_path, quiet=False):
     """
     Try opening a database session.
     """
-    from trapdata.models import __models__
+    from trapdata.db.models import __models__
 
     try:
-        with get_session(db_path) as sess:
+        with get_session(db_path) as sesh:
             # May have to check each model to detect schema changes
             # @TODO probably a better way to do this!
             for ModelClass in __models__:
                 logger.debug(f"Testing model {ModelClass}")
-                count = sess.query(ModelClass).count()
+                count = sesh.query(ModelClass).count()
                 logger.debug(
                     f"Found {count} records in table '{ModelClass.__tablename__}'"
                 )
@@ -97,8 +97,8 @@ def check_db(db_path, quiet=False):
 
 
 def query(db_path, q, **kwargs):
-    with get_session(db_path) as sess:
-        return list(sess.query(q, **kwargs))
+    with get_session(db_path) as sesh:
+        return list(sesh.query(q, **kwargs))
 
 
 def get_or_create(session, model, defaults=None, **kwargs):

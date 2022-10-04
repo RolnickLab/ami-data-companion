@@ -4,8 +4,8 @@ import multiprocessing
 from functools import partial
 
 from trapdata import db, ml
-from trapdata.models.queue import ImageQueue
-from trapdata.models.detections import save_detected_objects
+from trapdata.db.models.queue import ImageQueue
+from trapdata.db.models.detections import save_detected_objects
 
 
 def process_queue(queue):

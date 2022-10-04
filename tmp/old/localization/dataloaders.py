@@ -6,7 +6,7 @@ import PIL.Image
 
 from trapdata import db
 from trapdata import logger
-from trapdata import models
+from trapdata.db import models
 
 
 class LocalizationDatabaseDataset(torch.utils.data.Dataset):
@@ -18,21 +18,23 @@ class LocalizationDatabaseDataset(torch.utils.data.Dataset):
         self.query_args = {"in_queue": True}
 
     def __len__(self):
-        with db.get_session(self.db_path) as sess:
-            count = sess.query(models.Image).filter_by(**self.query_args).count()
+        with db.get_session(self.db_path) as sesh:
+            count = sesh.query(models.TrapImage).filter_by(**self.query_args).count()
             logger.info(f"Images found in queue: {count}")
             return count
 
     def __getitem__(self, idx):
-        with db.get_session(self.db_path) as sess:
-            next_image = sess.query(models.Image).filter_by(**self.query_args).first()
+        with db.get_session(self.db_path) as sesh:
+            next_image = (
+                sesh.query(models.TrapImage).filter_by(**self.query_args).first()
+            )
             if next_image:
                 img_path = next_image.absolute_path
                 pil_image = PIL.Image.open(img_path)
                 next_image.in_queue = False
                 item = (str(img_path), self.transform(pil_image))
-                sess.add(next_image)
-                sess.commit()
+                sesh.add(next_image)
+                sesh.commit()
                 return item
 
 

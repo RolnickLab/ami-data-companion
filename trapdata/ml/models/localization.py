@@ -7,10 +7,10 @@ import PIL.Image
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
 from trapdata import db
+from trapdata import TrapImage
 from trapdata import logger
-from trapdata import models
 
-from trapdata.models.detections import save_detected_objects
+from trapdata.db.models.detections import save_detected_objects
 from trapdata.ml.models.base import InferenceBaseClass
 
 
@@ -23,8 +23,8 @@ class LocalizationDatabaseDataset(torch.utils.data.Dataset):
         self.query_args = {"in_queue": True}
 
     def __len__(self):
-        with db.get_session(self.db_path) as sess:
-            count = sess.query(models.Image).filter_by(**self.query_args).count()
+        with db.get_session(self.db_path) as sesh:
+            count = sesh.query(TrapImage).filter_by(**self.query_args).count()
             logger.info(f"Images found in queue: {count}")
             return count
 
@@ -33,15 +33,15 @@ class LocalizationDatabaseDataset(torch.utils.data.Dataset):
         # images in the queue.
         # @TODO use a custom sampler instead to query all images in the batch
         # from the DB at one, rather than one by one.
-        with db.get_session(self.db_path) as sess:
-            next_image = sess.query(models.Image).filter_by(**self.query_args).first()
+        with db.get_session(self.db_path) as sesh:
+            next_image = sesh.query(TrapImage).filter_by(**self.query_args).first()
             if next_image:
                 img_path = next_image.absolute_path
                 pil_image = PIL.Image.open(img_path)
                 next_image.in_queue = False
                 item = (next_image.id, self.transform(pil_image))
-                sess.add(next_image)
-                sess.commit()
+                sesh.add(next_image)
+                sesh.commit()
                 return item
 
 

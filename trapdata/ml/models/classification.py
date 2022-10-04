@@ -6,8 +6,8 @@ from PIL import Image
 from trapdata import logger
 from trapdata import constants
 from trapdata import db
-from trapdata import models
-from trapdata.models.detections import save_classified_objects
+from trapdata.db import models
+from trapdata.db.models.detections import save_classified_objects
 
 from .base import InferenceBaseClass
 
@@ -24,9 +24,9 @@ class BinaryClassificationDatabaseDataset(torch.utils.data.Dataset):
         }
 
     def __len__(self):
-        with db.get_session(self.db_path) as sess:
+        with db.get_session(self.db_path) as sesh:
             count = (
-                sess.query(models.DetectedObject)
+                sesh.query(models.DetectedObject)
                 .filter(models.DetectedObject.bbox.is_not(None))
                 .filter_by(**self.query_args)
                 .count()
@@ -35,9 +35,9 @@ class BinaryClassificationDatabaseDataset(torch.utils.data.Dataset):
             return count
 
     def __getitem__(self, idx):
-        with db.get_session(self.db_path) as sess:
+        with db.get_session(self.db_path) as sesh:
             next_obj = (
-                sess.query(models.DetectedObject)
+                sesh.query(models.DetectedObject)
                 .filter(models.DetectedObject.bbox.is_not(None))
                 .filter_by(**self.query_args)
                 .options(db.orm.joinedload(models.DetectedObject.image))
@@ -57,8 +57,8 @@ class BinaryClassificationDatabaseDataset(torch.utils.data.Dataset):
                 cropped_image = torchvision.transforms.ToPILImage()(cropped_image)
                 next_obj.in_queue = False
                 item = (next_obj.id, self.transform(cropped_image))
-                sess.add(next_obj)
-                sess.commit()
+                sesh.add(next_obj)
+                sesh.commit()
                 return item
 
 
@@ -75,9 +75,9 @@ class SpeciesClassificationDatabaseDataset(torch.utils.data.Dataset):
         }
 
     def __len__(self):
-        with db.get_session(self.db_path) as sess:
+        with db.get_session(self.db_path) as sesh:
             count = (
-                sess.query(models.DetectedObject)
+                sesh.query(models.DetectedObject)
                 .filter(models.DetectedObject.bbox.is_not(None))
                 .filter_by(**self.query_args)
                 .count()
@@ -86,9 +86,9 @@ class SpeciesClassificationDatabaseDataset(torch.utils.data.Dataset):
             return count
 
     def __getitem__(self, idx):
-        with db.get_session(self.db_path) as sess:
+        with db.get_session(self.db_path) as sesh:
             next_obj = (
-                sess.query(models.DetectedObject)
+                sesh.query(models.DetectedObject)
                 .filter(models.DetectedObject.bbox.is_not(None))
                 .filter_by(**self.query_args)
                 .options(db.orm.joinedload(models.DetectedObject.image))
@@ -108,8 +108,8 @@ class SpeciesClassificationDatabaseDataset(torch.utils.data.Dataset):
                 cropped_image = torchvision.transforms.ToPILImage()(cropped_image)
                 next_obj.in_queue = False
                 item = (next_obj.id, self.transform(cropped_image))
-                sess.add(next_obj)
-                sess.commit()
+                sesh.add(next_obj)
+                sesh.commit()
                 return item
 
 

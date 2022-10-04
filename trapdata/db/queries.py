@@ -1,7 +1,7 @@
 import sqlalchemy as sa
 
 from .base import get_session
-from trapdata import models
+from trapdata.db import models
 
 
 def count_species(monitoring_session):
@@ -18,9 +18,9 @@ def count_species(monitoring_session):
     ]).group_by(USERS.c.first_name, USERS.c.last_name)
     """
 
-    with get_session(monitoring_session.base_directory) as sess:
+    with get_session(monitoring_session.base_directory) as sesh:
         return (
-            sess.query(
+            sesh.query(
                 # DetectedObject.binary_label,
                 # DetectedObject.specific_label,
                 sa.func.coalesce(
@@ -40,7 +40,7 @@ def update_all_aggregates(directory):
     # Call the update_aggregates method of every model
     raise NotImplementedError
 
-    with get_session(directory) as sess:
-        for ms in sess.query(None).all():
+    with get_session(directory) as sesh:
+        for ms in sesh.query(None).all():
             ms.update_aggregates()
-        sess.commit()
+        sesh.commit()

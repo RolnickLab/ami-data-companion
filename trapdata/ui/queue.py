@@ -12,7 +12,7 @@ from kivy.lang import Builder
 from kivy.clock import Clock
 
 from trapdata import logger
-from trapdata.models.queue import all_queues
+from trapdata.db.models.queue import all_queues
 
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "queue.kv"))
