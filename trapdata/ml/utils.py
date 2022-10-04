@@ -136,5 +136,5 @@ class StopWatch:
     def __repr__(self):
         start = datetime.datetime.fromtimestamp(self.start).strftime("%H:%M:%S")
         end = datetime.datetime.fromtimestamp(self.end).strftime("%H:%M:%S")
-        seconds = int(round(self.duration, 0))
+        seconds = int(round(self.duration, 1))
         return f"Started: {start}, Ended: {end}, Duration: {seconds} seconds"

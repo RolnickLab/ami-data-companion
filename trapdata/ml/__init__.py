@@ -83,8 +83,9 @@ class InferenceModel:
         return batch_output
 
     def save_results(self, batch_output):
-        _ = self.format_output(batch_output)
-        logger.warn("No save method configured for model. Doing nothing with results")
+        logger.warn(
+            "No save method configured for model. Doing nothing with model output!"
+        )
         return None
 
     def run(self):

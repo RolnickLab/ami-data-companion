@@ -11,10 +11,10 @@ from trapdata import logger
 from trapdata import models
 
 from trapdata.models.detections import save_detected_objects
-from trapdata.ml.models.base import InferenceModel
+from trapdata.ml.models.base import InferenceBaseClass
 
 
-class ObjectDetector(InferenceModel):
+class ObjectDetector(InferenceBaseClass):
     pass
 
 
@@ -96,6 +96,13 @@ class MothFasterRCNNObjectDetector(ObjectDetector):
         model.eval()
         self.model = model
         return self.model
+
+    def get_transforms(self):
+        return torchvision.transforms.Compose(
+            [
+                torchvision.transforms.ToTensor(),
+            ]
+        )
 
     def get_dataset(self):
         dataset = LocalizationDatabaseDataset(
