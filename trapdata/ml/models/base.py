@@ -24,8 +24,8 @@ class InferenceBaseClass:
     """
 
     db_path = None
-    title = "Unknown Inference Model"
-    description = None
+    name = "Unknown Inference Model"
+    description = str()
     model_type = None
     device = None
     weights_path = None
@@ -36,7 +36,7 @@ class InferenceBaseClass:
     transforms = None
     batch_size = 4
     num_workers = 1
-    description = str()
+    user_data_path = None
     type = "unknown"
     stage = 0
 
@@ -65,11 +65,11 @@ class InferenceBaseClass:
                 "Missing parameter `weights_path`. "
                 "Specify a URL or local path to a model checkpoint"
             )
-        return get_or_download_file(weights_path)
+        return get_or_download_file(weights_path, self.user_data_path)
 
     def get_labels(self, labels_path):
         if labels_path:
-            local_path = get_or_download_file(labels_path)
+            local_path = get_or_download_file(labels_path, self.user_data_path)
 
             with open(local_path) as f:
                 labels = json.load(f)

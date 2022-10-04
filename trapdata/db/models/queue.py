@@ -213,9 +213,9 @@ def all_queues(db_path):
     return {
         q.name: q
         for q in [
-            ImageQueue(db_path),
-            DetectedObjectQueue(db_path),
-            UnclassifiedObjectQueue(db_path),
+            ImageQueue(db_path, model=None),
+            DetectedObjectQueue(db_path, model=None),
+            UnclassifiedObjectQueue(db_path, model=None),
         ]
     }
 
@@ -224,7 +224,7 @@ def add_image_to_queue(db_path, image_id):
 
     with get_session(db_path) as sesh:
         image = sesh.query(TrapImage).get(image_id)
-        logger.info(f"Addding image to queue: {image}")
+        logger.info(f"Adding image to queue: {image}")
         if not image.in_queue:
             image.in_queue = True
             sesh.add(image)

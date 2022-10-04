@@ -52,17 +52,15 @@ class Queue(Label):
     def process_queue(self):
         db_path = self.app.db_path
 
-        models_dir = (
-            pathlib.Path(self.app.config.get("paths", "user_data_path")) / "models"
-        )
-        logger.info(f"Local models path: {models_dir}")
+        user_data_path = pathlib.Path(self.app.config.get("paths", "user_data_path"))
+        logger.info(f"Local user data path: {user_data_path}")
         num_workers = int(self.app.config.get("performance", "num_workers"))
 
         model_1_name = self.app.config.get("models", "localization_model")
         Model_1 = ml.models.object_detectors[model_1_name]
         model_1 = Model_1(
             db_path=db_path,
-            models_dir=models_dir,
+            user_data_path=user_data_path,
             batch_size=int(
                 self.app.config.get("performance", "localization_batch_size")
             ),
@@ -74,8 +72,8 @@ class Queue(Label):
         model_2_name = self.app.config.get("models", "binary_classification_model")
         Model_2 = ml.models.binary_classifiers[model_2_name]
         model_2 = Model_2(
-            models_dir=models_dir,
             db_path=db_path,
+            user_data_path=user_data_path,
             batch_size=int(
                 self.app.config.get("performance", "classification_batch_size")
             ),
@@ -87,8 +85,8 @@ class Queue(Label):
         model_3_name = self.app.config.get("models", "taxon_classification_model")
         Model_3 = ml.models.species_classifiers[model_3_name]
         model_3 = Model_3(
-            models_dir=models_dir,
             db_path=db_path,
+            user_data_path=user_data_path,
             batch_size=int(
                 self.app.config.get("performance", "classification_batch_size")
             ),
@@ -216,7 +214,7 @@ class TrapDataApp(App):
             {
                 "key": "user_data_path",
                 "type": "path",
-                "title": "Local directory for model data",
+                "title": "Local directory for model weights",
                 "desc": "Model weights are between 100-200Mb and will be downloaded the first time a model is used.",
                 "section": "paths",
             },
