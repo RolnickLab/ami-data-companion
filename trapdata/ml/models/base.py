@@ -60,12 +60,10 @@ class InferenceBaseClass:
         self.model = self.get_model()
 
     def get_weights(self, weights_path):
-        if not weights_path:
-            raise Exception(
-                "Missing parameter `weights_path`. "
-                "Specify a URL or local path to a model checkpoint"
-            )
-        return get_or_download_file(weights_path, self.user_data_path)
+        if weights_path:
+            return get_or_download_file(weights_path, self.user_data_path)
+        else:
+            logger.warn(f"No weights specified for model {self.name}")
 
     def get_labels(self, labels_path):
         if labels_path:
@@ -147,7 +145,7 @@ class InferenceBaseClass:
         for item in batch_output:
             yield self.post_process_single(item)
 
-    def save_results(self, batch_output):
+    def save_results(self, item_ids, batch_output):
         logger.warn("No save method configured for model. Doing nothing with results")
         return None
 
