@@ -16,6 +16,7 @@ class MonitoringSession(Base):
 
     id = sa.Column(sa.Integer, primary_key=True)
     day = sa.Column(sa.Date)
+    # @TODO instead of base directory, we can now use a Trap object to group sessions
     base_directory = sa.Column(sa.String(255))
     start_time = sa.Column(sa.DateTime(timezone=True))
     end_time = sa.Column(sa.DateTime(timezone=True))
