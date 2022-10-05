@@ -1,4 +1,5 @@
 import datetime
+import pathlib
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -7,7 +8,7 @@ from trapdata import db
 from trapdata import constants
 from trapdata.db.models.images import TrapImage
 from trapdata.common.logs import logger
-from trapdata.common.utils import bbox_area
+from trapdata.common.utils import bbox_area, bbox_center, export_report
 
 
 class DetectedObject(db.Base):
@@ -47,6 +48,27 @@ class DetectedObject(db.Base):
             f"\tspecific_label={self.specific_label!r}, \n"
             f"\tbbox={self.bbox!r})"
         )
+
+    def report_data(self):
+        if self.specific_label:
+            label = self.specific_label
+            score = self.specific_label_score
+        else:
+            label = self.binary_label
+            score = self.binary_label_score
+
+        return {
+            "trap": pathlib.Path(self.monitoring_session.base_directory).name,
+            "event": self.monitoring_session.day,
+            "image": self.image.path,
+            "timestamp": self.image.timestamp,
+            "bbox": self.bbox,
+            "bbox_center": bbox_center(self.bbox) if self.bbox else None,
+            "area_pixels": self.area_pixels,
+            "model_name": self.model_name,
+            "category_label": label,
+            "category_score": score,
+        }
 
 
 def save_detected_objects(db_path, image_paths, detected_objects_data):
@@ -131,3 +153,8 @@ def get_species_for_image(db_path, image_id):
             .filter(DetectedObject.specific_label.is_not(None))
             .distinct()
         )
+
+
+def export_detected_objects(objects, report_name, directory):
+    records = [obj.report_data() for obj in objects]
+    return export_report(records, report_name, directory)
