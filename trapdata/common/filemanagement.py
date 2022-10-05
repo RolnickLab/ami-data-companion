@@ -100,6 +100,8 @@ def find_images(
 ):
     logger.info(f"Scanning '{base_directory}' for images")
     base_directory = pathlib.Path(base_directory)
+    if not base_directory.exists():
+        raise Exception(f"Directory does not exist: {base_directory}")
     extensions_list = "|".join(
         [f.lstrip(".") for f in constants.SUPPORTED_IMAGE_EXTENSIONS]
     )
@@ -147,7 +149,7 @@ def group_images_by_day(images, maximum_gap_minutes=6 * 60):
     )
     images = sorted(images, key=lambda image: image["timestamp"])
     if not images:
-        return []
+        return {}
 
     groups = collections.OrderedDict()
 
