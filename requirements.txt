@@ -1,10 +1,10 @@
 kivy[base]
 plyer  # cross platform interfaces like file chooser
+pyobjus; platform_system == "Darwin"  # macOS requirement for Kivy file chooser
 black
 flake8
 Pillow
 python-dateutil
-# pyobjus  # macOS requirement for Kivy
 sqlalchemy
 sqlalchemy_utils
 sentry-sdk
