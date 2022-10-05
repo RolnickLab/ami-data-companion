@@ -27,8 +27,7 @@ from trapdata.ml.models.classification import (
 def end_to_end(db_path, image_base_directory, sample_size):
 
     # db_path = ":memory:"
-
-    db = get_db(db_path, create=True)
+    get_db(db_path, create=True)
 
     _ = get_or_create_monitoring_sessions(db_path, image_base_directory)
 
