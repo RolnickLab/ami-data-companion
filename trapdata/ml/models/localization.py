@@ -86,6 +86,16 @@ class ObjectDetector(InferenceBaseClass):
         )
         return dataset
 
+    def save_results(self, item_ids, batch_output):
+        # Format data to be saved in DB
+        # Here we are just saving the bboxes of detected objects
+        detected_objects_data = []
+        for image_output in batch_output:
+            detected_objects = [{"bbox": bbox} for bbox in image_output]
+            detected_objects_data.append(detected_objects)
+
+        save_detected_objects(self.db_path, item_ids, detected_objects_data)
+
 
 class MothObjectDetector_FasterRCNN(ObjectDetector):
     name = "FasterRCNN for AMI Moth Traps 2021"
@@ -124,16 +134,6 @@ class MothObjectDetector_FasterRCNN(ObjectDetector):
 
         bboxes = bboxes.cpu().numpy().astype(int).tolist()
         return bboxes
-
-    def save_results(self, item_ids, batch_output):
-        # Format data to be saved in DB
-        # Here we are just saving the bboxes of detected objects
-        detected_objects_data = []
-        for image_output in batch_output:
-            detected_objects = [{"bbox": bbox} for bbox in image_output]
-            detected_objects_data.append(detected_objects)
-
-        save_detected_objects(self.db_path, item_ids, detected_objects_data)
 
 
 class GenericObjectDetector_FasterRCNN_MobileNet(ObjectDetector):
