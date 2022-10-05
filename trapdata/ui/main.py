@@ -216,7 +216,7 @@ class TrapDataApp(App):
             {
                 "key": "user_data_path",
                 "type": "path",
-                "title": "Local directory for model weights",
+                "title": "Local directory for models, thumbnails & reports",
                 "desc": "Model weights are between 100-200Mb and will be downloaded the first time a model is used.",
                 "section": "paths",
             },

@@ -176,6 +176,7 @@ class BinaryClassifier(EfficientNetClassifier):
                 "binary_label": str(label),
                 "binary_label_score": float(score),
                 "in_queue": True if label == constants.POSITIVE_BINARY_LABEL else False,
+                "model_name": self.name,
             }
             for label, score in batch_output
         ]
@@ -208,6 +209,7 @@ class SpeciesClassifier(EfficientNetClassifier):
             {
                 "specific_label": label,
                 "specific_label_score": score,
+                "model_name": self.name,
             }
             for label, score in batch_output
         ]

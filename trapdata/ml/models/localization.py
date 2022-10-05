@@ -91,7 +91,13 @@ class ObjectDetector(InferenceBaseClass):
         # Here we are just saving the bboxes of detected objects
         detected_objects_data = []
         for image_output in batch_output:
-            detected_objects = [{"bbox": bbox} for bbox in image_output]
+            detected_objects = [
+                {
+                    "bbox": bbox,
+                    "model_name": self.name,
+                }
+                for bbox in image_output
+            ]
             detected_objects_data.append(detected_objects)
 
         save_detected_objects(self.db_path, item_ids, detected_objects_data)

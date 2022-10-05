@@ -61,13 +61,17 @@ class InferenceBaseClass:
 
     def get_weights(self, weights_path):
         if weights_path:
-            return get_or_download_file(weights_path, self.user_data_path)
+            return get_or_download_file(
+                weights_path, self.user_data_path, prefix="models"
+            )
         else:
             logger.warn(f"No weights specified for model {self.name}")
 
     def get_labels(self, labels_path):
         if labels_path:
-            local_path = get_or_download_file(labels_path, self.user_data_path)
+            local_path = get_or_download_file(
+                labels_path, self.user_data_path, prefix="models"
+            )
 
             with open(local_path) as f:
                 labels = json.load(f)

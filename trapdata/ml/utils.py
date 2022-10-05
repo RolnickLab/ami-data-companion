@@ -26,7 +26,7 @@ def get_device(device_str=None):
     return device
 
 
-def get_or_download_file(path, destination_dir=None):
+def get_or_download_file(path, destination_dir=None, prefix=None):
     """
     >>> filename, headers = get_weights("https://drive.google.com/file/d/1KdQc56WtnMWX9PUapy6cS0CdjC8VSdVe/view?usp=sharing")
 
@@ -39,6 +39,8 @@ def get_or_download_file(path, destination_dir=None):
     fname = path.rsplit("/", 1)[-1]
     if destination_dir:
         destination_dir = pathlib.Path(destination_dir)
+        if prefix:
+            destination_dir = destination_dir / prefix
         if not destination_dir.exists():
             logger.info(f"Creating local directory {str(destination_dir)}")
             destination_dir.mkdir(parents=True, exist_ok=True)

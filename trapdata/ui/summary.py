@@ -1,4 +1,5 @@
 import pathlib
+import time
 
 from kivy.app import App
 from kivy.uix.screenmanager import Screen
@@ -6,11 +7,13 @@ from kivy.properties import ObjectProperty
 from kivy.uix.label import Label
 from kivy.uix.recycleview import RecycleView
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.popup import Popup
 from kivy.lang import Builder
 from kivy.clock import Clock
 
 from trapdata import logger
 from trapdata.db import queries
+from trapdata.db.models.detections import get_detected_objects, export_detected_objects
 
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "summary.kv"))
@@ -127,3 +130,24 @@ class SpeciesSummaryScreen(Screen):
 
     def on_leave(self, *args):
         self.ids.species_list.stop_auto_refresh()
+
+    def export(self):
+        app = App.get_running_app()
+        user_data_path = app.config.get("paths", "user_data_path")
+        records = list(get_detected_objects(app.db_path, self.monitoring_session))
+        timestamp = int(time.time())
+        report_name = f"detections-for-{self.monitoring_session.day.strftime('%Y-%m-%d')}-created-{timestamp}"
+        filepath = export_detected_objects(records, report_name, user_data_path)
+        logger.info(f"Exported detections to {filepath}")
+        Popup(
+            title="Report exported",
+            content=Label(
+                text=(
+                    f"{len(records)} detected objects for {self.monitoring_session.day} have been exported to: \n\n"
+                    f'"{filepath.name}" \n\n'
+                    f"In the directory: \n{filepath.parent} \n"
+                )
+            ),
+            size_hint=(None, None),
+            size=("550dp", "220dp"),
+        ).open()

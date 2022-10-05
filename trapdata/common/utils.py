@@ -1,3 +1,7 @@
+import csv
+import pathlib
+
+
 def get_sequential_sample(direction, images, last_sample=None):
     if not images:
         return None
@@ -31,3 +35,34 @@ def bbox_area(bbox):
     x1, y1, x2, y2 = bbox
     area = (y2 - y1) * (x2 - x1)
     return area
+
+
+def bbox_center(bbox):
+    """
+    Return the center coordinates of a bounding box.
+    """
+    x1, y1, x2, y2 = bbox
+    width = x2 - x1
+    height = y2 - y1
+    center_x = x1 + (width / 2)
+    center_y = y1 + (height / 2)
+    return (center_x, center_y)
+
+
+def export_report(records, report_name, directory):
+    if not records:
+        return None
+
+    filepath = (pathlib.Path(directory) / "reports" / report_name).with_suffix(".csv")
+    if not filepath.parent.exists():
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+
+    header = records[0].keys()
+
+    with open(filepath, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        for record in records:
+            writer.writerow(record.values())
+
+    return filepath
