@@ -1,5 +1,4 @@
 import pathlib
-import datetime
 
 import kivy
 from kivy.app import App
@@ -174,9 +173,9 @@ class AnnotatedImage(Widget):
             detections = get_detections_for_image(app.db_path, self.image.id).count()
             species = get_species_for_image(app.db_path, self.image.id).count()
             if self.image.last_processed:
-                time_delta = f"{(datetime.datetime.now() - self.image.last_processed).seconds}s ago"
+                last_processed = self.image.last_processed.strftime("%H:%M")
             else:
-                time_delta = "Never"
+                last_processed = "Never"
 
             label_text = (
                 f"{self.image.timestamp} | "
@@ -184,7 +183,7 @@ class AnnotatedImage(Widget):
                 f"Detections: {detections} | "
                 f"Species: {species} | "
                 f"Complete: {completely_classified(app.db_path, self.image.id)} | "
-                f"Processed: {time_delta}"
+                f"Last Processed: {last_processed}"
             )
             label = Label(
                 text=label_text,

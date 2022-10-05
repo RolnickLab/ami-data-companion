@@ -9,12 +9,15 @@ from kivy.uix.image import AsyncImage
 from kivy.uix.button import Button
 from kivy.uix.popup import Popup
 from kivy.uix.widget import Widget
+from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.recycleview import RecycleView
 from kivy.lang import Builder
 from kivy.properties import (
     StringProperty,
     ObjectProperty,
     BooleanProperty,
+    ListProperty,
 )
 from kivy.uix.screenmanager import Screen
 from plyer import filechooser
@@ -31,18 +34,6 @@ kivy.require("2.1.0")
 
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "menu.kv"))
-
-
-class ThreadWithStatus(threading.Thread):
-    exception = None
-
-    def run(self):
-        try:
-            super().run()
-        except Exception as e:
-            self.exception = e
-            logger.error(f"Thread {self} exited with an exception: {e}")
-            raise e
 
 
 def choose_directory(cache=True, setting_key="last_root_directory", starting_path=None):
@@ -83,17 +74,6 @@ def choose_directory(cache=True, setting_key="last_root_directory", starting_pat
     return selected_dir
 
 
-class TrapSesionData(Widget):
-    """
-    One night / session of trap data.
-
-    Will keep track of which directories have been processed, their cached results, etc.
-    Could be backed by a SQLite database? Or just a folder structure under .cache
-    """
-
-    pass
-
-
 class AddToQueueButton(Button):
     monitoring_session = ObjectProperty()
 
@@ -101,13 +81,17 @@ class AddToQueueButton(Button):
         super().__init__(*args, **kwargs)
 
     def on_release(self):
-        add_monitoring_session_to_queue(self.monitoring_session)
+        db_path = App.get_running_app().db_path
+        add_monitoring_session_to_queue(db_path, self.monitoring_session)
 
 
 class LaunchScreenButton(Button):
     monitoring_session = ObjectProperty()
-    screenname = StringProperty(allownone=True)
-    screenmanager = ObjectProperty(allownone=True)
+    screen_name = StringProperty(allownone=True)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.screen_manager = App.get_running_app().screen_manager
 
     def on_release(self):
         self.launch()
@@ -117,18 +101,108 @@ class LaunchScreenButton(Button):
         Open the specified screen
         """
 
-        if self.screenmanager and self.screenname:
-            self.screenmanager.current = self.screenname
-            self.screenmanager.get_screen(
-                self.screenname
+        if self.screen_manager and self.screen_name:
+            self.screen_manager.current = self.screen_name
+            self.screen_manager.get_screen(
+                self.screen_name
             ).monitoring_session = self.monitoring_session
+
+
+class MonitoringSessionRow(BoxLayout):
+    monitoring_session = ObjectProperty()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.app = App.get_running_app()
+
+    def on_monitoring_session(self, instance, value):
+        ms = self.monitoring_session
+
+        if ms:
+            self.clear_widgets()
+
+        with db.get_session(self.app.db_path) as sesh:
+            first_image = (
+                sesh.query(TrapImage)
+                .filter_by(monitoring_session_id=ms.id)
+                .order_by(TrapImage.filesize.desc())
+                .first()
+            )
+
+        if not first_image:
+            # If there is no first image
+            logger.error(f"No images found for Monitoring Session: {ms}")
+            return
+
+        labels = [
+            f"{ms.day.strftime('%a, %b %e')} \n{ms.duration_label} \n{ms.start_time.strftime('%H:%M')} - {ms.end_time.strftime('%H:%M')}",
+            f"{ms.num_images or '0'} images\n",
+        ]
+
+        # btn_disabled = True
+        btn_disabled = False
+
+        playback_btn = LaunchScreenButton(
+            text="Playback",
+            monitoring_session=ms,
+            screen_name="playback",
+            disabled=btn_disabled,
+        )
+
+        add_to_queue_btn = AddToQueueButton(
+            text="Add to Queue",
+            monitoring_session=ms,
+            disabled=btn_disabled,
+        )
+
+        summary_btn = LaunchScreenButton(
+            text="Summary",
+            monitoring_session=ms,
+            screen_name="summary",
+            disabled=btn_disabled,
+        )
+
+        buttons = [playback_btn, add_to_queue_btn, summary_btn]
+
+        row = GridLayout(
+            rows=1,
+            cols=4 + len(labels),
+            spacing=(0, 0),
+            padding=(0, 0),
+            # row_default_height=120,
+            # row_force_default=True,
+        )
+        row.add_widget(
+            AsyncImage(source=str(first_image.absolute_path), size_hint=(1, 1))
+        )
+        for label in labels:
+            row.add_widget(Label(text=label, valign="top"))
+
+        button_grid = GridLayout(rows=len(buttons), cols=1, padding=5, spacing=(0, 10))
+        for button in buttons:
+            button_grid.add_widget(button)
+
+        row.add_widget(button_grid)
+
+        self.add_widget(row)
+
+
+class MonitoringSessionListView(RecycleView):
+    monitoring_sessions = ListProperty()
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.data = []
+
+    def on_monitoring_sessions(self, instance, value):
+        self.data = [{"monitoring_session": ms} for ms in self.monitoring_sessions]
+        self.refresh_from_data()
 
 
 class DataMenuScreen(Screen):
     image_base_path = ObjectProperty(allownone=True)
     sessions = ObjectProperty()
     status_popup = ObjectProperty()
-    status_clock = ObjectProperty()
     data_ready = BooleanProperty(defaultvalue=False)
 
     def __init__(self, *args, **kwargs):
@@ -158,7 +232,8 @@ class DataMenuScreen(Screen):
         self.image_base_path = root_dir
 
     def db_ready(self):
-        # Try to open a database session. @TODO add GUI indicator and ask to recreate if fails.
+        # Try to open a database session.
+        # # @TODO add GUI indicator asking to recreate DB if it fails to open?
         if not db.check_db(self.app.db_path, create=True, quiet=True):
             Popup(
                 title="Error reading or creating database",
@@ -201,10 +276,11 @@ class DataMenuScreen(Screen):
         if self.data_ready:
             logger.info("Data is ready for other methods")
             # Buttons aren't available immediately
-            self.display_monitoring_sessions()
-            Clock.schedule_once(self.enable_buttons, 1)
+            # self.display_monitoring_sessions()
+            # Clock.schedule_once(self.enable_buttons, 1)
         else:
-            self.disable_buttons()
+            # self.disable_buttons()
+            pass
 
     def enable_buttons(self, *args):
         logger.info("Enabling all buttons")
@@ -221,86 +297,16 @@ class DataMenuScreen(Screen):
                     child.disabled = True
 
     def get_monitoring_sessions(self, *args):
-        self.sessions = get_or_create_monitoring_sessions(
+        sessions = get_or_create_monitoring_sessions(
             self.app.db_path, self.image_base_path
         )
+        logger.info(
+            f"Found {len(sessions)} monitoring sessions with base_path: {self.image_base_path}"
+        )
+        self.ids.monitoring_session_list.monitoring_sessions = sessions
         self.data_ready = True
         self.status_popup.dismiss()
-        return self.sessions
-
-    def display_monitoring_sessions(self, *args):
-        grid = self.ids.monitoring_sessions
-        grid.clear_widgets()
-
-        for ms in self.sessions:
-
-            with db.get_session(self.app.db_path) as sesh:
-                first_image = (
-                    sesh.query(TrapImage)
-                    .filter_by(monitoring_session_id=ms.id)
-                    .order_by(TrapImage.filesize.desc())
-                    .first()
-                )
-
-            if first_image:
-                first_image_path = pathlib.Path(first_image.path)
-                bg_image = str(self.image_base_path / first_image_path)
-            else:
-                continue
-
-            labels = [
-                f"{ms.day.strftime('%a, %b %e')} \n{ms.duration_label} \n{ms.start_time.strftime('%H:%M')} - {ms.end_time.strftime('%H:%M')}",
-                f"{ms.num_images or '0'} images\n",
-            ]
-
-            # btn_disabled = True
-            btn_disabled = False
-
-            playback_btn = LaunchScreenButton(
-                text="Playback",
-                monitoring_session=ms,
-                screenmanager=self.manager,
-                screenname="playback",
-                disabled=btn_disabled,
-            )
-
-            add_to_queue_btn = AddToQueueButton(
-                text="Add to Queue",
-                monitoring_session=ms,
-                disabled=btn_disabled,
-            )
-
-            summary_btn = LaunchScreenButton(
-                text="Summary",
-                monitoring_session=ms,
-                screenmanager=self.manager,
-                screenname="summary",
-                disabled=btn_disabled,
-            )
-
-            buttons = [playback_btn, add_to_queue_btn, summary_btn]
-
-            row = GridLayout(
-                rows=1,
-                cols=4 + len(labels),
-                spacing=10,
-                padding=20,
-                # row_default_height=120,
-                # row_force_default=True,
-            )
-            row.add_widget(AsyncImage(source=bg_image))
-            for label in labels:
-                row.add_widget(Label(text=label, valign="top"))
-
-            button_grid = GridLayout(rows=len(buttons), cols=1, padding=5, spacing=10)
-            for button in buttons:
-                button_grid.add_widget(button)
-
-            row.add_widget(button_grid)
-
-            grid.add_widget(row)
-
-        self.ids.status.text = "Ready"
+        return sessions
 
     def open_settings(self):
         self.manager.current = "settings"

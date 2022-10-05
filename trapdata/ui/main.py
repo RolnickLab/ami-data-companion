@@ -129,6 +129,7 @@ class TrapDataApp(App):
     # convenient that the current usage of DB sessions.
     queue = ObjectProperty()
     image_base_path = StringProperty(allownone=True)
+    screen_manager = ObjectProperty()
     use_kivy_settings = False
 
     def on_stop(self):
@@ -156,6 +157,7 @@ class TrapDataApp(App):
         sm.add_widget(ImagePlaybackScreen(name="playback"))
         sm.add_widget(SpeciesSummaryScreen(name="summary"))
         sm.add_widget(QueueScreen(name="queue"))
+        self.screen_manager = sm
 
         return sm
 

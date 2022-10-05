@@ -23,9 +23,8 @@ class SpeciesRow(BoxLayout):
         super().__init__(**kwargs)
 
     def on_species(self, instance, value):
-        species = value
-        if value:
-            self.make_row(species)
+        if self.species:
+            self.make_row(self.species)
 
     def make_row(self, species):
         self.clear_widgets()
@@ -91,18 +90,6 @@ class SpeciesListLayout(RecycleView):
         species_counts = queries.count_species(app.db_path, ms)
 
         row_height = 100  # @TODO make dynamic? Or fit images to specific size
-        # widget_attrs = [
-        #     {
-        #         "species": {
-        #             "atlas_path": f"atlas://{self.source_dir}/trapdata/{slugify(name)}",
-        #             "name": name,
-        #             "count": details["count"],
-        #             "image_height": row_height,
-        #         },
-        #         "height": row_height,
-        #     }
-        #     for name, details in species_counts
-        # ]
 
         widget_attrs = [
             {
