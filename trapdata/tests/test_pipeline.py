@@ -7,17 +7,16 @@ import pathlib
 
 import torch
 
-# import sys
-# sys.path.insert(0, full_path_to_trapdata_folder)
-# print(sys.path)
-
 from trapdata import logger
 from trapdata.db import get_db, check_db
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import add_sample_to_queue, images_in_queue, clear_queue
 
 from trapdata.ml.utils import StopWatch
-from trapdata.ml.models.localization import MothObjectDetector_FasterRCNN
+from trapdata.ml.models.localization import (
+    MothObjectDetector_FasterRCNN,
+    GenericObjectDetector_FasterRCNN_MobileNet,
+)
 from trapdata.ml.models.classification import (
     MothNonMothClassifier,
     UKDenmarkMothSpeciesClassifier,
@@ -39,7 +38,12 @@ def end_to_end(db_path, image_base_directory, sample_size):
     logger.info(f"Images in queue: {num_images}")
     assert num_images == sample_size
 
-    object_detector = MothObjectDetector_FasterRCNN(db_path=db_path, batch_size=10)
+    if torch.cuda.is_available():
+        object_detector = MothObjectDetector_FasterRCNN(db_path=db_path, batch_size=10)
+    else:
+        object_detector = GenericObjectDetector_FasterRCNN_MobileNet(
+            db_path=db_path, batch_size=10
+        )
     moth_nonmoth_classifier = MothNonMothClassifier(db_path=db_path, batch_size=300)
     species_classifier = UKDenmarkMothSpeciesClassifier(db_path=db_path, batch_size=300)
 
@@ -51,13 +55,16 @@ def end_to_end(db_path, image_base_directory, sample_size):
 
 
 if __name__ == "__main__":
-    image_base_directory = pathlib.Path(".")
-    print("tempfile dir", tempfile.gettempdir())
+    image_base_directory = pathlib.Path(__file__).parent
+    logger.info(f"Using test images from: {image_base_directory}")
+
     db_filepath = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    local_weights_path = torch.hub.get_dir()
-    os.environ["LOCAL_WEIGHTS_PATH"] = local_weights_path
     db_path = f"sqlite+pysqlite:///{db_filepath.name}"
     logger.info(f"Using temporary DB: {db_path}")
+
+    local_weights_path = torch.hub.get_dir()
+    logger.info(f"Looking for or downloading weights in {local_weights_path}")
+    os.environ["LOCAL_WEIGHTS_PATH"] = local_weights_path
 
     with StopWatch() as t:
         end_to_end(db_path, image_base_directory, sample_size=1)
