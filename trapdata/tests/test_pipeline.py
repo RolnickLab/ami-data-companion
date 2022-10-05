@@ -29,7 +29,7 @@ def end_to_end(db_path, image_base_directory, sample_size):
     # db_path = ":memory:"
     get_db(db_path, create=True)
 
-    _ = get_or_create_monitoring_sessions(db_path, image_base_directory)
+    get_or_create_monitoring_sessions(db_path, image_base_directory)
 
     clear_queue(db_path)
     add_sample_to_queue(db_path, sample_size=sample_size)
@@ -57,14 +57,14 @@ if __name__ == "__main__":
     image_base_directory = pathlib.Path(__file__).parent
     logger.info(f"Using test images from: {image_base_directory}")
 
-    db_filepath = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    db_path = f"sqlite+pysqlite:///{db_filepath.name}"
-    logger.info(f"Using temporary DB: {db_path}")
-
     local_weights_path = torch.hub.get_dir()
     logger.info(f"Looking for or downloading weights in {local_weights_path}")
     os.environ["LOCAL_WEIGHTS_PATH"] = local_weights_path
 
-    with StopWatch() as t:
-        end_to_end(db_path, image_base_directory, sample_size=1)
-    logger.info(t)
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=True) as db_filepath:
+        db_path = f"sqlite+pysqlite:///{db_filepath.name}"
+        logger.info(f"Using temporary DB: {db_path}")
+
+        with StopWatch() as t:
+            end_to_end(db_path, image_base_directory, sample_size=1)
+        logger.info(t)
