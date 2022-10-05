@@ -76,7 +76,20 @@ def get_exif(img_path):
     return tags
 
 
-def get_image_timestamp(img_path, default_offset=0):
+def get_image_timestamp(img_path):
+    """
+    Parse the date and time a photo was taken from its EXIF data.
+
+    This ignores the TimeZoneOffset and creates a datetime that is
+    timezone naive.
+    """
+    exif = get_exif(img_path)
+    datestring = exif["DateTime"].replace(":", "-", 2)
+    date = dateutil.parser.parse(datestring)
+    return date
+
+
+def get_image_timestamp_with_timezone(img_path, default_offset="+0"):
     """
     Parse the date and time a photo was taken from its EXIF data.
 
@@ -87,6 +100,8 @@ def get_image_timestamp(img_path, default_offset=0):
     exif = get_exif(img_path)
     datestring = exif["DateTime"].replace(":", "-", 2)
     offset = exif.get("TimeZoneOffset") or str(default_offset)
+    if int(offset) > 0:
+        offset = f"+{offset}"
     datestring = f"{datestring} {offset}"
     date = dateutil.parser.parse(datestring)
     return date
@@ -115,7 +130,7 @@ def find_images(
 
                 if include_timestamps:
                     try:
-                        date = get_image_timestamp(full_path)
+                        date = get_image_timestamp_with_timezone(full_path)
                     except Exception as e:
                         logger.error(
                             f"Could not get EXIF date for image: {full_path}\n {e}"
