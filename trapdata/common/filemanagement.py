@@ -115,8 +115,8 @@ def find_images(
     include_timestamps=True,
     skip_bad_exif=True,
 ):
-    logger.info(f"Scanning '{base_directory}' for images")
-    base_directory = pathlib.Path(base_directory)
+    base_directory = pathlib.Path(base_directory).absolute()
+    logger.info(f"Scanning '{base_directory}' for supported images")
     if not base_directory.exists():
         raise Exception(f"Directory does not exist: {base_directory}")
     extensions_list = "|".join(
@@ -132,7 +132,7 @@ def find_images(
 
                 if include_timestamps:
                     try:
-                        date = get_image_timestamp_with_timezone(full_path)
+                        date = get_image_timestamp(full_path)
                     except Exception as e:
                         logger.error(
                             f"Could not get EXIF date for image: {full_path}\n {e}"
