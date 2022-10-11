@@ -131,6 +131,7 @@ def find_images(
                 path = full_path if absolute_paths else relative_path
 
                 if include_timestamps:
+                    # @TODO move EXIF reading into a separate multi-threaded function
                     try:
                         date = get_image_timestamp(full_path)
                     except Exception as e:

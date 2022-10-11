@@ -11,7 +11,12 @@ parser.add_argument(
     "directory",
     help="Path to directory of trap images to scan",
 )
-parser.add_argument("--max_num", type=int, nargs="+", help="Add at-most N samples")
+parser.add_argument(
+    "--max-num",
+    type=int,
+    nargs="?",
+    help="Stop after finding N number of images",
+)
 parser.add_argument(
     "--queue",
     action="store_const",
@@ -35,12 +40,15 @@ parser.add_argument(
 )
 
 
-def collect_images(path):
+def collect_images(path, max_num=None):
     images = []
     with StopWatch() as t:
         for i, f in enumerate(find_images(path)):
-            logger.debug(f'Found {f["path"].name} from {f["timestamp"].strftime("%c")}')
+            # logger.debug(f'Found {f["path"].name} from {f["timestamp"].strftime("%c")}')
             images.append(f)
+            if max_num and i + 1 >= max_num:
+                break
+
     logger.info(f"Total images: {i+1}")
     logger.info(t)
     return images
@@ -59,4 +67,4 @@ if __name__ == "__main__":
     if args.count_only:
         count_images(args.directory)
     else:
-        collect_images(args.directory)
+        collect_images(args.directory, max_num=args.max_num)
