@@ -77,9 +77,11 @@ def save_detected_objects(db_path, image_paths, detected_objects_data):
     with db.get_session(db_path) as sesh:
         timestamp = datetime.datetime.now()
         for image_id, detected_objects in zip(image_paths, detected_objects_data):
+            orm_objects = []
             image = sesh.query(TrapImage).get(image_id)
             image.last_processed = timestamp
-            sesh.add(image)
+            # sesh.add(image)
+            orm_objects.append(image)
             for object_data in detected_objects:
                 detection = DetectedObject(
                     last_detected=timestamp,
@@ -95,9 +97,11 @@ def save_detected_objects(db_path, image_paths, detected_objects_data):
                     setattr(detection, k, v)
 
                 logger.debug(f"Saving detected object {detection} for image {image}")
-                sesh.add(detection)
+                # sesh.add(detection)
+                orm_objects.append(detection)
                 detection.monitoring_session_id = image.monitoring_session_id
                 detection.image_id = image.id
+        sesh.bulk_save_objects(orm_objects)
         sesh.commit()
 
 
@@ -106,10 +110,10 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
 
     with db.get_session(db_path) as sesh:
         timestamp = datetime.datetime.now()
+        orm_objects = []
         for object_id, object_data in zip(object_ids, classified_objects_data):
             obj = sesh.get(DetectedObject, object_id)
             obj.last_processed = timestamp
-            sesh.add(obj)
 
             for k, v in object_data.items():
                 logger.debug(f"Adding {k}: {v} to detected object {obj.id}")
@@ -117,6 +121,7 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
 
             logger.debug(f"Saving classified object {obj}")
 
+        sesh.bulk_save_objects(orm_objects)
         sesh.commit()
 
 
