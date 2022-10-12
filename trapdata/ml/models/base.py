@@ -128,9 +128,9 @@ class InferenceBaseClass:
             self.dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            persistent_workers=False,
+            persistent_workers=True,
             shuffle=False,
-            pin_memory=False,  # @TODO review this
+            pin_memory=True,  # @TODO review this
         )
         return self.dataloader
 
@@ -146,8 +146,10 @@ class InferenceBaseClass:
         return item
 
     def post_process_batch(self, batch_output):
-        for item in batch_output:
-            yield self.post_process_single(item)
+        return [self.post_process_single(item) for item in batch_output]
+        # Had problems with this generator and multiprocessing
+        # for item in batch_output:
+        #     yield self.post_process_single(item)
 
     def save_results(self, item_ids, batch_output):
         logger.warn("No save method configured for model. Doing nothing with results")
@@ -173,7 +175,9 @@ class InferenceBaseClass:
                     f"Seconds per item: {round(seconds_per_item, 2)}"
                 )
 
-                batch_output = self.post_process_batch(batch_output)
+                batch_output = list(self.post_process_batch(batch_output))
                 item_ids = item_ids.tolist()
                 logger.info(f"Saving {len(item_ids)} results")
                 self.save_results(item_ids, batch_output)
+                logger.info(f"{self.name} Batch -- Done")
+        logger.info(f"{self.name} -- Done")

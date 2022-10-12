@@ -40,7 +40,7 @@ class Queue(Label):
     clock = ObjectProperty(allownone=True)
 
     running = BooleanProperty(defaultvalue=False)
-    bgtask = ObjectProperty()
+    bgtask = ObjectProperty(allownone=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -54,6 +54,7 @@ class Queue(Label):
                 self.running = self.bgtask.is_alive()
             except ValueError:
                 self.running = False
+                self.bgtask = None
             else:
                 # logger.debug(f"Child process status: {self.bgtask}")
                 pass
@@ -136,11 +137,16 @@ class Queue(Label):
 
     def stop(self, *args):
         if self.bgtask:
-            # self.bgtask.terminate()
-            logger.info(f"Killing child process {self.bgtask}")
-            self.bgtask.kill()
-            logger.info(f"Waiting for {self.bgtask}")
-            self.bgtask.join()
+            try:
+                logger.info(f"Killing child process {self.bgtask}")
+                # self.bgtask.terminate()
+                self.bgtask.kill()
+                logger.info(f"Waiting for {self.bgtask}")
+                self.bgtask.join()
+            except ValueError:
+                self.bgtask = None
+            else:
+                self.cleanup()
 
     def cleanup(self, *args):
         if self.bgtask:
@@ -149,8 +155,11 @@ class Queue(Label):
                 self.bgtask.close()
             except ValueError:
                 pass
+            finally:
+                self.bgtask = None
 
     def clear(self):
+        self.stop()
         clear_queue(self.app.db_path)
 
 
