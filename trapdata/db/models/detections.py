@@ -71,37 +71,44 @@ class DetectedObject(db.Base):
         }
 
 
-def save_detected_objects(db_path, image_paths, detected_objects_data):
-    logger.debug("Saving detected objects")
+def save_detected_objects(db_path, image_ids, detected_objects_data):
+
+    orm_objects = []
+    with db.get_session(db_path) as sesh:
+        images = sesh.query(TrapImage).filter(TrapImage.id.in_(image_ids)).all()
+
+    timestamp = datetime.datetime.now()
+
+    for image, detected_objects in zip(images, detected_objects_data):
+        image.last_processed = timestamp
+        # sesh.add(image)
+        orm_objects.append(image)
+
+        for object_data in detected_objects:
+            detection = DetectedObject(
+                last_detected=timestamp,
+                in_queue=True,
+            )
+
+            if "bbox" in object_data:
+                area_pixels = bbox_area(object_data["bbox"])
+                object_data["area_pixels"] = area_pixels
+
+            for k, v in object_data.items():
+                logger.debug(f"Adding {k}: {v} to detected object {detection.id}")
+                setattr(detection, k, v)
+
+            detection.monitoring_session_id = image.monitoring_session_id
+            detection.image_id = image.id
+
+            logger.debug(f"Creating detected object {detection} for image {image}")
+
+            # sesh.add(detection)
+            orm_objects.append(detection)
 
     with db.get_session(db_path) as sesh:
-        logger.debug(f"DB session open: {sesh}")
-        timestamp = datetime.datetime.now()
-        for image_id, detected_objects in zip(image_paths, detected_objects_data):
-            orm_objects = []
-            image = sesh.query(TrapImage).get(image_id)
-            image.last_processed = timestamp
-            # sesh.add(image)
-            orm_objects.append(image)
-            for object_data in detected_objects:
-                detection = DetectedObject(
-                    last_detected=timestamp,
-                    in_queue=True,
-                )
-
-                if "bbox" in object_data:
-                    area_pixels = bbox_area(object_data["bbox"])
-                    object_data["area_pixels"] = area_pixels
-
-                for k, v in object_data.items():
-                    logger.debug(f"Adding {k}: {v} to detected object {detection.id}")
-                    setattr(detection, k, v)
-
-                logger.debug(f"Saving detected object {detection} for image {image}")
-                # sesh.add(detection)
-                orm_objects.append(detection)
-                detection.monitoring_session_id = image.monitoring_session_id
-                detection.image_id = image.id
+        # @TODO this could be faster! Especially for sqlite
+        logger.info(f"Bulk saving {len(orm_objects)} objects")
         sesh.bulk_save_objects(orm_objects)
         sesh.commit()
 
@@ -109,19 +116,25 @@ def save_detected_objects(db_path, image_paths, detected_objects_data):
 def save_classified_objects(db_path, object_ids, classified_objects_data):
     # logger.debug(f"Callback was called! {object_ids}, {classified_objects_data}")
 
+    orm_objects = []
+    timestamp = datetime.datetime.now()
     with db.get_session(db_path) as sesh:
-        timestamp = datetime.datetime.now()
-        orm_objects = []
-        for object_id, object_data in zip(object_ids, classified_objects_data):
-            obj = sesh.get(DetectedObject, object_id)
-            obj.last_processed = timestamp
+        objects = (
+            sesh.query(DetectedObject).filter(DetectedObject.id.in_(object_ids)).all()
+        )
 
-            for k, v in object_data.items():
-                logger.debug(f"Adding {k}: {v} to detected object {obj.id}")
-                setattr(obj, k, v)
+    for obj, object_data in zip(objects, classified_objects_data):
+        obj.last_processed = timestamp
 
-            logger.debug(f"Saving classified object {obj}")
+        logger.debug(f"Updating classified object {obj}")
+        for k, v in object_data.items():
+            logger.debug(f"Adding {k}: {v} to detected object {obj.id}")
+            setattr(obj, k, v)
 
+        orm_objects.append(obj)
+
+    with db.get_session(db_path) as sesh:
+        logger.info(f"Bulk saving {len(orm_objects)} objects")
         sesh.bulk_save_objects(orm_objects)
         sesh.commit()
 
@@ -131,8 +144,8 @@ def get_detected_objects(db_path, monitoring_session):
         "monitoring_session_id": monitoring_session.id,
     }
     with db.get_session(db_path) as sesh:
-        for obj in sesh.query(DetectedObject).filter_by(**query_kwargs).all():
-            yield obj
+        return sesh.query(DetectedObject).filter_by(**query_kwargs)
+        # yield obj # @TODO Does using a generator keep the session open?
 
 
 def get_objects_for_image(db_path, image_id):

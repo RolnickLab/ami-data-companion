@@ -31,6 +31,9 @@ def get_db(db_path, create=False):
         str(db_path),
         echo=False,
         future=True,
+        connect_args={
+            "timeout": 10,  # A longer timeout is necessary for SQLite and multiple PyTorch workers
+        },
     )
 
     if create:
@@ -70,7 +73,11 @@ def get_session(db_path):
     0
     """
     db = get_db(db_path)
-    session = orm.Session(db)
+    session = orm.Session(
+        db,
+        # autoflush=False,
+        # autocommit=False,
+    )
 
     yield session
 
