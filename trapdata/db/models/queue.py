@@ -60,34 +60,44 @@ class ImageQueue(QueueManager):
             )
 
     def add_unprocessed(self, *args):
+        orm_objects = []
         with get_session(self.db_path) as sesh:
-            images = []
-            for image in (
+            images = (
                 sesh.query(TrapImage)
                 .filter_by(
                     in_queue=False,
                     last_processed=None,
                 )
                 .all()
-            ):
-                image.in_queue = True
-                images.append(image)
-            logger.info(f"Adding {len(images)} images to queue")
+            )
+        for image in images:
+            image.in_queue = True
+            orm_objects.append(image)
+
+        with get_session(self.db_path) as sesh:
+            logger.info(f"Bulk saving {len(images)} images to queue")
             sesh.bulk_save_objects(images)
             sesh.commit()
-            return sesh.query(TrapImage).filter_by(last_processed=None).count()
+
+        with get_session(self.db_path) as sesh:
+            count = sesh.query(TrapImage).filter_by(last_processed=None).count()
+
+        return count
 
     def clear_queue(self, *args):
         logger.info("Clearing images in queue")
 
+        orm_objects = []
         with get_session(self.db_path) as sesh:
-            # @TODO switch to bulk update method
-            images = []
-            for image in sesh.query(TrapImage).filter_by(in_queue=True).all():
-                image.in_queue = False
-                images.append(image)
-            logger.info(f"Clearing {len(images)} images in queue")
-            sesh.bulk_save_objects(images)
+            images = sesh.query(TrapImage).filter_by(in_queue=True).all()
+
+        for image in images:
+            image.in_queue = False
+            orm_objects.append(image)
+
+        with get_session(self.db_path) as sesh:
+            logger.info(f"Removing {len(orm_objects)} images from queue")
+            sesh.bulk_save_objects(orm_objects)
             sesh.commit()
 
 
@@ -134,17 +144,21 @@ class DetectedObjectQueue(QueueManager):
     def clear_queue(self, *args):
         logger.info("Clearing detected objects in queue")
 
+        orm_objects = []
         with get_session(self.db_path) as sesh:
-            objects = []
-            for obj in (
+            objects = (
                 sesh.query(DetectedObject)
                 .filter_by(in_queue=True, binary_label=None)
                 .all()
-            ):
-                obj.in_queue = False
-                objects.append(obj)
-            logger.info(f"Clearing {len(objects)} objects in queue")
-            sesh.bulk_save_objects(objects)
+            )
+
+        for obj in objects:
+            obj.in_queue = False
+            orm_objects.append(obj)
+
+        with get_session(self.db_path) as sesh:
+            logger.info(f"Removing {len(orm_objects)} objects from queue")
+            sesh.bulk_save_objects(orm_objects)
             sesh.commit()
 
 
@@ -188,9 +202,9 @@ class UnclassifiedObjectQueue(QueueManager):
             )
 
     def add_unprocessed(self, *args):
+        orm_objects = []
         with get_session(self.db_path) as sesh:
-            objects = []
-            for obj in (
+            objects = (
                 sesh.query(DetectedObject)
                 .filter_by(
                     in_queue=False,
@@ -198,11 +212,15 @@ class UnclassifiedObjectQueue(QueueManager):
                     binary_label=constants.POSITIVE_BINARY_LABEL,
                 )
                 .all()
-            ):
-                obj.in_queue = True
-                objects.append(obj)
-            logger.info(f"Adding {len(objects)} objects to queue")
-            sesh.bulk_save_objects(objects)
+            )
+
+        for obj in objects:
+            obj.in_queue = True
+            orm_objects.append(obj)
+
+        with get_session(self.db_path) as sesh:
+            logger.info(f"Adding {len(orm_objects)} objects to queue")
+            sesh.bulk_save_objects(orm_objects)
             sesh.commit()
 
     def clear_queue(self, *args):
@@ -365,13 +383,15 @@ def clear_queue(db_path):
 
     logger.info("Clearing images in queue")
 
+    items = []
     with get_session(db_path) as sesh:
-        items = []
         for image in sesh.query(TrapImage).filter_by(in_queue=True).all():
             image.in_queue = False
             items.append(image)
         for obj in sesh.query(DetectedObject).filter_by(in_queue=True).all():
             obj.in_queue = False
             items.append(obj)
+
+    with get_session(db_path) as sesh:
         sesh.bulk_save_objects(items)
         sesh.commit()

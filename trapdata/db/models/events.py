@@ -93,6 +93,7 @@ def save_monitoring_session(db_path, base_directory, session):
     with get_session(db_path) as sesh:
         ms_kwargs = {"base_directory": str(base_directory), "day": session["day"]}
         ms = sesh.query(MonitoringSession).filter_by(**ms_kwargs).one_or_none()
+
         if ms:
             logger.debug(f"Found existing Monitoring Session in db: {ms}")
         else:
@@ -131,6 +132,7 @@ def save_monitoring_session(db_path, base_directory, session):
                     db_img = TrapImage(**img_kwargs)
                     logger.debug(f"Adding new Image to db: {db_img}")
                 ms_images.append(db_img)
+            logger.info(f"Bulk saving {len(ms_images)} objects")
             sesh.bulk_save_objects(ms_images)
 
             # Manually update aggregate & cached values after bulk update
