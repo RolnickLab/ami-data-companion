@@ -136,7 +136,7 @@ def save_monitoring_session(db_path, base_directory, session):
             # Manually update aggregate & cached values after bulk update
             ms.update_aggregates()
 
-        logger.debug("Comitting changes to DB")
+        logger.debug("Committing changes to DB")
         sesh.commit()
         logger.debug("Done committing")
 
