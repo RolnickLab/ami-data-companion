@@ -299,6 +299,7 @@ class PreviewWindow(RelativeLayout):
 
     def add_sample_to_queue(self):
         app = App.get_running_app()
+        app.clear_queue()
         add_image_to_queue(app.db_path, self.current_sample.id)
         app.start_queue()
         # @TODO kill clock when all objects have been classified!
@@ -308,4 +309,4 @@ class PreviewWindow(RelativeLayout):
         if self.current_sample and self.current_sample.in_queue:
             return "(In Queue)"
         else:
-            return "Add to Queue"
+            return "Process Single"
