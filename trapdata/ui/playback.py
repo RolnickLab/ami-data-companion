@@ -301,7 +301,6 @@ class PreviewWindow(RelativeLayout):
     def add_sample_to_queue(self):
         app = App.get_running_app()
         add_image_to_queue(app.db_path, self.current_sample.id)
-        app.start_queue()
         self.start_auto_refresh()
 
     def process_now(self):
@@ -311,6 +310,7 @@ class PreviewWindow(RelativeLayout):
         app = App.get_running_app()
         app.clear_queue()
         self.add_sample_to_queue()
+        app.start_queue()
 
     def start_auto_refresh(self):
         refresh_interval_seconds = 1
