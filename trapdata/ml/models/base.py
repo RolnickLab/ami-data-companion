@@ -128,16 +128,16 @@ class InferenceBaseClass:
             self.dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            persistent_workers=True,
+            persistent_workers=False,
             shuffle=False,
-            pin_memory=True,  # @TODO review this
+            pin_memory=False,  # @TODO review this
         )
         return self.dataloader
 
     def predict_batch(self, batch):
         batch_input = batch.to(
             self.device,
-            non_blocking=True,  # Block while in development, are we already in a background process?
+            non_blocking=False,  # Block while in development, are we already in a background process?
         )
         batch_output = self.model(batch_input)
         return batch_output
@@ -175,4 +175,5 @@ class InferenceBaseClass:
 
                 batch_output = self.post_process_batch(batch_output)
                 item_ids = item_ids.tolist()
+                logger.info(f"Saving {len(item_ids)} results")
                 self.save_results(item_ids, batch_output)
