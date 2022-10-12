@@ -230,7 +230,7 @@ class QuebecVermontMothSpeciesClassifier(SpeciesClassifier):
 
 
 class UKDenmarkMothSpeciesClassifier(SpeciesClassifier):
-    name = "Quebec & Vermont Species Classifier"
+    name = "UK & Denmark Species Classifier"
     description = (
         "Trained on September 8, 2022 using local species checklist from GBIF."
     )
