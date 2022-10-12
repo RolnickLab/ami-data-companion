@@ -247,6 +247,7 @@ class ImagePlaybackScreen(Screen):
 
     def on_leave(self, *args):
         self.pause()
+        self.ids.image_preview.stop_auto_refresh()
 
 
 class BBox(BoxLayout):
@@ -256,7 +257,7 @@ class BBox(BoxLayout):
 class PreviewWindow(RelativeLayout):
     # @TODO save current sample for each directory, so we keep our place
     current_sample = ObjectProperty(allownone=True)
-    queue_clock = ObjectProperty()
+    refresh_clock = ObjectProperty()
 
     def reset(self):
         self.current_sample = None
@@ -299,11 +300,35 @@ class PreviewWindow(RelativeLayout):
 
     def add_sample_to_queue(self):
         app = App.get_running_app()
-        app.clear_queue()
         add_image_to_queue(app.db_path, self.current_sample.id)
         app.start_queue()
-        # @TODO kill clock when all objects have been classified!
-        Clock.schedule_interval(self.refresh, 1)
+        self.start_auto_refresh()
+
+    def process_now(self):
+        """
+        Clear queue then add sample
+        """
+        app = App.get_running_app()
+        app.clear_queue()
+        self.add_sample_to_queue()
+
+    def start_auto_refresh(self):
+        refresh_interval_seconds = 1
+
+        if self.refresh_clock:
+            Clock.unschedule(self.refresh_clock)
+
+        logger.debug(
+            f"Scheduling auto-refresh of playback view every {refresh_interval_seconds} seconds"
+        )
+        self.refresh_clock = Clock.schedule_interval(
+            self.refresh, refresh_interval_seconds
+        )
+
+    def stop_auto_refresh(self):
+        logger.debug("Stopping auto-refresh of playback view")
+        if self.refresh_clock:
+            Clock.unschedule(self.refresh_clock)
 
     def button_text(self):
         if self.current_sample and self.current_sample.in_queue:

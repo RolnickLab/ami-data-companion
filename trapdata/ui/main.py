@@ -114,6 +114,8 @@ class Queue(Label):
             # logger.debug("Unscheduling queue check")
             # Clock.unschedule(self.clock)
             self.status_str = "Stopped"
+        if self.bgtask:
+            logger.info(self.bgtask)
 
     def start(self, *args):
         # @NOTE can't change a widget property from a bg thread
@@ -215,6 +217,12 @@ class TrapDataApp(App):
     def stop_queue(self):
         if self.queue:
             self.queue.stop()
+        else:
+            logger.warn("No queue found!")
+
+    def clear_queue(self):
+        if self.queue:
+            self.queue.clear()
         else:
             logger.warn("No queue found!")
 
