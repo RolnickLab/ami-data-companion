@@ -3,7 +3,7 @@
 
 import json
 import pathlib
-import threading
+import multiprocessing
 
 import kivy
 from kivy.app import App
@@ -47,7 +47,16 @@ class Queue(Label):
         logger.debug("Initializing queue status and starting DB polling")
 
     def check_queue(self, *args):
-        self.running = self.bgtask.is_alive()
+        if not self.bgtask:
+            self.running = False
+        else:
+            try:
+                self.running = self.bgtask.is_alive()
+            except ValueError:
+                self.running = False
+            else:
+                # logger.debug(f"Child process status: {self.bgtask}")
+                pass
 
     def process_queue(self):
         db_path = self.app.db_path
@@ -102,7 +111,6 @@ class Queue(Label):
                 self.clock = Clock.schedule_interval(self.check_queue, 1)
             self.status_str = "Running"
         else:
-            logger.debug("NOT Unscheduling queue check!")
             # logger.debug("Unscheduling queue check")
             # Clock.unschedule(self.clock)
             self.status_str = "Stopped"
@@ -110,15 +118,35 @@ class Queue(Label):
     def start(self, *args):
         # @NOTE can't change a widget property from a bg thread
         if not self.running:
+            if self.bgtask:
+                self.cleanup()
             logger.info("Starting queue")
-            task_name = "Mr. Queue"
-            self.bgtask = threading.Thread(
+            task_name = "Trapdata Queue Processor"
+            self.bgtask = multiprocessing.Process(
                 target=self.process_queue,
-                daemon=True,
+                daemon=False,
                 name=task_name,
             )
+            logger.info(f"Starting child process {self.bgtask}")
             self.bgtask.start()
+            logger.info(f"Started child process {self.bgtask}")
             self.running = True
+
+    def stop(self, *args):
+        if self.bgtask:
+            # self.bgtask.terminate()
+            logger.info(f"Killing child process {self.bgtask}")
+            self.bgtask.kill()
+            logger.info(f"Waiting for {self.bgtask}")
+            self.bgtask.join()
+
+    def cleanup(self, *args):
+        if self.bgtask:
+            try:
+                logger.info(f"Cleaning up {self.bgtask}")
+                self.bgtask.close()
+            except ValueError:
+                pass
 
     def clear(self):
         clear_queue(self.app.db_path)
@@ -138,7 +166,16 @@ class TrapDataApp(App):
         # keep running until all secondary threads exit.
         # @TODO Set stop byte in the database
         # @TODO stop background threads
-        pass
+        for child in multiprocessing.active_children():
+            try:
+                logger.info(f"Killing child process {child}")
+                child.kill()
+                logger.info(f"Waiting for child process {child}")
+                child.join()
+                logger.info(f"Clean up child process {child}")
+                child.close()
+            except ValueError:
+                pass
 
     @property
     def db_path(self):
@@ -172,6 +209,12 @@ class TrapDataApp(App):
     def start_queue(self):
         if self.queue:
             self.queue.start()
+        else:
+            logger.warn("No queue found!")
+
+    def stop_queue(self):
+        if self.queue:
+            self.queue.stop()
         else:
             logger.warn("No queue found!")
 
