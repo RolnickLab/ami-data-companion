@@ -35,6 +35,9 @@ class BinaryClassificationDatabaseDataset(torch.utils.data.Dataset):
             return count
 
     def __getitem__(self, idx):
+        # What properties do we need while session is open?
+        item_id, img_path, bbox = None, None, None
+
         with db.get_session(self.db_path) as sesh:
             next_obj = (
                 sesh.query(models.DetectedObject)
@@ -43,23 +46,31 @@ class BinaryClassificationDatabaseDataset(torch.utils.data.Dataset):
                 .options(db.orm.joinedload(models.DetectedObject.image))
                 .first()
             )
-            if next_obj:
-                # @TODO improve. Can't the main transforms chain do this?
-                # if we pass the bbox to get_transforms?
-                img = Image.open(next_obj.image.absolute_path)
-                img = torchvision.transforms.ToTensor()(img)
-                x1, y1, x2, y2 = next_obj.bbox
-                cropped_image = img[
-                    :,
-                    int(y1) : int(y2),
-                    int(x1) : int(x2),
-                ]
-                cropped_image = torchvision.transforms.ToPILImage()(cropped_image)
-                next_obj.in_queue = False
-                item = (next_obj.id, self.transform(cropped_image))
-                sesh.add(next_obj)
-                sesh.commit()
-                return item
+            if not next_obj:
+                return
+
+            item_id = next_obj.id
+            img_path = next_obj.image.absolute_path
+            bbox = next_obj.bbox
+
+            next_obj.in_queue = False
+            sesh.add(next_obj)
+            sesh.commit()
+
+        # @TODO improve. Can't the main transforms chain do this?
+        # if we pass the bbox to get_transforms?
+        img = Image.open(img_path)
+        img = torchvision.transforms.ToTensor()(img)
+        x1, y1, x2, y2 = bbox
+        cropped_image = img[
+            :,
+            int(y1) : int(y2),
+            int(x1) : int(x2),
+        ]
+        cropped_image = torchvision.transforms.ToPILImage()(cropped_image)
+        item = (item_id, self.transform(cropped_image))
+
+        return item
 
 
 class SpeciesClassificationDatabaseDataset(torch.utils.data.Dataset):
@@ -86,6 +97,9 @@ class SpeciesClassificationDatabaseDataset(torch.utils.data.Dataset):
             return count
 
     def __getitem__(self, idx):
+        # What properties do we need while session is open?
+        item_id, img_path, bbox = None, None, None
+
         with db.get_session(self.db_path) as sesh:
             next_obj = (
                 sesh.query(models.DetectedObject)
@@ -94,23 +108,31 @@ class SpeciesClassificationDatabaseDataset(torch.utils.data.Dataset):
                 .options(db.orm.joinedload(models.DetectedObject.image))
                 .first()
             )
-            if next_obj:
-                # @TODO improve. Can't the main transforms chain do this?
-                # if we pass the bbox to get_transforms?
-                img = Image.open(next_obj.image.absolute_path)
-                img = torchvision.transforms.ToTensor()(img)
-                x1, y1, x2, y2 = next_obj.bbox
-                cropped_image = img[
-                    :,
-                    int(y1) : int(y2),
-                    int(x1) : int(x2),
-                ]
-                cropped_image = torchvision.transforms.ToPILImage()(cropped_image)
-                next_obj.in_queue = False
-                item = (next_obj.id, self.transform(cropped_image))
-                sesh.add(next_obj)
-                sesh.commit()
-                return item
+            if not next_obj:
+                return
+
+            item_id = next_obj.id
+            img_path = next_obj.image.absolute_path
+            bbox = next_obj.bbox
+
+            next_obj.in_queue = False
+            sesh.add(next_obj)
+            sesh.commit()
+
+        # @TODO improve. Can't the main transforms chain do this?
+        # if we pass the bbox to get_transforms?
+        img = Image.open(img_path)
+        img = torchvision.transforms.ToTensor()(img)
+        x1, y1, x2, y2 = bbox
+        cropped_image = img[
+            :,
+            int(y1) : int(y2),
+            int(x1) : int(x2),
+        ]
+        cropped_image = torchvision.transforms.ToPILImage()(cropped_image)
+        item = (item_id, self.transform(cropped_image))
+
+        return item
 
 
 class EfficientNetClassifier(InferenceBaseClass):

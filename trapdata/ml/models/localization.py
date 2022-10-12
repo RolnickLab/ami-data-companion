@@ -33,16 +33,27 @@ class LocalizationDatabaseDataset(torch.utils.data.Dataset):
         # images in the queue.
         # @TODO use a custom sampler instead to query all images in the batch
         # from the DB at one, rather than one by one.
+
+        # What properties do we need while session is open?
+        item_id, img_path = None, None
+
         with db.get_session(self.db_path) as sesh:
             next_image = sesh.query(TrapImage).filter_by(**self.query_args).first()
-            if next_image:
-                img_path = next_image.absolute_path
-                pil_image = PIL.Image.open(img_path)
-                next_image.in_queue = False
-                item = (next_image.id, self.transform(pil_image))
-                sesh.add(next_image)
-                sesh.commit()
-                return item
+
+            if not next_image:
+                return
+
+            img_path = next_image.absolute_path
+            item_id = next_image.id
+            next_image.in_queue = False
+            sesh.add(next_image)
+            sesh.commit()
+
+        img_path = img_path
+        pil_image = PIL.Image.open(img_path)
+        item = (item_id, self.transform(pil_image))
+
+        return item
 
 
 class LocalizationFilesystemDataset(torch.utils.data.Dataset):
