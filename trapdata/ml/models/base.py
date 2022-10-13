@@ -11,6 +11,24 @@ from trapdata.ml.utils import (
 )
 
 
+class BatchEmptyException(Exception):
+    pass
+
+
+def zero_okay_collate(batch):
+    """
+    If the queue is cleared or shortened before the original batch count is complete
+    then the dataloader will crash. This catches the empty batch more gracefully.
+
+    @TODO switch to streaming IterableDataset type.
+    """
+    if any([not item for item in batch]):
+        logger.debug(f"There's a None in the batch of len {len(batch)}")
+        return None
+    else:
+        return torch.utils.data.default_collate(batch)
+
+
 class InferenceBaseClass:
     """
     Base class for all batch-inference models.
@@ -131,6 +149,7 @@ class InferenceBaseClass:
             persistent_workers=True,
             shuffle=False,
             pin_memory=True,  # @TODO review this
+            collate_fn=zero_okay_collate,
         )
         return self.dataloader
 
@@ -157,7 +176,14 @@ class InferenceBaseClass:
 
     def run(self):
         with torch.no_grad():
-            for i, (item_ids, batch_input) in enumerate(self.dataloader):
+            for i, batch in enumerate(self.dataloader):
+
+                if not batch:
+                    # @TODO review this once we switch to streaming IterableDataset
+                    logger.info(f"Batch {i+1} is empty, skipping")
+                    continue
+
+                item_ids, batch_input = batch
 
                 logger.info(
                     f"Processing batch {i+1}, about {len(self.dataloader)} remaining"
