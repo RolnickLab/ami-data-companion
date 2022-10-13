@@ -5,7 +5,7 @@ sentry_sdk.init(
     traces_sample_rate=1.0,
 )
 
-import multiprocessing
+# import multiprocessing
 
 from .common.logs import logger
 from .common import utils
@@ -25,4 +25,4 @@ __all__ = [
 ]
 
 # Required for PyTorch. Default on Windows.
-multiprocessing.set_start_method("fork")
+# multiprocessing.set_start_method("fork")
