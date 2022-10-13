@@ -3,7 +3,9 @@
 
 import json
 import pathlib
-import multiprocessing
+
+# import multiprocessing
+import threading
 
 import kivy
 from kivy.app import App
@@ -116,7 +118,7 @@ class Queue(Label):
             # Clock.unschedule(self.clock)
             self.status_str = "Stopped"
         if self.bgtask:
-            logger.info(self.bgtask)
+            logger.info(f"Background task changed status: {self.bgtask}")
 
     def start(self, *args):
         # @NOTE can't change a widget property from a bg thread
@@ -125,9 +127,9 @@ class Queue(Label):
                 self.cleanup()
             logger.info("Starting queue")
             task_name = "Trapdata Queue Processor"
-            self.bgtask = multiprocessing.Process(
+            self.bgtask = threading.Thread(
                 target=self.process_queue,
-                daemon=False,
+                daemon=True,  # PyTorch will be killed abruptly, leaving memory in GPU
                 name=task_name,
             )
             logger.info(f"Starting child process {self.bgtask}")
@@ -136,27 +138,33 @@ class Queue(Label):
             self.running = True
 
     def stop(self, *args):
-        if self.bgtask:
-            try:
-                logger.info(f"Killing child process {self.bgtask}")
-                # self.bgtask.terminate()
-                self.bgtask.kill()
-                logger.info(f"Waiting for {self.bgtask}")
-                self.bgtask.join()
-            except ValueError:
-                self.bgtask = None
-            else:
-                self.cleanup()
+        logger.warn(
+            "Stop not implemented. It's not possible to kill a background thread"
+        )
+        # The following code is for background Processes
+        # if self.bgtask:
+        #    try:
+        #        logger.info(f"Killing child process {self.bgtask}")
+        #        # self.bgtask.terminate()
+        #        self.bgtask.kill()
+        #        logger.info(f"Waiting for {self.bgtask}")
+        #        self.bgtask.join()
+        #    except ValueError:
+        #        self.bgtask = None
+        #    else:
+        #        self.cleanup()
 
     def cleanup(self, *args):
-        if self.bgtask:
-            try:
-                logger.info(f"Cleaning up {self.bgtask}")
-                self.bgtask.close()
-            except ValueError:
-                pass
-            finally:
-                self.bgtask = None
+        logger.debug("No cleanup implemented for background thread")
+        # The following code is for background Processes
+        # if self.bgtask:
+        #     try:
+        #         logger.info(f"Cleaning up {self.bgtask}")
+        #         self.bgtask.close()
+        #     except ValueError:
+        #         pass
+        #     finally:
+        #         self.bgtask = None
 
     def clear(self):
         self.stop()
@@ -177,16 +185,18 @@ class TrapDataApp(App):
         # keep running until all secondary threads exit.
         # @TODO Set stop byte in the database
         # @TODO stop background threads
-        for child in multiprocessing.active_children():
-            try:
-                logger.info(f"Killing child process {child}")
-                child.kill()
-                logger.info(f"Waiting for child process {child}")
-                child.join()
-                logger.info(f"Clean up child process {child}")
-                child.close()
-            except ValueError:
-                pass
+        # Disabling multiprocessing now, due to cross-platform issues
+        # for child in multiprocessing.active_children():
+        #     try:
+        #         logger.info(f"Killing child process {child}")
+        #         child.kill()
+        #         logger.info(f"Waiting for child process {child}")
+        #         child.join()
+        #         logger.info(f"Clean up child process {child}")
+        #         child.close()
+        #     except ValueError:
+        #         pass
+        pass
 
     @property
     def db_path(self):
