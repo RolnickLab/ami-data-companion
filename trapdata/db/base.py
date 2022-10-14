@@ -73,15 +73,20 @@ def get_session(db_path):
     0
     """
     db = get_db(db_path)
+
     session = orm.Session(
         db,
         # autoflush=False,
         # autocommit=False,
     )
 
-    yield session
-
-    session.close()
+    try:
+        yield session
+    except Exception as e:
+        logger.error(e)
+        session.rollback()
+    finally:
+        session.close()
 
 
 def check_db(db_path, create=True, quiet=False):
