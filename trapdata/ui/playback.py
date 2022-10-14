@@ -208,7 +208,7 @@ class AnnotatedImage(Widget):
             f"{self.image.timestamp.strftime('%c')} | {self.image.path}\n"
             f"In Queue: {self.image.in_queue} | "
             f"Objects: {num_objects} | "
-            f"Detections: {num_detections} | "
+            f"Moths: {num_detections} | "
             f"Species: {num_species} | "
             f"Complete: {complete} | "
             f"Last Processed: {last_processed}"
