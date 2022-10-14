@@ -3,6 +3,7 @@
 
 import json
 import pathlib
+from functools import partial
 
 # import multiprocessing
 import threading
@@ -23,7 +24,8 @@ from kivy.properties import (
 
 from trapdata import logger
 from trapdata import ml
-from trapdata.db.models.queue import clear_queue
+from trapdata.db.base import get_session
+from trapdata.db.models.queue import clear_queue, start_pipeline
 
 from .menu import DataMenuScreen
 from .playback import ImagePlaybackScreen
@@ -61,52 +63,6 @@ class Queue(Label):
                 # logger.debug(f"Child process status: {self.bgtask}")
                 pass
 
-    def process_queue(self):
-        db_path = self.app.db_path
-
-        user_data_path = pathlib.Path(self.app.config.get("paths", "user_data_path"))
-        logger.info(f"Local user data path: {user_data_path}")
-        num_workers = int(self.app.config.get("performance", "num_workers"))
-
-        model_1_name = self.app.config.get("models", "localization_model")
-        Model_1 = ml.models.object_detectors[model_1_name]
-        model_1 = Model_1(
-            db_path=db_path,
-            user_data_path=user_data_path,
-            batch_size=int(
-                self.app.config.get("performance", "localization_batch_size")
-            ),
-            num_workers=num_workers,
-        )
-        model_1.run()
-        logger.info("Localization complete")
-
-        model_2_name = self.app.config.get("models", "binary_classification_model")
-        Model_2 = ml.models.binary_classifiers[model_2_name]
-        model_2 = Model_2(
-            db_path=db_path,
-            user_data_path=user_data_path,
-            batch_size=int(
-                self.app.config.get("performance", "classification_batch_size")
-            ),
-            num_workers=num_workers,
-        )
-        model_2.run()
-        logger.info("Binary classification complete")
-
-        model_3_name = self.app.config.get("models", "taxon_classification_model")
-        Model_3 = ml.models.species_classifiers[model_3_name]
-        model_3 = Model_3(
-            db_path=db_path,
-            user_data_path=user_data_path,
-            batch_size=int(
-                self.app.config.get("performance", "classification_batch_size")
-            ),
-            num_workers=num_workers,
-        )
-        model_3.run()
-        logger.info("Species classification complete")
-
     def on_running(self, *args):
         if self.running:
             if not self.clock:
@@ -128,7 +84,7 @@ class Queue(Label):
             logger.info("Starting queue")
             task_name = "Trapdata Queue Processor"
             self.bgtask = threading.Thread(
-                target=self.process_queue,
+                target=partial(start_pipeline, self.app.db_path, self.app.config),
                 daemon=True,  # PyTorch will be killed abruptly, leaving memory in GPU
                 name=task_name,
             )
