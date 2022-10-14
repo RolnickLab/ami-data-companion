@@ -160,6 +160,20 @@ def get_detections_for_image(db_path, image_id):
         )
 
 
+def get_classifications_for_image(db_path, image_id):
+    with db.get_session(db_path) as sesh:
+        return (
+            sesh.query(DetectedObject.specific_label)
+            .filter_by(
+                image_id=image_id,
+                binary_label=constants.POSITIVE_BINARY_LABEL,
+            )
+            .filter(
+                DetectedObject.specific_label.is_not(None),
+            )
+        )
+
+
 def get_species_for_image(db_path, image_id):
     with db.get_session(db_path) as sesh:
         return (
@@ -168,6 +182,31 @@ def get_species_for_image(db_path, image_id):
             .filter(DetectedObject.specific_label.is_not(None))
             .distinct()
         )
+
+
+def get_object_counts_for_image(db_path, image_id):
+    # Every object detected
+    num_objects = get_objects_for_image(db_path, image_id).count()
+
+    # Every object that is a moth
+    num_detections = get_detections_for_image(db_path, image_id).count()
+
+    # Every object that has been classified to taxa level
+    num_classifications = get_classifications_for_image(db_path, image_id).count()
+
+    # Unique taxa names
+    num_species = get_species_for_image(db_path, image_id).count()
+
+    # Has every object detected in this image been fully processed?
+    completely_classified = True if num_classifications == num_detections else False
+
+    return {
+        "num_objects": num_objects,
+        "num_detections": num_detections,
+        "num_species": num_species,
+        "num_classifications": num_classifications,
+        "completely_classified": completely_classified,
+    }
 
 
 def export_detected_objects(objects, report_name, directory):

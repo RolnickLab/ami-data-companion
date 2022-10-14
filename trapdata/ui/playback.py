@@ -20,12 +20,8 @@ from kivy.uix.screenmanager import Screen
 from trapdata import logger
 from trapdata import constants
 from trapdata.db.models.events import get_monitoring_session_image_ids
-from trapdata.db.models.images import get_image_with_objects, completely_classified
-from trapdata.db.models.detections import (
-    get_objects_for_image,
-    get_detections_for_image,
-    get_species_for_image,
-)
+from trapdata.db.models.images import get_image_with_objects
+from trapdata.db.models.detections import get_object_counts_for_image
 from trapdata.db.models.queue import add_image_to_queue
 from trapdata.common.utils import get_sequential_sample
 
@@ -36,10 +32,15 @@ kivy.require("2.1.0")
 Builder.load_file(str(pathlib.Path(__file__).parent / "playback.kv"))
 
 
+DEFAULT_FPS = 2
+
+
 class AnnotatedImage(Widget):
     image_path = ObjectProperty()
     annotations = ListProperty()
     image = ObjectProperty()
+    stats = ObjectProperty()
+    bg = ObjectProperty()
 
     def __init__(self, *args, **kwargs):
 
@@ -48,15 +49,16 @@ class AnnotatedImage(Widget):
         # Arranging Canvas
         with self.canvas:
 
-            # Update the canvas as the screen size change
+            # Update canvas when the window size changes
             self.bind(pos=self.update_rect, size=self.update_rect)
 
         self.draw()
 
     # update function which makes the canvas adjustable.
     def update_rect(self, *args):
-        self.bg.pos = self.pos
-        self.bg.size = self.size
+        if self.bg:
+            self.bg.pos = self.pos
+            self.bg.size = self.size
         self.draw()
 
     def draw(self, *args):
@@ -192,32 +194,25 @@ class AnnotatedImage(Widget):
                     )
                 )
 
-        app = App.get_running_app()
-        num_objects = get_objects_for_image(app.db_path, self.image.id).count()
-        num_detections = get_detections_for_image(app.db_path, self.image.id).count()
-        num_species = get_species_for_image(app.db_path, self.image.id).count()
-        complete = completely_classified(app.db_path, self.image.id)
-        if complete:  # and hasattr(self.parent, "stop_auto_refresh"):
-            logger.debug(f"Processing complete for image {self.image.path}")
         if self.image.last_processed:
             last_processed = self.image.last_processed.strftime("%H:%M")
         else:
             last_processed = "Never"
 
-        label_text = (
+        info_bar_text = (
             f"{self.image.timestamp.strftime('%c')} | {self.image.path}\n"
             f"In Queue: {self.image.in_queue} | "
-            f"Objects: {num_objects} | "
-            f"Moths: {num_detections} | "
-            f"Species: {num_species} | "
-            f"Complete: {complete} | "
+            f"Objects: {self.stats.get('num_objects')} | "
+            f"Detections: {self.stats.get('num_detections')} | "
+            f"Species: {self.stats.get('num_species')} | "
+            f"Complete: {self.stats.get('completely_classified')} | "
             f"Last Processed: {last_processed}"
         )
 
         with self.canvas:
             Color(1, 1, 1, 1)
             Label(
-                text=label_text,
+                text=info_bar_text,
                 color=[1, 1, 1, 1],
                 halign="center",
                 size=(self.size[0], 30),
@@ -225,9 +220,6 @@ class AnnotatedImage(Widget):
                 font_size="14sp",
             )
         # label.center = (label.center[0] + label.width * 2, 30)
-
-
-DEFAULT_FPS = 2
 
 
 class ImagePlaybackScreen(Screen):
@@ -275,9 +267,14 @@ class ImagePlaybackScreen(Screen):
     def exit(self):
         self.manager.current = "menu"
 
+    def on_enter(self, *args):
+        if self.ids.image_preview:
+            self.ids.image_preview.start_auto_refresh()
+
     def on_leave(self, *args):
         self.pause()
-        self.ids.image_preview.stop_auto_refresh()
+        if self.ids.image_preview:
+            self.ids.image_preview.stop_auto_refresh()
 
 
 class BBox(BoxLayout):
@@ -287,33 +284,40 @@ class BBox(BoxLayout):
 class PreviewWindow(RelativeLayout):
     # @TODO save current sample for each directory, so we keep our place
     current_sample = ObjectProperty(allownone=True)
+    image_widget = ObjectProperty(allownone=True)
     refresh_clock = ObjectProperty()
+
+    def on_current_sample(self, *args):
+        pass
 
     def reset(self):
         self.current_sample = None
+        self.image_widget = None
         self.clear_widgets()
+
+    def on_image_widget(self, *args):
+        self.clear_widgets()
+        if self.image_widget:
+            self.add_widget(self.image_widget)
 
     def refresh(self, *args):
         self.load_sample(self.current_sample.id)
 
     def load_sample(self, image_id):
-        ms = self.parent.parent.monitoring_session
         # Refetch image with associated detected objects
         app = App.get_running_app()
-        image = get_image_with_objects(app.db_path, ms, image_id)
-        self.clear_widgets()
-        cvs = AnnotatedImage(
+        image = get_image_with_objects(app.db_path, image_id)
+        stats = get_object_counts_for_image(app.db_path, image_id)
+        image_widget = AnnotatedImage(
             image_path=image.absolute_path,
             annotations=image.detected_objects,
             size=self.size,
             pos_hint={"bottom": 0},
             image=image,
+            stats=stats,
         )
         self.current_sample = image
-        self.add_widget(cvs)
-
-        # if completely_classified(app.db_path, image_id):
-        #     self.stop_auto_refresh()
+        self.image_widget = image_widget
 
     def next_sample(self, *args):
         image_id = get_sequential_sample(
