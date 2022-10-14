@@ -26,7 +26,7 @@ class LocalizationDatabaseDataset(torch.utils.data.Dataset):
         with db.get_session(self.db_path) as sesh:
             count = sesh.query(TrapImage).filter_by(**self.query_args).count()
             logger.info(f"Images found in queue: {count}")
-            return count
+            return int(count)
 
     def __getitem__(self, idx):
         # @TODO this exits with an exception if there are no

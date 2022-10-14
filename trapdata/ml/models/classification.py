@@ -32,7 +32,7 @@ class BinaryClassificationDatabaseDataset(torch.utils.data.Dataset):
                 .count()
             )
             logger.info(f"Detected Objects found in queue: {count}")
-            return count
+            return int(count)
 
     def __getitem__(self, idx):
         # What properties do we need while session is open?
@@ -94,7 +94,7 @@ class SpeciesClassificationDatabaseDataset(torch.utils.data.Dataset):
                 .count()
             )
             logger.info(f"Objects for species classification found in queue: {count}")
-            return count
+            return int(count)
 
     def __getitem__(self, idx):
         # What properties do we need while session is open?
