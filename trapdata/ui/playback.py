@@ -187,7 +187,7 @@ class AnnotatedImage(Widget):
                 self.bbox_widgets.append(
                     Label(
                         text=label_text,
-                        center=((x1 + w2 / 2), y2 - 0),
+                        center=((x1 + w2 / 2), y2 - 10),
                         color=color,
                         bold=True,
                         halign="center",
