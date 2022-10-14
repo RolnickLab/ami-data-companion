@@ -175,6 +175,8 @@ class InferenceBaseClass:
         return None
 
     def run(self):
+        torch.cuda.empty_cache()
+
         with torch.no_grad():
             for i, batch in enumerate(self.dataloader):
 

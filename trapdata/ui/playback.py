@@ -22,6 +22,7 @@ from trapdata import constants
 from trapdata.db.models.events import get_monitoring_session_image_ids
 from trapdata.db.models.images import get_image_with_objects, completely_classified
 from trapdata.db.models.detections import (
+    get_objects_for_image,
     get_detections_for_image,
     get_species_for_image,
 )
@@ -71,130 +72,159 @@ class AnnotatedImage(Widget):
                 pos=(0, 0),
                 size=self.size,
                 pos_hint={"bottom": 0},
-                keep_ratio=False,
+                keep_ratio=True,
                 allow_stretch=True,
             )
-            win_width, win_height = img.norm_image_size
-            img_width, img_height = img.texture_size
-            x_scale = win_width / img_width
-            y_scale = win_height / img_height
-            self.bg = img
-            self.bbox_widgets = []
-            for i, annotation in enumerate(self.annotations):
-                # Red box around canvas for debugging
-                # Color(1, 0, 0, 1)
-                # self.bbox_widgets.append(
-                #     Line(rectangle=(0, 0, win_width, win_height), width=2)
-                # )
-                # print("bbox#", i)
 
-                if annotation.binary_label == constants.POSITIVE_BINARY_LABEL:
-                    color = constants.POSITIVE_COLOR
-                # elif annotation.binary_label == NEGATIVE_BINARY_LABEL:
-                #     color = NEGATIVE_COLOR
-                # else:
-                #     color = NEUTRAL_COLOR
-                else:
-                    color = constants.NEGATIVE_COLOR
+        displayed_img_width, displayed_img_height = img.norm_image_size
+        source_img_width, source_img_height = img.texture_size
+        win_width, win_height = self.size
+        x_offset = (win_width / 2) - (displayed_img_width / 2)
+        y_offset = (win_height / 2) - (displayed_img_height / 2)
+        x_scale = displayed_img_width / source_img_width
+        y_scale = displayed_img_height / source_img_height
+        self.bg = img
+        self.bbox_widgets = []
 
-                # color = [random.random() for _ in range(3)]
-                # color.append(0.8)  # alpha
+        # Color(1, 0, 0, 1)
+        # frame_thickness = 2
+        # self.frame = Line(
+        #     rectangle=(
+        #         x_offset - frame_thickness,
+        #         y_offset - frame_thickness,
+        #         displayed_img_width + frame_thickness * 2,
+        #         displayed_img_height + frame_thickness * 2,
+        #     ),
+        #     width=frame_thickness,
+        # )
+
+        for i, annotation in enumerate(self.annotations):
+            # Red box around canvas for debugging
+            # Color(1, 0, 0, 1)
+            # self.bbox_widgets.append(
+            #     Line(rectangle=(0, 0, win_width, win_height), width=2)
+            # )
+            # print("bbox#", i)
+
+            if annotation.binary_label == constants.POSITIVE_BINARY_LABEL:
+                color = constants.POSITIVE_COLOR
+            # elif annotation.binary_label == NEGATIVE_BINARY_LABEL:
+            #     color = NEGATIVE_COLOR
+            # else:
+            #     color = NEUTRAL_COLOR
+            else:
+                color = constants.NEGATIVE_COLOR
+
+            # color = [random.random() for _ in range(3)]
+            # color.append(0.8)  # alpha
+            with self.canvas:
                 Color(*color)
 
-                if not annotation.bbox:
-                    logger.warn(
-                        f"No bbox for detected object {annotation.id}. Skipping."
-                    )
-                    continue
+            if not annotation.bbox:
+                logger.warn(f"No bbox for detected object {annotation.id}. Skipping.")
+                continue
 
-                x1, y1, x2, y2 = annotation.bbox
+            x1, y1, x2, y2 = annotation.bbox
 
-                w = x2 - x1
-                # h = y2 - y1
-                # print("original dims:", w, h)
+            w = x2 - x1
+            # h = y2 - y1
+            # print("original dims:", w, h)
 
-                # Reference from bottom left instead of top left
-                y1 = img_height - y1
-                y2 = img_height - y2
+            # Reference from bottom left instead of top left
+            y1 = source_img_height - y1
+            y2 = source_img_height - y2
 
-                # Scale bbox to match on-screen scale of image
-                x1 *= x_scale
-                y1 *= y_scale
-                x2 *= x_scale
-                y2 *= y_scale
+            # Scale bbox to match on-screen scale of image
+            x1 *= x_scale
+            y1 *= y_scale
+            x2 *= x_scale
+            y2 *= y_scale
 
-                w2 = w * x_scale
-                # h2 = h * y_scale
-                # print("new dims:", w2, h2)
+            w2 = w * x_scale
+            # h2 = h * y_scale
+            # print("new dims:", w2, h2)
 
-                w2 = x2 - x1
-                # h2 = y1 - y2
-                # print("new dims by coord:", w2, h2)
+            w2 = x2 - x1
+            # h2 = y1 - y2
+            # print("new dims by coord:", w2, h2)
 
-                # rect = (x1, y2, x2, y1)
+            # rect = (x1, y2, x2, y1)
+            x1 += x_offset
+            x2 += x_offset
+            y1 += y_offset
+            y2 += y_offset
 
+            with self.canvas:
                 self.bbox_widgets.append(
                     Line(points=[x1, y1, x1, y2, x2, y2, x2, y1, x1, y1], width=2)
                 )
 
-                if annotation.binary_label == constants.NEGATIVE_BINARY_LABEL:
-                    label_text = ""
+            if annotation.binary_label == constants.NEGATIVE_BINARY_LABEL:
+                label_text = ""
 
-                elif annotation.specific_label:
-                    # If there is a binary label and it's nonmoth, don't show
-                    # the specific label, even if one exists.
-                    if annotation.specific_label_score:
-                        score = round(annotation.specific_label_score * 100, 1)
-                        label_text = f"{annotation.specific_label} ({score}%)"
-                    else:
-                        label_text = f"{annotation.specific_label}"
-
-                elif annotation.binary_label:
-                    if annotation.binary_label_score:
-                        score = round(annotation.binary_label_score * 100, 1)
-                        label_text = f"{annotation.binary_label} ({score}%)"
-                    else:
-                        label_text = f"{annotation.binary_label}"
-
+            elif annotation.specific_label:
+                # If there is a binary label and it's nonmoth, don't show
+                # the specific label, even if one exists.
+                if annotation.specific_label_score:
+                    score = round(annotation.specific_label_score * 100, 1)
+                    label_text = f"{annotation.specific_label} ({score}%)"
                 else:
-                    label_text = ""
+                    label_text = f"{annotation.specific_label}"
 
+            elif annotation.binary_label:
+                if annotation.binary_label_score:
+                    score = round(annotation.binary_label_score * 100, 1)
+                    label_text = f"{annotation.binary_label} ({score}%)"
+                else:
+                    label_text = f"{annotation.binary_label}"
+
+            else:
+                label_text = ""
+
+            with self.canvas:
                 self.bbox_widgets.append(
                     Label(
                         text=label_text,
-                        center=((x1 + w2 / 2), y2 - 20),
+                        center=((x1 + w2 / 2), y2 - 0),
                         color=color,
                         bold=True,
                         halign="center",
                     )
                 )
 
-            app = App.get_running_app()
-            detections = get_detections_for_image(app.db_path, self.image.id).count()
-            species = get_species_for_image(app.db_path, self.image.id).count()
-            if self.image.last_processed:
-                last_processed = self.image.last_processed.strftime("%H:%M")
-            else:
-                last_processed = "Never"
+        app = App.get_running_app()
+        num_objects = get_objects_for_image(app.db_path, self.image.id).count()
+        num_detections = get_detections_for_image(app.db_path, self.image.id).count()
+        num_species = get_species_for_image(app.db_path, self.image.id).count()
+        complete = completely_classified(app.db_path, self.image.id)
+        if complete:  # and hasattr(self.parent, "stop_auto_refresh"):
+            logger.debug(f"Processing complete for image {self.image.path}")
+        if self.image.last_processed:
+            last_processed = self.image.last_processed.strftime("%H:%M")
+        else:
+            last_processed = "Never"
 
-            label_text = (
-                f"{self.image.timestamp} | "
-                f"In Queue: {self.image.in_queue} | "
-                f"Detections: {detections} | "
-                f"Species: {species} | "
-                f"Complete: {completely_classified(app.db_path, self.image.id)} | "
-                f"Last Processed: {last_processed}"
-            )
-            label = Label(
+        label_text = (
+            f"{self.image.timestamp.strftime('%c')} | {self.image.path}\n"
+            f"In Queue: {self.image.in_queue} | "
+            f"Objects: {num_objects} | "
+            f"Detections: {num_detections} | "
+            f"Species: {num_species} | "
+            f"Complete: {complete} | "
+            f"Last Processed: {last_processed}"
+        )
+
+        with self.canvas:
+            Color(1, 1, 1, 1)
+            Label(
                 text=label_text,
-                color=[0, 0, 0, 1],
-                halign="left",
-                size=self.size,
-                center=(self.size[0] / 2, 20),
+                color=[1, 1, 1, 1],
+                halign="center",
+                size=(self.size[0], 30),
+                center=(self.size[0] / 2, 30),
                 font_size="14sp",
             )
-            # label.center = (label.center[0] + label.width * 2, 30)
-            self.add_widget(label)
+        # label.center = (label.center[0] + label.width * 2, 30)
 
 
 DEFAULT_FPS = 2
@@ -281,6 +311,9 @@ class PreviewWindow(RelativeLayout):
         )
         self.current_sample = image
         self.add_widget(cvs)
+
+        # if completely_classified(app.db_path, image_id):
+        #     self.stop_auto_refresh()
 
     def next_sample(self, *args):
         image_id = get_sequential_sample(
