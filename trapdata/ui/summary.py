@@ -122,7 +122,7 @@ class SpeciesSummaryScreen(Screen):
     def exit(self):
         self.manager.current = "menu"
 
-    def reload(self):
+    def refresh(self):
         self.ids.species_list.refresh()
 
     def on_enter(self, *args):
@@ -133,21 +133,7 @@ class SpeciesSummaryScreen(Screen):
 
     def export(self):
         app = App.get_running_app()
-        user_data_path = app.config.get("paths", "user_data_path")
         records = list(get_detected_objects(app.db_path, self.monitoring_session))
         timestamp = int(time.time())
         report_name = f"detections-for-{self.monitoring_session.day.strftime('%Y-%m-%d')}-created-{timestamp}"
-        filepath = export_detected_objects(records, report_name, user_data_path)
-        logger.info(f"Exported detections to {filepath}")
-        Popup(
-            title="Report exported",
-            content=Label(
-                text=(
-                    f"{len(records)} detected objects for {self.monitoring_session.day} have been exported to: \n\n"
-                    f'"{filepath.name}" \n\n'
-                    f"In the directory: \n{filepath.parent} \n"
-                )
-            ),
-            size_hint=(None, None),
-            size=("550dp", "220dp"),
-        ).open()
+        app.export(records, report_name)

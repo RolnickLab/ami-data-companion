@@ -2,6 +2,7 @@
 # newrelic.agent.initialize(environment="staging")
 
 import json
+import time
 import pathlib
 from functools import partial
 
@@ -14,6 +15,7 @@ from kivy.clock import Clock
 from kivy.uix.label import Label
 from kivy.uix.screenmanager import ScreenManager
 from kivy.uix.settings import SettingsWithSidebar
+from kivy.uix.popup import Popup
 from kivy.core.window import Window
 from kivy.properties import (
     ObjectProperty,
@@ -24,7 +26,7 @@ from kivy.properties import (
 
 from trapdata import logger
 from trapdata import ml
-from trapdata.db.base import get_session
+from trapdata.db.models.detections import get_detected_objects, export_detected_objects
 from trapdata.db.models.queue import clear_queue, start_pipeline
 
 from .menu import DataMenuScreen
@@ -342,6 +344,27 @@ class TrapDataApp(App):
             self.config,
             data=json.dumps(performance_settings),
         )
+
+    def export(self, detected_objects=None, report_name=None):
+        app = self
+        user_data_path = app.config.get("paths", "user_data_path")
+        records = list(detected_objects or get_detected_objects(app.db_path))
+        timestamp = int(time.time())
+        report_name = report_name or f"all-detections-{timestamp}"
+        filepath = export_detected_objects(records, report_name, user_data_path)
+        logger.info(f"Exported detections to {filepath}")
+        Popup(
+            title="Report exported",
+            content=Label(
+                text=(
+                    f"{len(records)} detected objects have been exported to: \n\n"
+                    f'"{filepath.name}" \n\n'
+                    f"In the directory: \n{filepath.parent} \n"
+                )
+            ),
+            size_hint=(None, None),
+            size=("550dp", "220dp"),
+        ).open()
 
 
 # @newrelic.agent.background_task()
