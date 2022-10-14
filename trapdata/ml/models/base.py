@@ -156,7 +156,7 @@ class InferenceBaseClass:
     def predict_batch(self, batch):
         batch_input = batch.to(
             self.device,
-            non_blocking=False,  # Block while in development, are we already in a background process?
+            non_blocking=True,  # Block while in development, are we already in a background process?
         )
         batch_output = self.model(batch_input)
         return batch_output
