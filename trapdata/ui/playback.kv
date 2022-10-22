@@ -34,6 +34,15 @@
         orientation: "vertical"
         PreviewWindow:
             id: image_preview 
+            size_hint_y: 0.8
+        Label:
+            id: info_bar 
+            text: ""
+            halign: "center"
+            valign: "middle"
+            color: [1, 1, 1, 1]
+            orientation: "horizontal"
+            size_hint_y: 0.1
         BoxLayout:
             id: controls 
             orientation: "horizontal"

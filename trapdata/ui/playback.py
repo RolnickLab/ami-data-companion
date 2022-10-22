@@ -35,6 +35,25 @@ Builder.load_file(str(pathlib.Path(__file__).parent / "playback.kv"))
 DEFAULT_FPS = 2
 
 
+def update_info_bar(info_bar, image, stats):
+    if image.last_processed:
+        last_processed = image.last_processed.strftime("%H:%M")
+    else:
+        last_processed = "Never"
+
+    info_bar_text = (
+        f"{image.timestamp.strftime('%c')} | {image.path}\n"
+        f"In Queue: {image.in_queue} | "
+        f"Objects: {stats.get('num_objects')} | "
+        f"Detections: {stats.get('num_detections')} | "
+        f"Species: {stats.get('num_species')} | "
+        f"Complete: {stats.get('completely_classified')} | "
+        f"Last Processed: {last_processed}"
+    )
+
+    info_bar.text = info_bar_text
+
+
 class AnnotatedImage(Widget):
     image_path = ObjectProperty()
     annotations = ListProperty()
@@ -73,7 +92,7 @@ class AnnotatedImage(Widget):
                 source=str(self.image_path),
                 pos=(0, 0),
                 size=self.size,
-                pos_hint={"bottom": 0},
+                pos_hint={"top": 0},
                 keep_ratio=True,
                 allow_stretch=True,
             )
@@ -194,33 +213,6 @@ class AnnotatedImage(Widget):
                     )
                 )
 
-        if self.image.last_processed:
-            last_processed = self.image.last_processed.strftime("%H:%M")
-        else:
-            last_processed = "Never"
-
-        info_bar_text = (
-            f"{self.image.timestamp.strftime('%c')} | {self.image.path}\n"
-            f"In Queue: {self.image.in_queue} | "
-            f"Objects: {self.stats.get('num_objects')} | "
-            f"Detections: {self.stats.get('num_detections')} | "
-            f"Species: {self.stats.get('num_species')} | "
-            f"Complete: {self.stats.get('completely_classified')} | "
-            f"Last Processed: {last_processed}"
-        )
-
-        with self.canvas:
-            Color(1, 1, 1, 1)
-            Label(
-                text=info_bar_text,
-                color=[1, 1, 1, 1],
-                halign="center",
-                size=(self.size[0], 30),
-                center=(self.size[0] / 2, 30),
-                font_size="14sp",
-            )
-        # label.center = (label.center[0] + label.width * 2, 30)
-
 
 class ImagePlaybackScreen(Screen):
     monitoring_session = ObjectProperty()
@@ -286,6 +278,7 @@ class PreviewWindow(RelativeLayout):
     current_sample = ObjectProperty(allownone=True)
     image_widget = ObjectProperty(allownone=True)
     refresh_clock = ObjectProperty()
+    info_bar = ObjectProperty()
 
     def on_current_sample(self, *args):
         pass
@@ -308,6 +301,9 @@ class PreviewWindow(RelativeLayout):
         app = App.get_running_app()
         image = get_image_with_objects(app.db_path, image_id)
         stats = get_object_counts_for_image(app.db_path, image_id)
+        # @TODO is there a more reliable way to reference the info bar?
+        info_bar = self.parent.parent.ids.info_bar
+        update_info_bar(info_bar, image, stats)
         image_widget = AnnotatedImage(
             image_path=image.absolute_path,
             annotations=image.detected_objects,
