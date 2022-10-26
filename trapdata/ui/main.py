@@ -27,7 +27,8 @@ from kivy.properties import (
 from trapdata import logger
 from trapdata import ml
 from trapdata.db.models.detections import get_detected_objects, export_detected_objects
-from trapdata.db.models.queue import clear_queue, start_pipeline
+from trapdata.db.models.queue import clear_queue
+from trapdata.pipeline import start_pipeline
 
 from .menu import DataMenuScreen
 from .playback import ImagePlaybackScreen
