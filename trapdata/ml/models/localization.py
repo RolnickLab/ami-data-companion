@@ -7,11 +7,43 @@ import PIL.Image
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
 from trapdata import db
+from trapdata.db.models.queue import ImageQueue
 from trapdata import TrapImage
 from trapdata import logger
 
 from trapdata.db.models.detections import save_detected_objects
 from trapdata.ml.models.base import InferenceBaseClass
+
+
+class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
+    def __init__(self, db_path, image_transforms, batch_size=2):
+        super().__init__()
+        self.batch_size = batch_size
+        self.db_path = db_path
+        self.transform = image_transforms
+        self.queue = ImageQueue(db_path)
+
+    def __len__(self):
+        return self.queue.queue_count()
+
+    def __iter__(self):
+        while len(self):
+            worker_info = torch.utils.data.get_worker_info()
+            print("Using worker:", worker_info)
+
+            records = self.queue.pull_n_from_queue(self.batch_size)
+
+            item_ids = torch.utils.data.default_collate(
+                [record.id for record in records]
+            )
+            batch_data = torch.utils.data.default_collate(
+                [
+                    self.transform(PIL.Image.open(record.absolute_path))
+                    for record in records
+                ]
+            )
+
+            yield (item_ids, batch_data)
 
 
 class LocalizationDatabaseDataset(torch.utils.data.Dataset):
@@ -91,11 +123,27 @@ class ObjectDetector(InferenceBaseClass):
         )
 
     def get_dataset(self):
-        dataset = LocalizationDatabaseDataset(
+        dataset = LocalizationIterableDatabaseDataset(
             db_path=self.db_path,
             image_transforms=self.get_transforms(),
+            batch_size=self.batch_size,
         )
         return dataset
+
+    def get_dataloader(self):
+        logger.info(
+            f"Preparing dataloader with batch size of {self.batch_size} and {self.num_workers} workers."
+        )
+        self.dataloader = torch.utils.data.DataLoader(
+            self.dataset,
+            num_workers=self.num_workers,
+            persistent_workers=True,
+            shuffle=False,
+            pin_memory=True,  # @TODO review this
+            batch_size=None,
+            batch_sampler=None,
+        )
+        return self.dataloader
 
     def save_results(self, item_ids, batch_output):
         # Format data to be saved in DB

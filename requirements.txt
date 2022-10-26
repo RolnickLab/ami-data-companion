@@ -5,7 +5,7 @@ black
 flake8
 Pillow
 python-dateutil
-sqlalchemy
+sqlalchemy==2.0b2
 sqlalchemy_utils
 sentry-sdk
 

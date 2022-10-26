@@ -5,7 +5,6 @@ import sqlalchemy as sa
 from trapdata.db import get_session
 from trapdata import logger
 from trapdata import constants
-from trapdata import ml
 from trapdata.db.models.images import TrapImage
 from trapdata.db.models.detections import (
     DetectedObject,
@@ -15,9 +14,8 @@ from trapdata.db.models.detections import (
 class QueueManager:
     name = "Unnamed Queue"
 
-    def __init__(self, db_path, model):
+    def __init__(self, db_path):
         self.db_path = db_path
-        self.model = model
 
     def queue_count(self):
         raise NotImplementedError
@@ -37,18 +35,28 @@ class QueueManager:
     def status(self):
         return NotImplementedError
 
-    def process_queue(self):
+    def pull_n_from_queue(self, n):
+        return NotImplementedError
+
+    def process_queue(self, model):
         logger.info(f"Processing {self.name} queue")
-        self.model.run()
+        model.run()
         logger.info(f"Done processing {self.name} queue")
 
 
 class ImageQueue(QueueManager):
     name = "Images"
+    description = "Raw images from camera needing object detection"
 
     def queue_count(self):
         with get_session(self.db_path) as sesh:
-            return sesh.query(TrapImage).filter_by(in_queue=True).count()
+            count1 = sesh.query(TrapImage).filter_by(in_queue=True).count()
+            count = sesh.scalar(
+                sa.select(sa.func.count(TrapImage.id)).where(TrapImage.in_queue == True)
+            )
+            assert count1 == count
+            logger.debug(f"Images in queue: {count}")
+            return count
 
     def unprocessed_count(self):
         with get_session(self.db_path) as sesh:
@@ -102,6 +110,28 @@ class ImageQueue(QueueManager):
             logger.info(f"Removing {len(orm_objects)} images from queue")
             sesh.bulk_save_objects(orm_objects)
             sesh.commit()
+
+    def pull_n_from_queue(self, n):
+        logger.debug(f"Attempting to pull {n} images from queue")
+        select_stmt = (
+            sa.select(TrapImage.id)
+            .where((TrapImage.in_queue == True))
+            .limit(n)
+            .with_for_update()
+        )
+        update_stmt = (
+            sa.update(TrapImage)
+            .where(TrapImage.id.in_(select_stmt.scalar_subquery()))
+            # .where(TrapImage.status == Status.waiting)
+            .values({"in_queue": False})
+            .returning(TrapImage)
+        )
+        with get_session(self.db_path) as sesh:
+            records = sesh.execute(update_stmt).unique().all()
+            sesh.commit()
+            images = [record[0] for record in records]
+            logger.info(f"Pulled {len(images)} images from queue")
+            return images
 
 
 class DetectedObjectQueue(QueueManager):
@@ -251,9 +281,9 @@ def all_queues(db_path):
     return {
         q.name: q
         for q in [
-            ImageQueue(db_path, model=None),
-            DetectedObjectQueue(db_path, model=None),
-            UnclassifiedObjectQueue(db_path, model=None),
+            ImageQueue(db_path),
+            DetectedObjectQueue(db_path),
+            UnclassifiedObjectQueue(db_path),
         ]
     }
 
@@ -398,43 +428,3 @@ def clear_queue(db_path):
     with get_session(db_path) as sesh:
         sesh.bulk_save_objects(items)
         sesh.commit()
-
-
-def start_pipeline(db_path, config):
-
-    user_data_path = pathlib.Path(config.get("paths", "user_data_path"))
-    logger.info(f"Local user data path: {user_data_path}")
-    num_workers = int(config.get("performance", "num_workers"))
-
-    model_1_name = config.get("models", "localization_model")
-    Model_1 = ml.models.object_detectors[model_1_name]
-    model_1 = Model_1(
-        db_path=db_path,
-        user_data_path=user_data_path,
-        batch_size=int(config.get("performance", "localization_batch_size")),
-        num_workers=num_workers,
-    )
-    model_1.run()
-    logger.info("Localization complete")
-
-    model_2_name = config.get("models", "binary_classification_model")
-    Model_2 = ml.models.binary_classifiers[model_2_name]
-    model_2 = Model_2(
-        db_path=db_path,
-        user_data_path=user_data_path,
-        batch_size=int(config.get("performance", "classification_batch_size")),
-        num_workers=num_workers,
-    )
-    model_2.run()
-    logger.info("Binary classification complete")
-
-    model_3_name = config.get("models", "taxon_classification_model")
-    Model_3 = ml.models.species_classifiers[model_3_name]
-    model_3 = Model_3(
-        db_path=db_path,
-        user_data_path=user_data_path,
-        batch_size=int(config.get("performance", "classification_batch_size")),
-        num_workers=num_workers,
-    )
-    model_3.run()
-    logger.info("Species classification complete")

@@ -16,12 +16,14 @@ def watch_queue(db_path, interval=1):
     # if we want to do one model at a time, not sure how to order them
 
     model = MothObjectDetector_FasterRCNN(db_path)
-    queue = ImageQueue(db_path, model=model)
+    queue = ImageQueue(db_path)
 
     while True:
         print(f"Images in queue: {queue.queue_count()}")
         if queue.queue_count() > 0:
-            queue.process_queue()
+            # Pick one of these directions!
+            # model.run(queue=queue)
+            queue.process_queue(model)
         time.sleep(interval)
 
 
