@@ -76,6 +76,10 @@ def get_session(db_path):
 
     session = orm.Session(
         db,
+        # @TODO this only needs to happen
+        # in the `pull_n_from_queue` method
+        # but need to use sessionmaker first.
+        expire_on_commit=False
         # autoflush=False,
         # autocommit=False,
     )
