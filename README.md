@@ -1,4 +1,4 @@
-# AMI Trap Data Processor
+# AMI Data Companion
 
 Desktop app for analyzing images from autonomous insect monitoring stations
 
