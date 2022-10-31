@@ -50,11 +50,9 @@ class ImageQueue(QueueManager):
 
     def queue_count(self):
         with get_session(self.db_path) as sesh:
-            count1 = sesh.query(TrapImage).filter_by(in_queue=True).count()
             count = sesh.scalar(
                 sa.select(sa.func.count(TrapImage.id)).where(TrapImage.in_queue == True)
             )
-            assert count1 == count
             logger.debug(f"Images in queue: {count}")
             return count
 
@@ -136,11 +134,13 @@ class ImageQueue(QueueManager):
 
 class DetectedObjectQueue(QueueManager):
     name = "Detected objects"
+    description = "Objects that were detected in an image but have not been classified"
 
     def queue_count(self):
         with get_session(self.db_path) as sesh:
             return (
                 sesh.query(DetectedObject)
+                .filter(DetectedObject.bbox.is_not(None))
                 .filter_by(
                     in_queue=True,
                     binary_label=None,
@@ -194,14 +194,45 @@ class DetectedObjectQueue(QueueManager):
             sesh.bulk_save_objects(orm_objects)
             sesh.commit()
 
+    def pull_n_from_queue(self, n):
+        logger.debug(f"Attempting to pull {n} detected objects from queue")
+        select_stmt = (
+            sa.select(DetectedObject.id)
+            .where(
+                (DetectedObject.in_queue == True)
+                & (DetectedObject.binary_label == None)
+                & (DetectedObject.bbox.is_not(None))
+            )
+            .limit(n)
+            .with_for_update()
+        )
+        update_stmt = (
+            sa.update(DetectedObject)
+            .where(DetectedObject.id.in_(select_stmt.scalar_subquery()))
+            .values({"in_queue": False})
+            .returning(DetectedObject.id)
+        )
+        with get_session(self.db_path) as sesh:
+            record_ids = sesh.execute(update_stmt).unique().scalars().all()
+            sesh.commit()
+            records = (
+                sesh.execute(
+                    sa.select(DetectedObject).where(DetectedObject.id.in_(record_ids))
+                )
+                .unique()
+                .all()
+            )
+            objs = [record[0] for record in records]
+            logger.info(f"Pulled {len(objs)} detected objects from queue")
+            return objs
+
 
 class UnclassifiedObjectQueue(QueueManager):
-    """
+    name = "Unclassified species"
+    description = """
     Objects that have been identified as something of interest (e.g. a moth)
     but have not yet been classified to the species level.
     """
-
-    name = "Unclassified species"
 
     def queue_count(self):
         with get_session(self.db_path) as sesh:
@@ -275,6 +306,39 @@ class UnclassifiedObjectQueue(QueueManager):
             logger.info(f"Clearing {len(objects)} objects in queue")
             sesh.bulk_save_objects(objects)
             sesh.commit()
+
+    def pull_n_from_queue(self, n):
+        logger.debug(f"Attempting to pull {n} objects of interest from queue")
+        select_stmt = (
+            sa.select(DetectedObject.id)
+            .where(
+                (DetectedObject.in_queue == True)
+                & (DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
+                & (DetectedObject.specific_label == None)
+                & (DetectedObject.bbox.is_not(None))
+            )
+            .limit(n)
+            .with_for_update()
+        )
+        update_stmt = (
+            sa.update(DetectedObject)
+            .where(DetectedObject.id.in_(select_stmt.scalar_subquery()))
+            .values({"in_queue": False})
+            .returning(DetectedObject.id)
+        )
+        with get_session(self.db_path) as sesh:
+            record_ids = sesh.execute(update_stmt).scalars().all()
+            sesh.commit()
+            records = (
+                sesh.execute(
+                    sa.select(DetectedObject).where(DetectedObject.id.in_(record_ids))
+                )
+                .unique()
+                .all()
+            )
+            objs = [record[0] for record in records]
+            logger.info(f"Pulled {len(objs)} objects of interest from queue")
+            return objs
 
 
 def all_queues(db_path):

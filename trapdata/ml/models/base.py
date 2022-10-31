@@ -57,6 +57,7 @@ class InferenceBaseClass:
     user_data_path = None
     type = "unknown"
     stage = 0
+    debug = False
 
     def __init__(self, db_path, **kwargs):
         self.db_path = db_path
@@ -139,17 +140,20 @@ class InferenceBaseClass:
         raise NotImplementedError
 
     def get_dataloader(self):
+        """
+        Prepare dataloader for streaming/iterable datasets from database
+        """
         logger.info(
             f"Preparing dataloader with batch size of {self.batch_size} and {self.num_workers} workers."
         )
         self.dataloader = torch.utils.data.DataLoader(
             self.dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            persistent_workers=True,
+            num_workers=0 if self.debug else self.num_workers,
+            persistent_workers=False if self.debug else True,
             shuffle=False,
             pin_memory=True,  # @TODO review this
-            collate_fn=zero_okay_collate,
+            batch_size=None,  # Recommended setting for streaming datasets
+            batch_sampler=None,  # Recommended setting for streaming datasets
         )
         return self.dataloader
 

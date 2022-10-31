@@ -16,12 +16,11 @@ from trapdata.ml.models.base import InferenceBaseClass
 
 
 class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
-    def __init__(self, db_path, image_transforms, batch_size=2):
+    def __init__(self, queue, image_transforms, batch_size=1):
         super().__init__()
+        self.queue = queue
+        self.image_transforms = image_transforms
         self.batch_size = batch_size
-        self.db_path = db_path
-        self.transform = image_transforms
-        self.queue = ImageQueue(db_path)
 
     def __len__(self):
         return self.queue.queue_count()
@@ -37,13 +36,13 @@ class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
                 [record.id for record in records]
             )
             batch_data = torch.utils.data.default_collate(
-                [
-                    self.transform(PIL.Image.open(record.absolute_path))
-                    for record in records
-                ]
+                [self.transform(record.absolute_path) for record in records]
             )
 
             yield (item_ids, batch_data)
+
+    def transform(self, img_path):
+        return self.image_transforms(PIL.Image.open(img_path))
 
 
 class LocalizationDatabaseDataset(torch.utils.data.Dataset):
@@ -124,26 +123,11 @@ class ObjectDetector(InferenceBaseClass):
 
     def get_dataset(self):
         dataset = LocalizationIterableDatabaseDataset(
-            db_path=self.db_path,
+            queue=ImageQueue(self.db_path),
             image_transforms=self.get_transforms(),
             batch_size=self.batch_size,
         )
         return dataset
-
-    def get_dataloader(self):
-        logger.info(
-            f"Preparing dataloader with batch size of {self.batch_size} and {self.num_workers} workers."
-        )
-        self.dataloader = torch.utils.data.DataLoader(
-            self.dataset,
-            num_workers=self.num_workers,
-            persistent_workers=True,
-            shuffle=False,
-            pin_memory=True,  # @TODO review this
-            batch_size=None,
-            batch_sampler=None,
-        )
-        return self.dataloader
 
     def save_results(self, item_ids, batch_output):
         # Format data to be saved in DB
