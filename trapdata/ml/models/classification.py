@@ -7,9 +7,56 @@ from trapdata import logger
 from trapdata import constants
 from trapdata import db
 from trapdata.db import models
+from trapdata.db.models.queue import DetectedObjectQueue, UnclassifiedObjectQueue
 from trapdata.db.models.detections import save_classified_objects
 
 from .base import InferenceBaseClass
+
+
+class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
+    def __init__(self, queue, image_transforms, batch_size=4):
+        super().__init__()
+        self.queue = queue
+        self.image_transforms = image_transforms
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return self.queue.queue_count()
+
+    def __iter__(self):
+        while len(self):
+            worker_info = torch.utils.data.get_worker_info()
+            print("Using worker:", worker_info)
+
+            records = self.queue.pull_n_from_queue(self.batch_size)
+
+            item_ids = torch.utils.data.default_collate(
+                [record.id for record in records]
+            )
+            batch_data = torch.utils.data.default_collate(
+                [
+                    self.transform(record.image.absolute_path, record.bbox)
+                    for record in records
+                ]
+            )
+            yield (item_ids, batch_data)
+
+    def transform(self, img_path, bbox):
+        # @TODO improve. Can't the main transforms chain do this?
+        # if we pass the bbox to get_transforms?
+        img = Image.open(img_path)
+        img = torchvision.transforms.ToTensor()(img)
+        x1, y1, x2, y2 = bbox
+        # @TODO save crops to disk the first time they are detected
+        # in the object detector? So we don't have to load original image
+        # each time, or is this better?
+        cropped_image = img[
+            :,
+            int(y1) : int(y2),
+            int(x1) : int(x2),
+        ]
+        cropped_image = torchvision.transforms.ToPILImage()(cropped_image)
+        return self.image_transforms(cropped_image)
 
 
 class BinaryClassificationDatabaseDataset(torch.utils.data.Dataset):
@@ -185,9 +232,10 @@ class BinaryClassifier(EfficientNetClassifier):
     positive_negative_label = None
 
     def get_dataset(self):
-        dataset = BinaryClassificationDatabaseDataset(
-            db_path=self.db_path,
+        dataset = ClassificationIterableDatabaseDataset(
+            queue=DetectedObjectQueue(self.db_path),
             image_transforms=self.get_transforms(),
+            batch_size=self.batch_size,
         )
         return dataset
 
@@ -219,9 +267,10 @@ class SpeciesClassifier(EfficientNetClassifier):
     type = "fine_grained_classifier"
 
     def get_dataset(self):
-        dataset = SpeciesClassificationDatabaseDataset(
-            db_path=self.db_path,
+        dataset = ClassificationIterableDatabaseDataset(
+            queue=UnclassifiedObjectQueue(self.db_path),
             image_transforms=self.get_transforms(),
+            batch_size=self.batch_size,
         )
         return dataset
 
