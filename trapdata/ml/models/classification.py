@@ -26,7 +26,7 @@ class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
     def __iter__(self):
         while len(self):
             worker_info = torch.utils.data.get_worker_info()
-            logger.info("Using worker:", worker_info)
+            logger.info(f"Using worker: {worker_info}")
 
             records = self.queue.pull_n_from_queue(self.batch_size)
             if records:
