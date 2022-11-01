@@ -22,7 +22,7 @@ from trapdata import constants
 from trapdata.db.models.events import get_monitoring_session_image_ids
 from trapdata.db.models.images import get_image_with_objects
 from trapdata.db.models.detections import get_object_counts_for_image
-from trapdata.db.models.queue import add_image_to_queue
+from trapdata.db.models.queue import add_image_to_queue, clear_all_queues
 from trapdata.common.utils import get_sequential_sample
 
 
@@ -339,11 +339,13 @@ class PreviewWindow(RelativeLayout):
     def process_now(self):
         """
         Clear queue then add sample
+
+        @TODO this should skip the queue all together and just process the image in one shot/chain
         """
         app = App.get_running_app()
-        app.clear_queue()
+        clear_all_queues(app.db_path)
         self.add_sample_to_queue()
-        app.start_queue()
+        app.start_queue(single=True)
 
     def start_auto_refresh(self):
         refresh_interval_seconds = 1

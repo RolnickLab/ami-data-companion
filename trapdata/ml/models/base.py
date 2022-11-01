@@ -57,7 +57,7 @@ class InferenceBaseClass:
     user_data_path = None
     type = "unknown"
     stage = 0
-    debug = False
+    single = True
 
     def __init__(self, db_path, **kwargs):
         self.db_path = db_path
@@ -143,15 +143,20 @@ class InferenceBaseClass:
         """
         Prepare dataloader for streaming/iterable datasets from database
         """
-        logger.info(
-            f"Preparing dataloader with batch size of {self.batch_size} and {self.num_workers} workers."
-        )
+        if self.single:
+            logger.info(
+                f"Preparing dataloader with batch size of {self.batch_size} in single worker mode."
+            )
+        else:
+            logger.info(
+                f"Preparing dataloader with batch size of {self.batch_size} and {self.num_workers} workers."
+            )
         self.dataloader = torch.utils.data.DataLoader(
             self.dataset,
-            num_workers=0 if self.debug else self.num_workers,
-            persistent_workers=False if self.debug else True,
+            num_workers=0 if self.single else self.num_workers,
+            persistent_workers=False if self.single else True,
             shuffle=False,
-            pin_memory=True,  # @TODO review this
+            pin_memory=False if self.single else True,  # @TODO review this
             batch_size=None,  # Recommended setting for streaming datasets
             batch_sampler=None,  # Recommended setting for streaming datasets
         )
@@ -178,38 +183,39 @@ class InferenceBaseClass:
         logger.warn("No save method configured for model. Doing nothing with results")
         return None
 
+    @torch.no_grad()
     def run(self):
         torch.cuda.empty_cache()
 
-        with torch.no_grad():
-            for i, batch in enumerate(self.dataloader):
+        for i, batch in enumerate(self.dataloader):
 
-                if not batch:
-                    # @TODO review this once we switch to streaming IterableDataset
-                    logger.info(f"Batch {i+1} is empty, skipping")
-                    continue
+            if not batch:
+                # @TODO review this once we switch to streaming IterableDataset
+                logger.info(f"Batch {i+1} is empty, skipping")
+                continue
 
-                item_ids, batch_input = batch
+            item_ids, batch_input = batch
 
-                logger.info(
-                    f"Processing batch {i+1}, about {len(self.dataloader)} remaining"
-                )
+            logger.info(
+                f"Processing batch {i+1}, about {len(self.dataloader)} remaining"
+            )
 
-                # @TODO the StopWatch doesn't seem to work for the classifier batches,
-                # it always returns 0 seconds
-                with StopWatch() as batch_time:
-                    with start_transaction(op="inference_batch", name=self.name):
-                        batch_output = self.predict_batch(batch_input)
+            # @TODO the StopWatch doesn't seem to work when there are multiple workers,
+            # it always returns 0 seconds.
+            with StopWatch() as batch_time:
+                with start_transaction(op="inference_batch", name=self.name):
+                    batch_output = self.predict_batch(batch_input)
 
-                seconds_per_item = batch_time.duration / len(batch_output)
-                logger.info(
-                    f"Inference time for batch: {batch_time}, "
-                    f"Seconds per item: {round(seconds_per_item, 2)}"
-                )
+            seconds_per_item = batch_time.duration / len(batch_output)
+            logger.info(
+                f"Inference time for batch: {batch_time}, "
+                f"Seconds per item: {round(seconds_per_item, 2)}"
+            )
 
-                batch_output = list(self.post_process_batch(batch_output))
-                item_ids = item_ids.tolist()
-                logger.info(f"Saving {len(item_ids)} results")
-                self.save_results(item_ids, batch_output)
-                logger.info(f"{self.name} Batch -- Done")
+            batch_output = list(self.post_process_batch(batch_output))
+            item_ids = item_ids.tolist()
+            logger.info(f"Saving {len(item_ids)} results")
+            self.save_results(item_ids, batch_output)
+            logger.info(f"{self.name} Batch -- Done")
+
         logger.info(f"{self.name} -- Done")

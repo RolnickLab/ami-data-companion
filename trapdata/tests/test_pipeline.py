@@ -10,7 +10,11 @@ import torch
 from trapdata import logger
 from trapdata.db import get_db, check_db
 from trapdata.db.models.events import get_or_create_monitoring_sessions
-from trapdata.db.models.queue import add_sample_to_queue, images_in_queue, clear_queue
+from trapdata.db.models.queue import (
+    add_sample_to_queue,
+    images_in_queue,
+    clear_all_queues,
+)
 
 from trapdata.ml.utils import StopWatch
 from trapdata.ml.models.localization import (
@@ -31,7 +35,7 @@ def end_to_end(db_path, image_base_directory, sample_size):
 
     get_or_create_monitoring_sessions(db_path, image_base_directory)
 
-    clear_queue(db_path)
+    clear_all_queues(db_path)
     add_sample_to_queue(db_path, sample_size=sample_size)
     num_images = images_in_queue(db_path)
     logger.info(f"Images in queue: {num_images}")

@@ -476,19 +476,10 @@ def unprocessed_counts(db_path):
     return counts
 
 
-def clear_queue(db_path):
+def clear_all_queues(db_path):
 
-    logger.info("Clearing images in queue")
+    logger.info("Clearing all queues")
 
-    items = []
-    with get_session(db_path) as sesh:
-        for image in sesh.query(TrapImage).filter_by(in_queue=True).all():
-            image.in_queue = False
-            items.append(image)
-        for obj in sesh.query(DetectedObject).filter_by(in_queue=True).all():
-            obj.in_queue = False
-            items.append(obj)
-
-    with get_session(db_path) as sesh:
-        sesh.bulk_save_objects(items)
-        sesh.commit()
+    for name, queue in all_queues(db_path).items():
+        logger.info(f"Clearing queue: {name}")
+        queue.clear_queue()

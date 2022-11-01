@@ -27,7 +27,7 @@ from kivy.properties import (
 from trapdata import logger
 from trapdata import ml
 from trapdata.db.models.detections import get_detected_objects, export_detected_objects
-from trapdata.db.models.queue import clear_queue
+from trapdata.db.models.queue import clear_all_queues
 from trapdata.pipeline import start_pipeline
 
 from .menu import DataMenuScreen
@@ -79,7 +79,7 @@ class Queue(Label):
         if self.bgtask:
             logger.info(f"Background task changed status: {self.bgtask}")
 
-    def start(self, *args):
+    def start(self, *args, single=False):
         # @NOTE can't change a widget property from a bg thread
         if not self.running:
             if self.bgtask:
@@ -87,7 +87,9 @@ class Queue(Label):
             logger.info("Starting queue")
             task_name = "Trapdata Queue Processor"
             self.bgtask = threading.Thread(
-                target=partial(start_pipeline, self.app.db_path, self.app.config),
+                target=partial(
+                    start_pipeline, self.app.db_path, self.app.config, single
+                ),
                 daemon=True,  # PyTorch will be killed abruptly, leaving memory in GPU
                 name=task_name,
             )
@@ -127,7 +129,7 @@ class Queue(Label):
 
     def clear(self):
         self.stop()
-        clear_queue(self.app.db_path)
+        clear_all_queues(self.app.db_path)
 
 
 class TrapDataApp(App):
@@ -186,9 +188,9 @@ class TrapDataApp(App):
             Clock.unschedule(self.queue.clock)
         self.queue = Queue(app=self)
 
-    def start_queue(self):
+    def start_queue(self, single=False):
         if self.queue:
-            self.queue.start()
+            self.queue.start(single=single)
         else:
             logger.warn("No queue found!")
 

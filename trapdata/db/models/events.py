@@ -31,12 +31,13 @@ class MonitoringSession(Base):
     def num_detected_objects(self):
         return sa.func.count("1")
 
-    @observes("images")
-    def image_observer(self, images):
-        timestamps = sorted([img.timestamp for img in images if img.timestamp])
-        if timestamps:
-            self.start_time = timestamps[0]
-            self.end_time = timestamps[-1]
+    # This runs an expensive/slow query every time an image is updated
+    # @observes("images")
+    # def image_observer(self, images):
+    #     timestamps = sorted([img.timestamp for img in images if img.timestamp])
+    #     if timestamps:
+    #         self.start_time = timestamps[0]
+    #         self.end_time = timestamps[-1]
 
     images = orm.relationship(
         "TrapImage",
