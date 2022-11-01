@@ -4,7 +4,7 @@ from trapdata import logger
 from trapdata import ml
 
 
-def start_pipeline(db_path, config):
+def start_pipeline(db_path, config, single=False):
 
     user_data_path = pathlib.Path(config.get("paths", "user_data_path"))
     logger.info(f"Local user data path: {user_data_path}")
@@ -17,6 +17,7 @@ def start_pipeline(db_path, config):
         user_data_path=user_data_path,
         batch_size=int(config.get("performance", "localization_batch_size")),
         num_workers=num_workers,
+        single=single,
     )
     model_1.run()
     logger.info("Localization complete")
@@ -28,6 +29,7 @@ def start_pipeline(db_path, config):
         user_data_path=user_data_path,
         batch_size=int(config.get("performance", "classification_batch_size")),
         num_workers=num_workers,
+        single=single,
     )
     model_2.run()
     logger.info("Binary classification complete")
@@ -39,6 +41,7 @@ def start_pipeline(db_path, config):
         user_data_path=user_data_path,
         batch_size=int(config.get("performance", "classification_batch_size")),
         num_workers=num_workers,
+        single=single,
     )
     model_3.run()
     logger.info("Species classification complete")
