@@ -26,20 +26,20 @@ class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
     def __iter__(self):
         while len(self):
             worker_info = torch.utils.data.get_worker_info()
-            print("Using worker:", worker_info)
+            logger.info("Using worker:", worker_info)
 
             records = self.queue.pull_n_from_queue(self.batch_size)
-
-            item_ids = torch.utils.data.default_collate(
-                [record.id for record in records]
-            )
-            batch_data = torch.utils.data.default_collate(
-                [
-                    self.transform(record.image.absolute_path, record.bbox)
-                    for record in records
-                ]
-            )
-            yield (item_ids, batch_data)
+            if records:
+                item_ids = torch.utils.data.default_collate(
+                    [record.id for record in records]
+                )
+                batch_data = torch.utils.data.default_collate(
+                    [
+                        self.transform(record.image.absolute_path, record.bbox)
+                        for record in records
+                    ]
+                )
+                yield (item_ids, batch_data)
 
     def transform(self, img_path, bbox):
         # @TODO improve. Can't the main transforms chain do this?
@@ -56,6 +56,7 @@ class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
             int(x1) : int(x2),
         ]
         cropped_image = torchvision.transforms.ToPILImage()(cropped_image)
+        # logger.debug(f"Cropped image size: {cropped_image.size}")
         return self.image_transforms(cropped_image)
 
 

@@ -31,15 +31,15 @@ class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
             print("Using worker:", worker_info)
 
             records = self.queue.pull_n_from_queue(self.batch_size)
+            if records:
+                item_ids = torch.utils.data.default_collate(
+                    [record.id for record in records]
+                )
+                batch_data = torch.utils.data.default_collate(
+                    [self.transform(record.absolute_path) for record in records]
+                )
 
-            item_ids = torch.utils.data.default_collate(
-                [record.id for record in records]
-            )
-            batch_data = torch.utils.data.default_collate(
-                [self.transform(record.absolute_path) for record in records]
-            )
-
-            yield (item_ids, batch_data)
+                yield (item_ids, batch_data)
 
     def transform(self, img_path):
         return self.image_transforms(PIL.Image.open(img_path))
