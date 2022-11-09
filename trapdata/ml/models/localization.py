@@ -179,7 +179,7 @@ class MothObjectDetector_FasterRCNN(ObjectDetector):
         # Filter out objects if their score is under score threshold
         bboxes = output["boxes"][output["scores"] > self.bbox_score_threshold]
 
-        logger.info(
+        logger.debug(
             f"Keeping {len(bboxes)} out of {len(output['boxes'])} objects found (threshold: {self.bbox_score_threshold})"
         )
 
@@ -216,7 +216,7 @@ class GenericObjectDetector_FasterRCNN_MobileNet(ObjectDetector):
         # Filter out background label, if using pretrained model only!
         bboxes = output["boxes"][output["labels"] > 1]
 
-        logger.info(
+        logger.debug(
             f"Keeping {len(bboxes)} out of {len(output['boxes'])} objects found (threshold: {self.bbox_score_threshold})"
         )
 

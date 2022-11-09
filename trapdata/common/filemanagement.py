@@ -225,6 +225,6 @@ def save_image(image, base_path=None, subdir=None, name=None, suffix=".jpg"):
         base_path.mkdir(parents=True)
 
     fpath = (base_path / name).with_suffix(suffix)
-    logger.info(f"Saving {fpath}")
+    logger.debug(f"Saving image to {fpath}")
     image.save(fpath)
     return fpath
