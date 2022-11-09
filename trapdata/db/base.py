@@ -91,6 +91,7 @@ def get_session(db_path):
         session.rollback()
     finally:
         session.close()
+        raise
 
 
 def check_db(db_path, create=True, quiet=False):
