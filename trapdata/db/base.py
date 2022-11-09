@@ -89,9 +89,9 @@ def get_session(db_path):
     except Exception as e:
         logger.error(e)
         session.rollback()
+        raise
     finally:
         session.close()
-        raise
 
 
 def check_db(db_path, create=True, quiet=False):
