@@ -3,12 +3,14 @@ import pathlib
 
 import sqlalchemy as sa
 from sqlalchemy import orm
+import PIL.Image
 
 from trapdata import db
 from trapdata import constants
 from trapdata.db.models.images import TrapImage
 from trapdata.common.logs import logger
 from trapdata.common.utils import bbox_area, bbox_center, export_report
+from trapdata.common.filemanagement import save_image
 
 
 class DetectedObject(db.Base):
@@ -19,6 +21,7 @@ class DetectedObject(db.Base):
     monitoring_session_id = sa.Column(sa.ForeignKey("monitoring_sessions.id"))
     bbox = sa.Column(sa.JSON)
     area_pixels = sa.Column(sa.Integer)
+    path = sa.Column(sa.String(255))
     specific_label = sa.Column(sa.String(255))
     specific_label_score = sa.Column(sa.Numeric(asdecimal=False))
     binary_label = sa.Column(sa.String(255))
@@ -43,11 +46,39 @@ class DetectedObject(db.Base):
     def __repr__(self):
         image = self.image.path if self.image else None
         return (
-            f"DetectedObject("
+            f"DetectedObject(\n"
             f"\timage={image!r}, \n"
+            f"\tpath={self.path!r}, \n"
             f"\tspecific_label={self.specific_label!r}, \n"
             f"\tbbox={self.bbox!r})"
         )
+
+    def cropped_image_data(self, source_image=None):
+        """
+        Return a PIL image of this detected object.
+        """
+        if self.path and pathlib.Path(self.path).exists():
+            logger.debug(f"Using existing image crop: {self.path}")
+            return PIL.Image.open(self.path)
+        else:
+            source_image = source_image or self.image
+            if not source_image:
+                raise Exception(f"Detected object id {self.id} has no source image")
+            logger.debug(
+                f"Extracting cropped image data from source image {source_image.path}"
+            )
+            image = PIL.Image.open(source_image.absolute_path)
+            return image.crop(self.bbox)
+
+    def save_cropped_image_data(self, base_path=None, source_image=None):
+        source_image = source_image or self.image
+        fpath = save_image(
+            image=self.cropped_image_data(source_image=source_image),
+            base_path=base_path,
+            subdir="crops",
+        )
+        self.path = str(fpath)
+        return fpath
 
     def report_data(self):
         if self.specific_label:
@@ -71,7 +102,9 @@ class DetectedObject(db.Base):
         }
 
 
-def save_detected_objects(db_path, image_ids, detected_objects_data):
+def save_detected_objects(
+    db_path, image_ids, detected_objects_data, user_data_path=None
+):
 
     orm_objects = []
     with db.get_session(db_path) as sesh:
@@ -103,7 +136,11 @@ def save_detected_objects(db_path, image_ids, detected_objects_data):
 
             logger.debug(f"Creating detected object {detection} for image {image}")
 
-            # sesh.add(detection)
+            detection.save_cropped_image_data(
+                source_image=image,
+                base_path=user_data_path,
+            )
+
             orm_objects.append(detection)
 
     with db.get_session(db_path) as sesh:

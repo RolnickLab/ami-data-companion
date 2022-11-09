@@ -34,29 +34,11 @@ class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
                     [record.id for record in records]
                 )
                 batch_data = torch.utils.data.default_collate(
-                    [
-                        self.transform(record.image.absolute_path, record.bbox)
-                        for record in records
-                    ]
+                    [self.transform(record.cropped_image_data()) for record in records]
                 )
                 yield (item_ids, batch_data)
 
-    def transform(self, img_path, bbox):
-        # @TODO improve. Can't the main transforms chain do this?
-        # if we pass the bbox to get_transforms?
-        img = Image.open(img_path)
-        img = torchvision.transforms.ToTensor()(img)
-        x1, y1, x2, y2 = bbox
-        # @TODO save crops to disk the first time they are detected
-        # in the object detector? So we don't have to load original image
-        # each time, or is this better?
-        cropped_image = img[
-            :,
-            int(y1) : int(y2),
-            int(x1) : int(x2),
-        ]
-        cropped_image = torchvision.transforms.ToPILImage()(cropped_image)
-        # logger.debug(f"Cropped image size: {cropped_image.size}")
+    def transform(self, cropped_image):
         return self.image_transforms(cropped_image)
 
 

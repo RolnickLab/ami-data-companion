@@ -4,6 +4,8 @@ import collections
 import dateutil.parser
 import os
 import re
+import hashlib
+import tempfile
 
 import PIL.Image
 import PIL.ExifTags
@@ -202,3 +204,27 @@ def group_images_by_day(images, maximum_gap_minutes=6 * 60):
 
     return groups
     # yield relative_path, get_image_timestamp(full_path)
+
+
+def save_image(image, base_path=None, subdir=None, name=None, suffix=".jpg"):
+    """
+    Accepts a PIL image, returns fpath Path object
+    """
+    if not name:
+        name = hashlib.md5(image.tobytes()).hexdigest()
+
+    if base_path:
+        base_path = pathlib.Path(base_path)
+    else:
+        base_path = pathlib.Path(tempfile.TemporaryDirectory().name)
+
+    if subdir:
+        base_path = base_path / subdir
+
+    if not base_path.exists():
+        base_path.mkdir(parents=True)
+
+    fpath = (base_path / name).with_suffix(suffix)
+    logger.info(f"Saving {fpath}")
+    image.save(fpath)
+    return fpath
