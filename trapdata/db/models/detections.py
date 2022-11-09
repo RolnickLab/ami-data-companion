@@ -134,12 +134,12 @@ def save_detected_objects(
             detection.monitoring_session_id = image.monitoring_session_id
             detection.image_id = image.id
 
-            logger.debug(f"Creating detected object {detection} for image {image}")
-
             detection.save_cropped_image_data(
                 source_image=image,
                 base_path=user_data_path,
             )
+
+            logger.debug(f"Creating detected object {detection} for image {image}")
 
             orm_objects.append(detection)
 
