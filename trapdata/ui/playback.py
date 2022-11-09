@@ -21,7 +21,10 @@ from trapdata import logger
 from trapdata import constants
 from trapdata.db.models.events import get_monitoring_session_image_ids
 from trapdata.db.models.images import get_image_with_objects
-from trapdata.db.models.detections import get_object_counts_for_image
+from trapdata.db.models.detections import (
+    get_object_counts_for_image,
+    delete_objects_for_image,
+)
 from trapdata.db.models.queue import add_image_to_queue, clear_all_queues
 from trapdata.common.utils import get_sequential_sample
 
@@ -344,6 +347,7 @@ class PreviewWindow(RelativeLayout):
         """
         app = App.get_running_app()
         clear_all_queues(app.db_path)
+        delete_objects_for_image(app.db_path, self.current_sample.id)
         self.add_sample_to_queue()
         app.start_queue(single=True)
 

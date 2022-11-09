@@ -191,6 +191,12 @@ def get_objects_for_image(db_path, image_id):
         return sesh.query(DetectedObject.binary_label).filter_by(image_id=image_id)
 
 
+def delete_objects_for_image(db_path, image_id):
+    with db.get_session(db_path) as sesh:
+        sesh.query(DetectedObject).filter_by(image_id=image_id).delete()
+        sesh.commit()
+
+
 def get_detections_for_image(db_path, image_id):
     with db.get_session(db_path) as sesh:
         return sesh.query(DetectedObject.binary_label).filter_by(
