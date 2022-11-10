@@ -23,8 +23,6 @@ from trapdata.db.models.detections import (
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "species_summary.kv"))
 
-from kivy.uix.recycleview.views import RecycleDataViewBehaviddor
-
 
 class SpeciesGrid(StackLayout):
     species = ObjectProperty()
