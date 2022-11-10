@@ -4,7 +4,7 @@ from .base import get_session
 from trapdata.db import models
 
 
-def count_species(db_path, monitoring_session):
+def count_species(db_path, monitoring_session=None):
     """
     Count number of species detected in a monitoring session.
 
@@ -19,21 +19,49 @@ def count_species(db_path, monitoring_session):
     """
 
     with get_session(db_path) as sesh:
-        return (
-            sesh.query(
-                # DetectedObject.binary_label,
-                # DetectedObject.specific_label,
+        query = (
+            sa.select(
                 sa.func.coalesce(
                     models.DetectedObject.specific_label,
                     models.DetectedObject.binary_label,
                 ).label("label"),
                 sa.func.count().label("count"),
+                models.DetectedObject.path.label("image_path"),
+                # sa.func.max(models.DetectedObject.area_pixels),
             )
             .group_by("label")
             .order_by(sa.desc("count"))
-            .filter_by(monitoring_session=monitoring_session)
-            .all()
         )
+        if monitoring_session:
+            query = query.filter_by(monitoring_session=monitoring_session)
+        return sesh.execute(query).all()
+
+
+def count_species_with_images(db_session=None, monitoring_session=None):
+    """
+    Count number of species detected in a monitoring session.
+
+    # @TODO try getting the largest example of each detected species
+    # SQLAlchemy Query to GROUP BY and fetch MAX date
+    """
+
+    query = (
+        sa.select(
+            sa.func.coalesce(
+                models.DetectedObject.specific_label,
+                models.DetectedObject.binary_label,
+                models.DetectedObject.path,
+            ).label("label"),
+            sa.func.count().label("count"),
+            sa.func.max(models.DetectedObject.area_pixels),
+        )
+        .group_by("label")
+        .order_by(sa.desc("count"))
+    )
+    if db_session:
+        return db_session.execute(query).all()
+    else:
+        return query
 
 
 def update_all_aggregates(directory):

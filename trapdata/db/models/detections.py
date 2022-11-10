@@ -228,6 +228,35 @@ def get_species_for_image(db_path, image_id):
         )
 
 
+def get_unique_species(db_path, monitoring_session=None):
+    query = (
+        sa.select(
+            sa.func.coalesce(
+                DetectedObject.specific_label,
+                DetectedObject.binary_label,
+                DetectedObject.path,
+            ).label("label"),
+            sa.func.count().label("count"),
+        )
+        .group_by("label")
+        .order_by(sa.desc("count"))
+    )
+    if monitoring_session:
+        query = query.filter_by(monitoring_session=monitoring_session)
+
+    with db.get_session(db_path) as sesh:
+        return sesh.execute(query).all()
+
+
+def get_objects_for_species(db_path, species_label, monitoring_session=None):
+    query = sa.select(DetectedObject).filter_by(specific_label=species_label)
+    if monitoring_session:
+        query = query.filter_by(monitoring_session=monitoring_session)
+
+    with db.get_session(db_path) as sesh:
+        return sesh.execute(query).unique().all()
+
+
 def get_object_counts_for_image(db_path, image_id):
     # Every object detected
     num_objects = get_objects_for_image(db_path, image_id).count()

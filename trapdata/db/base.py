@@ -50,6 +50,19 @@ def get_db(db_path, create=False):
     return db
 
 
+def get_session_class(db_path):
+    """
+    Use this to create a pre-configured Session class.
+    Attach it to the running app.
+    Then we don't have to pass around the db_path
+    """
+    Session = orm.sessionmaker(
+        bind=get_db(db_path),
+        expire_on_commit=False,  # Only need this for select methods (`pull_n_from_queue`)
+    )
+    return Session
+
+
 @contextlib.contextmanager
 def get_session(db_path):
     """
