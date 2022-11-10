@@ -32,7 +32,9 @@ from trapdata.pipeline import start_pipeline
 
 from .menu import DataMenuScreen
 from .playback import ImagePlaybackScreen
+
 from .summary import SpeciesSummaryScreen
+from .species_summary import SpeciesSummaryGridScreen
 from .queue import QueueScreen
 
 
@@ -175,6 +177,7 @@ class TrapDataApp(App):
         sm.add_widget(DataMenuScreen(name="menu"))
         sm.add_widget(ImagePlaybackScreen(name="playback"))
         sm.add_widget(SpeciesSummaryScreen(name="summary"))
+        sm.add_widget(SpeciesSummaryGridScreen(name="species_grid"))
         sm.add_widget(QueueScreen(name="queue"))
         self.screen_manager = sm
 
