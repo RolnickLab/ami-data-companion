@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Detections{% endblock %}
+
+{% block content %}
+
+{% for name, count in species_list %}
+<h4>{{ name }} ({{ count }})</h4>
+    {% for (object,) in get_objects(name) %}
+        <img src=" {{ url_for('crops', path=relative_path(object.path)) }} " />
+    {% endfor %}
+
+{% endfor %}
+
+{% endblock %}

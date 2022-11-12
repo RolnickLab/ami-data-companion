@@ -17,6 +17,7 @@
         "softmax",
         "sqlalchemy",
         "torchvision",
-        "trapdata"
+        "trapdata",
+        "typer"
     ],
 }
