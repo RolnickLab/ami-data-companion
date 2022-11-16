@@ -15,6 +15,7 @@
         "resnet",
         "sesh",
         "softmax",
+        "sqlalchemy",
         "torchvision",
         "trapdata"
     ],
