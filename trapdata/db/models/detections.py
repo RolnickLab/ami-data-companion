@@ -1,5 +1,6 @@
 import datetime
 import pathlib
+from typing import Optional
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -103,9 +104,13 @@ class DetectedObject(db.Base):
 
 
 def save_detected_objects(
-    db_path, image_ids, detected_objects_data, user_data_path=None
-):
+    db_path: str,
+    image_ids: list[int],
+    detected_objects_data: list[dict],
+    user_data_path: Optional[str] = None,
+) -> None:
 
+    logger.info(f"Saving {len(detected_objects_data)} detected objects")
     orm_objects = []
     with db.get_session(db_path) as sesh:
         images = sesh.query(TrapImage).filter(TrapImage.id.in_(image_ids)).all()
@@ -134,6 +139,10 @@ def save_detected_objects(
             detection.monitoring_session_id = image.monitoring_session_id
             detection.image_id = image.id
 
+            # @TODO Optimize:
+            # 1) Save all detections without cropping
+            # 2) Load the source image once
+            # 3) Save all crops from that image
             detection.save_cropped_image_data(
                 source_image=image,
                 base_path=user_data_path,
@@ -144,7 +153,7 @@ def save_detected_objects(
             orm_objects.append(detection)
 
     with db.get_session(db_path) as sesh:
-        # @TODO this could be faster! Especially for sqlite
+        # @TODO this could be faster! Especially for sqlit -> Nonee
         logger.info(f"Bulk saving {len(orm_objects)} objects")
         sesh.bulk_save_objects(orm_objects)
         sesh.commit()

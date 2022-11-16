@@ -1,4 +1,6 @@
 import pathlib
+import threading
+
 
 import torch
 import torchvision
@@ -143,9 +145,17 @@ class ObjectDetector(InferenceBaseClass):
             ]
             detected_objects_data.append(detected_objects)
 
-        save_detected_objects(
-            self.db_path, item_ids, detected_objects_data, self.user_data_path
+        # @TODO might be able to speed up the crop & save rather than spawning a new thread
+        slow_save = threading.Thread(
+            target=save_detected_objects,
+            args=(
+                self.db_path,
+                item_ids,
+                detected_objects_data,
+                self.user_data_path,
+            ),
         )
+        slow_save.start()
 
 
 class MothObjectDetector_FasterRCNN(ObjectDetector):
