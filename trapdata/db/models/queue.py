@@ -1,5 +1,3 @@
-import pathlib
-
 import sqlalchemy as sa
 
 from trapdata.db import get_session
@@ -355,12 +353,10 @@ def all_queues(db_path):
 def add_image_to_queue(db_path, image_id):
 
     with get_session(db_path) as sesh:
-        image = sesh.query(TrapImage).get(image_id)
-        logger.info(f"Adding image to queue: {image}")
-        if not image.in_queue:
-            image.in_queue = True
-            sesh.add(image)
-            sesh.commit()
+        logger.info(f"Adding image id {image_id} to queue")
+        stmt = sa.update(TrapImage).filter_by(id=image_id).values({"in_queue": True})
+        sesh.execute(stmt)
+        sesh.commit()
 
 
 def add_sample_to_queue(db_path, sample_size=10):
@@ -383,6 +379,8 @@ def add_sample_to_queue(db_path, sample_size=10):
             logger.info(f"Adding {len(images)} images to queue")
             sesh.bulk_save_objects(images)
             sesh.commit()
+
+    return images
 
 
 def add_monitoring_session_to_queue(db_path, monitoring_session, limit=None):
