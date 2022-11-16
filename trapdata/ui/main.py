@@ -8,6 +8,7 @@ from functools import partial
 
 # import multiprocessing
 import threading
+from sqlalchemy import orm
 
 import kivy
 from kivy.app import App
@@ -159,7 +160,7 @@ class TrapDataApp(App):
         #         child.close()
         #     except ValueError:
         #         pass
-        pass
+        orm.close_all_sessions()
 
     @property
     def db_path(self):
