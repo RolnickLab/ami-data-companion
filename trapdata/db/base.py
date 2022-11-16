@@ -33,6 +33,7 @@ def get_db(db_path, create=False):
         future=True,
         connect_args={
             "timeout": 10,  # A longer timeout is necessary for SQLite and multiple PyTorch workers
+            "check_same_thread": False,
         },
     )
 
@@ -50,7 +51,7 @@ def get_db(db_path, create=False):
     return db
 
 
-def get_session_class(db_path):
+def get_session_class(db_path, **kwargs) -> type[orm.Session]:
     """
     Use this to create a pre-configured Session class.
     Attach it to the running app.
@@ -58,45 +59,28 @@ def get_session_class(db_path):
     """
     Session = orm.sessionmaker(
         bind=get_db(db_path),
-        expire_on_commit=False,  # Only need this for select methods (`pull_n_from_queue`)
+        expire_on_commit=False,  # Currently only need this for `pull_n_from_queue`
+        autoflush=False,
+        autocommit=False,
+        **kwargs,
     )
     return Session
 
 
 @contextlib.contextmanager
-def get_session(db_path):
+def get_session(db_path: str, **kwargs) -> orm.Session:
     """
-    Convenience method to start and close a database session.
+    Convenience method to start and close a pre-configured database session.
 
-    The database is a file-based sqlite database, so we store
-    in the base directory of the trap images.
-    All image paths in the database will be relative to the location
-    of this base directory.
-
-
-    SQL Alchemy also has a sessionmaker utility that could be used.
-    # return orm.sessionmaker(db).begin()
-
-    Usage:
-
-    >>> directory = "/tmp/images"
+    >>> db_path = ":memory:"
     >>> with get_session(db_path) as sesh:
     >>>     num_images = sesh.query(Image).filter_by().count()
     >>> num_images
     0
     """
-    db = get_db(db_path)
 
-    session = orm.Session(
-        db,
-        # @TODO this only needs to happen
-        # in the `pull_n_from_queue` method
-        # but need to use sessionmaker first.
-        expire_on_commit=False
-        # autoflush=False,
-        # autocommit=False,
-    )
-
+    DatabaseSession = get_session_class(db_path, **kwargs)
+    session = DatabaseSession()
     try:
         yield session
     except Exception as e:
