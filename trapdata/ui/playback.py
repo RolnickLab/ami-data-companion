@@ -334,7 +334,7 @@ class PreviewWindow(RelativeLayout):
         )
         self.load_sample(image_id)
 
-    def add_sample_to_queue(self):
+    def add_current_sample_to_queue(self):
         app = App.get_running_app()
         add_image_to_queue(app.db_path, self.current_sample.id)
         self.start_auto_refresh()
@@ -348,7 +348,7 @@ class PreviewWindow(RelativeLayout):
         app = App.get_running_app()
         clear_all_queues(app.db_path)
         delete_objects_for_image(app.db_path, self.current_sample.id)
-        self.add_sample_to_queue()
+        add_image_to_queue(app.db_path, self.current_sample.id)
         app.start_queue(single=True)
 
     def start_auto_refresh(self):
