@@ -5,15 +5,15 @@ import sqlalchemy as sa
 from sqlalchemy import orm
 import PIL.Image
 
-from trapdata import db
 from trapdata import constants
+from trapdata.db import Base
 from trapdata.db.models.images import TrapImage
 from trapdata.common.logs import logger
 from trapdata.common.utils import bbox_area, bbox_center, export_report
 from trapdata.common.filemanagement import save_image
 
 
-class DetectedObject(db.Base):
+class DetectedObject(Base):
     __tablename__ = "detections"
 
     id = sa.Column(sa.Integer, primary_key=True)
@@ -102,13 +102,10 @@ class DetectedObject(db.Base):
         }
 
 
-def save_detected_objects(
-    db_path, image_ids, detected_objects_data, user_data_path=None
-):
+def save_detected_objects(db, image_ids, detected_objects_data, user_data_path=None):
 
     orm_objects = []
-    with db.get_session(db_path) as sesh:
-        images = sesh.query(TrapImage).filter(TrapImage.id.in_(image_ids)).all()
+    images = db.query(TrapImage).filter(TrapImage.id.in_(image_ids)).all()
 
     timestamp = datetime.datetime.now()
 
@@ -143,22 +140,18 @@ def save_detected_objects(
 
             orm_objects.append(detection)
 
-    with db.get_session(db_path) as sesh:
-        # @TODO this could be faster! Especially for sqlite
-        logger.info(f"Bulk saving {len(orm_objects)} objects")
-        sesh.bulk_save_objects(orm_objects)
-        sesh.commit()
+    # @TODO this could be faster! Especially for sqlite
+    logger.info(f"Bulk saving {len(orm_objects)} objects")
+    db.bulk_save_objects(orm_objects)
+    db.commit()
 
 
-def save_classified_objects(db_path, object_ids, classified_objects_data):
+def save_classified_objects(db, object_ids, classified_objects_data):
     # logger.debug(f"Callback was called! {object_ids}, {classified_objects_data}")
 
     orm_objects = []
     timestamp = datetime.datetime.now()
-    with db.get_session(db_path) as sesh:
-        objects = (
-            sesh.query(DetectedObject).filter(DetectedObject.id.in_(object_ids)).all()
-        )
+    objects = db.query(DetectedObject).filter(DetectedObject.id.in_(object_ids)).all()
 
     for obj, object_data in zip(objects, classified_objects_data):
         obj.last_processed = timestamp
@@ -170,65 +163,59 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
 
         orm_objects.append(obj)
 
-    with db.get_session(db_path) as sesh:
-        logger.info(f"Bulk saving {len(orm_objects)} objects")
-        sesh.bulk_save_objects(orm_objects)
-        sesh.commit()
+    logger.info(f"Bulk saving {len(orm_objects)} objects")
+    db.bulk_save_objects(orm_objects)
+    db.commit()
 
 
-def get_detected_objects(db_path, monitoring_session=None):
+def get_detected_objects(db, monitoring_session=None):
     query_kwargs = {}
 
     if monitoring_session:
         query_kwargs["monitoring_session_id"] = monitoring_session.id
 
-    with db.get_session(db_path) as sesh:
+    with db.begin() as sesh:
         return sesh.query(DetectedObject).filter_by(**query_kwargs)
 
 
-def get_objects_for_image(db_path, image_id):
-    with db.get_session(db_path) as sesh:
-        return sesh.query(DetectedObject.binary_label).filter_by(image_id=image_id)
+def get_objects_for_image(db, image_id):
+    return db.query(DetectedObject.binary_label).filter_by(image_id=image_id)
 
 
-def delete_objects_for_image(db_path, image_id):
-    with db.get_session(db_path) as sesh:
-        sesh.query(DetectedObject).filter_by(image_id=image_id).delete()
-        sesh.commit()
+def delete_objects_for_image(db, image_id):
+    db.query(DetectedObject).filter_by(image_id=image_id).delete()
+    db.flush()
 
 
-def get_detections_for_image(db_path, image_id):
-    with db.get_session(db_path) as sesh:
-        return sesh.query(DetectedObject.binary_label).filter_by(
-            image_id=image_id, binary_label=constants.POSITIVE_BINARY_LABEL
+def get_detections_for_image(db, image_id):
+    return db.query(DetectedObject.binary_label).filter_by(
+        image_id=image_id, binary_label=constants.POSITIVE_BINARY_LABEL
+    )
+
+
+def get_classifications_for_image(db, image_id):
+    return (
+        db.query(DetectedObject.specific_label)
+        .filter_by(
+            image_id=image_id,
+            binary_label=constants.POSITIVE_BINARY_LABEL,
         )
-
-
-def get_classifications_for_image(db_path, image_id):
-    with db.get_session(db_path) as sesh:
-        return (
-            sesh.query(DetectedObject.specific_label)
-            .filter_by(
-                image_id=image_id,
-                binary_label=constants.POSITIVE_BINARY_LABEL,
-            )
-            .filter(
-                DetectedObject.specific_label.is_not(None),
-            )
+        .filter(
+            DetectedObject.specific_label.is_not(None),
         )
+    )
 
 
-def get_species_for_image(db_path, image_id):
-    with db.get_session(db_path) as sesh:
-        return (
-            sesh.query(DetectedObject.specific_label)
-            .filter_by(image_id=image_id)
-            .filter(DetectedObject.specific_label.is_not(None))
-            .distinct()
-        )
+def get_species_for_image(db, image_id):
+    return (
+        db.query(DetectedObject.specific_label)
+        .filter_by(image_id=image_id)
+        .filter(DetectedObject.specific_label.is_not(None))
+        .distinct()
+    )
 
 
-def get_unique_species(db_path, monitoring_session=None):
+def get_unique_species(db, monitoring_session=None):
     query = (
         sa.select(
             sa.func.coalesce(
@@ -244,31 +231,30 @@ def get_unique_species(db_path, monitoring_session=None):
     if monitoring_session:
         query = query.filter_by(monitoring_session=monitoring_session)
 
-    with db.get_session(db_path) as sesh:
-        return sesh.execute(query).all()
+    return db.execute(query).all()
 
 
-def get_objects_for_species(db_path, species_label, monitoring_session=None):
+def get_objects_for_species(db, species_label, monitoring_session=None):
     query = sa.select(DetectedObject).filter_by(specific_label=species_label)
     if monitoring_session:
         query = query.filter_by(monitoring_session=monitoring_session)
 
-    with db.get_session(db_path) as sesh:
+    with db.begin() as sesh:
         return sesh.execute(query).unique().all()
 
 
-def get_object_counts_for_image(db_path, image_id):
+def get_object_counts_for_image(db, image_id):
     # Every object detected
-    num_objects = get_objects_for_image(db_path, image_id).count()
+    num_objects = get_objects_for_image(db, image_id).count()
 
     # Every object that is a moth
-    num_detections = get_detections_for_image(db_path, image_id).count()
+    num_detections = get_detections_for_image(db, image_id).count()
 
     # Every object that has been classified to taxa level
-    num_classifications = get_classifications_for_image(db_path, image_id).count()
+    num_classifications = get_classifications_for_image(db, image_id).count()
 
     # Unique taxa names
-    num_species = get_species_for_image(db_path, image_id).count()
+    num_species = get_species_for_image(db, image_id).count()
 
     # Has every object detected in this image been fully processed?
     completely_classified = True if num_classifications == num_detections else False

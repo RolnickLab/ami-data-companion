@@ -144,7 +144,7 @@ class ObjectDetector(InferenceBaseClass):
             detected_objects_data.append(detected_objects)
 
         save_detected_objects(
-            self.db_path, item_ids, detected_objects_data, self.user_data_path
+            self.db, item_ids, detected_objects_data, self.user_data_path
         )
 
 

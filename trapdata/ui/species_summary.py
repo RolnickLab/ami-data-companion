@@ -34,7 +34,7 @@ class SpeciesGrid(StackLayout):
         if self.species:
             app = App.get_running_app()
             detections = get_objects_for_species(
-                app.db_path, self.species["name"], self.species["monitoring_session"]
+                app.db, self.species["name"], self.species["monitoring_session"]
             )
             logger.info(f"Showing all detections for species: {self.species['name']}")
             self.make_row(self.species, detections)
@@ -112,7 +112,7 @@ class SpeciesGridLayout(RecycleView):
         expects. In this case the viewclass is a `SpeciesRow` object.
         """
         app = App.get_running_app()
-        species = get_unique_species(app.db_path, ms)
+        species = get_unique_species(app.db, ms)
         logger.info(
             f"Found {len(species)} unique species in monitoring session {ms.id}"
         )

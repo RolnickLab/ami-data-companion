@@ -91,7 +91,7 @@ class SpeciesListLayout(RecycleView):
         expects. In this case the viewclass is a `SpeciesRow` object.
         """
         app = App.get_running_app()
-        species_counts = queries.count_species(app.db_path, ms)
+        species_counts = queries.count_species(app.db, ms)
 
         row_height = 100  # @TODO make dynamic? Or fit images to specific size
 
@@ -135,7 +135,7 @@ class SpeciesSummaryScreen(Screen):
 
     def export(self):
         app = App.get_running_app()
-        records = list(get_detected_objects(app.db_path, self.monitoring_session))
+        records = list(get_detected_objects(app.db, self.monitoring_session))
         timestamp = int(time.time())
         report_name = f"detections-for-{self.monitoring_session.day.strftime('%Y-%m-%d')}-created-{timestamp}"
         app.export(records, report_name)

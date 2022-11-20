@@ -233,7 +233,7 @@ class BinaryClassifier(EfficientNetClassifier):
             }
             for label, score in batch_output
         ]
-        save_classified_objects(self.db_path, object_ids, classified_objects_data)
+        save_classified_objects(self.db, object_ids, classified_objects_data)
 
 
 class MothNonMothClassifier(BinaryClassifier):
@@ -267,7 +267,7 @@ class SpeciesClassifier(EfficientNetClassifier):
             }
             for label, score in batch_output
         ]
-        save_classified_objects(self.db_path, object_ids, classified_objects_data)
+        save_classified_objects(self.db, object_ids, classified_objects_data)
 
 
 class QuebecVermontMothSpeciesClassifier(SpeciesClassifier):

@@ -227,7 +227,7 @@ class ImagePlaybackScreen(Screen):
         self.current_sample = None
         app = App.get_running_app()
         self.image_ids = [
-            img.id for img in get_monitoring_session_image_ids(app.db_path, ms)
+            img.id for img in get_monitoring_session_image_ids(app.db, ms)
         ]
         preview = self.ids.image_preview
         preview.reset()
@@ -302,8 +302,8 @@ class PreviewWindow(RelativeLayout):
     def load_sample(self, image_id):
         # Refetch image with associated detected objects
         app = App.get_running_app()
-        image = get_image_with_objects(app.db_path, image_id)
-        stats = get_object_counts_for_image(app.db_path, image_id)
+        image = get_image_with_objects(app.db, image_id)
+        stats = get_object_counts_for_image(app.db, image_id)
         # @TODO is there a more reliable way to reference the info bar?
         info_bar = self.parent.parent.ids.info_bar
         update_info_bar(info_bar, image, stats)
@@ -336,7 +336,7 @@ class PreviewWindow(RelativeLayout):
 
     def add_sample_to_queue(self):
         app = App.get_running_app()
-        add_image_to_queue(app.db_path, self.current_sample.id)
+        add_image_to_queue(app.db, self.current_sample.id)
         self.start_auto_refresh()
 
     def process_now(self):
@@ -346,8 +346,8 @@ class PreviewWindow(RelativeLayout):
         @TODO this should skip the queue all together and just process the image in one shot/chain
         """
         app = App.get_running_app()
-        clear_all_queues(app.db_path)
-        delete_objects_for_image(app.db_path, self.current_sample.id)
+        clear_all_queues(app.db)
+        delete_objects_for_image(app.db, self.current_sample.id)
         self.add_sample_to_queue()
         app.start_queue(single=True)
 

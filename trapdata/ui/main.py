@@ -23,9 +23,11 @@ from kivy.properties import (
     NumericProperty,
     BooleanProperty,
 )
+from sqlalchemy.orm import Session
 
 from trapdata import logger
 from trapdata import ml
+from trapdata.db import get_session_class
 from trapdata.db.models.detections import get_detected_objects, export_detected_objects
 from trapdata.db.models.queue import clear_all_queues
 from trapdata.pipeline import start_pipeline
@@ -89,9 +91,7 @@ class Queue(Label):
             logger.info("Starting queue")
             task_name = "Trapdata Queue Processor"
             self.bgtask = threading.Thread(
-                target=partial(
-                    start_pipeline, self.app.db_path, self.app.config, single
-                ),
+                target=partial(start_pipeline, self.app.config, single),
                 daemon=True,  # PyTorch will be killed abruptly, leaving memory in GPU
                 name=task_name,
             )
@@ -131,15 +131,14 @@ class Queue(Label):
 
     def clear(self):
         self.stop()
-        clear_all_queues(self.app.db_path)
+        clear_all_queues(self.app.db)
 
 
 class TrapDataApp(App):
-    # @TODO this db_session is not currently used, but may be more
-    # convenient that the current usage of DB sessions.
     queue = ObjectProperty()
     image_base_path = StringProperty(allownone=True)
     screen_manager = ObjectProperty()
+    db = ObjectProperty()
     use_kivy_settings = False
 
     def on_stop(self):
@@ -161,9 +160,33 @@ class TrapDataApp(App):
         #         pass
         pass
 
-    @property
-    def db_path(self):
-        return self.config.get("paths", "database_url")
+    def get_db_session(self) -> Session:
+        """
+        Create and return a pre-configured SqlAlchemy Session class using
+        the database connection string from the app settings.
+
+        Usage:
+        >>> from kivy.app import App
+        >>> from trapdata.db.models.detections import get_detected_objects
+        >>> app = App.get_current_app()
+        >>> objects = get_detected_objects(app.db)
+        >>> # OR
+        >>> with app.db.begin() as session:
+        >>>     query = sa.update(DetectedObjects)
+                            .where(DetectedObjects.status == 1)
+                            .values({"status": 2})
+        >>>     results = session.execute(query)
+
+        >>>
+        """
+        db_path = self.config.get("paths", "database_url")
+        DatabaseSession = get_session_class(db_path)
+        return DatabaseSession()
+        # db = DatabaseSession()
+        # try:
+        #     yield db
+        # finally:
+        #     db.close()
 
     def build(self):
         self.title = "AMI Trap Data Companion"
@@ -180,6 +203,8 @@ class TrapDataApp(App):
         sm.add_widget(SpeciesSummaryGridScreen(name="species_grid"))
         sm.add_widget(QueueScreen(name="queue"))
         self.screen_manager = sm
+
+        self.db = self.get_db_session()
 
         return sm
 
@@ -354,7 +379,7 @@ class TrapDataApp(App):
     def export(self, detected_objects=None, report_name=None):
         app = self
         user_data_path = app.config.get("paths", "user_data_path")
-        records = list(detected_objects or get_detected_objects(app.db_path))
+        records = list(detected_objects or get_detected_objects(app.db))
         timestamp = int(time.time())
         report_name = report_name or f"all-detections-{timestamp}"
         filepath = export_detected_objects(records, report_name, user_data_path)

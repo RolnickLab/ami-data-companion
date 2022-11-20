@@ -12,7 +12,7 @@ def get_safe_db_path(db):
     return db.path
 
 
-def get_db(db_path, create=False):
+def get_db_connection(db_path, create=False):
     """
     db_path supports any database URL format supported by sqlalchemy
     sqlite_filepath = "~/trapdata.db"
@@ -33,6 +33,7 @@ def get_db(db_path, create=False):
         future=True,
         connect_args={
             "timeout": 10,  # A longer timeout is necessary for SQLite and multiple PyTorch workers
+            # "check_same_thread": False,
         },
     )
 
@@ -50,17 +51,20 @@ def get_db(db_path, create=False):
     return db
 
 
-def get_session_class(db_path):
+def get_session_class(db_path: str, **kwargs) -> orm.Session:
     """
     Use this to create a pre-configured Session class.
     Attach it to the running app.
     Then we don't have to pass around the db_path
     """
-    Session = orm.sessionmaker(
-        bind=get_db(db_path),
+    CustomSession = orm.sessionmaker(
+        bind=get_db_connection(db_path),
         expire_on_commit=False,  # Only need this for select methods (`pull_n_from_queue`)
+        autocommit=False,
+        autoflush=False,
+        **kwargs,
     )
-    return Session
+    return CustomSession
 
 
 @contextlib.contextmanager
@@ -85,7 +89,8 @@ def get_session(db_path):
     >>> num_images
     0
     """
-    db = get_db(db_path)
+    raise NotImplementedError
+    db = get_db_connection(db_path)
 
     session = orm.Session(
         db,
@@ -107,25 +112,21 @@ def get_session(db_path):
         session.close()
 
 
-def check_db(db_path, create=True, quiet=False):
+def check_db(db: orm.Session, create=True, quiet=False):
     """
     Try opening a database session.
     """
     from trapdata.db.models import __models__
 
-    logger.debug(f"Checking DB {db_path}")
+    logger.debug(f"Checking DB {db}")
 
     try:
-        get_db(db_path, create=True)
-        with get_session(db_path) as sesh:
-            # May have to check each model to detect schema changes
-            # @TODO probably a better way to do this!
-            for ModelClass in __models__:
-                logger.debug(f"Testing model {ModelClass}")
-                count = sesh.query(ModelClass).count()
-                logger.debug(
-                    f"Found {count} records in table '{ModelClass.__tablename__}'"
-                )
+        # May have to check each model to detect schema changes
+        # @TODO probably a better way to do this!
+        for ModelClass in __models__:
+            logger.debug(f"Testing model {ModelClass}")
+            count = db.query(ModelClass).count()
+            logger.debug(f"Found {count} records in table '{ModelClass.__tablename__}'")
     except sa.exc.OperationalError as e:
         logger.error(f"Error opening database session: {e}")
         if quiet:

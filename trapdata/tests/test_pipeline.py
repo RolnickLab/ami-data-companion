@@ -8,7 +8,7 @@ import pathlib
 import torch
 
 from trapdata import logger
-from trapdata.db import get_db, check_db
+from trapdata.db import get_db_connection, get_session_class, check_db
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import (
     add_sample_to_queue,
@@ -31,13 +31,15 @@ from trapdata.ml.models.classification import (
 def end_to_end(db_path, image_base_directory, sample_size):
 
     # db_path = ":memory:"
-    get_db(db_path, create=True)
+    get_db_connection(db_path, create=True)
+    DatabaseSession = get_session_class(db_path)
+    db = DatabaseSession()
 
-    get_or_create_monitoring_sessions(db_path, image_base_directory)
+    get_or_create_monitoring_sessions(db, image_base_directory)
 
-    clear_all_queues(db_path)
-    add_sample_to_queue(db_path, sample_size=sample_size)
-    num_images = images_in_queue(db_path)
+    clear_all_queues(db)
+    add_sample_to_queue(db, sample_size=sample_size)
+    num_images = images_in_queue(db)
     logger.info(f"Images in queue: {num_images}")
     assert num_images == sample_size
 

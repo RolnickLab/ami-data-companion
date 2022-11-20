@@ -21,7 +21,7 @@ from kivy.uix.screenmanager import Screen
 from plyer import filechooser
 
 from trapdata import logger
-from trapdata import db
+from trapdata.db import check_db
 from trapdata import TrapImage
 from trapdata.common import settings
 from trapdata.db.models.queue import add_monitoring_session_to_queue
@@ -79,8 +79,8 @@ class AddToQueueButton(Button):
         super().__init__(*args, **kwargs)
 
     def on_release(self):
-        db_path = App.get_running_app().db_path
-        add_monitoring_session_to_queue(db_path, self.monitoring_session)
+        db = App.get_running_app().get_db()
+        add_monitoring_session_to_queue(db, self.monitoring_session)
 
 
 class LaunchScreenButton(Button):
@@ -119,13 +119,12 @@ class MonitoringSessionRow(BoxLayout):
         if ms:
             self.clear_widgets()
 
-        with db.get_session(self.app.db_path) as sesh:
-            first_image = (
-                sesh.query(TrapImage)
-                .filter_by(monitoring_session_id=ms.id)
-                .order_by(TrapImage.filesize.desc())
-                .first()
-            )
+        first_image = (
+            self.app.db.query(TrapImage)
+            .filter_by(monitoring_session_id=ms.id)
+            .order_by(TrapImage.filesize.desc())
+            .first()
+        )
 
         if not first_image:
             # If there is no first image
@@ -232,13 +231,13 @@ class DataMenuScreen(Screen):
     def db_ready(self):
         # Try to open a database session.
         # # @TODO add GUI indicator asking to recreate DB if it fails to open?
-        if not db.check_db(self.app.db_path, create=True, quiet=True):
+        if not check_db(self.app.db, create=True, quiet=True):
             Popup(
                 title="Error reading or creating database",
                 content=Label(
                     text=(
                         f"Error reading or creating database: \n\n"
-                        f"{self.app.db_path} \n\n"
+                        f"{self.app.db} \n\n"
                         f"Trying deleting the DB file and it will be recreated on next launch."
                     )
                 ),
@@ -295,9 +294,7 @@ class DataMenuScreen(Screen):
                     child.disabled = True
 
     def get_monitoring_sessions(self, *args):
-        sessions = get_or_create_monitoring_sessions(
-            self.app.db_path, self.image_base_path
-        )
+        sessions = get_or_create_monitoring_sessions(self.app.db, self.image_base_path)
         logger.info(
             f"Found {len(sessions)} monitoring sessions with base_path: {self.image_base_path}"
         )

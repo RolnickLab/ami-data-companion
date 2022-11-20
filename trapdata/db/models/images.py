@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from sqlalchemy import orm
 from sqlalchemy_utils import aggregated
 
-from trapdata.db import Base, get_session
+from trapdata.db import Base
 from trapdata import constants
 
 
@@ -61,23 +61,22 @@ class TrapImage(Base):
         )
 
 
-def get_image_with_objects(db_path, image_id):
-    with get_session(db_path) as sesh:
-        image_kwargs = {
-            "id": image_id,
-            # "path": str(image_path),
-            # "monitoring_session_id": monitoring_session.id,
-        }
-        image = (
-            sesh.query(TrapImage)
-            .filter_by(**image_kwargs)
-            .options(orm.joinedload(TrapImage.detected_objects))
-            .one_or_none()
-        )
-        # logger.debug(
-        #     f"Found image {image} with {len(image.detected_objects)} detected objects"
-        # )
-        return image
+def get_image_with_objects(db: orm.Session, image_id):
+    image_kwargs = {
+        "id": image_id,
+        # "path": str(image_path),
+        # "monitoring_session_id": monitoring_session.id,
+    }
+    image = (
+        db.query(TrapImage)
+        .filter_by(**image_kwargs)
+        .options(orm.joinedload(TrapImage.detected_objects))
+        .one_or_none()
+    )
+    # logger.debug(
+    #     f"Found image {image} with {len(image.detected_objects)} detected objects"
+    # )
+    return image
 
 
 def completely_classified(db_path, image_id):

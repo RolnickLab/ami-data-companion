@@ -4,6 +4,7 @@ import torch
 from sentry_sdk import start_transaction
 
 from trapdata import logger
+from trapdata.db import get_session_class
 from trapdata.ml.utils import (
     get_device,
     get_or_download_file,
@@ -60,7 +61,7 @@ class InferenceBaseClass:
     single = True
 
     def __init__(self, db_path, **kwargs):
-        self.db_path = db_path
+        self.db = self.get_db_session(db_path)
 
         for k, v in kwargs.items():
             setattr(self, k, v)
@@ -77,6 +78,10 @@ class InferenceBaseClass:
             f"Loading {self.type} model (stage: {self.stage}) for {self.name} with {len(self.category_map or [])} categories"
         )
         self.model = self.get_model()
+
+    def get_db_session(self, db_path):
+        DatabaseSession = get_session_class(db_path)
+        return DatabaseSession()
 
     def get_weights(self, weights_path):
         if weights_path:
