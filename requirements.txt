@@ -15,3 +15,7 @@ timm
 opencv_python
 matplotlib
 structlog
+
+fastapi
+uvicorn
+jinja2
