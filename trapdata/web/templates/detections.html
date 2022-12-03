@@ -4,12 +4,34 @@
 
 {% block content %}
 
-{% for name, count in species_list %}
-<h4>{{ name }} ({{ count }})</h4>
-    {% for (object,) in get_objects(name) %}
-        <img src=" {{ url_for('crops', path=relative_path(object.path)) }} " />
+<div class="row row-deck row-cards">
+    {% for name, count in species_list %}
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-body markdown">
+                <h3 class="card-title">
+                    {{ name }} ({{ count }})
+                </h3>
+                <div class="row row-deck row-cards">
+                    {% for (object,) in get_objects(name) %}
+                    <div class="col-lg-2">
+                        <div class="card border-0">
+                                <img src=" {{ url_for('crops', path=relative_path(object.path)) }} " />
+                                <!--<div class="img-responsive img-responsive-1x1 rounded-3 border" 
+                                    style="background-image: url( {{ url_for('crops', path=relative_path(object.path)) }} )"></div>
+                                -->
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
     {% endfor %}
+    <div class="col-lg-12">
+        <a class="btn btn-primary" href="{{ next_url }}">Next</a>
+    </div>
+</div>
 
-{% endfor %}
 
 {% endblock %}

@@ -1,5 +1,6 @@
 import os
 import pathlib
+import urllib.parse
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -9,7 +10,11 @@ from fastapi.templating import Jinja2Templates
 from trapdata.db import get_session_class
 from trapdata.db.models.detections import get_objects_for_species, get_unique_species
 
+# @TODO use pydantic settings module
 db_path = os.getenv("DATABASE_URL")
+assert db_path
+user_data_path = os.getenv("USER_DATA_DIR")
+assert user_data_path
 DatabaseSession = get_session_class(db_path)
 DB = DatabaseSession()
 
@@ -17,7 +22,9 @@ DB = DatabaseSession()
 app = FastAPI()
 
 app_root = pathlib.Path(__file__).parent
-crops_root = "/home/michael/Projects/AMI/USERDATA/crops/"
+crops_root = pathlib.Path(user_data_path) / "crops"
+if not crops_root.exists():
+    crops_root.mkdir()
 
 
 app.mount("/static", StaticFiles(directory=app_root / "static"), name="static")
@@ -41,6 +48,8 @@ async def detections(request: Request, limit: int = 2, offset: int = 0):
     def relative_path(path):
         return str(pathlib.Path(path).relative_to(crops_root))
 
+    next_url = request.url.include_query_params(limit=limit, offset=offset + limit)
+
     return templates.TemplateResponse(
         "detections.html",
         {
@@ -48,6 +57,7 @@ async def detections(request: Request, limit: int = 2, offset: int = 0):
             "species_list": species,
             "get_objects": objects_for_species,
             "relative_path": relative_path,
+            "next_url": next_url,
         },
     )
 
