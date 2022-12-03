@@ -14,7 +14,7 @@
                 </h3>
                 <div class="row row-deck row-cards">
                     {% for (object,) in get_objects(name) %}
-                    <div class="col-lg-2">
+                    <div class="col-lg-2 col-md-2 col-sm-2">
                         <div class="card border-0">
                                 <img src=" {{ url_for('crops', path=relative_path(object.path)) }} " />
                                 <!--<div class="img-responsive img-responsive-1x1 rounded-3 border" 
