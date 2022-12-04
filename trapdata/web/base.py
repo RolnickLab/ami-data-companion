@@ -7,8 +7,11 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from sqlalchemy import select
+
 from trapdata.db import get_session_class
 from trapdata.db.models.detections import get_objects_for_species, get_unique_species
+from trapdata.db.models.events import MonitoringSession
 
 # @TODO use pydantic settings module
 db_path = os.getenv("DATABASE_URL")
@@ -16,7 +19,6 @@ assert db_path
 user_data_path = os.getenv("USER_DATA_DIR")
 assert user_data_path
 DatabaseSession = get_session_class(db_path)
-DB = DatabaseSession()
 
 
 app = FastAPI()
@@ -60,6 +62,30 @@ async def detections(request: Request, limit: int = 2, offset: int = 0):
             "next_url": next_url,
         },
     )
+
+
+@app.get("/surveys", response_class=HTMLResponse)
+async def surveys(request: Request):
+    with DatabaseSession() as session:
+        surveys = session.execute(select(MonitoringSession)).scalars()
+
+        # The location image dir is different for each deployment
+        # Need a solution for this. Some might be on S3
+        base_dir = session.execute(select(MonitoringSession.base_directory)).scalar()
+        app.mount(
+            "/trapdata/",
+            StaticFiles(directory=base_dir),
+            name="trapdata",
+        )
+
+        return templates.TemplateResponse(
+            "surveys.html",
+            {
+                "request": request,
+                "surveys": surveys,
+                "session": session,
+            },
+        )
 
 
 @app.get("/items/{id}", response_class=HTMLResponse)

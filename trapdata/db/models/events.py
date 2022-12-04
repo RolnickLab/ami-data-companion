@@ -79,13 +79,22 @@ class MonitoringSession(Base):
 
     @property
     def duration_label(self):
-        if self.duration():
-            hours = int(round(self.duration().seconds / 60 / 60, 0))
+        duration = self.duration()
+        if duration:
+            hours = int(round(duration.seconds / 60 / 60, 0))
             unit = "hour" if hours == 1 else "hours"
             duration = f"{hours} {unit}"
         else:
             duration = "Unknown duration"
         return duration
+
+    def get_thumbnail(self, session):
+        statement = (
+            sa.select(TrapImage)
+            .filter_by(monitoring_session=self)
+            .order_by(TrapImage.filesize.desc())
+        )
+        return session.execute(statement).scalar()
 
 
 def save_monitoring_session(db_path, base_directory, session):
