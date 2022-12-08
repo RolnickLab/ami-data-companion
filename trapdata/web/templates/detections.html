@@ -17,6 +17,7 @@
                     <div class="col-lg-2 col-md-2 col-sm-2">
                         <div class="card border-0">
                                 <img src=" {{ url_for('crops', path=relative_path(object.path)) }} " />
+                                <span class="light" style="font-family:monospace">{{ "%.6f"|format(object.specific_label_score) }}</span>
                                 <!--<div class="img-responsive img-responsive-1x1 rounded-3 border" 
                                     style="background-image: url( {{ url_for('crops', path=relative_path(object.path)) }} )"></div>
                                 -->
