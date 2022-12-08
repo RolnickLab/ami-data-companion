@@ -103,12 +103,28 @@ async def playback(request: Request, image_id: int):
             name="trapdata",
         )
 
+        next_image_id = session.execute(
+            select(TrapImage.id)
+            .filter(TrapImage.timestamp > image.timestamp)
+            .order_by(TrapImage.timestamp.asc())
+        ).scalar()
+        prev_image_id = session.execute(
+            select(TrapImage.id)
+            .filter(TrapImage.timestamp < image.timestamp)
+            .order_by(TrapImage.timestamp.desc())
+        ).scalar()
+
+        next_url = app.url_path_for("playback", image_id=next_image_id)
+        prev_url = app.url_path_for("playback", image_id=prev_image_id)
+
         return templates.TemplateResponse(
             "playback.html",
             {
                 "request": request,
                 "image": image,
                 "session": session,
+                "prev_url": prev_url,
+                "next_url": next_url,
             },
         )
 

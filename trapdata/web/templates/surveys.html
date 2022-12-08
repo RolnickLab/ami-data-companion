@@ -9,13 +9,18 @@
     <div class="col-lg-12">
         <div class="card">
             <div class="card-body markdown">
-                <h3 class="card-title">
-                    {{ survey.day }} | {{ survey.duration_label }}
+                <h3 class="card-title" id="survey_{{ survey.id }}">
+                    {{ survey.day }} | {{ survey.duration_label }} | {{ survey.num_images }} images
                 </h3>
-                <p>
-                    {{ survey }}
-                </p>
-                <img src=" {{ url_for('trapdata', path=survey.get_thumbnail(session).path) }} " />
+                <div class="row row-deck row-cards">
+                    {% for img in survey.get_images(session, 6) %}
+                    <div class="col-lg-2 col-md-2 col-sm-2">
+                        <div class="card border-0" style="font-family:monospace">
+                            <a href="{{ url_for('playback', image_id=img.id) }}"><img src=" {{ url_for('trapdata', path=img.path) }} " /></a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
         </div>
     </div>

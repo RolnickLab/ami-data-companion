@@ -8,13 +8,16 @@
     <div class="col-lg-12">
         <div class="card">
             <div class="card-body markdown">
-                <h3 class="card-title">
-                    {{ image.path }}
-                </h3>
-                <p>
-                    {{ image }}
-                </p>
-                <div>
+                <div class="col-lg-12 markdown">
+                    <h3 class="card-title">
+                        <a href="{{ url_for('surveys')}}#survey_{{image.monitoring_session.id}}">{{ image.monitoring_session.day }}</a> | {{ image.timestamp }}<br>
+                    </h3>
+                </div><br>
+                <div class="col-lg-6 float-right">
+                    <a class="btn btn-primary" href="{{ prev_url }}">Prev</a> 
+                    <a class="btn btn-primary" href="{{ next_url }}">Next</a>
+                </div><br>
+                <div class="col-lg-12">
                     <img src=" {{ url_for('trapdata', path=image.path) }} " />
                 </div>
                 <div data-slider='{"js-name": "slider0","start": 50,"range": {"min": 0,"max": 100}}'></div>
@@ -23,7 +26,10 @@
         </div>
     </div>
     <div class="col-lg-12">
-        <a class="btn btn-primary" href="{{ next_url }}">Next</a>
+    <p>
+        From survey: <br>
+        Filepath: {{ image.path }}
+    </p>
     </div>
 </div>
 

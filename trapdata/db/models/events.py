@@ -96,6 +96,16 @@ class MonitoringSession(Base):
         )
         return session.execute(statement).scalar()
 
+    def get_images(self, session, num=5):
+        statement = (
+            sa.select(TrapImage)
+            .filter_by(monitoring_session=self)
+            .limit(num)
+            # .order_by(TrapImage.timestamp.asc())
+            .order_by(TrapImage.filesize.desc())
+        )
+        return session.execute(statement).unique().scalars()
+
 
 def save_monitoring_session(db_path, base_directory, session):
     # @TODO find & save all images to the DB first, then
