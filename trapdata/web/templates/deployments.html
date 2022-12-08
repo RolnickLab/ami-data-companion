@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Surveys{% endblock %}
+
+{% block content %}
+
+<div class="row row-deck row-cards">
+    {% for deployment in deployments %}
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-body markdown">
+                <h3 class="card-title">
+                    {{ survey.day }} | {{ survey.duration_label }}
+                </h3>
+                <p>
+                    {{ survey }}
+                </p>
+                <img src=" {{ url_for('trapdata', path=survey.get_thumbnail(session).path) }} " />
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    <div class="col-lg-12">
+        <a class="btn btn-primary" href="">New Deployment</a>
+    </div>
+</div>
+
+
+{% endblock %}
