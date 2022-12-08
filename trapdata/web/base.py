@@ -12,6 +12,7 @@ from sqlalchemy import select
 from trapdata.db import get_session_class
 from trapdata.db.models.detections import get_objects_for_species, get_unique_species
 from trapdata.db.models.events import MonitoringSession
+from trapdata.db.models.images import TrapImage
 
 # @TODO use pydantic settings module
 db_path = os.getenv("DATABASE_URL")
@@ -83,6 +84,30 @@ async def surveys(request: Request):
             {
                 "request": request,
                 "surveys": surveys,
+                "session": session,
+            },
+        )
+
+
+@app.get("/playback/{image_id}", response_class=HTMLResponse)
+async def playback(request: Request, image_id: int):
+    with DatabaseSession() as session:
+        image = session.execute(select(TrapImage).filter_by(id=image_id)).scalar()
+        if not image:
+            raise Exception("404")
+        # The location image dir is different for each deployment
+        # Need a solution for this. Some might be on S3
+        app.mount(
+            "/trapdata/",
+            StaticFiles(directory=str(image.base_path)),
+            name="trapdata",
+        )
+
+        return templates.TemplateResponse(
+            "playback.html",
+            {
+                "request": request,
+                "image": image,
                 "session": session,
             },
         )

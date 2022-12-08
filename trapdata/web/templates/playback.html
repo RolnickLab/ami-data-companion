@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Interactive Review{% endblock %}
+
+{% block content %}
+
+<div class="row row-deck row-cards">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-body markdown">
+                <h3 class="card-title">
+                    {{ image.path }}
+                </h3>
+                <p>
+                    {{ image }}
+                </p>
+                <div>
+                    <img src=" {{ url_for('trapdata', path=image.path) }} " />
+                </div>
+                <div data-slider='{"js-name": "slider0","start": 50,"range": {"min": 0,"max": 100}}'></div>
+                <p demo-slider="slider0"></p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-12">
+        <a class="btn btn-primary" href="{{ next_url }}">Next</a>
+    </div>
+</div>
+
+
+{% endblock %}
