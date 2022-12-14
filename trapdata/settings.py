@@ -1,9 +1,8 @@
-from typing import Union, Literal, Optional
+from typing import Union, Optional
 
 import pathlib
 
 from pydantic import (
-    BaseModel,
     BaseSettings,
     Field,
     FileUrl,
@@ -20,13 +19,6 @@ class SqliteDsn(FileUrl):
         "sqlite+aiosqlite",
         "sqlite+pysqlcipher",
     }
-
-
-from enum import Enum
-
-
-class Choice(Enum):
-    pass
 
 
 class Settings(BaseSettings):
@@ -112,5 +104,6 @@ class Settings(BaseSettings):
         }
 
 
-settings = Settings()
-print(settings.schema_json(indent=2))
+if __name__ == "__main__":
+    settings = Settings()  # type: ignore
+    print(settings.schema_json(indent=2))
