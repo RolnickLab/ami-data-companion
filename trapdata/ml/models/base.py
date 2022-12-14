@@ -4,6 +4,7 @@ import torch
 from sentry_sdk import start_transaction
 
 from trapdata import logger
+from trapdata.common.utils import slugify
 from trapdata.ml.utils import (
     get_device,
     get_or_download_file,
@@ -77,6 +78,13 @@ class InferenceBaseClass:
             f"Loading {self.type} model (stage: {self.stage}) for {self.name} with {len(self.category_map or [])} categories"
         )
         self.model = self.get_model()
+
+    @classmethod
+    def get_key(cls):
+        if hasattr(cls, "key") and cls.key:  # type: ignore
+            return cls.key  # type: ignore
+        else:
+            return slugify(cls.name)
 
     def get_weights(self, weights_path):
         if weights_path:
