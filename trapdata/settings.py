@@ -104,6 +104,7 @@ class Settings(BaseSettings):
         }
 
 
+settings = Settings()  # type: ignore
+
 if __name__ == "__main__":
-    settings = Settings()  # type: ignore
     print(settings.schema_json(indent=2))
