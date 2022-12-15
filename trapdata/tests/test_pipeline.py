@@ -42,10 +42,10 @@ def end_to_end(db_path, image_base_directory, sample_size):
     assert num_images == sample_size
 
     if torch.cuda.is_available():
-        object_detector = MothObjectDetector_FasterRCNN(db_path=db_path, batch_size=10)
+        object_detector = MothObjectDetector_FasterRCNN(db_path=db_path, batch_size=2)
     else:
         object_detector = GenericObjectDetector_FasterRCNN_MobileNet(
-            db_path=db_path, batch_size=10
+            db_path=db_path, batch_size=2
         )
     moth_nonmoth_classifier = MothNonMothClassifier(db_path=db_path, batch_size=300)
     species_classifier = UKDenmarkMothSpeciesClassifier(db_path=db_path, batch_size=300)
