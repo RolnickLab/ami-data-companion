@@ -1,5 +1,5 @@
 import pathlib
-from typing import Union
+from typing import Optional
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -22,9 +22,14 @@ class TrapImage(Base):
     last_processed = sa.Column(sa.DateTime)
     in_queue = sa.Column(sa.Boolean, default=False)
     notes = sa.Column(sa.JSON)
+    # width
+    # height
+    # diag
+    # centroid
+    # cnn features
 
     @property
-    def absolute_path(self, directory: Union[str, None] = None) -> pathlib.Path:
+    def absolute_path(self, directory: Optional[str] = None) -> pathlib.Path:
         # @TODO this directory argument can be removed once the image has the base
         # path stored in itself
         if not directory:
