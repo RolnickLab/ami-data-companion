@@ -101,6 +101,9 @@ class DetectedObject(db.Base):
             "category_score": score,
         }
 
+    def to_json(self):
+        return self.report_data()
+
 
 def save_detected_objects(
     db_path, image_ids, detected_objects_data, user_data_path=None
@@ -176,14 +179,19 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
         sesh.commit()
 
 
-def get_detected_objects(db_path, monitoring_session=None):
+def get_detected_objects(db_path, monitoring_session=None, limit=None, offset=0):
     query_kwargs = {}
 
     if monitoring_session:
         query_kwargs["monitoring_session_id"] = monitoring_session.id
 
     with db.get_session(db_path) as sesh:
-        return sesh.query(DetectedObject).filter_by(**query_kwargs)
+        return (
+            sesh.query(DetectedObject)
+            .filter_by(**query_kwargs)
+            .offset(offset)
+            .limit(limit)
+        )
 
 
 def get_objects_for_image(db_path, image_id):
