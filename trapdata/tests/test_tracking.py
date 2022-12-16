@@ -29,7 +29,7 @@ from trapdata.ml.models.classification import (
     MothNonMothClassifier,
     UKDenmarkMothSpeciesClassifier,
 )
-from trapdata.ml.models.tracking import TrackingCost, image_diagonal
+from trapdata.ml.models.tracking import TrackingCostOriginal, image_diagonal
 
 
 # @newrelic.agent.background_task()
@@ -119,7 +119,7 @@ def test_tracking(db_path, image_base_directory, sample_size):
     print("Calculating tracking costs")
     for obj1 in objects1:
         for obj2 in objects2:
-            cost = TrackingCost(
+            cost = TrackingCostOriginal(
                 obj1.cropped_image_data(),
                 obj2.cropped_image_data(),
                 tuple(obj1.bbox),

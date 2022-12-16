@@ -3,6 +3,8 @@ import json
 import torch
 from sentry_sdk import start_transaction
 
+import torchvision.transforms
+
 from trapdata import logger
 from trapdata.ml.utils import (
     get_device,
@@ -125,7 +127,7 @@ class InferenceBaseClass:
         """
         raise NotImplementedError
 
-    def get_transforms(self):
+    def get_transforms(self) -> torchvision.transforms.Compose:
         """
         # This method must be implemented by a subclass.
         # Example:

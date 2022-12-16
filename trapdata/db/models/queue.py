@@ -1,3 +1,5 @@
+from typing import Sequence, Any
+
 import sqlalchemy as sa
 
 from trapdata.db import get_session
@@ -33,7 +35,7 @@ class QueueManager:
     def status(self):
         return NotImplementedError
 
-    def pull_n_from_queue(self, n):
+    def pull_n_from_queue(self, n: int) -> Sequence[Any]:
         return NotImplementedError
 
     def process_queue(self, model):
@@ -107,7 +109,7 @@ class ImageQueue(QueueManager):
             sesh.bulk_save_objects(orm_objects)
             sesh.commit()
 
-    def pull_n_from_queue(self, n):
+    def pull_n_from_queue(self, n: int) -> Sequence[TrapImage]:
         logger.debug(f"Attempting to pull {n} images from queue")
         select_stmt = (
             sa.select(TrapImage.id)
@@ -192,7 +194,7 @@ class DetectedObjectQueue(QueueManager):
             sesh.bulk_save_objects(orm_objects)
             sesh.commit()
 
-    def pull_n_from_queue(self, n):
+    def pull_n_from_queue(self, n: int) -> Sequence[DetectedObject]:
         logger.debug(f"Attempting to pull {n} detected objects from queue")
         select_stmt = (
             sa.select(DetectedObject.id)
@@ -305,7 +307,16 @@ class UntrackedObjectsQueue(QueueManager):
             sesh.bulk_save_objects(objects)
             sesh.commit()
 
-    def pull_n_from_queue(self, n):
+    def pull_n_from_queue(
+        self, n: int
+    ) -> Sequence[tuple[DetectedObject, Sequence[DetectedObject]]]:
+        """
+        Fetch detected objects that need to be assigned to a sequence / track and
+        all of the objects from the previous frame that will be compared.
+
+        This will return more DetectedObjects than specified by `n` because
+        it includes all of the related objects.
+        """
         logger.debug(f"Attempting to pull {n} untracked detections from queue")
         select_stmt = (
             sa.select(DetectedObject.id)
@@ -327,16 +338,19 @@ class UntrackedObjectsQueue(QueueManager):
         with get_session(self.db_path) as sesh:
             record_ids = sesh.execute(update_stmt).scalars().all()
             sesh.commit()
-            records = (
+            detections = (
                 sesh.execute(
                     sa.select(DetectedObject).where(DetectedObject.id.in_(record_ids))
                 )
                 .unique()
+                .scalars()
                 .all()
             )
-            objs = [record[0] for record in records]
-            logger.info(f"Pulled {len(objs)} untracked detections from queue")
-            return objs
+            logger.info(f"Pulled {len(detections)} untracked detections from queue")
+            objs_with_comparisons = [
+                (obj, obj.previous_frame_detections(sesh)) for obj in detections
+            ]
+            return objs_with_comparisons
 
 
 class UnclassifiedObjectQueue(QueueManager):
@@ -423,7 +437,7 @@ class UnclassifiedObjectQueue(QueueManager):
             sesh.bulk_save_objects(objects)
             sesh.commit()
 
-    def pull_n_from_queue(self, n):
+    def pull_n_from_queue(self, n: int) -> Sequence[DetectedObject]:
         logger.debug(f"Attempting to pull {n} objects of interest from queue")
         select_stmt = (
             sa.select(DetectedObject.id)

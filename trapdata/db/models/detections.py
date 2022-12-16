@@ -1,6 +1,6 @@
 import datetime
 import pathlib
-from typing import Iterable, Union, Optional, Any
+from typing import Iterable, Union, Optional, Any, Sequence
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -45,6 +45,8 @@ class DetectedObject(db.Base):
     notes = sa.Column(sa.JSON)
     sequence_id = sa.Column(UUIDType)
     sequence_frame = sa.Column(sa.Integer)
+    sequence_previous_id = sa.Column(sa.Integer)
+    sequence_previous_cost = sa.Column(sa.Float)
 
     image = orm.relationship(
         "TrapImage",
@@ -120,6 +122,14 @@ class DetectedObject(db.Base):
         )
         self.path = str(fpath)
         return fpath
+
+    def previous_frame_detections(
+        self, session: orm.Session
+    ) -> Sequence["DetectedObject"]:
+        stmt = sa.select(DetectedObject).where(
+            DetectedObject.image_id == self.source_image_previous_frame
+        )
+        return session.execute(stmt).unique().scalars().all()
 
     def report_data(self) -> dict[str, Any]:
         if self.specific_label:
