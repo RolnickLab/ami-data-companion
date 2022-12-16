@@ -225,6 +225,120 @@ class DetectedObjectQueue(QueueManager):
             return objs
 
 
+class UntrackedObjectsQueue(QueueManager):
+    name = "Untracked detections"
+    description = """
+    Objects that have been identified as something of interest (e.g. a moth)
+    but have not yet been "tracked" e.g. grouped into multiple frames of the same organism.
+    """
+
+    def queue_count(self):
+        with get_session(self.db_path) as sesh:
+            return (
+                sesh.query(DetectedObject)
+                .filter_by(
+                    in_queue=True,
+                    binary_label=constants.POSITIVE_BINARY_LABEL,
+                    sequence_id=None,
+                )
+                .count()
+            )
+
+    def unprocessed_count(self):
+        with get_session(self.db_path) as sesh:
+            return (
+                sesh.query(DetectedObject)
+                .filter_by(
+                    binary_label=constants.POSITIVE_BINARY_LABEL,
+                    sequence_id=None,
+                )
+                .count()
+            )
+
+    def done_count(self):
+        with get_session(self.db_path) as sesh:
+            return (
+                sesh.query(DetectedObject)
+                .filter(DetectedObject.specific_label.is_not(None))
+                .count()
+            )
+
+    def add_unprocessed(self, *args):
+        orm_objects = []
+        with get_session(self.db_path) as sesh:
+            objects = (
+                sesh.query(DetectedObject)
+                .filter_by(
+                    in_queue=False,
+                    binary_label=constants.POSITIVE_BINARY_LABEL,
+                    sequence_id=None,
+                )
+                .all()
+            )
+
+        for obj in objects:
+            obj.in_queue = True
+            orm_objects.append(obj)
+
+        with get_session(self.db_path) as sesh:
+            logger.info(f"Adding {len(orm_objects)} untracked detections to queue")
+            sesh.bulk_save_objects(orm_objects)
+            sesh.commit()
+
+    def clear_queue(self, *args):
+        logger.info("Clearing untracked detections in queue")
+
+        with get_session(self.db_path) as sesh:
+            objects = []
+            for obj in (
+                sesh.query(DetectedObject)
+                .filter_by(
+                    in_queue=True,
+                    binary_label=constants.POSITIVE_BINARY_LABEL,
+                    sequence_id=None,
+                )
+                .all()
+            ):
+                obj.in_queue = False
+                objects.append(obj)
+            logger.info(f"Clearing {len(objects)} untracked detections in queue")
+            sesh.bulk_save_objects(objects)
+            sesh.commit()
+
+    def pull_n_from_queue(self, n):
+        logger.debug(f"Attempting to pull {n} untracked detections from queue")
+        select_stmt = (
+            sa.select(DetectedObject.id)
+            .where(
+                (DetectedObject.in_queue == True)
+                & (DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
+                & (DetectedObject.sequence_id == None)
+                & (DetectedObject.bbox.is_not(None))
+            )
+            .limit(n)
+            .with_for_update()
+        )
+        update_stmt = (
+            sa.update(DetectedObject)
+            .where(DetectedObject.id.in_(select_stmt.scalar_subquery()))
+            .values({"in_queue": False})
+            .returning(DetectedObject.id)
+        )
+        with get_session(self.db_path) as sesh:
+            record_ids = sesh.execute(update_stmt).scalars().all()
+            sesh.commit()
+            records = (
+                sesh.execute(
+                    sa.select(DetectedObject).where(DetectedObject.id.in_(record_ids))
+                )
+                .unique()
+                .all()
+            )
+            objs = [record[0] for record in records]
+            logger.info(f"Pulled {len(objs)} untracked detections from queue")
+            return objs
+
+
 class UnclassifiedObjectQueue(QueueManager):
     name = "Unclassified species"
     description = """
@@ -241,6 +355,7 @@ class UnclassifiedObjectQueue(QueueManager):
                     specific_label=None,
                     binary_label=constants.POSITIVE_BINARY_LABEL,
                 )
+                .filter(DetectedObject.sequence_id.is_not(None))
                 .count()
             )
 
@@ -252,6 +367,7 @@ class UnclassifiedObjectQueue(QueueManager):
                     specific_label=None,
                     binary_label=constants.POSITIVE_BINARY_LABEL,
                 )
+                .filter(DetectedObject.sequence_id.is_not(None))
                 .count()
             )
 
@@ -273,6 +389,7 @@ class UnclassifiedObjectQueue(QueueManager):
                     specific_label=None,
                     binary_label=constants.POSITIVE_BINARY_LABEL,
                 )
+                .filter(DetectedObject.sequence_id.is_not(None))
                 .all()
             )
 
@@ -297,6 +414,7 @@ class UnclassifiedObjectQueue(QueueManager):
                     specific_label=None,
                     binary_label=constants.POSITIVE_BINARY_LABEL,
                 )
+                .filter(DetectedObject.sequence_id.is_not(None))
                 .all()
             ):
                 obj.in_queue = False
@@ -314,6 +432,7 @@ class UnclassifiedObjectQueue(QueueManager):
                 & (DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
                 & (DetectedObject.specific_label == None)
                 & (DetectedObject.bbox.is_not(None))
+                & (DetectedObject.sequence_id.is_not(None))
             )
             .limit(n)
             .with_for_update()
@@ -345,6 +464,7 @@ def all_queues(db_path):
         for q in [
             ImageQueue(db_path),
             DetectedObjectQueue(db_path),
+            UntrackedObjectsQueue(db_path),
             UnclassifiedObjectQueue(db_path),
         ]
     }
