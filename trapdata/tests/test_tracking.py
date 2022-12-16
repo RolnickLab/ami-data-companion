@@ -94,7 +94,7 @@ def test_tracking(db_path, image_base_directory, sample_size):
             .all()
         )
         image1 = images[0]
-        image2 = images[2]
+        image2 = images[1]
 
         objects1 = (
             session.execute(
@@ -115,6 +115,8 @@ def test_tracking(db_path, image_base_directory, sample_size):
 
         img_shape = Image.open(image1.absolute_path).size
 
+    costs = []
+    print("Calculating tracking costs")
     for obj1 in objects1:
         for obj2 in objects2:
             cost = TrackingCost(
@@ -125,7 +127,9 @@ def test_tracking(db_path, image_base_directory, sample_size):
                 source_image_diagonal=image_diagonal(img_shape[0], img_shape[1]),
                 cnn_source_model=species_classifier.model,
             )
-            print(cost.final_cost(), obj1.path, obj2.path)
+            costs.append((cost.final_cost(), obj1, obj2))
+
+    print(list(reversed(sorted(costs, key=lambda costs: costs[0]))))
 
 
 if __name__ == "__main__":
