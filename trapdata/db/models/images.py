@@ -22,8 +22,8 @@ class TrapImage(Base):
     last_processed = sa.Column(sa.DateTime)
     in_queue = sa.Column(sa.Boolean, default=False)
     notes = sa.Column(sa.JSON)
-    # width
-    # height
+    width = sa.Column(sa.Integer)
+    height = sa.Column(sa.Integer)
     # diag
     # centroid
     # cnn features
@@ -39,6 +39,24 @@ class TrapImage(Base):
     @aggregated("detected_objects", sa.Column(sa.Integer))
     def num_detected_objects(self):
         return sa.func.count("1")
+
+    def previous_image(self, session: orm.Session) -> Optional["TrapImage"]:
+        img = session.execute(
+            sa.select(TrapImage)
+            .filter(TrapImage.timestamp < self.timestamp)
+            .order_by(TrapImage.timestamp.desc())
+            .limit(1)
+        ).scalar()
+        return img
+
+    def next_image(self, session: orm.Session) -> Optional["TrapImage"]:
+        img = session.execute(
+            sa.select(TrapImage)
+            .filter(TrapImage.timestamp > self.timestamp)
+            .order_by(TrapImage.timestamp.asc())
+            .limit(1)
+        ).scalar()
+        return img
 
     # @TODO let's keep the precious detected objects, even if the Monitoring Session or Image is deleted?
     detected_objects = orm.relationship(

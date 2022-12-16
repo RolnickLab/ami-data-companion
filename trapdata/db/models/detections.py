@@ -32,6 +32,9 @@ class DetectedObject(db.Base):
     path = sa.Column(
         sa.String(255)
     )  # @TODO currently these are absolute paths to help the pytorch dataloader, but relative would be ideal
+    source_image_width = sa.Column(sa.Integer)
+    source_image_height = sa.Column(sa.Integer)
+    source_image_previous_frame = sa.Column(sa.Integer)
     specific_label = sa.Column(sa.String(255))
     specific_label_score = sa.Column(sa.Numeric(asdecimal=False))
     binary_label = sa.Column(sa.String(255))
@@ -153,42 +156,53 @@ def save_detected_objects(
 
     timestamp = datetime.datetime.now()
 
-    for image, detected_objects in zip(images, detected_objects_data):
-        image.last_processed = timestamp
-        # sesh.add(image)
-        orm_objects.append(image)
-
-        for object_data in detected_objects:
-            detection = DetectedObject(
-                last_detected=timestamp,
-                in_queue=True,
-            )
-
-            if "bbox" in object_data:
-                area_pixels = bbox_area(object_data["bbox"])
-                object_data["area_pixels"] = area_pixels
-
-            for k, v in object_data.items():
-                logger.debug(f"Adding {k}: {v} to detected object {detection.id}")
-                setattr(detection, k, v)
-
-            detection.monitoring_session_id = image.monitoring_session_id
-            detection.image_id = image.id
-
-            detection.save_cropped_image_data(
-                source_image=image,
-                base_path=user_data_path,
-            )
-
-            logger.debug(f"Creating detected object {detection} for image {image}")
-
-            orm_objects.append(detection)
-
     with db.get_session(db_path) as sesh:
-        # @TODO this could be faster! Especially for sqlite
-        logger.info(f"Bulk saving {len(orm_objects)} objects")
-        sesh.bulk_save_objects(orm_objects)
-        sesh.commit()
+        for image, detected_objects in zip(images, detected_objects_data):
+            image.last_processed = timestamp
+
+            # sesh.add(image)
+            orm_objects.append(image)
+
+            for object_data in detected_objects:
+                detection = DetectedObject(
+                    last_detected=timestamp,
+                    in_queue=True,
+                )
+
+                if "bbox" in object_data:
+                    area_pixels = bbox_area(object_data["bbox"])
+                    object_data["area_pixels"] = area_pixels
+
+                for k, v in object_data.items():
+                    logger.debug(f"Adding {k}: {v} to detected object {detection.id}")
+                    setattr(detection, k, v)
+
+                detection.monitoring_session_id = image.monitoring_session_id
+                detection.image_id = image.id
+
+                detection.save_cropped_image_data(
+                    source_image=image,
+                    base_path=user_data_path,
+                )
+
+                previous_image = image.previous_image(sesh)
+                detection.source_image_previous_frame = (
+                    previous_image.id if previous_image else None
+                )
+                detection.source_image_width = image.width
+                detection.source_image_height = image.height
+                logger.debug(
+                    f"Previous image: {detection.source_image_previous_frame}, current image: {image.id}"
+                )
+
+                logger.debug(f"Creating detected object {detection} for image {image}")
+
+                orm_objects.append(detection)
+
+            # @TODO this could be faster! Especially for sqlite
+            logger.info(f"Bulk saving {len(orm_objects)} objects")
+            sesh.bulk_save_objects(orm_objects)
+            sesh.commit()
 
 
 def save_classified_objects(db_path, object_ids, classified_objects_data):
