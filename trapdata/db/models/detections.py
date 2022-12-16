@@ -4,6 +4,8 @@ from typing import Iterable, Union, Optional, Any
 
 import sqlalchemy as sa
 from sqlalchemy import orm
+from sqlalchemy_utils import UUIDType
+
 import PIL.Image
 
 from trapdata import db
@@ -38,6 +40,8 @@ class DetectedObject(db.Base):
     model_name = sa.Column(sa.String(255))
     in_queue = sa.Column(sa.Boolean, default=False)
     notes = sa.Column(sa.JSON)
+    sequence_id = sa.Column(UUIDType)
+    sequence_frame = sa.Column(sa.Integer)
 
     image = orm.relationship(
         "TrapImage",
