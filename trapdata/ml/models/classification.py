@@ -185,7 +185,7 @@ class MothNonMothClassifier(BinaryClassifier):
 
 
 class SpeciesClassifier:
-    stage = 3
+    stage = 4
     type = "fine_grained_classifier"
 
     def get_dataset(self):
