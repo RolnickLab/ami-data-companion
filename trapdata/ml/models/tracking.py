@@ -11,6 +11,12 @@ import math
 from PIL.Image import Image
 from torchvision import transforms
 
+from trapdata import logger
+from trapdata.db.models.queue import UntrackedObjectsQueue
+
+# from trapdata.db.models.detections import save_untracked_detection
+from .base import InferenceBaseClass
+
 
 def image_diagonal(width: float, height: float):
     img_diagonal = math.sqrt(width**2 + height**2)
@@ -197,3 +203,53 @@ class TrackingCost:
         )
 
         return self.total_cost
+
+
+class UntrackedObjectsIterableDatabaseDataset(torch.utils.data.IterableDataset):
+    def __init__(self, queue, image_transforms, batch_size=4):
+        super().__init__()
+        self.queue = queue
+        self.image_transforms = image_transforms
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return self.queue.queue_count()
+
+    def __iter__(self):
+        while len(self):
+            worker_info = torch.utils.data.get_worker_info()
+            logger.info(f"Using worker: {worker_info}")
+
+            # This should probably be one item, and then all of the objects from the previous frame
+            records = self.queue.pull_n_from_queue(self.batch_size)
+            if records:
+                item_ids = torch.utils.data.default_collate(
+                    [record.id for record in records]
+                )
+                # Do we need to transform here?
+                # Is this where we run the tracking cost calculator and skip the
+                # the model inference later on?
+                batch_data = torch.utils.data.default_collate(
+                    [self.transform(record.cropped_image_data()) for record in records]
+                )
+                yield (item_ids, batch_data)
+
+    def transform(self, cropped_image):
+        return self.image_transforms(cropped_image)
+
+
+class TrackingClassifier(InferenceBaseClass):
+    stage = 3
+    type = "tracking"
+
+    def get_dataset(self):
+        dataset = UntrackedObjectsIterableDatabaseDataset(
+            queue=UntrackedObjectsQueue(self.db_path),
+            image_transforms=self.get_transforms(),
+            batch_size=self.batch_size,
+        )
+        return dataset
+
+    def save_results(self, object_ids, batch_output):
+        # Save sequence_id and frame number
+        pass
