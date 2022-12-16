@@ -135,13 +135,15 @@ def save_monitoring_session(db_path, base_directory, session):
             ms_images = []
             for image in session["images"]:
                 path = pathlib.Path(image["path"]).relative_to(ms.base_directory)
-                absolute_path = pathlib.Path(ms.base_directory) / path
+                # absolute_path = pathlib.Path(ms.base_directory) / path
                 img_kwargs = {
                     "monitoring_session_id": ms.id,
                     "base_path": ms.base_directory,
                     "path": str(path),
                     "timestamp": image["timestamp"],
-                    "filesize": absolute_path.stat().st_size,
+                    "filesize": image["filesize"],
+                    "width": image["shape"][0],
+                    "height": image["shape"][1],
                     # file hash?
                 }
                 db_img = sesh.query(TrapImage).filter_by(**img_kwargs).one_or_none()
