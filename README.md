@@ -2,9 +2,6 @@
 
 Desktop app for analyzing images from autonomous insect monitoring stations
 
-
-## Development
-
 ### Dependencies
 
 _Requires Python 3.7 or above! Use conda if you need to maintain muliple versions of Python. Supports any version higher (3.9, 3.10 are even better)_
@@ -15,7 +12,7 @@ Create an environment just for AMI and the trapdata manager, or use the default 
 
 `conda create -n ami python=3.10 anaconda`
 
-#### Installation
+### Installation
 
 Clone repository using the command line or the GitHub deskop app. (Optionally create a virtualenv to install in).
 ```
