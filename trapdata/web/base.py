@@ -15,9 +15,9 @@ from trapdata.db.models.events import MonitoringSession
 from trapdata.db.models.images import TrapImage
 
 # @TODO use pydantic settings module
-db_path = os.getenv("DATABASE_URL")
+db_path = os.getenv("AMI_DATABASE_URL")
 assert db_path
-user_data_path = os.getenv("USER_DATA_DIR")
+user_data_path = os.getenv("AMI_USER_DATA_PATH")
 assert user_data_path
 DatabaseSession = get_session_class(db_path)
 
