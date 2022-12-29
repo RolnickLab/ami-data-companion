@@ -298,9 +298,9 @@ def get_object_counts_for_image(db_path, image_id):
 
 
 def export_detected_objects(
-    objects: Iterable[DetectedObject],
-    report_name: str,
+    items: Iterable[DetectedObject],
     directory: Union[pathlib.Path, str],
+    report_name: str = "detections",
 ):
-    records = [obj.report_data() for obj in objects]
+    records = [item.report_data() for item in items]
     return export_report(records, report_name, directory)
