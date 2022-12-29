@@ -1,5 +1,6 @@
 import contextlib
 import pathlib
+from typing import Generator
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -68,7 +69,7 @@ def get_session_class(db_path, **kwargs) -> type[orm.Session]:
 
 
 @contextlib.contextmanager
-def get_session(db_path: str, **kwargs) -> orm.Session:
+def get_session(db_path: str, **kwargs) -> Generator[orm.Session, None, None]:
     """
     Convenience method to start and close a pre-configured database session.
 
