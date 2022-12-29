@@ -1,4 +1,6 @@
 import pathlib
+import datetime
+from typing import Optional
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -71,7 +73,7 @@ class MonitoringSession(Base):
         self.start_time = self.images[0].timestamp
         self.end_time = self.images[-1].timestamp
 
-    def duration(self):
+    def duration(self) -> Optional[datetime.timedelta]:
         if self.start_time and self.end_time:
             return self.end_time - self.start_time
         else:
@@ -79,8 +81,9 @@ class MonitoringSession(Base):
 
     @property
     def duration_label(self):
-        if self.duration():
-            hours = int(round(self.duration().seconds / 60 / 60, 0))
+        duration = self.duration()
+        if duration:
+            hours = int(round(duration.seconds / 60 / 60, 0))
             unit = "hour" if hours == 1 else "hours"
             duration = f"{hours} {unit}"
         else:
