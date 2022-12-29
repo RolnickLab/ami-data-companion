@@ -1,5 +1,6 @@
 import csv
 import pathlib
+from typing import Union, Any
 
 
 def get_sequential_sample(direction, images, last_sample=None):
@@ -49,7 +50,11 @@ def bbox_center(bbox):
     return (center_x, center_y)
 
 
-def export_report(records, report_name, directory):
+def export_report(
+    records: list[dict[str, Any]],
+    report_name: str,
+    directory: Union[pathlib.Path, str],
+) -> Union[pathlib.Path, None]:
     if not records:
         return None
 
@@ -60,7 +65,7 @@ def export_report(records, report_name, directory):
     header = records[0].keys()
 
     with open(filepath, "w", newline="") as f:
-        writer = csv.writer(f)
+        writer = csv.writer(f, quoting=csv.QUOTE_NONNUMERIC)
         writer.writerow(header)
         for record in records:
             writer.writerow(record.values())
