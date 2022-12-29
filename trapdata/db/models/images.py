@@ -1,4 +1,5 @@
 import pathlib
+from typing import Union
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -23,12 +24,12 @@ class TrapImage(Base):
     notes = sa.Column(sa.JSON)
 
     @property
-    def absolute_path(self, directory=None):
+    def absolute_path(self, directory: Union[str, None] = None) -> pathlib.Path:
         # @TODO this directory argument can be removed once the image has the base
         # path stored in itself
         if not directory:
-            directory = self.base_path
-        return pathlib.Path(directory) / self.path
+            directory = str(self.base_path)
+        return pathlib.Path(directory) / str(self.path)
 
     @aggregated("detected_objects", sa.Column(sa.Integer))
     def num_detected_objects(self):

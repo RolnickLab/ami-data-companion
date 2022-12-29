@@ -1,3 +1,4 @@
+from typing import Union
 import pathlib
 import time
 import collections
@@ -13,6 +14,22 @@ import PIL.ExifTags
 
 from .logs import logger
 from . import constants
+
+
+def absolute_path(
+    path: str, base_path: Union[pathlib.Path, str, None]
+) -> Union[pathlib.Path, None]:
+    """
+    Turn a relative path into an absolute path.
+    """
+    if not path:
+        return None
+    elif not base_path:
+        return pathlib.Path(path)
+    elif str(base_path) in path:
+        return pathlib.Path(path)
+    else:
+        return pathlib.Path(base_path) / path
 
 
 def archive_file(filepath):
