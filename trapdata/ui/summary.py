@@ -135,7 +135,8 @@ class SpeciesSummaryScreen(Screen):
 
     def export(self):
         app = App.get_running_app()
-        records = list(get_detected_objects(app.db_path, self.monitoring_session))
-        timestamp = int(time.time())
-        report_name = f"detections-for-{self.monitoring_session.day.strftime('%Y-%m-%d')}-created-{timestamp}"
-        app.export(records, report_name)
+        if app:
+            records = list(get_detected_objects(app.db_path, self.monitoring_session))
+            timestamp = int(time.time())
+            report_name = f"detections-for-{self.monitoring_session.day.strftime('%Y-%m-%d')}-created-{timestamp}"
+            app.export_detections(detected_objects=records, report_name=report_name)

@@ -27,6 +27,10 @@ from kivy.properties import (
 
 from trapdata import logger
 from trapdata import ml
+from trapdata.db.models.events import (
+    get_monitoring_sessions_from_db,
+    export_monitoring_sessions,
+)
 from trapdata.db.models.detections import get_detected_objects, export_detected_objects
 from trapdata.db.models.queue import clear_all_queues
 from trapdata.pipeline import start_pipeline
@@ -352,23 +356,69 @@ class TrapDataApp(App):
             data=json.dumps(performance_settings),
         )
 
-    def export(self, detected_objects=None, report_name=None):
+    def export_events(self):
+        """
+        User initiated export of Monitoring Sessions / Survey Events
+        with a pop-up.
+        """
         app = self
         user_data_path = app.config.get("paths", "user_data_path")
-        records = list(detected_objects or get_detected_objects(app.db_path))
+        items = list(
+            get_monitoring_sessions_from_db(
+                db_path=app.db_path, base_directory=app.image_base_path
+            )
+        )
         timestamp = int(time.time())
-        report_name = report_name or f"all-detections-{timestamp}"
-        filepath = export_detected_objects(records, report_name, user_data_path)
-        logger.info(f"Exported detections to {filepath}")
+        report_name = f"monitoring_events-{timestamp}"
+        filepath = export_monitoring_sessions(
+            items=items,
+            directory=user_data_path,
+            report_name=report_name,
+        )
+        if filepath:
+            logger.info(f"Exported monitoring events to {filepath}")
+            msg = (
+                f"{len(items)} events have been exported to: \n\n"
+                f'"{filepath.name}" \n\n'
+                f"In the directory: \n{filepath.parent} \n"
+            )
+        else:
+            msg = "Nothing exported, no report created"
+            logger.warn(msg)
         Popup(
             title="Report exported",
-            content=Label(
-                text=(
-                    f"{len(records)} detected objects have been exported to: \n\n"
-                    f'"{filepath.name}" \n\n'
-                    f"In the directory: \n{filepath.parent} \n"
-                )
-            ),
+            content=Label(text=msg),
+            size_hint=(None, None),
+            size=("550dp", "220dp"),
+        ).open()
+
+    def export_detections(self, detected_objects=None, report_name=None):
+        """
+        User initiated export of Detected Objects with a pop-up.
+        """
+        app = self
+        user_data_path = app.config.get("paths", "user_data_path")
+        objects = list(detected_objects or get_detected_objects(app.db_path))
+        timestamp = int(time.time())
+        report_name = report_name or f"all-detections-{timestamp}"
+        filepath = export_detected_objects(
+            items=objects,
+            directory=user_data_path,
+            report_name=report_name,
+        )
+        if filepath:
+            logger.info(f"Exported detections to {filepath}")
+            msg = (
+                f"{len(objects)} detected objects have been exported to: \n\n"
+                f'"{filepath.name}" \n\n'
+                f"In the directory: \n{filepath.parent} \n"
+            )
+        else:
+            msg = "Nothing exported, no report created"
+            logger.warn(msg)
+        Popup(
+            title="Report exported",
+            content=Label(text=msg),
             size_hint=(None, None),
             size=("550dp", "220dp"),
         ).open()
