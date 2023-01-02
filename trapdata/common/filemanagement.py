@@ -1,8 +1,6 @@
-from typing import Optional, Union, Literal
+from typing import Union
 import pathlib
-import math
 import time
-import datetime
 import collections
 import dateutil.parser
 import os
@@ -12,8 +10,6 @@ import tempfile
 
 import PIL.Image
 import PIL.ExifTags
-
-import exif as exiftools
 
 
 from .logs import logger
@@ -249,56 +245,3 @@ def save_image(image, base_path=None, subdir=None, name=None, suffix=".jpg"):
     logger.debug(f"Saving image to {fpath}")
     image.save(fpath)
     return fpath
-
-
-def dd_to_dms(deg: float) -> tuple[int, int, float]:
-    decimals, number = math.modf(deg)
-    d = int(number)
-    m = int(decimals * 60)
-    s = (deg - d - m / 60) * 3600.00
-    return d, m, s
-
-
-def display_dms(d: int, m: int, s: float, direction: str):
-    return "{}º{}'{:.2f}\"{}".format(abs(d), abs(m), abs(s), direction)
-
-
-Point = collections.namedtuple("Point", "degrees minutes seconds direction")
-Location = collections.namedtuple("Location", latitude=Point, longitude=Point)
-
-
-def format_location(
-    latitude: float, longitude: float
-) -> dict[str, tuple[tuple[int, int, float], Literal["N", "S", "E", "W"]]]:
-    """
-    Format decimal degrees format to degrees, minutes, seconds (DMS)
-    for the image EXIF data.
-    """
-
-    lat = dd_to_dms(latitude)
-    lat_ref = "N" if lat[0] >= 1 else "S"
-    lon = dd_to_dms(longitude)
-    lon_ref = "E" if lon[0] >= 1 else "W"
-
-    return {"latitude": (lat, lat_ref), "longitude": (lon, lon_ref)}
-
-
-def write_exif(
-    filepath: Union[pathlib.Path, str],
-    latitude: Optional[float] = None,
-    longitude: Optional[float] = None,
-    date: Optional[datetime.datetime] = None,
-    caption: Optional[str] = None,
-    keywords: Optional[str] = None,
-):
-
-    filepath = pathlib.Path(filepath)
-    if not filepath.exists():
-        raise Exception(f"File does not exist: {filepath.absolute()}")
-
-    img = exiftools.Image(str(filepath.absolute()))
-    if date:
-        date_string = date.strftime(exiftools.DATETIME_STR_FORMAT)
-        img.datetime = date_string
-        img.datetime_original = date_string
-        img.datetime_digitized = date_string
