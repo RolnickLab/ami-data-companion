@@ -11,7 +11,12 @@ from trapdata import constants
 from trapdata.db.models.images import TrapImage
 from trapdata.common.logs import logger
 from trapdata.common.utils import bbox_area, bbox_center, export_report
-from trapdata.common.filemanagement import save_image, absolute_path
+from trapdata.common.filemanagement import (
+    save_image,
+    absolute_path,
+    construct_exif,
+    EXIF_DATETIME_STR_FORMAT,
+)
 
 
 class DetectedObject(db.Base):
@@ -76,7 +81,7 @@ class DetectedObject(db.Base):
                 f"Extracting cropped image data from source image {source_image.path}"
             )
             image = PIL.Image.open(str(source_image.absolute_path))
-            return image.crop(self.bbox)
+            return image.crop(self.bbox)  # type:ignore
 
     def save_cropped_image_data(
         self,
@@ -89,6 +94,13 @@ class DetectedObject(db.Base):
         """
         source_image = source_image or self.image
 
+        exif_data: PIL.Image.Exif = PIL.Image.open(source_image.absolute_path).getexif()
+        exif_data = construct_exif(
+            description=f"Source image: {source_image.path}",
+            timestamp=source_image.timestamp,  # type:ignore
+            existing_exif=exif_data,
+        )
+
         fpath = save_image(
             image=self.cropped_image_data(
                 base_path=base_path,
@@ -96,10 +108,7 @@ class DetectedObject(db.Base):
             ),
             base_path=base_path,
             subdir="crops",
-            # exif_tags={
-            #     "date": source_image.timestamp,
-            #     "description": source_image.path,
-            # },
+            exif_data=exif_data,
         )
         self.path = str(fpath)
         return fpath
