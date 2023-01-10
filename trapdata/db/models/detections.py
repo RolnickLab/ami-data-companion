@@ -1,6 +1,6 @@
 import datetime
 import pathlib
-from typing import Iterable, Union, Any
+from typing import Iterable, Union, Optional, Any
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -58,7 +58,7 @@ class DetectedObject(db.Base):
 
     def cropped_image_data(
         self,
-        source_image=Union[TrapImage, None],
+        source_image: Union[TrapImage, None] = None,
         base_path: Union[pathlib.Path, str, None] = None,
     ):
         """
@@ -78,18 +78,28 @@ class DetectedObject(db.Base):
             image = PIL.Image.open(str(source_image.absolute_path))
             return image.crop(self.bbox)
 
-    def save_cropped_image_data(self, base_path=None, source_image=None):
+    def save_cropped_image_data(
+        self,
+        base_path: Union[pathlib.Path, str, None] = None,
+        source_image: Union[TrapImage, None] = None,
+    ):
         """
         @TODO need consistent way of discovering the user_data_path in the application settings
         and using that for the base_path.
         """
         source_image = source_image or self.image
+
         fpath = save_image(
             image=self.cropped_image_data(
-                base_path=base_path, source_image=source_image
+                base_path=base_path,
+                source_image=source_image,
             ),
             base_path=base_path,
             subdir="crops",
+            # exif_tags={
+            #     "date": source_image.timestamp,
+            #     "description": source_image.path,
+            # },
         )
         self.path = str(fpath)
         return fpath

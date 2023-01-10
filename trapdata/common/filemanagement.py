@@ -8,6 +8,7 @@ import math
 import re
 import hashlib
 import tempfile
+import io
 
 import PIL.Image
 import PIL.ExifTags
@@ -224,7 +225,14 @@ def group_images_by_day(images, maximum_gap_minutes=6 * 60):
     # yield relative_path, get_image_timestamp(full_path)
 
 
-def save_image(image, base_path=None, subdir=None, name=None, suffix=".jpg"):
+def save_image(
+    image: PIL.Image.Image,
+    base_path=None,
+    subdir=None,
+    name=None,
+    suffix=".jpg",
+    exif_tags: Union[dict, None] = None,
+):
     """
     Accepts a PIL image, returns fpath Path object
     """
@@ -241,6 +249,11 @@ def save_image(image, base_path=None, subdir=None, name=None, suffix=".jpg"):
 
     if not base_path.exists():
         base_path.mkdir(parents=True)
+
+    if exif_tags:
+        # @TODO support writing to PIL Image
+        # image = write_exif(image.tobytes(), exif_tags**)
+        raise NotImplementedError
 
     fpath = (base_path / name).with_suffix(suffix)
     logger.debug(f"Saving image to {fpath}")
@@ -278,8 +291,42 @@ def dd_location_to_dms(
     return {"latitude": (lat, lat_ref), "longitude": (lon, lon_ref)}
 
 
-def display_dms(d: int, m: int, s: float, direction: str):
+def write_exif(
+    # @TODO support reading and returning a PIL image to work with
+    # other parts of the application.
+    img_file: Union[io.BytesIO, bytes, str],
+    bytes: Optional[bytes] = None,
+    location: Optional[Location] = None,
+    date: Optional[datetime.datetime] = None,
+    description: Optional[str] = None,
+    keywords: Optional[list[str]] = None,
+    delete_existing=True,
+):
     """
     Display a coordinate in a standard, human readable format.
     """
-    return "{}º{}'{:.2f}\"{}".format(abs(d), abs(m), abs(s), direction)
+
+    img = exiftools.Image(img_file)
+
+    if delete_existing:
+        img.delete_all()
+
+    if date:
+        date_string = str(date.strftime(exiftools.DATETIME_STR_FORMAT))
+        img.datetime = date_string
+        img.datetime_original = date_string
+        img.datetime_digitized = date_string
+
+    if description:
+        img.image_description = description
+
+    if keywords:
+        # keyword_str = ";".join(keywords)
+        # img.xp_keywords = keyword_str
+        raise NotImplementedError
+
+    if location:
+        # See https://exif.readthedocs.io/en/latest/usage.html#add-geolocation
+        raise NotImplementedError
+
+    return img
