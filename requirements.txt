@@ -8,7 +8,6 @@ python-dateutil
 sqlalchemy==2.0b2
 sqlalchemy_utils
 sentry-sdk
-exif
 
 torch
 torchvision

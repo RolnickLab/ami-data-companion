@@ -8,7 +8,6 @@ import math
 import re
 import hashlib
 import tempfile
-import io
 
 import PIL.Image
 import PIL.ExifTags
@@ -16,6 +15,8 @@ import PIL.ExifTags
 
 from .logs import logger
 from . import constants
+
+EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"
 
 
 def absolute_path(
@@ -95,6 +96,52 @@ def get_exif(img_path):
             tags[name] = val
 
     return tags
+
+
+def construct_exif(
+    timestamp: Optional[datetime.datetime] = None,
+    description: Optional[str] = None,
+    location: Optional[dict] = None,
+    other_tags: Optional[dict] = None,
+    existing_exif: Optional[PIL.Image.Exif] = None,
+) -> PIL.Image.Exif:
+    """
+    Construct an EXIF class using human readable keys.
+    Can be save to a Pillow image using:
+    >>> image = PIL.Image("test.jpg")
+    >>> existing_exif = image.getexif()
+    >>> exif_data = construct_exif(description="hi!", existing_exif=existing_exif)
+    >>> image.save("test_with_exif.jpg", exif=exif_data)
+    """
+
+    exif = existing_exif or PIL.Image.Exif()
+
+    name_to_code = {name: code for code, name in PIL.ExifTags.TAGS.items()}
+
+    if timestamp:
+        timestamp_str = timestamp.strftime(EXIF_DATETIME_STR_FORMAT)
+        exif[name_to_code["DateTime"]] = timestamp_str
+        exif[name_to_code["DateTimeOriginal"]] = timestamp_str
+        exif[name_to_code["DateTimeDigitized"]] = timestamp_str
+
+    if description:
+        exif[name_to_code["ImageDescription"]] = description
+        exif[name_to_code["UserComment"]] = description
+
+    if location:
+        raise NotImplementedError
+
+    if other_tags:
+        for name in other_tags:
+            if name not in name_to_code:
+                raise Exception(f"Unknown EXIF tag '{name}'")
+            else:
+                code = name_to_code[name]
+                value = other_tags[name]
+                logger.debug(f"Adding EXIF tag {name} ({code}) with value {value}")
+                exif[code] = value
+
+    return exif
 
 
 def get_image_timestamp(img_path):
@@ -231,7 +278,7 @@ def save_image(
     subdir=None,
     name=None,
     suffix=".jpg",
-    exif_tags: Union[dict, None] = None,
+    exif_data: Optional[PIL.Image.Exif] = None,
 ):
     """
     Accepts a PIL image, returns fpath Path object
@@ -243,6 +290,7 @@ def save_image(
         base_path = pathlib.Path(base_path)
     else:
         base_path = pathlib.Path(tempfile.TemporaryDirectory().name)
+        logger.info(f"Saving image to temporary directory: {base_path}")
 
     if subdir:
         base_path = base_path / subdir
@@ -250,14 +298,9 @@ def save_image(
     if not base_path.exists():
         base_path.mkdir(parents=True)
 
-    if exif_tags:
-        # @TODO support writing to PIL Image
-        # image = write_exif(image.tobytes(), exif_tags**)
-        raise NotImplementedError
-
     fpath = (base_path / name).with_suffix(suffix)
     logger.debug(f"Saving image to {fpath}")
-    image.save(fpath)
+    image.save(fpath, exif=exif_data)
     return fpath
 
 
@@ -289,44 +332,3 @@ def dd_location_to_dms(
     lon_ref = "E" if lon[0] >= 1 else "W"
 
     return {"latitude": (lat, lat_ref), "longitude": (lon, lon_ref)}
-
-
-def write_exif(
-    # @TODO support reading and returning a PIL image to work with
-    # other parts of the application.
-    img_file: Union[io.BytesIO, bytes, str],
-    bytes: Optional[bytes] = None,
-    location: Optional[Location] = None,
-    date: Optional[datetime.datetime] = None,
-    description: Optional[str] = None,
-    keywords: Optional[list[str]] = None,
-    delete_existing=True,
-):
-    """
-    Display a coordinate in a standard, human readable format.
-    """
-
-    img = exiftools.Image(img_file)
-
-    if delete_existing:
-        img.delete_all()
-
-    if date:
-        date_string = str(date.strftime(exiftools.DATETIME_STR_FORMAT))
-        img.datetime = date_string
-        img.datetime_original = date_string
-        img.datetime_digitized = date_string
-
-    if description:
-        img.image_description = description
-
-    if keywords:
-        # keyword_str = ";".join(keywords)
-        # img.xp_keywords = keyword_str
-        raise NotImplementedError
-
-    if location:
-        # See https://exif.readthedocs.io/en/latest/usage.html#add-geolocation
-        raise NotImplementedError
-
-    return img
