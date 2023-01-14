@@ -1,9 +1,10 @@
-from typing import Union
+from typing import Union, Literal
 import pathlib
 import time
 import collections
 import dateutil.parser
 import os
+import math
 import re
 import hashlib
 import tempfile
@@ -247,7 +248,7 @@ def save_image(image, base_path=None, subdir=None, name=None, suffix=".jpg"):
     return fpath
 
 
-def dd_to_dms(deg: float) -> tuple[int, int, float]:
+def dd_coordinate_to_dms(deg: float) -> tuple[int, int, float]:
     """
     Convert a single decimal degree coordinate to "degree minute seconds".
 
@@ -261,18 +262,7 @@ def dd_to_dms(deg: float) -> tuple[int, int, float]:
     return d, m, s
 
 
-def display_dms(d: int, m: int, s: float, direction: str):
-    """
-    Display a coordinate in a standard, human readable format.
-    """
-    return "{}º{}'{:.2f}\"{}".format(abs(d), abs(m), abs(s), direction)
-
-
-Point = collections.namedtuple("Point", "degrees minutes seconds direction")
-Location = collections.namedtuple("Location", "latitude longitude")
-
-
-def format_location(
+def dd_location_to_dms(
     latitude: float, longitude: float
 ) -> dict[str, tuple[tuple[int, int, float], Literal["N", "S", "E", "W"]]]:
     """
@@ -280,53 +270,16 @@ def format_location(
     for the image EXIF data.
     """
 
-    lat = dd_to_dms(latitude)
+    lat = dd_coordinate_to_dms(latitude)
     lat_ref = "N" if lat[0] >= 1 else "S"
-    lon = dd_to_dms(longitude)
+    lon = dd_coordinate_to_dms(longitude)
     lon_ref = "E" if lon[0] >= 1 else "W"
 
     return {"latitude": (lat, lat_ref), "longitude": (lon, lon_ref)}
 
 
-def write_exif(
-    filepath: Union[pathlib.Path, str],
-    location: Optional[Location] = None,
-    date: Optional[datetime.datetime] = None,
-    description: Optional[str] = None,
-    keywords: Optional[list[str]] = None,
-    delete_existing=True,
-):
+def display_dms(d: int, m: int, s: float, direction: str):
     """
-    This `exif` library has a few issues
-    consider using Pillow directly instead
-    example: https://stackoverflow.com/a/63981972/966058
+    Display a coordinate in a standard, human readable format.
     """
-
-    filepath = pathlib.Path(filepath)
-    if not filepath.exists():
-        raise Exception(f"File does not exist: {filepath.absolute()}")
-
-    img = exiftools.Image(str(filepath.absolute()))
-
-    if delete_existing:
-        img.delete_all()
-
-    if date:
-        date_string = str(date.strftime(exiftools.DATETIME_STR_FORMAT))
-        img.datetime = date_string
-        img.datetime_original = date_string
-        img.datetime_digitized = date_string
-
-    if description:
-        img.image_description = description
-
-    if keywords:
-        # keyword_str = ";".join(keywords)
-        # img.xp_keywords = keyword_str
-        raise NotImplementedError
-
-    if location:
-        # See https://exif.readthedocs.io/en/latest/usage.html#add-geolocation
-        raise NotImplementedError
-
-    return img
+    return "{}º{}'{:.2f}\"{}".format(abs(d), abs(m), abs(s), direction)
