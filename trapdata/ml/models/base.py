@@ -100,6 +100,8 @@ class InferenceBaseClass:
             index_to_label = {index: label for label, index in labels.items()}
 
             return index_to_label
+        else:
+            return {}
 
     def get_model(self):
         """

@@ -1,5 +1,6 @@
 import torch
 import torchvision
+
 import timm
 from PIL import Image
 
@@ -208,6 +209,68 @@ class EfficientNetClassifier(InferenceBaseClass):
         return result
 
 
+class Resnet50(torch.nn.Module):
+    def __init__(self, num_classes):
+        """
+        Args:
+            config: provides parameters for model generation
+        """
+        super(Resnet50, self).__init__()
+        self.num_classes = num_classes
+        self.backbone = torchvision.models.resnet50(weights="DEFAULT")
+        out_dim = self.backbone.fc.in_features
+
+        self.backbone = torch.nn.Sequential(*list(self.backbone.children())[:-2])
+        self.avgpool = torch.nn.AdaptiveAvgPool2d(output_size=(1, 1))
+        self.classifier = torch.nn.Linear(out_dim, self.num_classes, bias=False)
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
+
+        return x
+
+
+class Resnet50Classifier(InferenceBaseClass):
+    input_size = 300
+
+    def get_model(self):
+        num_classes = len(self.category_map)
+        model = Resnet50(num_classes=num_classes)
+        model = model.to(self.device)
+        # state_dict = torch.hub.load_state_dict_from_url(weights_url)
+        checkpoint = torch.load(self.weights, map_location=self.device)
+        # The model state dict is nested in some checkpoints, and not in others
+        state_dict = checkpoint.get("model_state_dict") or checkpoint
+        model.load_state_dict(state_dict)
+        model.eval()
+        return model
+
+    def get_transforms(self):
+        mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
+        return torchvision.transforms.Compose(
+            [
+                torchvision.transforms.Resize((self.input_size, self.input_size)),
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize(mean, std),
+            ]
+        )
+
+    def post_process_batch(self, output):
+        predictions = torch.nn.functional.softmax(output, dim=1)
+        predictions = predictions.cpu().numpy()
+
+        categories = predictions.argmax(axis=1)
+        labels = [self.category_map[cat] for cat in categories]
+        scores = predictions.max(axis=1).astype(float)
+
+        result = list(zip(labels, scores))
+        logger.debug(f"Post-processing result batch: {result}")
+        return result
+
+
 class BinaryClassifier(EfficientNetClassifier):
     stage = 2
     type = "binary_classification"
@@ -245,7 +308,7 @@ class MothNonMothClassifier(BinaryClassifier):
     positive_negative_label = "nonmoth"
 
 
-class SpeciesClassifier(EfficientNetClassifier):
+class SpeciesClassifier:
     stage = 3
     type = "fine_grained_classifier"
 
@@ -270,7 +333,22 @@ class SpeciesClassifier(EfficientNetClassifier):
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
 
 
-class QuebecVermontMothSpeciesClassifier(SpeciesClassifier):
+class QuebecVermontMothSpeciesClassifierMixedResolution(
+    SpeciesClassifier, Resnet50Classifier
+):
+    name = "Quebec & Vermont Species Classifier - Mixed Resolution"
+    description = "Trained on December 22, 2022 using lower resolution images"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "quebec-vermont-moth-model_v07_resnet50_2022-12-22-07-54.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "quebec-vermont-moth_category-map_4Aug2022.json"
+    )
+
+
+class QuebecVermontMothSpeciesClassifier(SpeciesClassifier, EfficientNetClassifier):
     name = "Quebec & Vermont Species Classifier"
     description = "Trained on September 8, 2022 using local species checklist from GBIF"
     weights_path = (
@@ -283,7 +361,7 @@ class QuebecVermontMothSpeciesClassifier(SpeciesClassifier):
     )
 
 
-class UKDenmarkMothSpeciesClassifier(SpeciesClassifier):
+class UKDenmarkMothSpeciesClassifier(SpeciesClassifier, EfficientNetClassifier):
     name = "UK & Denmark Species Classifier"
     description = (
         "Trained on September 8, 2022 using local species checklist from GBIF."
