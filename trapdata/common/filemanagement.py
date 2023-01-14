@@ -301,7 +301,10 @@ def save_image(
 
     fpath = (base_path / name).with_suffix(suffix)
     logger.debug(f"Saving image to {fpath}")
-    image.save(fpath, exif=exif_data)
+    if exif_data:
+        image.save(fpath, exif=exif_data)
+    else:
+        image.save(fpath)
     return fpath
 
 
