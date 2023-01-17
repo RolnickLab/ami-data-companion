@@ -59,30 +59,29 @@ python trapdata/tests/test_pipeline.py
 
 ### Usage
 
-Make a directory of sample images to test & learn the whole workflow more quickly.
+- Make a directory of sample images to test & learn the whole workflow more quickly.
 
-Launch the app by opening a terminal, activating your python environment and then typing
-
+- Launch the app by opening a terminal, activating your python environment and then typing the command: 
 ```trapdata```
 
-When the app GUI window opens, it will prompt you to select the root directory with your trapdata. Choose the directory with your sample images.
+- When the app GUI window opens, it will prompt you to select the root directory with your trapdata. Choose the directory with your sample images.
 
-The first time you process an image the app will download all of the ML models needed, which can take some time.
+- The first time you process an image the app will download all of the ML models needed, which can take some time. The progress is only visible in the console!
 
-**Important** Look at the output in the terminal to see the status of the application. The GUI may appear to hang or be stuck when scanning or processing a larger number of images, but it is not. For the time being, most feedback will only appear in the terminal.
+- **Important** Look at the output in the console/terminal to see the status of the application. The GUI may appear to hang or be stuck when scanning or processing a larger number of images, but it is not. For the time being, most feedback will only appear in the terminal.
 
-All progress and intermediate results are saved to a local database, so if you close the program or it crashes, the status will not be lost and you can pick up where it left off.
+- All progress and intermediate results are saved to a local database, so if you close the program or it crashes, the status will not be lost and you can pick up where it left off.
 
-The cropped images, reports, cached models & local database are stored in the "user data" directory which can be changed in the Settings panel. By default, the user data directory is in one of the locations below, You 
+- The cropped images, reports, cached models & local database are stored in the "user data" directory which can be changed in the Settings panel. By default, the user data directory is in one of the locations below, You 
 
-macOS: 
-```/Library/Application Support/trapdata/```
+    macOS: 
+    ```/Library/Application Support/trapdata/```
 
-Linux:
-```~/.config/trapdata```
+    Linux:
+    ```~/.config/trapdata```
 
-Windows:
-```%AppData%/trapdata```
+    Windows:
+    ```%AppData%/trapdata```
 
 
 
