@@ -21,21 +21,34 @@ Desktop app for analyzing images from autonomous insect monitoring stations
 
 
 - Requires Python 3.7 *or above*. Use Anaconda (or just "conda") if you need to maintain multiple versions of Python or are unfamiliar with using Python and scientific packages, it is especially helpful on Windows. https://www.anaconda.com/
-- Requires Git to clone the source code and stay up-to-date with the latest changes. Anaconda comes with Git, but the GitHub Deskop application works well if you are less familiar with the tool. https://desktop.github.com/
+- Requires Git to clone the source code and stay up-to-date with the latest changes. Anaconda comes with Git, but the GitHub Desktop application works well if you are less familiar with git. https://desktop.github.com/
 
-### Installation
+### Installation (for non-developers)
 
-_Optionally_ create an environment just for AMI and the trapdata manager. If you are not working with other Python software, **you can likely skip this step** and use the default environment created by Anaconda called "base". 
+Install (or upgrade) the package with the following command
 
-`conda create -n ami python=3.10 anaconda`
+```
+pip install --editable git+https://github.com/mihow/trapdata.git#egg=trapdata
+```
 
-Clone repository using the command line or the GitHub deskop app. (Optionally create a virtualenv to install in).
+### Installation (for developers)
+
+Create an environment just for AMI and the trapdata manager using conda (or virtualenv) 
+
+```
+conda create -n ami python=3.10 anaconda
+```
+
+Clone the repository using the command line or the GitHub desktop app.
+
 ```
 git clone git@github.com:mihow/trapdata.git
 ```
 
-Install as an editable package if you want to launch the `trapdata` command from any directory. 
+Install as an editable package. This will install the dependencies and install the `trapdata` console command
+
 ```
+cd trapdata
 pip install -e .
 ```
 
@@ -48,7 +61,7 @@ python trapdata/tests/test_pipeline.py
 
 Make a directory of sample images to test & learn the whole workflow more quickly.
 
-Launch the app by opening a terminal, activating your python enviornment and then typing
+Launch the app by opening a terminal, activating your python environment and then typing
 
 ```trapdata```
 
@@ -56,7 +69,7 @@ When the app GUI window opens, it will prompt you to select the root directory w
 
 The first time you process an image the app will download all of the ML models needed, which can take some time.
 
-**Important** Look at the output in the terminal to see the status of the application. The GUI may appear to hang or be stuck when scanning or processing a larger number of images, but it is not. For the time being, most feedback will onlu appear in the terminal.
+**Important** Look at the output in the terminal to see the status of the application. The GUI may appear to hang or be stuck when scanning or processing a larger number of images, but it is not. For the time being, most feedback will only appear in the terminal.
 
 All progress and intermediate results are saved to a local database, so if you close the program or it crashes, the status will not be lost and you can pick up where it left off.
 
