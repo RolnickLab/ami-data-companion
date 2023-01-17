@@ -48,7 +48,6 @@ def watch_queue_in_background(db_path):
 
 
 if __name__ == "__main__":
-    # db_path = "sqlite+pysqlite:///home/michael/.config/trapdata/trapdata.db"
     # db_path = sys.argv[1]
     db_path = os.environ["DATABASE_URL"]
 
