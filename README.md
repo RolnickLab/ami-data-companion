@@ -1,6 +1,6 @@
-# AMI Data Companion
+# AMI Data Manager
 
-Desktop app for analyzing images from autonomous insect monitoring stations
+Desktop app for analyzing images from autonomous insect monitoring stations using deep learning models
 
 <table>
 <tr>
@@ -31,6 +31,11 @@ Install (or upgrade) the package with the following command
 pip install --editable git+https://github.com/mihow/trapdata.git#egg=trapdata
 ```
 
+Optionally test the installation with the following command
+```
+trapdata-test
+```
+
 ### Installation (for developers)
 
 Create an environment just for AMI and the trapdata manager using conda (or virtualenv) 
@@ -42,13 +47,13 @@ conda create -n ami python=3.10 anaconda
 Clone the repository using the command line or the GitHub desktop app.
 
 ```
-git clone git@github.com:mihow/trapdata.git
+git clone git@github.com:RolnickLab/ami-data-manager.git
 ```
 
 Install as an editable package. This will install the dependencies and install the `trapdata` console command
 
 ```
-cd trapdata
+cd ami-data-manager 
 pip install -e .
 ```
 
@@ -83,6 +88,6 @@ python trapdata/tests/test_pipeline.py
     Windows:
     ```%AppData%/trapdata```
 
-
+A short video of the application in use can be seen here: https://www.youtube.com/watch?v=DCPkxM_PvdQ
 
 
