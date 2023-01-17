@@ -2,6 +2,21 @@
 
 Desktop app for analyzing images from autonomous insect monitoring stations
 
+<table>
+<tr>
+<td>
+<img width="200px" alt="Monitoring station deployment in field" src="https://user-images.githubusercontent.com/158175/212795444-3f638f4b-78f9-4f94-adf0-f2269427b441.png">
+</td>
+<td>
+<img width="200px" alt="Screenshot of desktop application" src="https://user-images.githubusercontent.com/158175/212795253-6545c014-f82a-42c9-bd3a-919e471626cf.png">
+</td>
+<td>
+<img width="200px" alt="Emerald moths detected in processed images" src="https://user-images.githubusercontent.com/158175/212794681-45a51172-1431-4475-87a8-9468032d6f7d.png">
+</td>
+</tr>
+</table>
+
+
 ### Dependencies
 
 _Requires Python 3.7 or above! Use conda if you need to maintain muliple versions of Python. Supports any version higher (3.9, 3.10 are even better)_
