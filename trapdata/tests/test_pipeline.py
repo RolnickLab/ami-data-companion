@@ -57,7 +57,7 @@ def end_to_end(db_path, image_base_directory, sample_size):
     species_classifier.run()
 
 
-if __name__ == "__main__":
+def run():
     image_base_directory = pathlib.Path(__file__).parent
     logger.info(f"Using test images from: {image_base_directory}")
 
@@ -72,3 +72,7 @@ if __name__ == "__main__":
         with StopWatch() as t:
             end_to_end(db_path, image_base_directory, sample_size=1)
         logger.info(t)
+
+
+if __name__ == "__main__":
+    run()
