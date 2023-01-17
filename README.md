@@ -1,6 +1,6 @@
-# AMI Data Companion
+# AMI Data Manager
 
-Desktop app for analyzing images from autonomous insect monitoring stations
+Desktop app for analyzing images from autonomous insect monitoring stations using deep learning models
 
 <table>
 <tr>
@@ -83,6 +83,6 @@ python trapdata/tests/test_pipeline.py
     Windows:
     ```%AppData%/trapdata```
 
-
+A short video of the application in use can be seen here: https://www.youtube.com/watch?v=DCPkxM_PvdQ
 
 
