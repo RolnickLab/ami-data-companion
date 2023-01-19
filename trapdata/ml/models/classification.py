@@ -344,7 +344,7 @@ class QuebecVermontMothSpeciesClassifierMixedResolution(
     )
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "quebec-vermont-moth_category-map_4Aug2022.json"
+        "quebec-vermont_moth-category-map_19Jan2023.json"
     )
 
 
