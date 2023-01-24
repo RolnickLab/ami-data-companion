@@ -333,6 +333,19 @@ class SpeciesClassifier:
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
 
 
+class PanamaMothSpeciesClassifierMixedResolution(SpeciesClassifier, Resnet50Classifier):
+    name = "Panama Species Classifier - Mixed Resolution"
+    description = "Trained on December 22, 2022 using lower resolution images"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_moth-model_v01_resnet50_2023-01-24-09-51.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_moth-category-map_24Jan2023.json"
+    )
+
+
 class QuebecVermontMothSpeciesClassifierMixedResolution(
     SpeciesClassifier, Resnet50Classifier
 ):
