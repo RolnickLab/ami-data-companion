@@ -73,10 +73,13 @@ def classification_results(
                 and record.specific_label_score >= classification_threshold
             ):
                 label = record.specific_label
-                score = record.specific_label_score
             else:
                 label = record.binary_label
-                score = record.binary_label_score
+
+            # Seeing the average score for the specific label is more helpful
+            # than seeing the average binary score
+            score = record.specific_label_score or 0
+
             results.append(
                 {
                     "id": record.id,
