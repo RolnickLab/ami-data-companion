@@ -138,5 +138,6 @@ class SpeciesSummaryScreen(Screen):
         if app:
             records = list(get_detected_objects(app.db_path, self.monitoring_session))
             timestamp = int(time.time())
-            report_name = f"detections-for-{self.monitoring_session.day.strftime('%Y-%m-%d')}-created-{timestamp}"
+            trap = pathlib.Path(app.image_base_path).name
+            report_name = f"{trap}-detections-for-{self.monitoring_session.day.strftime('%Y-%m-%d')}-created-{timestamp}"
             app.export_detections(detected_objects=records, report_name=report_name)

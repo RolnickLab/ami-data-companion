@@ -369,7 +369,8 @@ class TrapDataApp(App):
             )
         )
         timestamp = int(time.time())
-        report_name = f"monitoring_events-{timestamp}"
+        trap = pathlib.Path(app.image_base_path).name
+        report_name = f"{trap}-monitoring_events-{timestamp}"
         filepath = export_monitoring_sessions(
             items=items,
             directory=user_data_path,
@@ -400,7 +401,8 @@ class TrapDataApp(App):
         user_data_path = app.config.get("paths", "user_data_path")
         objects = list(detected_objects or get_detected_objects(app.db_path))
         timestamp = int(time.time())
-        report_name = report_name or f"all-detections-{timestamp}"
+        trap = pathlib.Path(app.image_base_path).name
+        report_name = report_name or f"{trap}-all-detections-{timestamp}"
         filepath = export_detected_objects(
             items=objects,
             directory=user_data_path,
