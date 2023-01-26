@@ -68,6 +68,11 @@ class AnnotatedImage(Widget):
 
         super().__init__(*args, **kwargs)
 
+        app = App.get_running_app()
+        self.classification_threshold = float(
+            app.config.get("models", "classification_threshold")
+        )
+
         # Arranging Canvas
         with self.canvas:
 
@@ -84,6 +89,7 @@ class AnnotatedImage(Widget):
         self.draw()
 
     def draw(self, *args):
+
         self.canvas.clear()
 
         if not self.image_path.exists():
@@ -186,7 +192,11 @@ class AnnotatedImage(Widget):
             if annotation.binary_label == constants.NEGATIVE_BINARY_LABEL:
                 label_text = ""
 
-            elif annotation.specific_label:
+            elif (
+                annotation.specific_label
+                and float(annotation.specific_label_score)
+                >= self.classification_threshold
+            ):
                 # If there is a binary label and it's nonmoth, don't show
                 # the specific label, even if one exists.
                 if annotation.specific_label_score:

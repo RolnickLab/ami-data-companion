@@ -9,7 +9,7 @@
             id: species_list
             viewclass: "SpeciesRow"
             RecycleBoxLayout:
-                padding: (100, 20)
+                padding: (50, 20)
                 spacing: 40
                 orientation: "vertical"
                 default_size: None, dp(56)
@@ -33,3 +33,6 @@
             Button:
                 text: "Export"
                 on_press: root.export()
+            Button:
+                text: "Settings"
+                on_press: app.open_settings()
