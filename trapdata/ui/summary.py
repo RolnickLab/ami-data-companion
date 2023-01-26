@@ -3,7 +3,7 @@ import time
 
 from kivy.app import App
 from kivy.uix.screenmanager import Screen
-from kivy.properties import ObjectProperty
+from kivy.properties import ObjectProperty, ListProperty
 from kivy.uix.label import Label
 from kivy.uix.recycleview import RecycleView
 from kivy.uix.boxlayout import BoxLayout
@@ -13,15 +13,19 @@ from kivy.lang import Builder
 from kivy.clock import Clock
 
 from trapdata import logger
+from trapdata import constants
 from trapdata.db import queries
 from trapdata.db.models.detections import get_detected_objects, export_detected_objects
 
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "summary.kv"))
 
+NUM_EXAMPLES_PER_ROW = 4
+
 
 class SpeciesRow(BoxLayout):
-    species = ObjectProperty()
+    species = ObjectProperty(allownone=True)
+    heading = ListProperty(allownone=True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -30,24 +34,49 @@ class SpeciesRow(BoxLayout):
         if self.species:
             self.make_row(self.species)
 
+    def on_heading(self, instance, value):
+        if self.heading:
+            self.make_heading(self.heading)
+
+    def make_heading(self, heading: list[str]):
+        self.clear_widgets()
+        for value in heading:
+            label = Label(
+                text=value,
+                halign="left",
+                valign="top",
+                bold=True,
+            )
+            label.bind(size=label.setter("text_size"))
+            self.add_widget(label)
+
     def make_row(self, species):
         self.clear_widgets()
+
         label = Label(
             text=species["name"],
-            halign="left",
+            halign="right",
             valign="middle",
         )
         label.bind(size=label.setter("text_size"))
 
-        self.add_widget(
-            Image(
-                source=species["image_path"],
-                size_hint_y=None,
-                height=species["image_height"],
-            )
-        )
         self.add_widget(label)
         self.add_widget(Label(text=str(species["count"]), valign="top"))
+        self.add_widget(
+            Label(text=str(round(species["mean_score"] * 100, 1)), valign="top")
+        )
+        for i in range(NUM_EXAMPLES_PER_ROW):
+            try:
+                example = species["examples"][i]
+                widget = Image(
+                    source=example["image_path"],
+                    size_hint_y=None,
+                    height=species["image_height"],
+                )
+            except IndexError:
+                widget = Label(text="")
+
+            self.add_widget(widget)
 
 
 class SpeciesListLayout(RecycleView):
@@ -63,7 +92,7 @@ class SpeciesListLayout(RecycleView):
         self.start_auto_refresh()
 
     def start_auto_refresh(self):
-        refresh_interval_seconds = 1
+        refresh_interval_seconds = constants.SUMMARY_REFRESH_SECONDS
 
         if self.refresh_clock:
             Clock.unschedule(self.refresh_clock)
@@ -91,24 +120,44 @@ class SpeciesListLayout(RecycleView):
         expects. In this case the viewclass is a `SpeciesRow` object.
         """
         app = App.get_running_app()
-        species_counts = queries.count_species(app.db_path, ms)
+        classification_threshold = float(
+            app.config.get("models", "classification_threshold")
+        )
+        classification_summary = queries.summarize_results(
+            app.db_path,
+            ms,
+            classification_threshold=classification_threshold,
+            num_examples=NUM_EXAMPLES_PER_ROW,
+        )
 
         row_height = 100  # @TODO make dynamic? Or fit images to specific size
 
-        widget_attrs = [
+        species_rows = [
             {
                 "species": {
-                    "name": label or "Unclassified",
-                    "count": count,
+                    "name": item["label"] or "Unclassified",
+                    "count": item["count"],
+                    "mean_score": item["mean_score"],
+                    "examples": item["examples"],
                     "image_height": row_height,
-                    "image_path": image_path,
                 },
+                "heading": None,
                 "height": row_height,
             }
-            for label, count, image_path in species_counts
+            for item in classification_summary
         ]
 
-        return widget_attrs
+        example_placeholders = [""] * (NUM_EXAMPLES_PER_ROW - 1)
+        header_row = [
+            {
+                "species": None,
+                "heading": ["Label", "Count", "Avg. Score", "Examples"]
+                + example_placeholders,
+                "height": 50,
+            }
+        ]
+
+        return header_row + species_rows
 
 
 class SpeciesSummaryScreen(Screen):

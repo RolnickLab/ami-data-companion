@@ -55,7 +55,7 @@
                 text: "Add to Queue" 
                 on_press: root.ids.image_preview.add_current_sample_to_queue() 
             Button:
-                text: "Process Single\n(Clears Queue)"
+                text: "Process Now\n(Clear Queue)"
                 on_press: root.ids.image_preview.process_now() 
             Button:
                 text: "< Previous"
@@ -70,3 +70,6 @@
                 id: play_button
                 text: "Play"   
                 on_press: root.play() 
+            Button:
+                text: "Settings"
+                on_press: app.open_settings()

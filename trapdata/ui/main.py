@@ -237,6 +237,7 @@ class TrapDataApp(App):
                     ml.models.species_classifiers.keys()
                 )[0],
                 "tracking_algorithm": None,
+                "classification_threshold": 0.5,
             },
         )
         config.setdefaults(
@@ -295,9 +296,16 @@ class TrapDataApp(App):
             {
                 "key": "tracking_algorithm",
                 "type": "options",
-                "title": "Occurence tracking algorithm (de-duplication)",
+                "title": "Occurrence tracking algorithm (de-duplication)",
                 "desc": "Method of identifying and tracking the same individual moth across multiple images.",
                 "options": [],
+                "section": "models",
+            },
+            {
+                "key": "classification_threshold",
+                "type": "numeric",
+                "title": "Confidence threshold for species classification",
+                "desc": "Only consider species-level identifications that have a confidence greater or equal to this value. Valid range: 0.0-1.0",
                 "section": "models",
             },
         ]
