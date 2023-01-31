@@ -71,8 +71,8 @@ class MonitoringSession(Base):
         logger.info(f"Updating cached values for {self}")
         self.num_images = len(self.images)
         self.num_detected_objects = len(self.detected_objects)
-        self.start_time = self.images[0].timestamp
-        self.end_time = self.images[-1].timestamp
+        self.start_time: datetime.datetime = self.images[0].timestamp
+        self.end_time: datetime.datetime = self.images[-1].timestamp
 
     def duration(self) -> Optional[datetime.timedelta]:
         if self.start_time and self.end_time:
@@ -93,15 +93,17 @@ class MonitoringSession(Base):
 
     def report_data(self) -> dict[str, Any]:
 
+        duration = self.duration()
+
         return {
             "trap": pathlib.Path(str(self.base_directory)).name,
-            "event": self.day,
-            "duration": self.duration(),
+            "event": self.day.isoformat(),
+            "duration_minutes": int(round(duration.seconds / 60, 0)) if duration else 0,
             "duration_label": self.duration_label,
             "num_images": self.num_images,
             "num_detected_objects": self.num_detected_objects,
-            "start_time": self.start_time,
-            "end_time": self.end_time,
+            "start_time": self.start_time.isoformat(),
+            "end_time": self.end_time.isoformat(),
         }
 
 
@@ -190,12 +192,22 @@ def get_monitoring_sessions_from_filesystem(base_directory):
     return sessions
 
 
-def get_monitoring_sessions_from_db(db_path, base_directory, update_aggregates=True):
-    logger.info("Quering existing sessions in DB")
+def get_monitoring_sessions_from_db(
+    db_path, base_directory=None, update_aggregates=True
+):
+    query_kwargs = {}
+
+    logger.info("Querying existing sessions in DB")
+
+    if base_directory:
+        query_kwargs["base_directory"] = base_directory
+
     with get_session(db_path) as sesh:
         items = (
             sesh.query(MonitoringSession)
-            .filter_by(base_directory=str(base_directory))
+            .filter_by(
+                **query_kwargs,
+            )
             .all()
         )
         if update_aggregates:

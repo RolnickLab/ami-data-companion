@@ -123,10 +123,10 @@ class DetectedObject(db.Base):
 
         return {
             "trap": pathlib.Path(self.monitoring_session.base_directory).name,
-            "event": self.monitoring_session.day,
+            "event": self.monitoring_session.day.isoformat(),
             "source_image": self.image.absolute_path,
             "cropped_image": self.path,
-            "timestamp": self.image.timestamp,
+            "timestamp": self.image.timestamp.isoformat(),
             "bbox": self.bbox,
             "bbox_center": bbox_center(self.bbox) if self.bbox else None,
             "area_pixels": self.area_pixels,
