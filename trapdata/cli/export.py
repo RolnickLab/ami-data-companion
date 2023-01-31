@@ -27,7 +27,7 @@ def detections(
     objects = get_detected_objects(settings.database_url, limit=limit, offset=offset)
     df = pd.DataFrame([obj.report_data() for obj in objects])
     if format is ExportFormat.json:
-        output = df.to_json(orient="records", indent=2)
+        output = df.to_json(orient="records", indent=2, default_handler=str)
     else:
         export_method = getattr(df, f"to_{format}")
         output = export_method(index=False)
