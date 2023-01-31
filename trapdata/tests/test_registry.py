@@ -1,7 +1,7 @@
 from trapdata.ml.models import object_detectors, binary_classifiers, species_classifiers
 
 
-def main():
+def run():
     for model in object_detectors + binary_classifiers + species_classifiers:
         print(
             "\n".join(
@@ -18,4 +18,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run()

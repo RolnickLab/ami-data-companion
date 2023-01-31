@@ -4,12 +4,12 @@ import torch
 from sentry_sdk import start_transaction
 
 from trapdata import logger
-from trapdata.common.utils import slugify
 from trapdata.ml.utils import (
     get_device,
     get_or_download_file,
     StopWatch,
 )
+from trapdata.common.utils import slugify
 
 
 class BatchEmptyException(Exception):
@@ -108,6 +108,8 @@ class InferenceBaseClass:
             index_to_label = {index: label for label, index in labels.items()}
 
             return index_to_label
+        else:
+            return {}
 
     def get_model(self):
         """

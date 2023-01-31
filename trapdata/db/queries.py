@@ -1,6 +1,10 @@
+import statistics
+import random
+from collections import Counter
 import sqlalchemy as sa
 
 from .base import get_session
+from trapdata import constants
 from trapdata.db import models
 
 
@@ -25,6 +29,9 @@ def count_species(db_path, monitoring_session=None):
                     models.DetectedObject.specific_label,
                     models.DetectedObject.binary_label,
                 ).label("label"),
+                sa.func.mean(models.DetectedObject.specific_label_score).label(
+                    "avg_score"
+                ),
                 sa.func.count().label("count"),
                 models.DetectedObject.path.label("image_path"),
                 # sa.func.max(models.DetectedObject.area_pixels),

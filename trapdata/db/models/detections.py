@@ -1,5 +1,6 @@
 import datetime
 import pathlib
+from typing import Iterable, Union, Optional, Any
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -10,7 +11,12 @@ from trapdata import constants
 from trapdata.db.models.images import TrapImage
 from trapdata.common.logs import logger
 from trapdata.common.utils import bbox_area, bbox_center, export_report
-from trapdata.common.filemanagement import save_image
+from trapdata.common.filemanagement import (
+    save_image,
+    absolute_path,
+    construct_exif,
+    EXIF_DATETIME_STR_FORMAT,
+)
 
 
 class DetectedObject(db.Base):
@@ -21,7 +27,9 @@ class DetectedObject(db.Base):
     monitoring_session_id = sa.Column(sa.ForeignKey("monitoring_sessions.id"))
     bbox = sa.Column(sa.JSON)
     area_pixels = sa.Column(sa.Integer)
-    path = sa.Column(sa.String(255))
+    path = sa.Column(
+        sa.String(255)
+    )  # @TODO currently these are absolute paths to help the pytorch dataloader, but relative would be ideal
     specific_label = sa.Column(sa.String(255))
     specific_label_score = sa.Column(sa.Numeric(asdecimal=False))
     binary_label = sa.Column(sa.String(255))
@@ -53,13 +61,18 @@ class DetectedObject(db.Base):
             f"\tbbox={self.bbox!r})"
         )
 
-    def cropped_image_data(self, source_image=None):
+    def cropped_image_data(
+        self,
+        source_image: Union[TrapImage, None] = None,
+        base_path: Union[pathlib.Path, str, None] = None,
+    ):
         """
         Return a PIL image of this detected object.
         """
-        if self.path and pathlib.Path(self.path).exists():
-            logger.debug(f"Using existing image crop: {self.path}")
-            return PIL.Image.open(self.path)
+        path = absolute_path(str(self.path), base_path)
+        if path and path.exists():
+            logger.debug(f"Using existing image crop: {path}")
+            return PIL.Image.open(path)
         else:
             source_image = source_image or self.image
             if not source_image:
@@ -67,20 +80,40 @@ class DetectedObject(db.Base):
             logger.debug(
                 f"Extracting cropped image data from source image {source_image.path}"
             )
-            image = PIL.Image.open(source_image.absolute_path)
-            return image.crop(self.bbox)
+            image = PIL.Image.open(str(source_image.absolute_path))
+            return image.crop(self.bbox)  # type:ignore
 
-    def save_cropped_image_data(self, base_path=None, source_image=None):
+    def save_cropped_image_data(
+        self,
+        base_path: Union[pathlib.Path, str, None] = None,
+        source_image: Union[TrapImage, None] = None,
+    ):
+        """
+        @TODO need consistent way of discovering the user_data_path in the application settings
+        and using that for the base_path.
+        """
         source_image = source_image or self.image
+
+        exif_data: PIL.Image.Exif = PIL.Image.open(source_image.absolute_path).getexif()
+        exif_data = construct_exif(
+            description=f"Source image: {source_image.path}",
+            timestamp=source_image.timestamp,  # type:ignore
+            existing_exif=exif_data,
+        )
+
         fpath = save_image(
-            image=self.cropped_image_data(source_image=source_image),
+            image=self.cropped_image_data(
+                base_path=base_path,
+                source_image=source_image,
+            ),
             base_path=base_path,
             subdir="crops",
+            exif_data=exif_data,
         )
         self.path = str(fpath)
         return fpath
 
-    def report_data(self):
+    def report_data(self) -> dict[str, Any]:
         if self.specific_label:
             label = self.specific_label
             score = self.specific_label_score
@@ -91,7 +124,8 @@ class DetectedObject(db.Base):
         return {
             "trap": pathlib.Path(self.monitoring_session.base_directory).name,
             "event": self.monitoring_session.day,
-            "image": self.image.path,
+            "source_image": self.image.absolute_path,
+            "cropped_image": self.path,
             "timestamp": self.image.timestamp,
             "bbox": self.bbox,
             "bbox_center": bbox_center(self.bbox) if self.bbox else None,
@@ -290,6 +324,10 @@ def get_object_counts_for_image(db_path, image_id):
     }
 
 
-def export_detected_objects(objects, report_name, directory):
-    records = [obj.report_data() for obj in objects]
+def export_detected_objects(
+    items: Iterable[DetectedObject],
+    directory: Union[pathlib.Path, str],
+    report_name: str = "detections",
+):
+    records = [item.report_data() for item in items]
     return export_report(records, report_name, directory)

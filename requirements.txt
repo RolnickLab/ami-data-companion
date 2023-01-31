@@ -5,11 +5,11 @@ black
 flake8
 Pillow
 python-dateutil
-sqlalchemy==2.0b2
-sqlalchemy_utils
-sentry-sdk
 python-dotenv
 pydantic
+sqlalchemy==2.0rc2
+sqlalchemy_utils==0.39.0
+sentry-sdk
 
 torch
 torchvision

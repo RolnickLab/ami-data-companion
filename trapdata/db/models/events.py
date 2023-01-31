@@ -1,4 +1,6 @@
 import pathlib
+import datetime
+from typing import Optional, Union, Iterable, Any
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -6,6 +8,7 @@ from sqlalchemy_utils import aggregated, observes
 
 from trapdata.db import Base, get_session
 from trapdata.common.logs import logger
+from trapdata.common.utils import export_report
 from trapdata.db.models.images import TrapImage
 from trapdata.common.filemanagement import find_images, group_images_by_day
 
@@ -71,7 +74,7 @@ class MonitoringSession(Base):
         self.start_time = self.images[0].timestamp
         self.end_time = self.images[-1].timestamp
 
-    def duration(self):
+    def duration(self) -> Optional[datetime.timedelta]:
         if self.start_time and self.end_time:
             return self.end_time - self.start_time
         else:
@@ -79,13 +82,27 @@ class MonitoringSession(Base):
 
     @property
     def duration_label(self):
-        if self.duration():
-            hours = int(round(self.duration().seconds / 60 / 60, 0))
+        duration = self.duration()
+        if duration:
+            hours = int(round(duration.seconds / 60 / 60, 0))
             unit = "hour" if hours == 1 else "hours"
             duration = f"{hours} {unit}"
         else:
             duration = "Unknown duration"
         return duration
+
+    def report_data(self) -> dict[str, Any]:
+
+        return {
+            "trap": pathlib.Path(str(self.base_directory)).name,
+            "event": self.day,
+            "duration": self.duration(),
+            "duration_label": self.duration_label,
+            "num_images": self.num_images,
+            "num_detected_objects": self.num_detected_objects,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+        }
 
 
 def save_monitoring_session(db_path, base_directory, session):
@@ -173,14 +190,17 @@ def get_monitoring_sessions_from_filesystem(base_directory):
     return sessions
 
 
-def get_monitoring_sessions_from_db(db_path, base_directory):
+def get_monitoring_sessions_from_db(db_path, base_directory, update_aggregates=True):
     logger.info("Quering existing sessions in DB")
     with get_session(db_path) as sesh:
-        return (
+        items = (
             sesh.query(MonitoringSession)
             .filter_by(base_directory=str(base_directory))
             .all()
         )
+        if update_aggregates:
+            [item.update_aggregates() for item in items]
+        return items
 
 
 def monitoring_sessions_exist(db_path, base_directory):
@@ -223,3 +243,12 @@ def get_monitoring_session_image_ids(db_path, ms):
         )
     logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")
     return images
+
+
+def export_monitoring_sessions(
+    items: Iterable[MonitoringSession],
+    directory: Union[pathlib.Path, str],
+    report_name: str = "monitoring_events",
+):
+    records = [item.report_data() for item in items]
+    return export_report(records, report_name, directory)
