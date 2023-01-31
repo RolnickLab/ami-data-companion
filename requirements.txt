@@ -7,6 +7,9 @@ Pillow
 python-dateutil
 python-dotenv
 pydantic
+typer
+rich
+pandas
 sqlalchemy==2.0rc2
 sqlalchemy_utils==0.39.0
 sentry-sdk
