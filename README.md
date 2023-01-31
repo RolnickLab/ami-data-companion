@@ -27,7 +27,6 @@ Desktop app for analyzing images from autonomous insect monitoring stations usin
 
 Install (or upgrade) the package with the following command
 
-Clone repo & create virtualenv
 ```
 pip install --editable "git+https://github.com/RolnickLab/ami-data-manager.git#egg=trapdata"
 ```
