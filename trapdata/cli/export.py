@@ -27,7 +27,6 @@ def export(
     format: ExportFormat = ExportFormat.json,
     outfile: Optional[pathlib.Path] = None,
 ) -> Union[str, None]:
-    print(df.dtypes)
     if format is ExportFormat.json:
         output = df.to_json(
             path_or_buf=outfile,
