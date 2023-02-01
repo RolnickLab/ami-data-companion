@@ -9,6 +9,7 @@ from trapdata.ml.utils import (
     get_or_download_file,
     StopWatch,
 )
+from trapdata.common.utils import slugify
 
 
 class BatchEmptyException(Exception):
@@ -77,6 +78,13 @@ class InferenceBaseClass:
             f"Loading {self.type} model (stage: {self.stage}) for {self.name} with {len(self.category_map or [])} categories"
         )
         self.model = self.get_model()
+
+    @classmethod
+    def get_key(cls):
+        if hasattr(cls, "key") and cls.key:  # type: ignore
+            return cls.key  # type: ignore
+        else:
+            return slugify(cls.name)
 
     def get_weights(self, weights_path):
         if weights_path:

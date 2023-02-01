@@ -140,6 +140,7 @@ class SpeciesListLayout(RecycleView):
                     "mean_score": item["mean_score"],
                     "examples": item["examples"],
                     "image_height": row_height,
+                    "image_path": image_path,
                 },
                 "heading": None,
                 "height": row_height,

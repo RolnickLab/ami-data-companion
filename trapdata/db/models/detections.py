@@ -123,10 +123,10 @@ class DetectedObject(db.Base):
 
         return {
             "trap": pathlib.Path(self.monitoring_session.base_directory).name,
-            "event": self.monitoring_session.day,
+            "event": self.monitoring_session.day.isoformat(),
             "source_image": self.image.absolute_path,
             "cropped_image": self.path,
-            "timestamp": self.image.timestamp,
+            "timestamp": self.image.timestamp.isoformat(),
             "bbox": self.bbox,
             "bbox_center": bbox_center(self.bbox) if self.bbox else None,
             "area_pixels": self.area_pixels,
@@ -134,6 +134,9 @@ class DetectedObject(db.Base):
             "category_label": label,
             "category_score": score,
         }
+
+    def to_json(self):
+        return self.report_data()
 
 
 def save_detected_objects(
@@ -210,14 +213,19 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
         sesh.commit()
 
 
-def get_detected_objects(db_path, monitoring_session=None):
+def get_detected_objects(db_path, monitoring_session=None, limit=None, offset=0):
     query_kwargs = {}
 
     if monitoring_session:
         query_kwargs["monitoring_session_id"] = monitoring_session.id
 
     with db.get_session(db_path) as sesh:
-        return sesh.query(DetectedObject).filter_by(**query_kwargs)
+        return (
+            sesh.query(DetectedObject)
+            .filter_by(**query_kwargs)
+            .offset(offset)
+            .limit(limit)
+        )
 
 
 def get_objects_for_image(db_path, image_id):

@@ -1,6 +1,5 @@
 import torch
 import torchvision
-
 import timm
 from PIL import Image
 
