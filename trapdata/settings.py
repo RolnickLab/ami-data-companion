@@ -1,3 +1,5 @@
+# @TODO use this settings module in Kivy
+import sys
 from typing import Union, Optional
 
 import pathlib
@@ -7,7 +9,9 @@ from pydantic import (
     Field,
     FileUrl,
     PostgresDsn,
+    ValidationError,
 )
+from rich import print as rprint
 
 from trapdata import ml
 
@@ -104,7 +108,23 @@ class Settings(BaseSettings):
         }
 
 
-settings = Settings()  # type: ignore
+def read_settings(*args, **kwargs):
+    try:
+        settings = Settings(*args, **kwargs)  # type: ignore
+    except ValidationError as e:
+        # @TODO can we make this output more friendly with the rich library?
+        rprint(e)
+        print(e)
+        rprint(
+            "Configuration for the CLI is currently set in `.env` or environment variables, see `.env.example`"
+        )
+        sys.exit(1)
+    else:
+        return settings
+
+
+settings = read_settings()
+
 
 if __name__ == "__main__":
     print(settings.schema_json(indent=2))
