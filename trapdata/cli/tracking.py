@@ -1,4 +1,4 @@
- =import sys
+import sys
 import enum
 import pathlib
 import csv
@@ -26,7 +26,9 @@ def run():
     Find tracks in all monitoring sessions .
     """
     Session = get_session_class(settings.database_url)
-    CNNClassifier: Type[InferenceBaseClass] = species_classifiers[settings.species_classification_model.value]
+    CNNClassifier: Type[InferenceBaseClass] = species_classifiers[
+        settings.species_classification_model.value
+    ]
     logger.info(f"Using '{CNNClassifier}' to calculate CNN features")
     species_classifier = CNNClassifier(
         db_path=settings.database_url, user_data_path=settings.user_data_path
@@ -36,7 +38,11 @@ def run():
     session = Session()
     events = get_monitoring_sessions_from_db(db_path=settings.database_url)
     for event in events:
-        find_all_tracks(monitoring_session=event, cnn_model=cnn_model, session=session)
+        find_all_tracks(
+            monitoring_session=event,
+            cnn_model=cnn_model,
+            session=session,
+        )
     print(summarize_tracks(session))
 
 

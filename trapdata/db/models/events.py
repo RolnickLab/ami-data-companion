@@ -68,7 +68,7 @@ class MonitoringSession(Base):
 
     def update_aggregates(self):
         # Requires and active session
-        logger.info(f"Updating cached values for {self}")
+        logger.info(f"Updating cached values for event {self.day}")
         self.num_images = len(self.images)
         self.num_detected_objects = len(self.detected_objects)
         self.start_time: datetime.datetime = self.images[0].timestamp

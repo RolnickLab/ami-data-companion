@@ -9,6 +9,7 @@ import PIL.Image
 from torchvision import transforms
 import torch.utils.data
 from sqlalchemy import orm, select, func
+from rich.progress import track
 
 from trapdata import logger
 from trapdata import constants
@@ -549,7 +550,7 @@ def compare_objects(
 
     Will assign objects to a sequence if the similarity exceeds the TRACKING_COST_THRESHOLD.
     """
-    logger.info(
+    logger.debug(
         f"Calculating tracking costs in image {image_current.id} vs. {image_previous.id}"
     )
     objects_current = (
@@ -577,12 +578,12 @@ def compare_objects(
 
     for obj_current in objects_current:
         if skip_existing and obj_current.sequence_id:
-            logger.info(
+            logger.(info
                 f"Skipping obj {obj_current.id}, already assigned to sequence {obj_current.sequence_id} as frame {obj_current.sequence_frame}"
             )
             continue
 
-        logger.info(f"Comparing obj {obj_current.id} to all objects in previous frame")
+        logger.debug(f"Comparing obj {obj_current.id} to all objects in previous frame")
         costs = []
         assert cnn_model is not None
         for obj_previous in objects_previous:
@@ -635,7 +636,10 @@ def find_all_tracks(
         .scalars()
         .all()
     )
-    for i, image in enumerate(images):
+    for i, image in track(
+        enumerate(images),
+        description=f"Processing objects from event {monitoring_session.day}",
+    ):
         n_current = i
         n_previous = max(n_current - 1, 0)
         image_current = images[n_current]
