@@ -1,3 +1,4 @@
+from typing import Optional
 import json
 
 import torch
@@ -53,7 +54,7 @@ class InferenceBaseClass:
     weights = None
     labels_path = None
     category_map = {}
-    model = None
+    model: Optional[torch.nn.Module] = None
     transforms = None
     batch_size = 4
     num_workers = 1

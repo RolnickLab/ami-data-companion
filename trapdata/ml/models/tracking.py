@@ -1,16 +1,20 @@
-from typing import Generator, Sequence, Any
+from typing import Generator, Sequence, Any, Optional
 from collections import namedtuple
 
 import torch
 from torch import nn
 import numpy as np
 import math
-from PIL.Image import Image
+import PIL.Image
 from torchvision import transforms
 import torch.utils.data
+from sqlalchemy import orm, select, func
 
 from trapdata import logger
+from trapdata import constants
 from trapdata.db.models.queue import UntrackedObjectsQueue
+from trapdata.db.models.events import MonitoringSession
+from trapdata.db.models.images import TrapImage
 from trapdata.db.models.detections import DetectedObject
 
 # from trapdata.db.models.detections import save_untracked_detection
@@ -30,8 +34,8 @@ ItemForTrackingCost = namedtuple(
 class TrackingCostOriginal:
     def __init__(
         self,
-        image1: Image,
-        image2: Image,
+        image1: PIL.Image.Image,
+        image2: PIL.Image.Image,
         bb1: tuple[int, int, int, int],
         bb2: tuple[int, int, int, int],
         source_image_diagonal: float,
@@ -366,15 +370,15 @@ class UntrackedObjectsIterableDatabaseDataset(torch.utils.data.IterableDataset):
     ) -> Generator[
         tuple[
             torch.Tensor,
-            tuple[
-                tuple[
-                    torch.Tensor, torch.Tensor, tuple[int]
-                ],  # Can we make this types? help me out here!
-                tuple[
-                    torch.Tensor,
-                    torch.Tensor,
-                ],
-            ],
+            # tuple[
+            #     tuple[
+            #         torch.Tensor, torch.Tensor, tuple[int]
+            #     ],  # Can we make this types? help me out here!
+            #     tuple[
+            #         torch.Tensor,
+            #         torch.Tensor,
+            #     ],
+            # ],
         ],
         None,
         None,
@@ -405,10 +409,10 @@ class UntrackedObjectsIterableDatabaseDataset(torch.utils.data.IterableDataset):
 
                 yield (
                     item_ids,
-                    batch_image_data,
-                    batch_comparision_image_data,
-                    batch_metadata,
-                    batch_comparisoin_metadata,
+                    # batch_image_data,
+                    # batch_comparison_image_data,
+                    # batch_metadata,
+                    # batch_comparison_metadata,
                 )
 
     def transform(self, cropped_image) -> torch.Tensor:
@@ -478,3 +482,202 @@ class TrackingClassifier(InferenceBaseClass):
     def save_results(self, object_ids, batch_output):
         # Save sequence_id and frame number
         pass
+
+
+def new_sequence(
+    obj_current: DetectedObject,
+    obj_previous: DetectedObject,
+    session: Optional[orm.Session] = None,
+):
+    """
+    Create a new sequence ID and assign it to the current & previous detections.
+    """
+    # obj_current.sequence_id = uuid.uuid4() # @TODO ensure this is unique, or
+    sequence_id = f"{obj_previous.monitoring_session.day.strftime('%Y%m%d')}-SEQ-{obj_previous.id}"
+    obj_previous.sequence_id = sequence_id
+    obj_previous.sequence_frame = 0
+
+    obj_current.sequence_id = sequence_id
+    obj_current.sequence_frame = 1
+
+    logger.info(
+        f"Created new sequence beginning with obj {obj_previous.id}: {sequence_id}"
+    )
+
+    if session:
+        session.add(obj_current)
+        session.add(obj_previous)
+        session.flush()
+
+    return sequence_id
+
+
+def assign_sequence(
+    obj_current: DetectedObject,
+    obj_previous: DetectedObject,
+    final_cost: float,
+    session: orm.Session,
+):
+    """
+    Assign a pair of objects to the same sequence.
+
+    Will create a new sequence if necessary. Saves their similarity and order to the database.
+    """
+    obj_current.sequence_previous_cost = final_cost
+    obj_current.sequence_previous_id = obj_previous.id
+    if obj_previous.sequence_id:
+        obj_current.sequence_id = obj_previous.sequence_id
+        obj_current.sequence_frame = obj_previous.sequence_frame + 1
+    else:
+        new_sequence(obj_current, obj_previous)
+    session.add(obj_current)
+    session.add(obj_previous)
+    session.flush()
+    session.commit()
+    return obj_current.sequence_id, obj_current.sequence_frame
+
+
+def compare_objects(
+    image_current: TrapImage,
+    image_previous: TrapImage,
+    cnn_model: torch.nn.Module,
+    session: orm.Session,
+    skip_existing: bool = True,
+):
+    """
+    Calculate the similarity (tracking cost) between all objects detected in a pair of images.
+
+    Will assign objects to a sequence if the similarity exceeds the TRACKING_COST_THRESHOLD.
+    """
+    logger.info(
+        f"Calculating tracking costs in image {image_current.id} vs. {image_previous.id}"
+    )
+    objects_current = (
+        session.execute(
+            select(DetectedObject)
+            .filter(DetectedObject.image == image_current)
+            .where(DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+    objects_previous = (
+        session.execute(
+            select(DetectedObject)
+            .filter(DetectedObject.image == image_previous)
+            .where(DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+
+    img_shape = PIL.Image.open(image_current.absolute_path).size
+
+    for obj_current in objects_current:
+        if skip_existing and obj_current.sequence_id:
+            logger.info(
+                f"Skipping obj {obj_current.id}, already assigned to sequence {obj_current.sequence_id} as frame {obj_current.sequence_frame}"
+            )
+            continue
+
+        logger.info(f"Comparing obj {obj_current.id} to all objects in previous frame")
+        costs = []
+        for obj_previous in objects_previous:
+            cost = TrackingCostOriginal(
+                obj_current.cropped_image_data(),
+                obj_previous.cropped_image_data(),
+                tuple(obj_current.bbox),
+                tuple(obj_previous.bbox),
+                source_image_diagonal=image_diagonal(img_shape[0], img_shape[1]),
+                cnn_source_model=cnn_model,
+            )
+            final_cost = cost.final_cost()
+            logger.debug(
+                f"\tScore for obj {obj_current.id} vs. {obj_previous.id}: {final_cost}"
+            )
+            costs.append((final_cost, obj_previous))
+        costs.sort(key=lambda cost: cost[0])
+        lowest_cost, best_match = costs[0]
+        if lowest_cost <= constants.TRACKING_COST_THRESHOLD:
+            sequence_id, frame_num = assign_sequence(
+                obj_current=obj_current,
+                obj_previous=best_match,
+                final_cost=lowest_cost,
+                session=session,
+            )
+            logger.info(
+                f"Assigned {obj_current.id} to sequence {sequence_id} as frame #{frame_num}. Tracking cost: {lowest_cost}"
+            )
+
+
+def find_all_tracks(
+    monitoring_session: MonitoringSession,
+    cnn_model: torch.nn.Module,
+    session: orm.Session,
+):
+    """
+    Retrieve all images for an Event / Monitoring Session and find all sequential objects.
+    """
+    images = (
+        session.execute(
+            select(TrapImage)
+            .filter(TrapImage.monitoring_session == monitoring_session)
+            .order_by(TrapImage.timestamp)
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+    for i, image in enumerate(images):
+        n_current = i
+        n_previous = max(n_current - 1, 0)
+        image_current = images[n_current]
+        image_previous = images[n_previous]
+        if image_current != image_previous:
+            compare_objects(
+                image_current,
+                image_previous,
+                cnn_model=cnn_model,
+                session=session,
+            )
+
+
+def summarize_tracks(session: orm.Session):
+    tracks = session.execute(
+        select(
+            DetectedObject.monitoring_session_id,
+            DetectedObject.sequence_id,
+            func.count(DetectedObject.id),
+        ).group_by(DetectedObject.monitoring_session_id, DetectedObject.sequence_id)
+    ).all()
+
+    sequences = {}
+    for ms, sequence_id, count in tracks:
+        track_objects = (
+            session.execute(
+                select(DetectedObject)
+                .where(DetectedObject.sequence_id == sequence_id)
+                .order_by(DetectedObject.sequence_frame)
+            )
+            .unique()
+            .scalars()
+            .all()
+        )
+        sequences[sequence_id] = [
+            dict(
+                event=obj.monitoring_session.day,
+                sequence=sequence_id,
+                frame=obj.sequence_frame,
+                image=obj.image_id,
+                id=obj.id,
+                path=obj.path,
+                specific_label=obj.specific_label,
+                specific_label_score=obj.specific_label_score,
+                cost=obj.sequence_previous_cost,
+            )
+            for obj in track_objects
+        ]
+
+    return sequences

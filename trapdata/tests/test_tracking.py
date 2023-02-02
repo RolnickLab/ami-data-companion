@@ -1,6 +1,7 @@
 # import newrelic.agent
 # newrelic.agent.initialize(environment="staging")
 
+import sys
 import os
 import tempfile
 import pathlib
@@ -30,119 +31,11 @@ from trapdata.ml.models.classification import (
     MothNonMothClassifier,
     UKDenmarkMothSpeciesClassifier,
 )
-from trapdata.ml.models.tracking import TrackingCostOriginal, image_diagonal
-
-TRACKING_THRESHOLD = 1.0
-
-
-def start_sequence(obj_current: DetectedObject, obj_previous: DetectedObject):
-    # obj_current.sequence_id = uuid.uuid4() # @TODO ensure this is unique, or
-    sequence_id = f"{obj_previous.id}-sequence"
-    obj_previous.sequence_id = sequence_id
-    obj_previous.sequence_frame = 0
-
-    obj_current.sequence_id = sequence_id
-    obj_current.sequence_frame = 1
-    logger.info(
-        f"Created new sequence beginning with obj {obj_previous.id}: {sequence_id}"
-    )
-    return sequence_id
-
-
-def assign_sequence(
-    obj_current: DetectedObject,
-    obj_previous: DetectedObject,
-    final_cost: float,
-    session,
-):
-    obj_current.sequence_previous_cost = final_cost
-    obj_current.sequence_previous_id = obj_previous.id
-    if obj_previous.sequence_id:
-        obj_current.sequence_id = obj_previous.sequence_id
-        obj_current.sequence_frame = obj_previous.sequence_frame + 1
-    else:
-        start_sequence(obj_current, obj_previous)
-    session.add(obj_current)
-    session.add(obj_previous)
-    session.flush()
-    session.commit()
-    return obj_current.sequence_id, obj_current.sequence_frame
-
-
-def compare_objects(
-    image_current: TrapImage,
-    image_previous: TrapImage,
-    cnn_model,
-    session,
-):
-    logger.info(
-        f"Calculating tracking costs in image {image_current.id} vs. {image_previous.id}"
-    )
-    objects_current: list[DetectedObject] = (
-        session.execute(
-            select(DetectedObject)
-            .filter(DetectedObject.image == image_current)
-            .where(DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
-        )
-        .unique()
-        .scalars()
-        .all()
-    )
-    objects_previous: list[DetectedObject] = (
-        session.execute(
-            select(DetectedObject)
-            .filter(DetectedObject.image == image_previous)
-            .where(DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
-        )
-        .unique()
-        .scalars()
-        .all()
-    )
-
-    img_shape = Image.open(image_current.absolute_path).size
-
-    for obj_current in objects_current:
-        if obj_current.sequence_id:
-            logger.info(
-                f"Skipping obj {obj_current.id}, already assigned to sequence {obj_current.sequence_id} as frame {obj_current.sequence_frame}"
-            )
-            continue
-
-        logger.info(f"Comparing obj {obj_current.id} to all objects in previous frame")
-        costs = []
-        for obj_previous in objects_previous:
-            cost = TrackingCostOriginal(
-                obj_current.cropped_image_data(),
-                obj_previous.cropped_image_data(),
-                tuple(obj_current.bbox),
-                tuple(obj_previous.bbox),
-                source_image_diagonal=image_diagonal(img_shape[0], img_shape[1]),
-                cnn_source_model=cnn_model,
-            )
-            final_cost = cost.final_cost()
-            logger.info(
-                f"\tScore for obj {obj_current.id} vs. {obj_previous.id}: {final_cost}"
-            )
-            costs.append((final_cost, obj_previous))
-        costs.sort(key=lambda cost: cost[0])
-        highest_cost, best_match = costs[-1]
-        sequence_id, frame_num = assign_sequence(
-            obj_current=obj_current,
-            obj_previous=best_match,
-            final_cost=highest_cost,
-            session=session,
-        )
-        logger.info(
-            f"Assigned {obj_current.id} to sequence {sequence_id} as frame #{frame_num}. Match score: {highest_cost}"
-        )
-
-    session.close()
-
-    # print(list(reversed(sorted(costs, key=lambda costs: costs[0]))))
+from trapdata.ml.models.tracking import find_all_tracks, summarize_tracks
 
 
 # @newrelic.agent.background_task()
-def test_tracking(db_path, image_base_directory, sample_size):
+def test_tracking(db_path, image_base_directory, sample_size, skip_queue):
 
     # db_path = ":memory:"
     get_db(db_path, create=True)
@@ -152,7 +45,6 @@ def test_tracking(db_path, image_base_directory, sample_size):
 
     clear_all_queues(db_path)
 
-    images = []
     with Session() as session:
         ms = session.execute(
             select(MonitoringSession)
@@ -162,8 +54,9 @@ def test_tracking(db_path, image_base_directory, sample_size):
 
         print("Using Monitoring Session:", ms)
 
-        for image in ms.images:
-            add_image_to_queue(db_path, image.id)
+        if not skip_queue:
+            for image in ms.images:
+                add_image_to_queue(db_path, image.id)
 
     if torch.cuda.is_available():
         object_detector = MothObjectDetector_FasterRCNN(db_path=db_path, batch_size=2)
@@ -182,44 +75,38 @@ def test_tracking(db_path, image_base_directory, sample_size):
 
     logger.info("Classification complete")
 
+    assert species_classifier.model is not None
+
     with Session() as session:
-        images = (
-            session.execute(
-                select(TrapImage)
-                .filter(TrapImage.monitoring_session == ms)
-                .order_by(TrapImage.timestamp)
-            )
-            .unique()
-            .scalars()
-            .all()
+        find_all_tracks(
+            monitoring_session=ms, cnn_model=species_classifier.model, session=session
         )
-        for i, image in enumerate(images):
-            n_current = i
-            n_previous = max(n_current - 1, 0)
-            image_current = images[n_current]
-            image_previous = images[n_previous]
-            if image_current != image_previous:
-                compare_objects(
-                    image_current,
-                    image_previous,
-                    cnn_model=species_classifier.model,
-                    session=session,
-                )
+
+        summary = summarize_tracks(session=session)
+        print(summary)
 
 
 if __name__ == "__main__":
-    image_base_directory = pathlib.Path(__file__).parent
+    image_base_directory = pathlib.Path(__file__).parent / "images/sequential"
     logger.info(f"Using test images from: {image_base_directory}")
 
     local_weights_path = torch.hub.get_dir()
     logger.info(f"Looking for or downloading weights in {local_weights_path}")
     os.environ["LOCAL_WEIGHTS_PATH"] = local_weights_path
+    if len(sys.argv) > 1:
+        db_path = sys.argv[1]
+        skip_queue = True
+    else:
+        db_filepath = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        db_path = f"sqlite+pysqlite:///{db_filepath.name}"
+        skip_queue = False
 
-    # with tempfile.NamedTemporaryFile(suffix=".db", delete=True) as db_filepath:
-    db_filepath = pathlib.Path("/home/michael/Projects/AMI/tracking-test.db")
-    db_path = f"sqlite+pysqlite:///{db_filepath.name}"
     logger.info(f"Using temporary DB: {db_path}")
 
     with StopWatch() as t:
-        test_tracking(db_path, image_base_directory, sample_size=10)
+        test_tracking(
+            db_path, image_base_directory, sample_size=10, skip_queue=skip_queue
+        )
     logger.info(t)
+
+    logger.info(f"Keeping temporary DB: {db_path}")
