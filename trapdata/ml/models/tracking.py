@@ -584,6 +584,7 @@ def compare_objects(
 
         logger.info(f"Comparing obj {obj_current.id} to all objects in previous frame")
         costs = []
+        assert cnn_model is not None
         for obj_previous in objects_previous:
             cost = TrackingCostOriginal(
                 obj_current.cropped_image_data(),
@@ -598,8 +599,12 @@ def compare_objects(
                 f"\tScore for obj {obj_current.id} vs. {obj_previous.id}: {final_cost}"
             )
             costs.append((final_cost, obj_previous))
+
         costs.sort(key=lambda cost: cost[0])
+        if not costs:
+            continue
         lowest_cost, best_match = costs[0]
+
         if lowest_cost <= constants.TRACKING_COST_THRESHOLD:
             sequence_id, frame_num = assign_sequence(
                 obj_current=obj_current,
