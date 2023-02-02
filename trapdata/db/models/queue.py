@@ -363,25 +363,23 @@ class UnclassifiedObjectQueue(QueueManager):
     def queue_count(self):
         with get_session(self.db_path) as sesh:
             return (
-                sesh.query(DetectedObject)
-                .filter_by(
+                sesh.query(DetectedObject).filter_by(
                     in_queue=True,
                     specific_label=None,
                     binary_label=constants.POSITIVE_BINARY_LABEL,
                 )
-                .filter(DetectedObject.sequence_id.is_not(None))
+                # .filter(DetectedObject.sequence_id.is_not(None))
                 .count()
             )
 
     def unprocessed_count(self):
         with get_session(self.db_path) as sesh:
             return (
-                sesh.query(DetectedObject)
-                .filter_by(
+                sesh.query(DetectedObject).filter_by(
                     specific_label=None,
                     binary_label=constants.POSITIVE_BINARY_LABEL,
                 )
-                .filter(DetectedObject.sequence_id.is_not(None))
+                # .filter(DetectedObject.sequence_id.is_not(None))
                 .count()
             )
 
@@ -397,13 +395,12 @@ class UnclassifiedObjectQueue(QueueManager):
         orm_objects = []
         with get_session(self.db_path) as sesh:
             objects = (
-                sesh.query(DetectedObject)
-                .filter_by(
+                sesh.query(DetectedObject).filter_by(
                     in_queue=False,
                     specific_label=None,
                     binary_label=constants.POSITIVE_BINARY_LABEL,
                 )
-                .filter(DetectedObject.sequence_id.is_not(None))
+                # .filter(DetectedObject.sequence_id.is_not(None))
                 .all()
             )
 
@@ -422,13 +419,12 @@ class UnclassifiedObjectQueue(QueueManager):
         with get_session(self.db_path) as sesh:
             objects = []
             for obj in (
-                sesh.query(DetectedObject)
-                .filter_by(
+                sesh.query(DetectedObject).filter_by(
                     in_queue=True,
                     specific_label=None,
                     binary_label=constants.POSITIVE_BINARY_LABEL,
                 )
-                .filter(DetectedObject.sequence_id.is_not(None))
+                # .filter(DetectedObject.sequence_id.is_not(None))
                 .all()
             ):
                 obj.in_queue = False
@@ -446,7 +442,7 @@ class UnclassifiedObjectQueue(QueueManager):
                 & (DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
                 & (DetectedObject.specific_label == None)
                 & (DetectedObject.bbox.is_not(None))
-                & (DetectedObject.sequence_id.is_not(None))
+                # & (DetectedObject.sequence_id.is_not(None))
             )
             .limit(n)
             .with_for_update()
@@ -478,8 +474,8 @@ def all_queues(db_path):
         for q in [
             ImageQueue(db_path),
             DetectedObjectQueue(db_path),
-            UntrackedObjectsQueue(db_path),
             UnclassifiedObjectQueue(db_path),
+            UntrackedObjectsQueue(db_path),
         ]
     }
 
