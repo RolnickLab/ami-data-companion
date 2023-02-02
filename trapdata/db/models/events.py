@@ -200,7 +200,7 @@ def get_monitoring_sessions_from_db(
     logger.info("Querying existing sessions in DB")
 
     if base_directory:
-        query_kwargs["base_directory"] = base_directory
+        query_kwargs["base_directory"] = str(base_directory)
 
     with get_session(db_path) as sesh:
         items = (
