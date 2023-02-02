@@ -193,7 +193,9 @@ def get_monitoring_sessions_from_filesystem(base_directory):
 
 
 def get_monitoring_sessions_from_db(
-    db_path, base_directory=None, update_aggregates=True
+    db_path: str,
+    base_directory: Union[pathlib.Path, str, None] = None,
+    update_aggregates: bool = True,
 ):
     query_kwargs = {}
 
