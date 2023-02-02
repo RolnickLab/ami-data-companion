@@ -1,4 +1,4 @@
-from typing import Generator, Sequence, Any, Optional
+from typing import Generator, Sequence, Any, Optional, Union
 from collections import namedtuple
 
 import torch
@@ -13,6 +13,7 @@ from rich.progress import track
 
 from trapdata import logger
 from trapdata import constants
+from trapdata.ml.utils import get_device
 from trapdata.db.models.queue import UntrackedObjectsQueue
 from trapdata.db.models.events import MonitoringSession
 from trapdata.db.models.images import TrapImage
@@ -44,7 +45,7 @@ class TrackingCostOriginal:
         cost_weights: tuple[int, int, int, int] = (1, 1, 1, 1),
         cost_threshold=1,
         img_resize=224,
-        device="cuda",
+        device=None,
     ):
         """
         Finds tracking cost for a pair of bounding box using cnn features, distance, iou and box ratio
@@ -65,7 +66,7 @@ class TrackingCostOriginal:
         self.image1 = image1
         self.image2 = image2
         self.img_resize = img_resize
-        self.device = device
+        self.device = device or get_device()
         self.total_cost = 0
         self.bb1 = bb1
         self.bb2 = bb2
@@ -544,6 +545,7 @@ def compare_objects(
     cnn_model: torch.nn.Module,
     session: orm.Session,
     skip_existing: bool = True,
+    device: Union[torch.device, str, None] = None,
 ):
     """
     Calculate the similarity (tracking cost) between all objects detected in a pair of images.
@@ -578,7 +580,7 @@ def compare_objects(
 
     for obj_current in objects_current:
         if skip_existing and obj_current.sequence_id:
-            logger.(info
+            logger.debug(
                 f"Skipping obj {obj_current.id}, already assigned to sequence {obj_current.sequence_id} as frame {obj_current.sequence_frame}"
             )
             continue
@@ -594,6 +596,7 @@ def compare_objects(
                 tuple(obj_previous.bbox),
                 source_image_diagonal=image_diagonal(img_shape[0], img_shape[1]),
                 cnn_source_model=cnn_model,
+                device=device,
             )
             final_cost = cost.final_cost()
             logger.debug(
@@ -622,6 +625,7 @@ def find_all_tracks(
     monitoring_session: MonitoringSession,
     cnn_model: torch.nn.Module,
     session: orm.Session,
+    device: Union[torch.device, str, None] = None,
 ):
     """
     Retrieve all images for an Event / Monitoring Session and find all sequential objects.
@@ -650,6 +654,7 @@ def find_all_tracks(
                 image_previous,
                 cnn_model=cnn_model,
                 session=session,
+                device=device,
             )
 
 

@@ -12,7 +12,7 @@ import torchvision
 from trapdata import logger
 
 
-def get_device(device_str=None):
+def get_device(device_str=None) -> torch.device:
     """
     Select CUDA if available.
 

@@ -14,6 +14,7 @@ from trapdata.db.models.events import get_monitoring_sessions_from_db
 from trapdata.ml.models import species_classifiers, SpeciesClassifier
 from trapdata.ml.models.base import InferenceBaseClass
 from trapdata.ml.models.tracking import find_all_tracks, summarize_tracks
+from trapdata.ml.utils import get_device
 from trapdata.settings import settings
 from trapdata import logger
 
@@ -34,6 +35,7 @@ def run():
         db_path=settings.database_url, user_data_path=settings.user_data_path
     )
     cnn_model = species_classifier.model
+    device = get_device()
     assert cnn_model is not None
     session = Session()
     events = get_monitoring_sessions_from_db(db_path=settings.database_url)
@@ -42,6 +44,7 @@ def run():
             monitoring_session=event,
             cnn_model=cnn_model,
             session=session,
+            device=device,
         )
     print(summarize_tracks(session))
 
