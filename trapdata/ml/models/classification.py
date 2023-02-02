@@ -21,7 +21,9 @@ class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
         self.batch_size = batch_size
 
     def __len__(self):
-        return self.queue.queue_count()
+        queue_count = self.queue.queue_count()
+        logger.info(f"Current queue count: {queue_count}")
+        return queue_count
 
     def __iter__(self):
         while len(self):
