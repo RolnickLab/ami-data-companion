@@ -642,7 +642,7 @@ def find_all_tracks(
     )
     for i, image in track(
         enumerate(images),
-        description=f"Processing objects from event {monitoring_session.day}",
+        description=f"Processing {monitoring_session.num_images} images with {monitoring_session.num_detected_objects} objects from event {monitoring_session.day}",
     ):
         n_current = i
         n_previous = max(n_current - 1, 0)
