@@ -1,16 +1,14 @@
-import sys
-import enum
-import pathlib
-import csv
-from typing import Optional, Union, Type
+import datetime
+from typing import Type, Optional
 
 import typer
 from rich import print
 import pandas as pd
+from sqlalchemy import select
 
 from trapdata.db.base import get_session_class
 from trapdata.db.models.detections import get_detected_objects
-from trapdata.db.models.events import get_monitoring_sessions_from_db
+from trapdata.db.models.events import MonitoringSession, get_monitoring_sessions_from_db
 from trapdata.ml.models import species_classifiers, SpeciesClassifier
 from trapdata.ml.models.base import InferenceBaseClass
 from trapdata.ml.models.tracking import find_all_tracks, summarize_tracks
@@ -19,6 +17,23 @@ from trapdata.settings import settings
 from trapdata import logger
 
 cli = typer.Typer()
+
+
+@cli.command()
+def summary(event_day: datetime.datetime):
+    Session = get_session_class(settings.database_url)
+    session = Session()
+    event = None
+    if event_day:
+        event = session.execute(
+            select(MonitoringSession).where(
+                # MonitoringSession.base_directory="",  @TODO retrieve from settings?
+                MonitoringSession.day
+                == event_day.date(),
+            )
+        ).scalar_one()
+        print(f"Matched of event: {event}")
+        print(summarize_tracks(session, event=event))
 
 
 @cli.command()
@@ -46,7 +61,6 @@ def run():
             session=session,
             device=device,
         )
-    print(summarize_tracks(session))
 
 
 if __name__ == "__main__":

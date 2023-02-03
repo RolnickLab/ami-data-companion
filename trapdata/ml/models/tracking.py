@@ -658,13 +658,19 @@ def find_all_tracks(
             )
 
 
-def summarize_tracks(session: orm.Session):
+def summarize_tracks(session: orm.Session, event: Optional[MonitoringSession] = None):
+    query_args = {}
+    if event:
+        query_args = {"monitoring_session": event}
+
     tracks = session.execute(
         select(
             DetectedObject.monitoring_session_id,
             DetectedObject.sequence_id,
             func.count(DetectedObject.id),
-        ).group_by(DetectedObject.monitoring_session_id, DetectedObject.sequence_id)
+        )
+        .group_by(DetectedObject.monitoring_session_id, DetectedObject.sequence_id)
+        .filter_by(**query_args)
     ).all()
 
     sequences = {}

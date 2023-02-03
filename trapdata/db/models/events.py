@@ -59,7 +59,9 @@ class MonitoringSession(Base):
 
     def __repr__(self):
         return (
-            f"MonitoringSession("
+            f"MonitoringSession(\n"
+            f"\tid={self.id !r}, \n"
+            f"\tday={self.day.strftime('%Y-%m-%d') !r}, \n"
             f"\tstart_time={self.start_time.strftime('%c') if self.start_time else None !r}, \n"
             f"\tend_time={self.end_time.strftime('%c') if self.end_time else None!r}, \n"
             f"\tnum_images={self.num_images!r}, \n"
@@ -92,7 +94,6 @@ class MonitoringSession(Base):
         return duration
 
     def report_data(self) -> dict[str, Any]:
-
         duration = self.duration()
 
         return {
@@ -166,7 +167,6 @@ def save_monitoring_session(db_path, base_directory, session):
 
 
 def save_monitoring_sessions(db_path, base_directory, sessions):
-
     for session in sessions:
         save_monitoring_session(db_path, base_directory, session)
 
