@@ -15,7 +15,11 @@ from kivy.clock import Clock
 from trapdata import logger
 from trapdata import constants
 from trapdata.db import queries
-from trapdata.db.models.detections import get_detected_objects, export_detected_objects
+from trapdata.db.models.detections import (
+    get_detected_objects,
+    export_detected_objects,
+    get_unique_species_by_track,
+)
 
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "summary.kv"))
@@ -53,6 +57,7 @@ class SpeciesRow(BoxLayout):
     def make_row(self, species):
         self.clear_widgets()
 
+        print(species)
         label = Label(
             text=species["name"],
             halign="right",
@@ -123,11 +128,14 @@ class SpeciesListLayout(RecycleView):
         classification_threshold = float(
             app.config.get("models", "classification_threshold")
         )
-        classification_summary = queries.summarize_results(
-            app.db_path,
-            ms,
-            classification_threshold=classification_threshold,
-            num_examples=NUM_EXAMPLES_PER_ROW,
+        # classification_summary = queries.summarize_results(
+        #     app.db_path,
+        #     ms,
+        #     classification_threshold=classification_threshold,
+        #     num_examples=NUM_EXAMPLES_PER_ROW,
+        # )
+        classification_summary = get_unique_species_by_track(
+            app.db_path, ms, classification_threshold=classification_threshold
         )
 
         row_height = 100  # @TODO make dynamic? Or fit images to specific size

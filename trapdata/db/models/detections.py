@@ -1,5 +1,6 @@
 import datetime
 import pathlib
+import statistics
 from typing import Iterable, Union, Optional, Any, Sequence
 
 import sqlalchemy as sa
@@ -161,7 +162,6 @@ class DetectedObject(db.Base):
 def save_detected_objects(
     db_path, image_ids, detected_objects_data, user_data_path=None
 ):
-
     orm_objects = []
     with db.get_session(db_path) as sesh:
         images = sesh.query(TrapImage).filter(TrapImage.id.in_(image_ids)).all()
@@ -318,6 +318,57 @@ def get_unique_species(db_path, monitoring_session=None):
 
     with db.get_session(db_path) as sesh:
         return sesh.execute(query).all()
+
+
+def get_unique_species_by_track(
+    db_path, monitoring_session=None, classification_threshold: float = -1
+):
+    Session = db.get_session_class(db_path)
+    session = Session()
+    sequences = session.execute(
+        sa.select(
+            DetectedObject.sequence_id,
+            sa.func.count().label("count"),
+            sa.func.max(DetectedObject.specific_label_score).label("count"),
+        )
+        .group_by("sequence_id")
+        .where(DetectedObject.monitoring_session_id == monitoring_session.id)
+        .order_by(sa.desc("count"))
+    ).all()
+    picks = []
+    for sequence, count, score in sequences:
+        sequence_pick = session.execute(
+            sa.select(
+                DetectedObject.specific_label.label("label"),
+                DetectedObject.specific_label_score.label("score"),
+                DetectedObject.path.label("image_path"),
+                DetectedObject.sequence_id,
+            ).where(
+                (DetectedObject.specific_label_score == score)
+                & (DetectedObject.sequence_id == sequence)
+                & (DetectedObject.monitoring_session_id == monitoring_session.id)
+            )
+        ).all()[0]
+        picks.append(sequence_pick)
+
+    species = {}
+    for pick in picks:
+        if pick.score < classification_threshold:
+            continue
+        if pick.label in species.keys():
+            species[pick.label]["count"] += 1
+            species[pick.label]["mean_score"] = statistics.mean(
+                [species[pick.label]["mean_score"], pick.score]
+            )
+            species[pick.label]["examples"].append(pick._mapping)
+        else:
+            species[pick.label] = {}
+            species[pick.label]["count"] = 1
+            species[pick.label]["mean_score"] = pick.score
+            species[pick.label]["examples"] = [pick._mapping]
+            species[pick.label]["label"] = pick.label
+
+    return species.values()
 
 
 def get_objects_for_species(db_path, species_label, monitoring_session=None):
