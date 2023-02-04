@@ -133,6 +133,30 @@ class DetectedObject(db.Base):
         )
         return session.execute(stmt).unique().scalars().all()
 
+    def best_sibling(self, session: orm.Session):
+        """
+        Return the detected object from the same sequence with
+        the highest confidence score from the species classification.
+        """
+        stmt = (
+            sa.select(DetectedObject)
+            .where(
+                (DetectedObject.sequence_id == self.sequence_id)
+                & DetectedObject.specific_label_score.isnot(None)
+            )
+            .order_by(DetectedObject.specific_label_score.desc())
+        )
+        best_sibling = session.execute(stmt).unique().scalars().first()
+        if best_sibling:
+            if best_sibling.specific_label != self.specific_label:
+                print(f"Found better label! {best_sibling.specific_label}")
+            else:
+                print(f"Using current label {self.specific_label}")
+            return best_sibling
+        else:
+            print(f"No siblings")
+            return self
+
     def report_data(self) -> dict[str, Any]:
         if self.specific_label:
             label = self.specific_label
