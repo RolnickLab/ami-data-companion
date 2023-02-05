@@ -19,6 +19,7 @@ from kivy.uix.screenmanager import Screen
 
 from trapdata import logger
 from trapdata import constants
+from trapdata.db.base import get_session_class
 from trapdata.db.models.events import get_monitoring_session_image_ids
 from trapdata.db.models.images import get_image_with_objects
 from trapdata.db.models.detections import (
@@ -314,12 +315,15 @@ class PreviewWindow(RelativeLayout):
         app = App.get_running_app()
         image = get_image_with_objects(app.db_path, image_id)
         stats = get_object_counts_for_image(app.db_path, image_id)
+        Session = get_session_class(app.db_path)
+        with Session() as session:
+            objects = [obj.best_sibling(session) for obj in image.detected_objects]
         # @TODO is there a more reliable way to reference the info bar?
         info_bar = self.parent.parent.ids.info_bar
         update_info_bar(info_bar, image, stats)
         image_widget = AnnotatedImage(
             image_path=image.absolute_path,
-            annotations=image.detected_objects,
+            annotations=objects,
             size=self.size,
             pos_hint={"bottom": 0},
             image=image,
