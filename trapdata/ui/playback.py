@@ -19,6 +19,7 @@ from kivy.uix.screenmanager import Screen
 
 from trapdata import logger
 from trapdata import constants
+from trapdata.common.utils import format_timedelta_hours
 from trapdata.db.base import get_session_class
 from trapdata.db.models.events import get_monitoring_session_image_ids
 from trapdata.db.models.images import TrapImage, get_image_with_objects
@@ -225,9 +226,11 @@ class AnnotatedImage(Widget):
             if annotation.sequence_id:
                 label_text = (
                     f"{label_text}\n"
-                    f"{annotation.sequence_id}\n"
-                    f"{round(track_info['total_time']/60, 1)} hours\n"
-                    f"{track_info['current_frame']} / {track_info['total_frames']}\n"
+                    # f"{annotation.sequence_id}\n"
+                    f"frame {track_info['current_frame']} / {track_info['total_frames']}\n"
+                    f"first seen {track_info['start_time'].strftime('%-I:%-M %p')}\n"
+                    f"last seen {track_info['end_time'].strftime('%-I:%-M %p')}\n"
+                    f"present for {format_timedelta_hours(track_info['end_time']-track_info['start_time'])}\n"
                 )
 
             # label_text = split_label(label_text)
@@ -236,7 +239,7 @@ class AnnotatedImage(Widget):
                 self.bbox_widgets.append(
                     Label(
                         text=label_text,
-                        center=((x1 + w2 / 2), y2 - 30),
+                        center=((x1 + w2 / 2), y2 - 120),
                         color=color,
                         bold=True,
                         halign="center",

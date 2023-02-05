@@ -1,4 +1,5 @@
 import csv
+import datetime
 import pathlib
 import string
 from typing import Union, Any
@@ -78,3 +79,15 @@ def export_report(
             writer.writerow(record.values())
 
     return filepath
+
+
+def format_timedelta(td: datetime.timedelta) -> str:
+    minutes, seconds = divmod(td.seconds + td.days * 86400, 60)
+    hours, minutes = divmod(minutes, 60)
+    return "{:d}:{:02d}:{:02d}".format(hours, minutes, seconds)
+
+
+def format_timedelta_hours(td: datetime.timedelta) -> str:
+    minutes, seconds = divmod(td.seconds + td.days * 86400, 60)
+    hours, minutes = divmod(minutes, 60)
+    return "{:d} hours, {:02d} min".format(hours, minutes)
