@@ -21,8 +21,9 @@ from trapdata import logger
 from trapdata import constants
 from trapdata.db.base import get_session_class
 from trapdata.db.models.events import get_monitoring_session_image_ids
-from trapdata.db.models.images import get_image_with_objects
+from trapdata.db.models.images import TrapImage, get_image_with_objects
 from trapdata.db.models.detections import (
+    DetectedObject,
     get_object_counts_for_image,
     delete_objects_for_image,
 )
@@ -59,14 +60,13 @@ def update_info_bar(info_bar, image, stats):
 
 
 class AnnotatedImage(Widget):
-    image_path = ObjectProperty()
-    annotations = ListProperty()
-    image = ObjectProperty()
-    stats = ObjectProperty()
+    image_path: pathlib.Path = ObjectProperty()
+    annotations: list[DetectedObject] = ListProperty()
+    image: TrapImage = ObjectProperty()
+    stats: dict = ObjectProperty()
     bg = ObjectProperty()
 
     def __init__(self, *args, **kwargs):
-
         super().__init__(*args, **kwargs)
 
         app = App.get_running_app()
@@ -76,7 +76,6 @@ class AnnotatedImage(Widget):
 
         # Arranging Canvas
         with self.canvas:
-
             # Update canvas when the window size changes
             self.bind(pos=self.update_rect, size=self.update_rect)
 
@@ -90,7 +89,6 @@ class AnnotatedImage(Widget):
         self.draw()
 
     def draw(self, *args):
-
         self.canvas.clear()
 
         if not self.image_path.exists():
@@ -132,7 +130,7 @@ class AnnotatedImage(Widget):
         for i, annotation in enumerate(self.annotations):
             # Red box around canvas for debugging
             # Color(1, 0, 0, 1)
-            # self.bbox_widgets.append(
+            # self.bbox_widgets.append
             #     Line(rectangle=(0, 0, win_width, win_height), width=2)
             # )
             # print("bbox#", i)
@@ -144,7 +142,8 @@ class AnnotatedImage(Widget):
             # else:
             #     color = NEUTRAL_COLOR
             else:
-                color = constants.NEGATIVE_COLOR
+                # color = constants.NEGATIVE_COLOR
+                continue
 
             # color = [random.random() for _ in range(3)]
             # color.append(0.8)  # alpha
@@ -190,37 +189,54 @@ class AnnotatedImage(Widget):
                     Line(points=[x1, y1, x1, y2, x2, y2, x2, y1, x1, y1], width=2)
                 )
 
-            if annotation.binary_label == constants.NEGATIVE_BINARY_LABEL:
+            def split_label(text):
+                return text.replace(" ", "\n")
+
+            app = App.get_running_app()
+            Session = get_session_class(app.db_path)
+            with Session() as session:
+                best_annotation = annotation.best_sibling(session)
+                track_info = annotation.track_info(session)
+
+            if best_annotation.binary_label == constants.NEGATIVE_BINARY_LABEL:
                 label_text = ""
 
             elif (
-                annotation.specific_label
-                and float(annotation.specific_label_score)
+                best_annotation.specific_label
+                and float(best_annotation.specific_label_score)
                 >= self.classification_threshold
             ):
                 # If there is a binary label and it's nonmoth, don't show
                 # the specific label, even if one exists.
-                if annotation.specific_label_score:
-                    score = round(annotation.specific_label_score * 100, 1)
-                    label_text = f"{annotation.specific_label} ({score}%)"
+                if best_annotation.specific_label_score:
+                    score = round(best_annotation.specific_label_score * 100, 1)
+                    label_text = f"{best_annotation.specific_label} ({score}%)"
                 else:
-                    label_text = f"{annotation.specific_label}"
+                    label_text = f"{best_annotation.specific_label}"
 
-            elif annotation.binary_label:
-                if annotation.binary_label_score:
-                    score = round(annotation.binary_label_score * 100, 1)
-                    label_text = f"{annotation.binary_label} ({score}%)"
-                else:
-                    label_text = f"{annotation.binary_label}"
+            elif best_annotation.binary_label:
+                # Show or not show binary-only labels?
+                # label_text = f"{best_annotation.binary_label}"
+                label_text = ""
 
             else:
                 label_text = ""
+
+            if annotation.sequence_id:
+                label_text = (
+                    f"{label_text}\n"
+                    f"{annotation.sequence_id}\n"
+                    f"{round(track_info['total_time']/60, 1)} hours\n"
+                    f"{track_info['current_frame']} / {track_info['total_frames']}\n"
+                )
+
+            # label_text = split_label(label_text)
 
             with self.canvas:
                 self.bbox_widgets.append(
                     Label(
                         text=label_text,
-                        center=((x1 + w2 / 2), y2 - 10),
+                        center=((x1 + w2 / 2), y2 - 30),
                         color=color,
                         bold=True,
                         halign="center",
@@ -315,15 +331,12 @@ class PreviewWindow(RelativeLayout):
         app = App.get_running_app()
         image = get_image_with_objects(app.db_path, image_id)
         stats = get_object_counts_for_image(app.db_path, image_id)
-        Session = get_session_class(app.db_path)
-        with Session() as session:
-            objects = [obj.best_sibling(session) for obj in image.detected_objects]
         # @TODO is there a more reliable way to reference the info bar?
         info_bar = self.parent.parent.ids.info_bar
         update_info_bar(info_bar, image, stats)
         image_widget = AnnotatedImage(
             image_path=image.absolute_path,
-            annotations=objects,
+            annotations=image.detected_objects,
             size=self.size,
             pos_hint={"bottom": 0},
             image=image,

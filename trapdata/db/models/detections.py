@@ -1,7 +1,7 @@
 import datetime
 import pathlib
 import statistics
-from typing import Iterable, Union, Optional, Any, Sequence
+from typing import Iterable, Union, Optional, Any, Sequence, TypedDict
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -33,6 +33,7 @@ class DetectedObject(db.Base):
     path = sa.Column(
         sa.String(255)
     )  # @TODO currently these are absolute paths to help the pytorch dataloader, but relative would be ideal
+    # timestamp = sa.Column(sa.DateTime(timezone=True)) # @TODO add migration for these fields
     source_image_width = sa.Column(sa.Integer)
     source_image_height = sa.Column(sa.Integer)
     source_image_previous_frame = sa.Column(sa.Integer)
@@ -133,6 +134,57 @@ class DetectedObject(db.Base):
         )
         return session.execute(stmt).unique().scalars().all()
 
+    def track_info(
+        self, session: orm.Session
+    ) -> dict[str, Union[datetime.datetime, datetime.datetime, int, int]]:
+        """
+        Return the start time, end time duration in minutes, and number of frames for a track
+        """
+        image = session.execute(
+            sa.select(TrapImage).join(DetectedObject.image)
+        ).scalar()
+        if not image:
+            raise Exception(f"No source image found for detected object id {self.id}")
+
+        if self.sequence_id:
+            stmt = (
+                sa.select(
+                    sa.func.min(TrapImage.timestamp).label("start"),
+                    sa.func.max(TrapImage.timestamp).label("end"),
+                    sa.func.count(TrapImage.id).label("num_frames"),
+                )
+                .join(DetectedObject.image)
+                .where((DetectedObject.sequence_id == self.sequence_id))
+            )
+            start_time, end_time, num_frames = session.execute(stmt).one()
+        else:
+            start_time, end_time = image.timestamp, image.timestamp
+            num_frames = 1
+
+        def get_minutes(timedelta):
+            return int(round(timedelta.seconds / 60, 0))
+
+        return dict(
+            start_time=start_time,
+            end_time=end_time,
+            current_time=get_minutes(
+                image.timestamp - start_time
+            ),  # @TODO This is the incorrect time
+            total_time=get_minutes(end_time - start_time),
+            current_frame=self.sequence_frame,
+            total_frames=num_frames,
+        )
+
+        # stmt = (
+        #     sa.select(DetectedObject.image.timestamp)
+        #     .where(
+        #         (DetectedObject.sequence_id == self.sequence_id)
+        #         & DetectedObject.sequence_id.isnot(None)
+        #         & DetectedObject.specific_label_score.isnot(None)
+        #     )
+        #     .order_by(DetectedObject.sequence_frame))
+        # )
+
     def best_sibling(self, session: orm.Session):
         """
         Return the detected object from the same sequence with
@@ -142,6 +194,7 @@ class DetectedObject(db.Base):
             sa.select(DetectedObject)
             .where(
                 (DetectedObject.sequence_id == self.sequence_id)
+                & DetectedObject.sequence_id.isnot(None)
                 & DetectedObject.specific_label_score.isnot(None)
             )
             .order_by(DetectedObject.specific_label_score.desc())
@@ -149,12 +202,12 @@ class DetectedObject(db.Base):
         best_sibling = session.execute(stmt).unique().scalars().first()
         if best_sibling:
             if best_sibling.specific_label != self.specific_label:
-                print(f"Found better label! {best_sibling.specific_label}")
+                logger.debug(f"Found better label! {best_sibling.specific_label}")
             else:
-                print(f"Using current label {self.specific_label}")
+                logger.debug(f"Using current label {self.specific_label}")
             return best_sibling
         else:
-            print(f"No siblings")
+            logger.debug(f"No siblings")
             return self
 
     def report_data(self) -> dict[str, Any]:
@@ -220,6 +273,8 @@ def save_detected_objects(
                     source_image=image,
                     base_path=user_data_path,
                 )
+
+                detection.timestamp = image.timestamp
 
                 previous_image = image.previous_image(sesh)
                 detection.source_image_previous_frame = (
