@@ -241,7 +241,7 @@ def find_images(
 def group_images_by_day(images, maximum_gap_minutes=6 * 60):
     """
     Find consecutive images and group them into daily/nightly monitoring sessions.
-    If the time between two photos is greater than `maximumm_time_gap` (in minutes)
+    If the time between two photos is greater than `maximum_time_gap` (in minutes)
     then start a new session group. Each new group uses the first photo's day
     as the day of the session even if consecutive images are taken past midnight.
     # @TODO add other group by methods? like image size, camera model, random sample batches, etc. Add to UI settings
