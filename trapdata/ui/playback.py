@@ -197,7 +197,7 @@ class AnnotatedImage(Widget):
             Session = get_session_class(app.db_path)
             with Session() as session:
                 best_annotation = annotation.best_sibling(session)
-                track_info = annotation.track_info(session)
+                # track_info = annotation.track_info(session)
 
             if best_annotation.binary_label == constants.NEGATIVE_BINARY_LABEL:
                 label_text = ""
@@ -227,10 +227,10 @@ class AnnotatedImage(Widget):
                 label_text = (
                     f"{label_text}\n"
                     # f"{annotation.sequence_id}\n"
-                    f"frame {track_info['current_frame']} / {track_info['total_frames']}\n"
-                    f"first seen {track_info['start_time'].strftime('%-I:%-M %p')}\n"
-                    f"last seen {track_info['end_time'].strftime('%-I:%-M %p')}\n"
-                    f"present for {format_timedelta_hours(track_info['end_time']-track_info['start_time'])}\n"
+                    # f"frame {track_info['current_frame']} / {track_info['total_frames']}\n"
+                    # f"first seen {track_info['start_time'].strftime('%-I:%-M %p')}\n"
+                    # f"last seen {track_info['end_time'].strftime('%-I:%-M %p')}\n"
+                    # f"present for {format_timedelta_hours(track_info['end_time']-track_info['start_time'])}\n"
                 )
 
             # label_text = split_label(label_text)
@@ -239,7 +239,7 @@ class AnnotatedImage(Widget):
                 self.bbox_widgets.append(
                     Label(
                         text=label_text,
-                        center=((x1 + w2 / 2), y2 - 120),
+                        center=((x1 + w2 / 2), y2 - 20),
                         color=color,
                         bold=True,
                         halign="center",
