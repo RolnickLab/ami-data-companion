@@ -219,6 +219,29 @@ def get_monitoring_sessions_from_db(
         return items
 
 
+def get_monitoring_session_by_date(
+    db_path: str,
+    event_dates: list[datetime.date],
+    base_directory: Union[pathlib.Path, str, None] = None,
+):
+    query_kwargs = {}
+
+    if base_directory:
+        query_kwargs["base_directory"] = str(base_directory)
+
+    with get_session(db_path) as sesh:
+        items = (
+            sesh.query(MonitoringSession)
+            .where(MonitoringSession.day.in_(event_dates))
+            .filter_by(
+                **query_kwargs,
+            )
+            .all()
+        )
+        [item.update_aggregates() for item in items]
+        return items
+
+
 def monitoring_sessions_exist(db_path, base_directory):
     with get_session(db_path) as sesh:
         return (

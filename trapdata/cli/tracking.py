@@ -1,5 +1,5 @@
 import datetime
-from typing import Type, Optional
+from typing import Type, Optional, Iterable, List
 
 import typer
 from rich import print
@@ -8,7 +8,11 @@ from sqlalchemy import select
 
 from trapdata.db.base import get_session_class
 from trapdata.db.models.detections import get_detected_objects
-from trapdata.db.models.events import MonitoringSession, get_monitoring_sessions_from_db
+from trapdata.db.models.events import (
+    MonitoringSession,
+    get_monitoring_session_by_date,
+    get_monitoring_sessions_from_db,
+)
 from trapdata.ml.models import species_classifiers, SpeciesClassifier
 from trapdata.ml.models.base import InferenceBaseClass
 from trapdata.ml.models.tracking import find_all_tracks, summarize_tracks
@@ -37,7 +41,7 @@ def summary(event_day: datetime.datetime):
 
 
 @cli.command()
-def run():
+def run(event_dates: List[datetime.datetime]):
     """
     Find tracks in all monitoring sessions .
     """
@@ -53,7 +57,13 @@ def run():
     device = get_device()
     assert cnn_model is not None
     session = Session()
-    events = get_monitoring_sessions_from_db(db_path=settings.database_url)
+    if event_dates:
+        dates = [e.date() for e in event_dates]
+        events = get_monitoring_session_by_date(
+            db_path=settings.database_url, event_dates=dates
+        )
+    else:
+        events = get_monitoring_sessions_from_db(db_path=settings.database_url)
     for event in events:
         find_all_tracks(
             monitoring_session=event,
