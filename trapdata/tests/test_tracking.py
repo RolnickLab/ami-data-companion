@@ -75,12 +75,14 @@ def test_tracking(db_path, image_base_directory, sample_size, skip_queue):
 
     logger.info("Classification complete")
 
-    assert species_classifier.model is not None
+    assert species_classifier.model is not None, "Missing species classifier model"
 
     with Session() as session:
         find_all_tracks(
             monitoring_session=ms, cnn_model=species_classifier.model, session=session
         )
+
+        # @TODO what is the expected result? test the output of this against known tracks.
 
         summary = summarize_tracks(session=session)
         print(summary)

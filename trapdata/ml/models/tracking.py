@@ -541,9 +541,9 @@ def assign_sequence(
 
 def compare_objects(
     image_current: TrapImage,
-    image_previous: TrapImage,
     cnn_model: torch.nn.Module,
     session: orm.Session,
+    image_previous: Optional[TrapImage] = None,
     skip_existing: bool = True,
     device: Union[torch.device, str, None] = None,
 ):
@@ -552,6 +552,10 @@ def compare_objects(
 
     Will assign objects to a sequence if the similarity exceeds the TRACKING_COST_THRESHOLD.
     """
+    if not image_previous:
+        image_previous = image_current.previous_image(session)
+        assert image_previous, f"No image found before image {image_current.id}"
+
     logger.debug(
         f"Calculating tracking costs in image {image_current.id} vs. {image_previous.id}"
     )
@@ -565,6 +569,7 @@ def compare_objects(
         .scalars()
         .all()
     )
+
     objects_previous = (
         session.execute(
             select(DetectedObject)
@@ -650,8 +655,8 @@ def find_all_tracks(
         image_previous = images[n_previous]
         if image_current != image_previous:
             compare_objects(
-                image_current,
-                image_previous,
+                image_current=image_current,
+                image_previous=image_previous,
                 cnn_model=cnn_model,
                 session=session,
                 device=device,
