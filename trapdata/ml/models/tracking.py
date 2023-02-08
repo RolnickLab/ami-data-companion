@@ -3,6 +3,7 @@ from collections import namedtuple
 
 import torch
 from torch import nn
+import torchvision
 import numpy as np
 import math
 import PIL.Image
@@ -13,7 +14,9 @@ from rich.progress import track
 
 from trapdata import logger
 from trapdata import constants
+from trapdata.common.types import BoundingBox
 from trapdata.ml.utils import get_device
+from trapdata.ml.models.classification import SpeciesClassifier
 from trapdata.db.models.queue import UntrackedObjectsQueue
 from trapdata.db.models.events import MonitoringSession
 from trapdata.db.models.images import TrapImage
@@ -31,6 +34,118 @@ def image_diagonal(width: int, height: int) -> int:
 ItemForTrackingCost = namedtuple(
     "ItemForTrackingCost", "image_data bbox source_image_diagonal"
 )
+
+
+def l1_normalize(v):
+    norm = np.sum(np.array(v))
+    return v / norm
+
+
+def cosine_similarity(img1_ftrs: torch.Tensor, img2_ftrs: torch.Tensor) -> float:
+    """
+    Finds cosine similarity between a pair of cropped images.
+
+    Uses the feature embeddings array computed from a CNN model.
+    """
+
+    cosine_sim = np.dot(img1_ftrs, img2_ftrs) / (
+        np.linalg.norm(img1_ftrs) * np.linalg.norm(img2_ftrs)
+    )
+    assert 0 <= cosine_sim <= 1, "cosine similarity score out of bounds"
+
+    return cosine_sim
+
+
+def iou(bb1: BoundingBox, bb2: BoundingBox) -> float:
+    """Finds intersection over union for a bounding box pair"""
+
+    assert bb1[0] < bb1[2], "Issue in bounding box 1 x_annotation"
+    assert bb1[1] < bb1[3], "Issue in bounding box 1 y_annotation"
+    assert bb2[0] < bb2[2], "Issue in bounding box 2 x_annotation"
+    assert bb2[1] < bb2[3], "Issue in bounding box 2 y_annotation"
+
+    bb1_area = (bb1[2] - bb1[0] + 1) * (bb1[3] - bb1[1] + 1)
+    bb2_area = (bb2[2] - bb2[0] + 1) * (bb2[3] - bb2[1] + 1)
+
+    x_min = max(bb1[0], bb2[0])
+    x_max = min(bb1[2], bb2[2])
+    width = max(0, x_max - x_min + 1)
+
+    y_min = max(bb1[1], bb2[1])
+    y_max = min(bb1[3], bb2[3])
+    height = max(0, y_max - y_min + 1)
+
+    intersec_area = width * height
+    union_area = bb1_area + bb2_area - intersec_area
+
+    iou = np.around(intersec_area / union_area, 2)
+    assert 0 <= iou <= 1, "IoU out of bounds"
+
+    return iou
+
+
+def box_ratio(bb1: BoundingBox, bb2: BoundingBox) -> float:
+    """Finds the ratio of the two bounding boxes"""
+
+    bb1_area = (bb1[2] - bb1[0] + 1) * (bb1[3] - bb1[1] + 1)
+    bb2_area = (bb2[2] - bb2[0] + 1) * (bb2[3] - bb2[1] + 1)
+
+    min_area = min(bb1_area, bb2_area)
+    max_area = max(bb1_area, bb2_area)
+
+    box_ratio = min_area / max_area
+    assert 0 <= box_ratio <= 1, "box ratio out of bounds"
+
+    return box_ratio
+
+
+def distance_ratio(bb1: BoundingBox, bb2: BoundingBox, img_diag: float) -> float:
+    """finds the distance between the two bounding boxes and normalizes
+    by the image diagonal length
+    """
+
+    centre_x_bb1 = bb1[0] + (bb1[2] - bb1[0]) / 2
+    centre_y_bb1 = bb1[1] + (bb1[3] - bb1[1]) / 2
+
+    centre_x_bb2 = bb2[0] + (bb2[2] - bb2[0]) / 2
+    centre_y_bb2 = bb2[1] + (bb2[3] - bb2[1]) / 2
+
+    dist = math.sqrt(
+        (centre_x_bb2 - centre_x_bb1) ** 2 + (centre_y_bb2 - centre_y_bb1) ** 2
+    )
+    max_dist = img_diag
+
+    assert dist <= max_dist, "distance between bounding boxes more than max distance"
+
+    return dist / max_dist
+
+
+def total_cost(
+    img1_features: torch.Tensor,
+    img2_features: torch.Tensor,
+    bb1: BoundingBox,
+    bb2: BoundingBox,
+    image_diagonal: float,
+    w_cnn: float = 1,
+    w_iou: float = 1,
+    w_box: float = 1,
+    w_dis: float = 1,
+) -> float:
+    """returns the final cost"""
+
+    cnn_cost = 1 - cosine_similarity(img1_features, img2_features)
+    iou_cost = 1 - iou(bb1, bb2)
+    box_ratio_cost = 1 - box_ratio(bb1, bb2)
+    dist_ratio_cost = distance_ratio(bb1, bb2, image_diagonal)
+
+    total_cost = (
+        w_cnn * cnn_cost
+        + w_iou * iou_cost
+        + w_box * box_ratio_cost
+        + w_dis * dist_ratio_cost
+    )
+
+    return total_cost
 
 
 class TrackingCostOriginal:
@@ -257,100 +372,6 @@ class TrackingCost:
         self.w_box = cost_weights[2]
         self.w_dis = cost_weights[3]
 
-    def _l1_normalize(self, v):
-        norm = np.sum(np.array(v))
-        return v / norm
-
-    def _cosine_similarity(self):
-        """Finds cosine similarity for a bounding box pair images"""
-
-        cosine_sim = np.dot(self.img1_ftrs, self.img2_ftrs) / (
-            np.linalg.norm(self.img1_ftrs) * np.linalg.norm(self.img2_ftrs)
-        )
-        assert 0 <= cosine_sim <= 1, "cosine similarity score out of bounds"
-
-        return cosine_sim
-
-    def _iou(self):
-        """Finds intersection over union for a bounding box pair"""
-
-        assert self.bb1[0] < self.bb1[2], "Issue in bounding box 1 x_annotation"
-        assert self.bb1[1] < self.bb1[3], "Issue in bounding box 1 y_annotation"
-        assert self.bb2[0] < self.bb2[2], "Issue in bounding box 2 x_annotation"
-        assert self.bb2[1] < self.bb2[3], "Issue in bounding box 2 y_annotation"
-
-        bb1_area = (self.bb1[2] - self.bb1[0] + 1) * (self.bb1[3] - self.bb1[1] + 1)
-        bb2_area = (self.bb2[2] - self.bb2[0] + 1) * (self.bb2[3] - self.bb2[1] + 1)
-
-        x_min = max(self.bb1[0], self.bb2[0])
-        x_max = min(self.bb1[2], self.bb2[2])
-        width = max(0, x_max - x_min + 1)
-
-        y_min = max(self.bb1[1], self.bb2[1])
-        y_max = min(self.bb1[3], self.bb2[3])
-        height = max(0, y_max - y_min + 1)
-
-        intersec_area = width * height
-        union_area = bb1_area + bb2_area - intersec_area
-
-        iou = np.around(intersec_area / union_area, 2)
-        assert 0 <= iou <= 1, "IoU out of bounds"
-
-        return iou
-
-    def _box_ratio(self):
-        """Finds the ratio of the two bounding boxes"""
-
-        bb1_area = (self.bb1[2] - self.bb1[0] + 1) * (self.bb1[3] - self.bb1[1] + 1)
-        bb2_area = (self.bb2[2] - self.bb2[0] + 1) * (self.bb2[3] - self.bb2[1] + 1)
-
-        min_area = min(bb1_area, bb2_area)
-        max_area = max(bb1_area, bb2_area)
-
-        box_ratio = min_area / max_area
-        assert 0 <= box_ratio <= 1, "box ratio out of bounds"
-
-        return box_ratio
-
-    def _distance_ratio(self):
-        """finds the distance between the two bounding boxes and normalizes
-        by the image diagonal length
-        """
-
-        centre_x_bb1 = self.bb1[0] + (self.bb1[2] - self.bb1[0]) / 2
-        centre_y_bb1 = self.bb1[1] + (self.bb1[3] - self.bb1[1]) / 2
-
-        centre_x_bb2 = self.bb2[0] + (self.bb2[2] - self.bb2[0]) / 2
-        centre_y_bb2 = self.bb2[1] + (self.bb2[3] - self.bb2[1]) / 2
-
-        dist = math.sqrt(
-            (centre_x_bb2 - centre_x_bb1) ** 2 + (centre_y_bb2 - centre_y_bb1) ** 2
-        )
-        max_dist = self.img_diag
-
-        assert (
-            dist <= max_dist
-        ), "distance between bounding boxes more than max distance"
-
-        return dist / max_dist
-
-    def final_cost(self):
-        """returns the final cost"""
-
-        cnn_cost = 1 - self._cosine_similarity()
-        iou_cost = 1 - self._iou()
-        box_ratio_cost = 1 - self._box_ratio()
-        dist_ratio_cost = self._distance_ratio()
-
-        self.total_cost = (
-            self.w_cnn * cnn_cost
-            + self.w_iou * iou_cost
-            + self.w_box * box_ratio_cost
-            + self.w_dis * dist_ratio_cost
-        )
-
-        return self.total_cost
-
 
 class UntrackedObjectsIterableDatabaseDataset(torch.utils.data.IterableDataset):
     def __init__(
@@ -365,7 +386,9 @@ class UntrackedObjectsIterableDatabaseDataset(torch.utils.data.IterableDataset):
         self.batch_size = batch_size
 
     def __len__(self):
-        return self.queue.queue_count()
+        count = self.queue.queue_count()
+        print("TRACKING QUEUE COUNT:", count)
+        return count
 
     def __iter__(
         self,
@@ -433,13 +456,23 @@ class UntrackedObjectsIterableDatabaseDataset(torch.utils.data.IterableDataset):
 
 
 class TrackingClassifier(InferenceBaseClass):
-    stage = 3
+    name = "Default Tracking Method"
+    stage = 4
     type = "tracking"
+    cnn_features_model: torch.nn.Module
+    cnn_features_model_transforms: torchvision.transforms.Compose
+    cnn_features_model_input_size: int
+
+    def get_model(self):
+        # Get the last feature layer of the model
+        model = nn.Sequential(*list(self.cnn_features_model.children())[:-3])
+
+        return model
 
     def get_dataset(self):
         dataset = UntrackedObjectsIterableDatabaseDataset(
             queue=UntrackedObjectsQueue(self.db_path),
-            image_transforms=self.get_transforms(),
+            image_transforms=self.cnn_features_model_transforms,
             batch_size=self.batch_size,
         )
         return dataset
@@ -452,8 +485,9 @@ class TrackingClassifier(InferenceBaseClass):
         image1_data, image1_bboxes, image1_diagonals = batch_a
         image2_data, image2_bboxes, image2_diagonals = batch_b
 
-        image1_features = super().predict_batch(batch=image1_data)
-        image2_features = super().predict_batch(batch=image2_data)
+        print("SUPER", super())
+        image1_features = self.cnn_features_model.predict_batch(batch=image1_data)
+        image2_features = self.cnn_features_model.predict_batch(batch=image2_data)
 
         batch_costs = []
         for img1_ftrs, img2_ftrs, bbox1, bbox2, diagonal in zip(
