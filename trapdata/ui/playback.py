@@ -54,7 +54,8 @@ def update_info_bar(info_bar, image, stats):
         f"Detections: {stats.get('num_detections')} | "
         f"Species: {stats.get('num_species')} | "
         f"Complete: {stats.get('completely_classified')} | "
-        f"Last Processed: {last_processed}"
+        f"Last Processed: {last_processed}\n"
+        '* "Process Now" button will clear the queue and interrupt any tracked sequences.'
     )
 
     info_bar.text = info_bar_text
