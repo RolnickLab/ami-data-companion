@@ -17,7 +17,7 @@ from trapdata import constants
 from trapdata.common.types import BoundingBox
 from trapdata.ml.utils import get_device
 from trapdata.ml.models.classification import (
-    MothNonMothClassifier,
+    QuebecVermontMothSpeciesClassifierMixedResolution,
     ClassificationIterableDatabaseDataset,
 )
 from trapdata.db.models.queue import UntrackedObjectsQueue, ObjectsWithoutFeaturesQueue
@@ -429,7 +429,8 @@ class UntrackedObjectsIterableDatabaseDataset(torch.utils.data.IterableDataset):
         pass
 
 
-class FeatureExtractor(MothNonMothClassifier):
+# class FeatureExtractor(MothNonMothClassifier):
+class FeatureExtractor(QuebecVermontMothSpeciesClassifierMixedResolution):
     name = "Default Feature Extractor"
     stage = 4
     type = "feature_extractor"
@@ -447,9 +448,11 @@ class FeatureExtractor(MothNonMothClassifier):
         return dataset
 
     def get_model(self):
-        # Get the last feature layer of the EfficientNet model
         model = super().get_model()
-        model = nn.Sequential(*list(model.children())[:-3])
+        # Get the last feature layer of the ResNet50 model
+        model = nn.Sequential(*list(model.children())[:-1])
+        # # Get the last feature layer of the EfficientNet model
+        # model = nn.Sequential(*list(model.children())[:-3])
         return model
 
     def post_process_batch(self, output) -> np.ndarray:
