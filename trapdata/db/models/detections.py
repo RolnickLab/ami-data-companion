@@ -52,6 +52,8 @@ class DetectedObject(db.Base):
     sequence_previous_cost = sa.Column(sa.Float)
     cnn_features = sa.Column(sa.JSON)
 
+    # @TODO add updated & created timestamps to all db models
+
     image = orm.relationship(
         "TrapImage",
         back_populates="detected_objects",
@@ -347,6 +349,21 @@ def get_detected_objects(db_path, monitoring_session=None, limit=None, offset=0)
 def get_objects_for_image(db_path, image_id):
     with db.get_session(db_path) as sesh:
         return sesh.query(DetectedObject.binary_label).filter_by(image_id=image_id)
+
+
+def get_unique_objects_for_image(db_path, image_id) -> Sequence[DetectedObject]:
+    with db.get_session(db_path) as sesh:
+        objects = (
+            sesh.execute(
+                sa.select(DetectedObject)
+                .where(DetectedObject.image_id == image_id)
+                .order_by(DetectedObject.last_detected.desc())
+            )
+            .unique(lambda d: str(d.bbox))
+            .scalars()
+            .all()
+        )
+        return objects
 
 
 def delete_objects_for_image(db_path, image_id):

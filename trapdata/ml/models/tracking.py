@@ -14,7 +14,7 @@ from rich.progress import track
 
 from trapdata import logger
 from trapdata import constants
-from trapdata.common.types import BoundingBox
+from trapdata.common.types import BoundingBox, SystemPath
 from trapdata.ml.utils import get_device
 from trapdata.ml.models.classification import (
     QuebecVermontMothSpeciesClassifierMixedResolution,
@@ -472,6 +472,11 @@ class FeatureExtractor(QuebecVermontMothSpeciesClassifierMixedResolution):
         data = [
             {
                 "cnn_features": features.tolist(),
+                # Clear any existing sequence assignment:
+                "sequence_id": None,
+                "sequence_frame": None,
+                "sequence_previous_id": None,
+                "sequence_previous_cost": None,
             }
             for features in batch_output
         ]
@@ -570,6 +575,9 @@ def compare_objects(
         .scalars()
         .all()
     )
+    logger.debug(
+        f"Objects in current frame: {len(objects_current)}, objects in previous: {len(objects_previous)}"
+    )
 
     img_shape = PIL.Image.open(image_current.absolute_path).size
 
@@ -620,6 +628,20 @@ def compare_objects(
             logger.info(
                 f"Assigned {obj_current.id} to sequence {sequence_id} as frame #{frame_num}. Tracking cost: {lowest_cost}"
             )
+
+
+def get_events_that_need_tracks(
+    base_directory: SystemPath, session: orm.Session
+) -> Sequence[MonitoringSession]:
+    stmt = (
+        select(MonitoringSession)
+        .join(DetectedObject.monitoring_session)
+        .where(
+            (DetectedObject.sequence_id.is_(None))
+            & (MonitoringSession.base_directory == str(base_directory))
+        )
+    )
+    return session.execute(stmt).unique().scalars().all()
 
 
 def find_all_tracks(

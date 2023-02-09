@@ -2,9 +2,11 @@ import pathlib
 
 from trapdata import logger
 from trapdata import ml
+from trapdata.db.base import get_session_class
+from trapdata.common.types import SystemPath
 
 
-def start_pipeline(db_path, config, single=False):
+def start_pipeline(db_path, config, base_directory: SystemPath, single=False):
 
     user_data_path = pathlib.Path(config.get("paths", "user_data_path"))
     logger.info(f"Local user data path: {user_data_path}")
@@ -56,3 +58,11 @@ def start_pipeline(db_path, config, single=False):
         single=single,
     )
     model_4.run()
+
+    Session = get_session_class(db_path)
+    with Session() as session:
+        events = ml.models.tracking.get_events_that_need_tracks(base_directory, session)
+        for event in events:
+            ml.models.tracking.find_all_tracks(
+                monitoring_session=event, session=session
+            )

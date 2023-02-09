@@ -13,9 +13,12 @@ from trapdata.db.models.events import (
     get_monitoring_session_by_date,
     get_monitoring_sessions_from_db,
 )
-from trapdata.ml.models import species_classifiers, SpeciesClassifier
 from trapdata.ml.models.base import InferenceBaseClass
-from trapdata.ml.models.tracking import find_all_tracks, summarize_tracks
+from trapdata.ml.models.tracking import (
+    find_all_tracks,
+    summarize_tracks,
+    FeatureExtractor,
+)
 from trapdata.ml.utils import get_device
 from trapdata.settings import settings
 from trapdata import logger
@@ -45,18 +48,14 @@ def run(event_dates: List[datetime.datetime]):
     """
     Find tracks in all monitoring sessions .
     """
-    Session = get_session_class(settings.database_url)
-    CNNClassifier: Type[InferenceBaseClass] = species_classifiers[
-        settings.species_classification_model.value
-    ]
-    logger.info(f"Using '{CNNClassifier}' to calculate CNN features")
-    species_classifier = CNNClassifier(
+    feature_extrator = FeatureExtractor(
         db_path=settings.database_url, user_data_path=settings.user_data_path
     )
-    cnn_model = species_classifier.model
-    device = get_device()
-    assert cnn_model is not None
+    feature_extrator.run()
+
+    Session = get_session_class(settings.database_url)
     session = Session()
+
     if event_dates:
         dates = [e.date() for e in event_dates]
         events = get_monitoring_session_by_date(
@@ -64,12 +63,12 @@ def run(event_dates: List[datetime.datetime]):
         )
     else:
         events = get_monitoring_sessions_from_db(db_path=settings.database_url)
+
     for event in events:
+        print(f"Finding tracks in {event}")
         find_all_tracks(
             monitoring_session=event,
-            cnn_model=cnn_model,
             session=session,
-            device=device,
         )
 
 

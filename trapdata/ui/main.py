@@ -95,7 +95,11 @@ class Queue(Label):
             task_name = "Trapdata Queue Processor"
             self.bgtask = threading.Thread(
                 target=partial(
-                    start_pipeline, self.app.db_path, self.app.config, single
+                    start_pipeline,
+                    self.app.db_path,
+                    self.app.config,
+                    self.app.image_base_path,
+                    single,
                 ),
                 daemon=True,  # PyTorch will be killed abruptly, leaving memory in GPU
                 name=task_name,
@@ -177,6 +181,8 @@ class TrapDataApp(App):
         # Just in case we are in a bind:
         Window.fullscreen = 0
         Window.show_cursor = True
+        # Window.clearcolor = (1, 1, 1, 1.0)
+        # Window.size = (600, 400)
 
         sm = ScreenManager()
         sm.add_widget(DataMenuScreen(name="menu"))
