@@ -28,6 +28,12 @@
 
 
 <ImagePlaybackScreen>:
+    canvas.before:
+        Color:
+            rgba: 1, 1, 1, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
     id: playback_screen
     BoxLayout:
         id: playback_layout
@@ -38,11 +44,11 @@
         Label:
             id: info_bar 
             text: ""
-            halign: "center"
-            valign: "middle"
-            color: [1, 1, 1, 1]
+            halign: "left"
+            valign: "bottom"
+            color: [0, 0, 0, 1]
             orientation: "horizontal"
-            size_hint_y: 0.1
+            size_hint_y: 0.08
         BoxLayout:
             id: controls 
             orientation: "horizontal"

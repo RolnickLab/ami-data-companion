@@ -60,7 +60,7 @@ def update_info_bar(info_bar, image, stats):
         f"Species: {stats.get('num_species')} | "
         f"Complete: {stats.get('completely_classified')} | "
         f"Last Processed: {last_processed}\n"
-        '* "Process Now" button will clear the queue and interrupt any tracked sequences.'
+        # '* "Process Now" button will clear the queue and interrupt any tracked sequences.'
     )
 
     info_bar.text = info_bar_text
@@ -197,7 +197,7 @@ class AnnotatedImage(Widget):
             if annotation.sequence_id:
                 label_text = (
                     f"{label_text}\n"
-                    f"{annotation.sequence_id}\n"
+                    # f"{annotation.sequence_id}\n"
                     # f"frame {track_info['current_frame']} / {track_info['total_frames']}\n"
                     # f"first seen {track_info['start_time'].strftime('%-I:%-M %p')}\n"
                     # f"last seen {track_info['end_time'].strftime('%-I:%-M %p')}\n"
