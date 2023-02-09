@@ -50,6 +50,7 @@ class DetectedObject(db.Base):
     sequence_frame = sa.Column(sa.Integer)
     sequence_previous_id = sa.Column(sa.Integer)
     sequence_previous_cost = sa.Column(sa.Float)
+    cnn_features = sa.Column(sa.JSON)
 
     image = orm.relationship(
         "TrapImage",
@@ -125,6 +126,12 @@ class DetectedObject(db.Base):
         )
         self.path = str(fpath)
         return fpath
+
+    def width(self):
+        pass  # Use bbox
+
+    def height(self):
+        pass  # Use bbox
 
     def previous_frame_detections(
         self, session: orm.Session

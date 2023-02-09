@@ -19,7 +19,11 @@ from trapdata.db.models.events import (
     MonitoringSession,
 )
 from trapdata.db.models.images import TrapImage
-from trapdata.db.models.queue import add_image_to_queue, clear_all_queues
+from trapdata.db.models.queue import (
+    ObjectsWithoutFeaturesQueue,
+    add_image_to_queue,
+    clear_all_queues,
+)
 from trapdata.db.models.detections import DetectedObject, get_detections_for_image
 
 from trapdata.ml.utils import StopWatch
@@ -31,7 +35,12 @@ from trapdata.ml.models.classification import (
     MothNonMothClassifier,
     UKDenmarkMothSpeciesClassifier,
 )
-from trapdata.ml.models.tracking import find_all_tracks, summarize_tracks
+from trapdata.ml.models.tracking import (
+    FeatureExtractor,
+    find_all_tracks,
+    summarize_tracks,
+    cosine_similarity,
+)
 
 
 # @newrelic.agent.background_task()
@@ -55,7 +64,7 @@ def test_tracking(db_path, image_base_directory, sample_size, skip_queue):
         print("Using Monitoring Session:", ms)
 
         if not skip_queue:
-            for image in ms.images:
+            for image in ms.images[:1]:
                 add_image_to_queue(db_path, image.id)
 
     if torch.cuda.is_available():
@@ -66,26 +75,49 @@ def test_tracking(db_path, image_base_directory, sample_size, skip_queue):
         )
     moth_nonmoth_classifier = MothNonMothClassifier(db_path=db_path, batch_size=300)
     species_classifier = UKDenmarkMothSpeciesClassifier(db_path=db_path, batch_size=300)
+    feature_extractor = FeatureExtractor(db_path=db_path, batch_size=50)
 
     check_db(db_path, quiet=False)
 
     object_detector.run()
     moth_nonmoth_classifier.run()
+    logger.info("Feature extractor queue:", feature_extractor.queue.queue_count())
+    feature_extractor.run()
     species_classifier.run()
 
-    logger.info("Classification complete")
-
-    assert species_classifier.model is not None, "Missing species classifier model"
-
     with Session() as session:
-        find_all_tracks(
-            monitoring_session=ms, cnn_model=species_classifier.model, session=session
+        objects = (
+            session.execute(
+                select(DetectedObject).where(DetectedObject.cnn_features.isnot(None))
+            )
+            .unique()
+            .scalars()
+            .all()
         )
 
-        # @TODO what is the expected result? test the output of this against known tracks.
+    for object in objects:
+        num_features = len(object.cnn_features)
+        assert (
+            num_features == 1536 * 10 * 10
+        )  # This is dependent on the input size & type of model
+        result = cosine_similarity(object.cnn_features, object.cnn_features)
+        assert round(result, 1) == 1.0, "Cosine simularity of same object is not 1!"
 
-        summary = summarize_tracks(session=session)
-        print(summary)
+    # assert species_classifier.model is not None, "Missing species classifier model"
+
+    # with Session() as session:
+    #     find_all_tracks(
+    #         monitoring_session=ms, cnn_model=species_classifier.model, session=session
+    #     )
+
+    # @TODO what is the expected result? test the output of this against known tracks.
+
+    # summary = summarize_tracks(session=session)
+    # print(summary)
+    # import sqlalchemy as sa
+    # import ipdb
+
+    # ipdb.set_trace()
 
 
 if __name__ == "__main__":

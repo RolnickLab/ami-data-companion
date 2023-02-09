@@ -227,6 +227,116 @@ class DetectedObjectQueue(QueueManager):
             return objs
 
 
+class ObjectsWithoutFeaturesQueue(QueueManager):
+    name = "Detections without features"
+    description = """
+    Objects that have been identified as something of interest (e.g. a moth)
+    and need CNN features stored for using to generate tracks & simularity later. 
+    """
+
+    def filter_args(self):
+        # args = (
+        #     DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL,
+        #     DetectedObject.cnn_features.is_(None),
+        # )
+        args = dict(
+            binary_label=constants.POSITIVE_BINARY_LABEL,
+            cnn_features=None,
+        )
+        return args
+
+    def queue_count(self):
+        with get_session(self.db_path) as sesh:
+            return (
+                sesh.query(DetectedObject)
+                .filter_by(in_queue=True, **self.filter_args())
+                .count()
+            )
+
+    def unprocessed_count(self):
+        with get_session(self.db_path) as sesh:
+            return sesh.query(DetectedObject).filter_by(**self.filter_args()).count()
+
+    def done_count(self):
+        with get_session(self.db_path) as sesh:
+            return (
+                sesh.query(DetectedObject)
+                .filter(DetectedObject.cnn_features.is_not(None))
+                .count()
+            )
+
+    def add_unprocessed(self, *args):
+        orm_objects = []
+        with get_session(self.db_path) as sesh:
+            objects = sesh.query(DetectedObject).filter_by(**self.filter_args()).all()
+
+        for obj in objects:
+            obj.in_queue = True
+            orm_objects.append(obj)
+
+        with get_session(self.db_path) as sesh:
+            logger.info(
+                f"Adding {len(orm_objects)} detections without features to queue"
+            )
+            sesh.bulk_save_objects(orm_objects)
+            sesh.commit()
+
+    def clear_queue(self, *args):
+        logger.info("Clearing untracked detections in queue")
+
+        with get_session(self.db_path) as sesh:
+            objects = []
+            for obj in (
+                sesh.query(DetectedObject)
+                .filter_by(in_queue=True, **self.filter_args())
+                .all()
+            ):
+                obj.in_queue = False
+                objects.append(obj)
+            logger.info(f"Clearing {len(objects)} untracked detections in queue")
+            sesh.bulk_save_objects(objects)
+            sesh.commit()
+
+    def pull_n_from_queue(
+        self, n: int
+    ) -> Sequence[tuple[DetectedObject, Sequence[DetectedObject]]]:
+        """
+        Fetch detected objects that need to be assigned to a sequence / track and
+        all of the objects from the previous frame that will be compared.
+
+        This will return more DetectedObjects than specified by `n` because
+        it includes all of the related objects.
+        """
+        logger.debug(f"Attempting to pull {n} untracked detections from queue")
+        select_stmt = (
+            sa.select(DetectedObject.id)
+            .filter_by(in_queue=True, **self.filter_args())
+            .limit(n)
+            .with_for_update()
+        )
+        update_stmt = (
+            sa.update(DetectedObject)
+            .where(DetectedObject.id.in_(select_stmt.scalar_subquery()))
+            .values({"in_queue": False})
+            .returning(DetectedObject.id)
+        )
+        with get_session(self.db_path) as sesh:
+            record_ids = sesh.execute(update_stmt).scalars().all()
+            sesh.commit()
+            detections = (
+                sesh.execute(
+                    sa.select(DetectedObject).where(DetectedObject.id.in_(record_ids))
+                )
+                .unique()
+                .scalars()
+                .all()
+            )
+            logger.info(
+                f"Pulled {len(detections)} detections without features from queue"
+            )
+            return detections
+
+
 class UntrackedObjectsQueue(QueueManager):
     name = "Untracked detections"
     description = """

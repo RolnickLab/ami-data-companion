@@ -12,6 +12,7 @@ from trapdata.ml.utils import (
     get_or_download_file,
     StopWatch,
 )
+from trapdata.db.models.queue import QueueManager
 from trapdata.common.utils import slugify
 
 
@@ -62,6 +63,7 @@ class InferenceBaseClass:
     type = "unknown"
     stage = 0
     single = True
+    queue: Optional[QueueManager] = None
 
     def __init__(self, db_path, **kwargs):
         self.db_path = db_path
@@ -75,6 +77,7 @@ class InferenceBaseClass:
         self.category_map = self.get_labels(self.labels_path)
         self.weights = self.get_weights(self.weights_path)
         self.transforms = self.get_transforms()
+        self.queue = self.get_queue()
         self.dataset = self.get_dataset()
         self.dataloader = self.get_dataloader()
         logger.info(
@@ -116,8 +119,9 @@ class InferenceBaseClass:
 
     def get_model(self):
         """
-        # This method must be implemented by a subclass.
-        # Example:
+        This method must be implemented by a subclass.
+
+        Example:
 
         model = torch.nn.Module()
         checkpoint = torch.load(self.weights, map_location=self.device)
@@ -130,8 +134,9 @@ class InferenceBaseClass:
 
     def get_transforms(self) -> torchvision.transforms.Compose:
         """
-        # This method must be implemented by a subclass.
-        # Example:
+        This method must be implemented by a subclass.
+
+        Example:
 
         transforms = torchvision.transforms.Compose(
             [
@@ -142,10 +147,23 @@ class InferenceBaseClass:
         """
         raise NotImplementedError
 
+    def get_queue(self) -> QueueManager:
+        """
+        This method must be implemented by a subclass.
+        Example:
+
+        from trapdata.db.models.queue import DetectedObjectQueue
+        def get_queue(self):
+            return DetectedObjectQueue(self.db_path)
+        """
+        return None
+        # raise NotImplementedError
+
     def get_dataset(self):
         """
-        # This method must be implemented by a subclass.
-        # Example:
+        This method must be implemented by a subclass.
+
+        Example:
 
         dataset = torch.utils.data.Dataset()
         return dataset

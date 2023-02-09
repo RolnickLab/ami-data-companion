@@ -5,7 +5,7 @@ from .classification import (
     BinaryClassifier,
     SpeciesClassifier,
 )
-from .tracking import TrackingClassifier
+from .tracking import FeatureExtractor
 
 object_detectors = {Model.name: Model for Model in ObjectDetector.__subclasses__()}
 ObjectDetectorChoice = Enum(
@@ -28,5 +28,5 @@ SpeciesClassifierChoice = Enum(
     {Model.get_key(): Model.name for Model in SpeciesClassifier.__subclasses__()},
 )
 
-tracking_algorithms = {"Default": TrackingClassifier}
-TrackingAlgorithmChoice = Enum("TrackingAlgorithm", {"default": TrackingClassifier})
+tracking_algorithms = {"Default": FeatureExtractor}
+TrackingAlgorithmChoice = Enum("TrackingAlgorithm", {"default": FeatureExtractor})

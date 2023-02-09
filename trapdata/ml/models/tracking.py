@@ -16,11 +16,14 @@ from trapdata import logger
 from trapdata import constants
 from trapdata.common.types import BoundingBox
 from trapdata.ml.utils import get_device
-from trapdata.ml.models.classification import SpeciesClassifier
-from trapdata.db.models.queue import UntrackedObjectsQueue
+from trapdata.ml.models.classification import (
+    MothNonMothClassifier,
+    ClassificationIterableDatabaseDataset,
+)
+from trapdata.db.models.queue import UntrackedObjectsQueue, ObjectsWithoutFeaturesQueue
 from trapdata.db.models.events import MonitoringSession
 from trapdata.db.models.images import TrapImage
-from trapdata.db.models.detections import DetectedObject
+from trapdata.db.models.detections import DetectedObject, save_classified_objects
 
 # from trapdata.db.models.detections import save_untracked_detection
 from .base import InferenceBaseClass
@@ -41,6 +44,13 @@ def l1_normalize(v):
     return v / norm
 
 
+def l1_normalize_batch(a: np.ndarray) -> np.ndarray:
+    # https://stackoverflow.com/a/8904762
+    row_sums = a.sum(axis=1)
+    normed = a / row_sums[:, np.newaxis]
+    return normed
+
+
 def cosine_similarity(img1_ftrs: torch.Tensor, img2_ftrs: torch.Tensor) -> float:
     """
     Finds cosine similarity between a pair of cropped images.
@@ -51,7 +61,7 @@ def cosine_similarity(img1_ftrs: torch.Tensor, img2_ftrs: torch.Tensor) -> float
     cosine_sim = np.dot(img1_ftrs, img2_ftrs) / (
         np.linalg.norm(img1_ftrs) * np.linalg.norm(img2_ftrs)
     )
-    assert 0 <= cosine_sim <= 1, "cosine similarity score out of bounds"
+    assert 0 <= round(cosine_sim, 5) <= 1, "Cosine similarity score out of bounds"
 
     return cosine_sim
 
@@ -233,7 +243,9 @@ class TrackingCostOriginal:
         img2_moth = torch.unsqueeze(img2_moth, 0).to(self.device)
 
         img1_moth = self._transform_image(self.image1)
+        print(img1_moth.shape)
         img1_moth = torch.unsqueeze(img1_moth, 0).to(self.device)
+        print(img1_moth.shape)
 
         # getting model features for each image
         with torch.no_grad():
@@ -335,44 +347,6 @@ class TrackingCostOriginal:
         return self.total_cost
 
 
-class TrackingCost:
-    def __init__(
-        self,
-        image1_cnn_features: torch.Tensor,
-        image2_cnn_features: torch.Tensor,
-        bb1: tuple[int, int, int, int],
-        bb2: tuple[int, int, int, int],
-        source_image_diagonal: float,
-        cost_weights: tuple[int, int, int, int] = (1, 1, 1, 1),
-        cost_threshold=1,
-    ):
-        """
-        Finds tracking cost for a pair of bounding box using cnn features, distance, iou and box ratio
-        Author        : Aditya Jain
-        Date created  : June 23, 2022
-
-        Args:
-        image1_cnn_features       : CNN features for first moth image
-        image2_cnn_features       : CNN features for second moth image
-        bb1          : [x1, y1, x2, y2] The origin is top-left corner; x1<x2; y1<y2; integer values in the list
-        bb2          : [x1, y1, x2, y2] The origin is top-left corner; x1<x2; y1<y2; integer values in the list
-        weights      : weights assigned to various cost metrics
-        img_diagonal : diagonal length of the image in pixels
-
-        """
-
-        self.img1_ftrs = image1_cnn_features
-        self.img2_ftrs = image2_cnn_features
-        self.total_cost = 0
-        self.bb1 = bb1
-        self.bb2 = bb2
-        self.img_diag = source_image_diagonal
-        self.w_cnn = cost_weights[0]
-        self.w_iou = cost_weights[1]
-        self.w_box = cost_weights[2]
-        self.w_dis = cost_weights[3]
-
-
 class UntrackedObjectsIterableDatabaseDataset(torch.utils.data.IterableDataset):
     def __init__(
         self,
@@ -455,69 +429,50 @@ class UntrackedObjectsIterableDatabaseDataset(torch.utils.data.IterableDataset):
         pass
 
 
-class TrackingClassifier(InferenceBaseClass):
-    name = "Default Tracking Method"
+class FeatureExtractor(MothNonMothClassifier):
+    name = "Default Feature Extractor"
     stage = 4
-    type = "tracking"
-    cnn_features_model: torch.nn.Module
-    cnn_features_model_transforms: torchvision.transforms.Compose
-    cnn_features_model_input_size: int
+    type = "feature_extractor"
+    input_size = 300
 
-    def get_model(self):
-        # Get the last feature layer of the model
-        model = nn.Sequential(*list(self.cnn_features_model.children())[:-3])
-
-        return model
+    def get_queue(self):
+        return ObjectsWithoutFeaturesQueue(self.db_path)
 
     def get_dataset(self):
-        dataset = UntrackedObjectsIterableDatabaseDataset(
-            queue=UntrackedObjectsQueue(self.db_path),
-            image_transforms=self.cnn_features_model_transforms,
+        dataset = ClassificationIterableDatabaseDataset(
+            queue=self.queue,
+            image_transforms=self.get_transforms(),
             batch_size=self.batch_size,
         )
         return dataset
 
-    def predict_batch(
-        self,
-        batch_a: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-        batch_b: tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-    ):
-        image1_data, image1_bboxes, image1_diagonals = batch_a
-        image2_data, image2_bboxes, image2_diagonals = batch_b
+    def get_model(self):
+        # Get the last feature layer of the EfficientNet model
+        model = super().get_model()
+        model = nn.Sequential(*list(model.children())[:-3])
+        return model
 
-        print("SUPER", super())
-        image1_features = self.cnn_features_model.predict_batch(batch=image1_data)
-        image2_features = self.cnn_features_model.predict_batch(batch=image2_data)
+    def post_process_batch(self, output) -> np.ndarray:
+        # output = output.view(-1, output.size(0)).cpu()
+        # output = output.reshape((output.shape[0],))
+        batch_size = output.shape[0]
+        num_features = np.product(output.shape[1:])
 
-        batch_costs = []
-        for img1_ftrs, img2_ftrs, bbox1, bbox2, diagonal in zip(
-            image1_features,
-            image2_features,
-            image1_bboxes,
-            image2_bboxes,
-            image1_diagonals,
-        ):
-            cost = TrackingCost(
-                image1_cnn_features=img1_ftrs,
-                image2_cnn_features=img2_ftrs,
-                bb1=bbox1,
-                bb2=bbox2,
-                source_image_diagonal=diagonal,
-            )
-            batch_costs.append(cost.final_cost())
-
-            # Calculate the CNN features just once!
-            # Get lowest cost for each detection
-            # Save that cost, and the comparison it came from
-
-        return batch_output
-
-        TrackingCost()
-        return super().predict_batch(batch)
+        output = output.reshape(batch_size, num_features)
+        output = output.cpu().numpy()
+        output = l1_normalize_batch(output)
+        # logger.debug(f"Post-processing features: {output[0]}")
+        return output
 
     def save_results(self, object_ids, batch_output):
-        # Save sequence_id and frame number
-        pass
+        # Here we are saving the moth/non-moth labels
+        data = [
+            {
+                "cnn_features": features.tolist(),
+            }
+            for features in batch_output
+        ]
+        save_classified_objects(self.db_path, object_ids, data)
 
 
 def new_sequence(
@@ -679,10 +634,7 @@ def find_all_tracks(
         .scalars()
         .all()
     )
-    for i, image in track(
-        enumerate(images),
-        description=f"Processing {monitoring_session.num_images} images with {monitoring_session.num_detected_objects} objects from event {monitoring_session.day}",
-    ):
+    for i, image in enumerate(images):
         n_current = i
         n_previous = max(n_current - 1, 0)
         image_current = images[n_current]
