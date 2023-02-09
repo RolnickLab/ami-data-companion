@@ -27,6 +27,7 @@ from trapdata.db.models.detections import (
     DetectedObject,
     get_object_counts_for_image,
     delete_objects_for_image,
+    get_unique_objects_for_image,
 )
 from trapdata.db.models.queue import add_image_to_queue, clear_all_queues
 from trapdata.common.utils import get_sequential_sample
@@ -39,6 +40,10 @@ Builder.load_file(str(pathlib.Path(__file__).parent / "playback.kv"))
 
 
 DEFAULT_FPS = 2
+
+
+def split_label(text):
+    return text.replace(" ", "\n")
 
 
 def update_info_bar(info_bar, image, stats):
@@ -129,38 +134,15 @@ class AnnotatedImage(Widget):
         #     width=frame_thickness,
         # )
 
+        color = [1, 1, 1, 1]
         for i, annotation in enumerate(self.annotations):
-            # Red box around canvas for debugging
-            # Color(1, 0, 0, 1)
-            # self.bbox_widgets.append
-            #     Line(rectangle=(0, 0, win_width, win_height), width=2)
-            # )
-            # print("bbox#", i)
-
-            if annotation.binary_label == constants.POSITIVE_BINARY_LABEL:
-                color = constants.POSITIVE_COLOR
-            # elif annotation.binary_label == NEGATIVE_BINARY_LABEL:
-            #     color = NEGATIVE_COLOR
-            # else:
-            #     color = NEUTRAL_COLOR
-            else:
-                # color = constants.NEGATIVE_COLOR
-                continue
-
-            # color = [random.random() for _ in range(3)]
-            # color.append(0.8)  # alpha
-            with self.canvas:
-                Color(*color)
 
             if not annotation.bbox:
                 logger.warn(f"No bbox for detected object {annotation.id}. Skipping.")
                 continue
 
             x1, y1, x2, y2 = annotation.bbox
-
             w = x2 - x1
-            # h = y2 - y1
-            # print("original dims:", w, h)
 
             # Reference from bottom left instead of top left
             y1 = source_img_height - y1
@@ -173,26 +155,11 @@ class AnnotatedImage(Widget):
             y2 *= y_scale
 
             w2 = w * x_scale
-            # h2 = h * y_scale
-            # print("new dims:", w2, h2)
-
             w2 = x2 - x1
-            # h2 = y1 - y2
-            # print("new dims by coord:", w2, h2)
-
-            # rect = (x1, y2, x2, y1)
             x1 += x_offset
             x2 += x_offset
             y1 += y_offset
             y2 += y_offset
-
-            with self.canvas:
-                self.bbox_widgets.append(
-                    Line(points=[x1, y1, x1, y2, x2, y2, x2, y1, x1, y1], width=2)
-                )
-
-            def split_label(text):
-                return text.replace(" ", "\n")
 
             app = App.get_running_app()
             Session = get_session_class(app.db_path)
@@ -202,6 +169,7 @@ class AnnotatedImage(Widget):
 
             if best_annotation.binary_label == constants.NEGATIVE_BINARY_LABEL:
                 label_text = ""
+                color = constants.NEGATIVE_COLOR
 
             elif (
                 best_annotation.specific_label
@@ -210,6 +178,7 @@ class AnnotatedImage(Widget):
             ):
                 # If there is a binary label and it's nonmoth, don't show
                 # the specific label, even if one exists.
+                color = constants.POSITIVE_COLOR
                 if best_annotation.specific_label_score:
                     score = round(best_annotation.specific_label_score * 100, 1)
                     label_text = f"{best_annotation.specific_label} ({score}%)"
@@ -218,7 +187,8 @@ class AnnotatedImage(Widget):
 
             elif best_annotation.binary_label:
                 # Show or not show binary-only labels?
-                # label_text = f"{best_annotation.binary_label}"
+                color = constants.NEUTRAL_COLOR
+                # label_text = f"{best_annotation.binary_label.title()}"
                 label_text = ""
 
             else:
@@ -227,7 +197,7 @@ class AnnotatedImage(Widget):
             if annotation.sequence_id:
                 label_text = (
                     f"{label_text}\n"
-                    # f"{annotation.sequence_id}\n"
+                    f"{annotation.sequence_id}\n"
                     # f"frame {track_info['current_frame']} / {track_info['total_frames']}\n"
                     # f"first seen {track_info['start_time'].strftime('%-I:%-M %p')}\n"
                     # f"last seen {track_info['end_time'].strftime('%-I:%-M %p')}\n"
@@ -237,6 +207,12 @@ class AnnotatedImage(Widget):
             # label_text = split_label(label_text)
 
             with self.canvas:
+                Color(*color)
+
+                self.bbox_widgets.append(
+                    Line(points=[x1, y1, x1, y2, x2, y2, x2, y1, x1, y1], width=2)
+                )
+
                 self.bbox_widgets.append(
                     Label(
                         text=label_text,
@@ -340,7 +316,9 @@ class PreviewWindow(RelativeLayout):
         update_info_bar(info_bar, image, stats)
         image_widget = AnnotatedImage(
             image_path=image.absolute_path,
-            annotations=image.detected_objects,
+            annotations=get_unique_objects_for_image(
+                db_path=app.db_path, image_id=image_id
+            ),
             size=self.size,
             pos_hint={"bottom": 0},
             image=image,

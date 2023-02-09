@@ -1,6 +1,7 @@
 import csv
 import datetime
 import pathlib
+import random
 import string
 from typing import Union, Any
 
@@ -91,3 +92,9 @@ def format_timedelta_hours(td: datetime.timedelta) -> str:
     minutes, seconds = divmod(td.seconds + td.days * 86400, 60)
     hours, minutes = divmod(minutes, 60)
     return "{:d} hours, {:02d} min".format(hours, minutes)
+
+
+def random_color():
+    color = [random.random() for _ in range(3)]
+    color.append(0.8)  # alpha
+    return color
