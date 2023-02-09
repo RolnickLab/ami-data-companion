@@ -1,4 +1,4 @@
-from typing import Generator, Sequence, Any, Optional, Union
+from typing import Generator, Sequence, Any, Optional, Union, Iterable
 from collections import namedtuple
 
 import torch
@@ -61,7 +61,7 @@ def cosine_similarity(img1_ftrs: torch.Tensor, img2_ftrs: torch.Tensor) -> float
     cosine_sim = np.dot(img1_ftrs, img2_ftrs) / (
         np.linalg.norm(img1_ftrs) * np.linalg.norm(img2_ftrs)
     )
-    assert 0 <= round(cosine_sim, 5) <= 1, "Cosine similarity score out of bounds"
+    assert 0 <= cosine_sim <= 1.000000001, "Cosine similarity score out of bounds"
 
     return cosine_sim
 
@@ -131,8 +131,8 @@ def distance_ratio(bb1: BoundingBox, bb2: BoundingBox, img_diag: float) -> float
 
 
 def total_cost(
-    img1_features: torch.Tensor,
-    img2_features: torch.Tensor,
+    img1_features: Iterable[float],
+    img2_features: Iterable[float],
     bb1: BoundingBox,
     bb2: BoundingBox,
     image_diagonal: float,
@@ -533,11 +533,9 @@ def assign_sequence(
 
 def compare_objects(
     image_current: TrapImage,
-    cnn_model: torch.nn.Module,
     session: orm.Session,
     image_previous: Optional[TrapImage] = None,
     skip_existing: bool = True,
-    device: Union[torch.device, str, None] = None,
 ):
     """
     Calculate the similarity (tracking cost) between all objects detected in a pair of images.
@@ -584,18 +582,24 @@ def compare_objects(
 
         logger.debug(f"Comparing obj {obj_current.id} to all objects in previous frame")
         costs = []
-        assert cnn_model is not None
         for obj_previous in objects_previous:
-            cost = TrackingCostOriginal(
-                obj_current.cropped_image_data(),
-                obj_previous.cropped_image_data(),
-                tuple(obj_current.bbox),
-                tuple(obj_previous.bbox),
-                source_image_diagonal=image_diagonal(img_shape[0], img_shape[1]),
-                cnn_source_model=cnn_model,
-                device=device,
+            final_cost = total_cost(
+                obj_current.cnn_features,
+                obj_previous.cnn_features,
+                bb1=tuple(obj_current.bbox),
+                bb2=tuple(obj_previous.bbox),
+                image_diagonal=image_diagonal(img_shape[0], img_shape[1]),
             )
-            final_cost = cost.final_cost()
+            # cost = TrackingCostOriginal(
+            #     obj_current.cropped_image_data(),
+            #     obj_previous.cropped_image_data(),
+            #     tuple(obj_current.bbox),
+            #     tuple(obj_previous.bbox),
+            #     source_image_diagonal=image_diagonal(img_shape[0], img_shape[1]),
+            #     cnn_source_model=cnn_model,
+            #     device=device,
+            # )
+            # final_cost = cost.final_cost()
             logger.debug(
                 f"\tScore for obj {obj_current.id} vs. {obj_previous.id}: {final_cost}"
             )
@@ -620,9 +624,7 @@ def compare_objects(
 
 def find_all_tracks(
     monitoring_session: MonitoringSession,
-    cnn_model: torch.nn.Module,
     session: orm.Session,
-    device: Union[torch.device, str, None] = None,
 ):
     """
     Retrieve all images for an Event / Monitoring Session and find all sequential objects.
@@ -646,9 +648,7 @@ def find_all_tracks(
             compare_objects(
                 image_current=image_current,
                 image_previous=image_previous,
-                cnn_model=cnn_model,
                 session=session,
-                device=device,
             )
 
 

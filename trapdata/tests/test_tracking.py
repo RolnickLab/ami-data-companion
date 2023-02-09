@@ -108,21 +108,13 @@ def test_tracking(db_path, image_base_directory, sample_size, skip_queue):
         result = cosine_similarity(object.cnn_features, object.cnn_features)
         assert round(result, 1) == 1.0, "Cosine simularity of same object is not 1!"
 
-    # assert species_classifier.model is not None, "Missing species classifier model"
-
-    # with Session() as session:
-    #     find_all_tracks(
-    #         monitoring_session=ms, cnn_model=species_classifier.model, session=session
-    #     )
+    with Session() as session:
+        find_all_tracks(monitoring_session=ms, session=session)
 
     # @TODO what is the expected result? test the output of this against known tracks.
 
-    # summary = summarize_tracks(session=session)
-    # print(summary)
-    # import sqlalchemy as sa
-    # import ipdb
-
-    # ipdb.set_trace()
+    summary = summarize_tracks(session=session)
+    print(summary)
 
 
 if __name__ == "__main__":
