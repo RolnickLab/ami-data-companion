@@ -9,7 +9,7 @@ POSITIVE_COLOR = [0, 100 / 255, 1, 1]  # Blue
 # POSITIVE_COLOR = [1, 0, 162 / 255, 1]  # Pink
 # NEUTRAL_COLOR = [1, 1, 1, 0.5]  # White
 # NEUTRAL_COLOR = [1, 0, 162 / 255, 0.2]  # Pink, semi-transparent
-NEUTRAL_COLOR = [0, 100 / 255, 1, 0.5]  # Blue
+NEUTRAL_COLOR = [0, 100 / 255, 1, 0.4]  # Blue
 NEGATIVE_COLOR = [1, 1, 1, 0]  # Transparent
 
 SUMMARY_REFRESH_SECONDS = 5

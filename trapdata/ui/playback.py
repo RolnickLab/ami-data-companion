@@ -46,14 +46,14 @@ def split_label(text):
     return text.replace(" ", "\n")
 
 
-def update_info_bar(info_bar, image, stats):
+def update_info_bar(widget: Label, image: TrapImage, stats: dict):
     if image.last_processed:
         last_processed = image.last_processed.strftime("%H:%M")
     else:
         last_processed = "Never"
 
-    info_bar_text = (
-        f"{image.timestamp.strftime('%c')} | {image.path}\n"
+    text = (
+        "\n\n"
         f"In Queue: {image.in_queue} | "
         f"Objects: {stats.get('num_objects')} | "
         f"Detections: {stats.get('num_detections')} | "
@@ -63,7 +63,14 @@ def update_info_bar(info_bar, image, stats):
         # '* "Process Now" button will clear the queue and interrupt any tracked sequences.'
     )
 
-    info_bar.text = info_bar_text
+    widget.text = text
+
+
+def update_title(widget: Label, image: TrapImage):
+    text = f"{image.timestamp.strftime('%c')}"  # ({image.path})\n"
+
+    widget.text = text
+    # widget.bold = True
 
 
 class AnnotatedImage(Widget):
@@ -180,8 +187,8 @@ class AnnotatedImage(Widget):
                 # the specific label, even if one exists.
                 color = constants.POSITIVE_COLOR
                 if best_annotation.specific_label_score:
-                    score = round(best_annotation.specific_label_score * 100, 1)
-                    label_text = f"{best_annotation.specific_label} ({score}%)"
+                    score = int(round(best_annotation.specific_label_score * 100, 0))
+                    label_text = f"{best_annotation.specific_label}\n{score}%"
                 else:
                     label_text = f"{best_annotation.specific_label}"
 
@@ -216,7 +223,7 @@ class AnnotatedImage(Widget):
                 self.bbox_widgets.append(
                     Label(
                         text=label_text,
-                        center=((x1 + w2 / 2), y2 - 20),
+                        center=((x1 + w2 / 2), y2 - 40),
                         color=color,
                         bold=True,
                         halign="center",
@@ -288,7 +295,6 @@ class PreviewWindow(RelativeLayout):
     current_sample = ObjectProperty(allownone=True)
     image_widget = ObjectProperty(allownone=True)
     refresh_clock = ObjectProperty()
-    info_bar = ObjectProperty()
 
     def on_current_sample(self, *args):
         pass
@@ -311,9 +317,14 @@ class PreviewWindow(RelativeLayout):
         app = App.get_running_app()
         image = get_image_with_objects(app.db_path, image_id)
         stats = get_object_counts_for_image(app.db_path, image_id)
+
         # @TODO is there a more reliable way to reference the info bar?
         info_bar = self.parent.parent.ids.info_bar
         update_info_bar(info_bar, image, stats)
+
+        title_bar = self.parent.parent.ids.title_bar
+        update_title(title_bar, image)
+
         image_widget = AnnotatedImage(
             image_path=image.absolute_path,
             annotations=get_unique_objects_for_image(

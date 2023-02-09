@@ -38,9 +38,17 @@
     BoxLayout:
         id: playback_layout
         orientation: "vertical"
+        Label:
+            id: title_bar 
+            text: "image title"
+            halign: "left"
+            valign: "bottom"
+            color: [0, 0, 0, 1]
+            orientation: "horizontal"
+            size_hint_y: 0.05
         PreviewWindow:
             id: image_preview 
-            size_hint_y: 0.8
+            size_hint_y: 0.75
         Label:
             id: info_bar 
             text: ""
@@ -48,7 +56,7 @@
             valign: "bottom"
             color: [0, 0, 0, 1]
             orientation: "horizontal"
-            size_hint_y: 0.08
+            size_hint_y: 0.1
         BoxLayout:
             id: controls 
             orientation: "horizontal"
