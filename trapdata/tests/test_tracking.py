@@ -64,7 +64,7 @@ def test_tracking(db_path, image_base_directory, sample_size, skip_queue):
         print("Using Monitoring Session:", ms)
 
         if not skip_queue:
-            for image in ms.images[:1]:
+            for image in ms.images:
                 add_image_to_queue(db_path, image.id)
 
     if torch.cuda.is_available():
@@ -81,9 +81,10 @@ def test_tracking(db_path, image_base_directory, sample_size, skip_queue):
 
     object_detector.run()
     moth_nonmoth_classifier.run()
-    logger.info("Feature extractor queue:", feature_extractor.queue.queue_count())
-    feature_extractor.run()
     species_classifier.run()
+
+    logger.info(f"Feature extractor queue: {feature_extractor.queue.queue_count()}")
+    feature_extractor.run()
 
     with Session() as session:
         objects = (
@@ -96,9 +97,13 @@ def test_tracking(db_path, image_base_directory, sample_size, skip_queue):
         )
 
     for object in objects:
+        # logger.info(f"Number of features: {num_features}")
+        # assert (
+        #     num_features == 1536 * 10 * 10,
+        # )  # This is dependent on the input size & type of model
         num_features = len(object.cnn_features)
         assert (
-            num_features == 1536 * 10 * 10
+            num_features == 2048  # Num features expected for ResNet model
         )  # This is dependent on the input size & type of model
         result = cosine_similarity(object.cnn_features, object.cnn_features)
         assert round(result, 1) == 1.0, "Cosine simularity of same object is not 1!"

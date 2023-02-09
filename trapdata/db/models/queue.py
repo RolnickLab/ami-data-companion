@@ -585,7 +585,7 @@ def all_queues(db_path):
             ImageQueue(db_path),
             DetectedObjectQueue(db_path),
             UnclassifiedObjectQueue(db_path),
-            UntrackedObjectsQueue(db_path),
+            ObjectsWithoutFeaturesQueue(db_path),
         ]
     }
 

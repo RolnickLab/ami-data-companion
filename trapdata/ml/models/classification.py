@@ -199,12 +199,13 @@ class SpeciesClassifier:
         return dataset
 
     def save_results(self, object_ids, batch_output):
-        # Here we are saving the moth/non-moth labels
+        # Here we are saving the specific taxon labels
         classified_objects_data = [
             {
                 "specific_label": label,
                 "specific_label_score": score,
                 "model_name": self.name,
+                "in_queue": True,  # Put back in queue for the feature extractor & tracking
             }
             for label, score in batch_output
         ]

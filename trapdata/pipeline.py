@@ -46,13 +46,13 @@ def start_pipeline(db_path, config, single=False):
     model_3.run()
     logger.info("Species classification complete")
 
-    # Model_4 = ml.models.tracking.TrackingClassifier
-    # model_4 = Model_4(
-    #     db_path=db_path,
-    #     cnn_features_model=model_3,
-    #     user_data_path=user_data_path,
-    #     batch_size=int(config.get("performance", "classification_batch_size")),
-    #     num_workers=num_workers,
-    #     single=single,
-    # )
-    # model_4.run()
+    Model_4 = ml.models.tracking.FeatureExtractor
+    model_4 = Model_4(
+        db_path=db_path,
+        cnn_features_model=model_3,
+        user_data_path=user_data_path,
+        batch_size=int(config.get("performance", "classification_batch_size")),
+        num_workers=num_workers,
+        single=single,
+    )
+    model_4.run()

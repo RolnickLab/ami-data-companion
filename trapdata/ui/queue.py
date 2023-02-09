@@ -51,7 +51,7 @@ class QueueStatusTable(BoxLayout):
             cols=num_cols,
             padding=0,
             spacing=0,
-            row_default_height=120,
+            row_default_height=80,
             row_force_default=True,
         )
 
