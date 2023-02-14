@@ -20,7 +20,7 @@ Desktop app for analyzing images from autonomous insect monitoring stations usin
 ### Dependencies
 
 
-- Requires Python 3.7 *or above*. Use Anaconda (or just "conda") if you need to maintain multiple versions of Python or are unfamiliar with using Python and scientific packages, it is especially helpful on Windows. https://www.anaconda.com/
+- Requires Python 3.10. Use Anaconda (or just "conda") if you need to maintain multiple versions of Python or are unfamiliar with using Python and scientific packages, it is especially helpful on Windows. https://www.anaconda.com/
 - Requires Git to clone the source code and stay up-to-date with the latest changes. Anaconda comes with Git, but the GitHub Desktop application works well if you are less familiar with git. https://desktop.github.com/
 
 ### Installation (for non-developers)
