@@ -651,6 +651,7 @@ def find_all_tracks(
     """
     Retrieve all images for an Event / Monitoring Session and find all sequential objects.
     """
+    logger.info(f"Calculating tracks for {monitoring_session.day}")
     images = (
         session.execute(
             select(TrapImage)

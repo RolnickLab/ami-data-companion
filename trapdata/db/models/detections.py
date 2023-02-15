@@ -33,9 +33,9 @@ class DetectedObject(db.Base):
     path = sa.Column(
         sa.String(255)
     )  # @TODO currently these are absolute paths to help the pytorch dataloader, but relative would be ideal
-    # timestamp = sa.Column(
-    #     sa.DateTime(timezone=True)
-    # )  # @TODO add migration for these fields
+    timestamp = sa.Column(
+        sa.DateTime(timezone=True)
+    )  # @TODO add migration for these fields
     source_image_width = sa.Column(sa.Integer)
     source_image_height = sa.Column(sa.Integer)
     source_image_previous_frame = sa.Column(sa.Integer)
@@ -164,25 +164,17 @@ class DetectedObject(db.Base):
         """
         Return the start time, end time duration in minutes, and number of frames for a track
         """
-        image = session.execute(
-            sa.select(TrapImage).join(DetectedObject.image)
-        ).scalar()
-        if not image:
-            raise Exception(f"No source image found for detected object id {self.id}")
 
         if self.sequence_id:
-            stmt = (
-                sa.select(
-                    sa.func.min(TrapImage.timestamp).label("start"),
-                    sa.func.max(TrapImage.timestamp).label("end"),
-                    sa.func.count(TrapImage.id).label("num_frames"),
-                )
-                .join(DetectedObject.image)
-                .where((DetectedObject.sequence_id == self.sequence_id))
-            )
-            start_time, end_time, num_frames = session.execute(stmt).one()
+            stmt = sa.select(
+                sa.func.min(DetectedObject.timestamp).label("start"),
+                sa.func.max(DetectedObject.timestamp).label("end"),
+                sa.func.max(DetectedObject.sequence_frame).label("last_frame_num"),
+            ).where((DetectedObject.sequence_id == self.sequence_id))
+            start_time, end_time, last_frame_num = session.execute(stmt).one()
+            num_frames = last_frame_num + 1
         else:
-            start_time, end_time = image.timestamp, image.timestamp
+            start_time, end_time = self.timestamp, self.timestamp
             num_frames = 1
 
         def get_minutes(timedelta):
@@ -192,7 +184,7 @@ class DetectedObject(db.Base):
             start_time=start_time,
             end_time=end_time,
             current_time=get_minutes(
-                image.timestamp - start_time
+                self.timestamp - start_time
             ),  # @TODO This is the incorrect time
             total_time=get_minutes(end_time - start_time),
             current_frame=self.sequence_frame,
@@ -472,6 +464,8 @@ def get_unique_species_by_track(
 
     species = {}
     for pick in picks:
+        if not pick.score:
+            continue
         if pick.score < classification_threshold:
             continue
         if pick.label in species.keys():
