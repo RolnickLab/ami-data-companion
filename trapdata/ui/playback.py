@@ -1,4 +1,5 @@
 import pathlib
+from typing import Optional
 
 import kivy
 from kivy.app import App
@@ -21,7 +22,10 @@ from trapdata import logger
 from trapdata import constants
 from trapdata.common.utils import format_timedelta_hours
 from trapdata.db.base import get_session_class
-from trapdata.db.models.events import get_monitoring_session_image_ids
+from trapdata.db.models.events import (
+    get_monitoring_session_image_ids,
+    MonitoringSession,
+)
 from trapdata.db.models.images import TrapImage, get_image_with_objects
 from trapdata.db.models.detections import (
     DetectedObject,
@@ -239,15 +243,18 @@ class ImagePlaybackScreen(Screen):
     fps = NumericProperty(defaultvalue=DEFAULT_FPS)
     clock = ObjectProperty(allownone=True)
 
-    def reload(self, ms):
+    def reload(self, ms, image_id: Optional[int] = None):
         self.current_sample = None
         app = App.get_running_app()
         self.image_ids = [
             img.id for img in get_monitoring_session_image_ids(app.db_path, ms)
         ]
-        preview = self.ids.image_preview
+        preview: PreviewWindow = self.ids.image_preview
         preview.reset()
-        preview.next_sample()
+        if image_id:
+            preview.load_sample(image_id)
+        else:
+            preview.next_sample()
         self.pause()
 
     def on_monitoring_session(self, instance, value):
@@ -286,6 +293,16 @@ class ImagePlaybackScreen(Screen):
         self.pause()
         if self.ids.image_preview:
             self.ids.image_preview.stop_auto_refresh()
+
+    def show_summary_screen(self):
+        app = App.get_running_app()
+        if app:
+            screen_name = "summary"
+            app.screen_manager.current = screen_name
+            if self.monitoring_session:
+                app.screen_manager.get_screen(
+                    screen_name
+                ).monitoring_session = self.monitoring_session
 
 
 class BBox(BoxLayout):

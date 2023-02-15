@@ -1,10 +1,12 @@
 import pathlib
 import time
+from functools import partial
 
 from kivy.app import App
 from kivy.uix.screenmanager import Screen
-from kivy.properties import ObjectProperty, ListProperty
+from kivy.properties import ObjectProperty, ListProperty, NumericProperty
 from kivy.uix.label import Label
+from kivy.uix.button import ButtonBehavior, Button
 from kivy.uix.recycleview import RecycleView
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.popup import Popup
@@ -14,7 +16,8 @@ from kivy.clock import Clock
 
 from trapdata import logger
 from trapdata import constants
-from trapdata.db import queries
+from trapdata.ui.playback import ImagePlaybackScreen
+from trapdata.db.models.events import MonitoringSession
 from trapdata.db.models.detections import (
     get_detected_objects,
     export_detected_objects,
@@ -25,6 +28,24 @@ from trapdata.db.models.detections import (
 Builder.load_file(str(pathlib.Path(__file__).parent / "summary.kv"))
 
 NUM_EXAMPLES_PER_ROW = 4
+
+
+def load_image_in_playback(monitoring_session: MonitoringSession, image_id: int):
+    app = App.get_running_app()
+    if app:
+        screen_name = "playback"
+        app.screen_manager.current = screen_name
+        playback: ImagePlaybackScreen = app.screen_manager.get_screen(screen_name)
+        playback.reload(ms=monitoring_session, image_id=image_id)
+
+
+class ImageToPlaybackButton(ButtonBehavior, Image):
+    monitoring_session = ObjectProperty()
+    source_image_id = NumericProperty()
+
+    def on_release(self):
+        if self.monitoring_session and self.source_image_id:
+            load_image_in_playback(self.monitoring_session, self.source_image_id)
 
 
 class SpeciesRow(BoxLayout):
@@ -54,10 +75,10 @@ class SpeciesRow(BoxLayout):
             label.bind(size=label.setter("text_size"))
             self.add_widget(label)
 
-    def make_row(self, species):
+    def make_row(self, species: dict):
         self.clear_widgets()
 
-        print(species)
+        # print(species)
         label = Label(
             text=species["name"],
             halign="right",
@@ -73,10 +94,12 @@ class SpeciesRow(BoxLayout):
         for i in range(NUM_EXAMPLES_PER_ROW):
             try:
                 example = species["examples"][i]
-                widget = Image(
-                    source=example["image_path"],
+                widget = ImageToPlaybackButton(
+                    source=example["cropped_image_path"],
                     size_hint_y=None,
                     height=species["image_height"],
+                    monitoring_session=species["monitoring_session"],
+                    source_image_id=example["source_image_id"],
                 )
             except IndexError:
                 widget = Label(text="")
@@ -148,6 +171,7 @@ class SpeciesListLayout(RecycleView):
                     "mean_score": item["mean_score"],
                     "examples": item["examples"],
                     "image_height": row_height,
+                    "monitoring_session": self.monitoring_session,
                 },
                 "heading": None,
                 "height": row_height,

@@ -457,9 +457,10 @@ def get_unique_species_by_track(
     for sequence, count, score in sequences:
         sequence_pick = session.execute(
             sa.select(
+                DetectedObject.image_id.label("source_image_id"),
                 DetectedObject.specific_label.label("label"),
                 DetectedObject.specific_label_score.label("score"),
-                DetectedObject.path.label("image_path"),
+                DetectedObject.path.label("cropped_image_path"),
                 DetectedObject.sequence_id,
             ).where(
                 (DetectedObject.specific_label_score == score)

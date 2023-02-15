@@ -62,20 +62,25 @@
             orientation: "horizontal"
             size_hint_y: 0.1
             Button:
-                text: "Back"
+                text: "Home"
                 on_press: root.exit()
             Button:
+                text: "Summary"
+                on_press: root.show_summary_screen() 
+            Button:
                 id: queue_button
-                text: "Add to Queue" 
+                text: "Add to\nQueue" 
                 on_press: root.ids.image_preview.add_current_sample_to_queue() 
+                halign: "center"
             Button:
-                text: "Process Now*"
+                text: "Process\nNow *"
                 on_press: root.ids.image_preview.process_now() 
+                halign: "center"
             Button:
-                text: "< Previous"
+                text: "<"
                 on_press: root.ids.image_preview.prev_sample() 
             Button:
-                text: "Next >"   
+                text: ">"   
                 on_press: root.ids.image_preview.next_sample() 
             Button:
                 text: "Pause"   
