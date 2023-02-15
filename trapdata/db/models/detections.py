@@ -433,11 +433,14 @@ def get_unique_species(db_path, monitoring_session=None):
 def get_unique_species_by_track(
     db_path, monitoring_session=None, classification_threshold: float = -1
 ):
+    # @TODO Return single objects that are not part of a sequence
     Session = db.get_session_class(db_path)
     session = Session()
     sequences = session.execute(
         sa.select(
-            DetectedObject.sequence_id,
+            sa.func.coalesce(DetectedObject.sequence_id, DetectedObject.id).label(
+                "sequence_id"
+            ),
             sa.func.count().label("count"),
             sa.func.max(DetectedObject.specific_label_score).label("count"),
         )
@@ -445,6 +448,7 @@ def get_unique_species_by_track(
         .where(DetectedObject.monitoring_session_id == monitoring_session.id)
         .order_by(sa.desc("count"))
     ).all()
+
     picks = []
     for sequence, count, score in sequences:
         sequence_pick = session.execute(
@@ -456,8 +460,11 @@ def get_unique_species_by_track(
                 DetectedObject.sequence_id,
             ).where(
                 (DetectedObject.specific_label_score == score)
-                & (DetectedObject.sequence_id == sequence)
                 & (DetectedObject.monitoring_session_id == monitoring_session.id)
+                & (
+                    (DetectedObject.sequence_id == sequence)
+                    | (DetectedObject.id == sequence)
+                )
             )
         ).all()[0]
         picks.append(sequence_pick)
