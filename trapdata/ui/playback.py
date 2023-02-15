@@ -172,6 +172,8 @@ class AnnotatedImage(Widget):
             Session = get_session_class(app.db_path)
             with Session() as session:
                 best_annotation = annotation.best_sibling(session)
+                track_length = annotation.track_length(session)
+
                 # track_info = annotation.track_info(session)
 
             if best_annotation.binary_label == constants.NEGATIVE_BINARY_LABEL:
@@ -201,9 +203,9 @@ class AnnotatedImage(Widget):
             else:
                 label_text = ""
 
-            if annotation.sequence_id:
+            if annotation.sequence_id and label_text:
                 label_text = (
-                    f"{label_text}\n"
+                    f"{label_text} #{annotation.sequence_frame + 1}/{track_length}\n"
                     # f"{annotation.sequence_id}\n"
                     # f"frame {track_info['current_frame']} / {track_info['total_frames']}\n"
                     # f"first seen {track_info['start_time'].strftime('%-I:%-M %p')}\n"

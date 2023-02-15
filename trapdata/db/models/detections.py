@@ -33,7 +33,9 @@ class DetectedObject(db.Base):
     path = sa.Column(
         sa.String(255)
     )  # @TODO currently these are absolute paths to help the pytorch dataloader, but relative would be ideal
-    # timestamp = sa.Column(sa.DateTime(timezone=True)) # @TODO add migration for these fields
+    # timestamp = sa.Column(
+    #     sa.DateTime(timezone=True)
+    # )  # @TODO add migration for these fields
     source_image_width = sa.Column(sa.Integer)
     source_image_height = sa.Column(sa.Integer)
     source_image_previous_frame = sa.Column(sa.Integer)
@@ -142,6 +144,19 @@ class DetectedObject(db.Base):
             DetectedObject.image_id == self.source_image_previous_frame
         )
         return session.execute(stmt).unique().scalars().all()
+
+    def track_length(self, session: orm.Session) -> int:
+        """
+        Return the start time, end time duration in minutes, and number of frames for a track
+        """
+        if self.sequence_id:
+            stmt = sa.select(
+                sa.func.max(DetectedObject.sequence_frame).label("last_frame_num"),
+            ).where((DetectedObject.sequence_id == self.sequence_id))
+            row = session.execute(stmt).one()
+            return row.last_frame_num + 1
+        else:
+            return 1
 
     def track_info(
         self, session: orm.Session
