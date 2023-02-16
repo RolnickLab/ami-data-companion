@@ -120,7 +120,10 @@ class SpeciesListLayout(RecycleView):
         self.start_auto_refresh()
 
     def start_auto_refresh(self):
-        refresh_interval_seconds = constants.SUMMARY_REFRESH_SECONDS
+        # refresh_interval_seconds = constants.SUMMARY_REFRESH_SECONDS
+        refresh_interval_seconds = (
+            60 * 5
+        )  # @TODO refresh is getting slow, freezes the interface and bumps you to the top
 
         if self.refresh_clock:
             Clock.unschedule(self.refresh_clock)

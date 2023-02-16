@@ -516,6 +516,7 @@ def assign_sequence(
     obj_previous: DetectedObject,
     final_cost: float,
     session: orm.Session,
+    commit: bool = True,
 ):
     """
     Assign a pair of objects to the same sequence.
@@ -531,8 +532,9 @@ def assign_sequence(
         new_sequence(obj_current, obj_previous)
     session.add(obj_current)
     session.add(obj_previous)
-    session.flush()
-    session.commit()
+    if commit:
+        session.flush()
+        session.commit()
     return obj_current.sequence_id, obj_current.sequence_frame
 
 
@@ -541,6 +543,7 @@ def compare_objects(
     session: orm.Session,
     image_previous: Optional[TrapImage] = None,
     skip_existing: bool = True,
+    commit: bool = True,
 ):
     """
     Calculate the similarity (tracking cost) between all objects detected in a pair of images.
@@ -624,10 +627,14 @@ def compare_objects(
                 obj_previous=best_match,
                 final_cost=lowest_cost,
                 session=session,
+                commit=False,
             )
             logger.info(
                 f"Assigned {obj_current.id} to sequence {sequence_id} as frame #{frame_num}. Tracking cost: {lowest_cost}"
             )
+    if commit:
+        session.flush()
+        session.commit()
 
 
 def get_events_that_need_tracks(
@@ -672,7 +679,11 @@ def find_all_tracks(
                 image_current=image_current,
                 image_previous=image_previous,
                 session=session,
+                commit=False,
             )
+    logger.info("Saving tracks to database")
+    session.flush()
+    session.commit()
 
 
 def summarize_tracks(session: orm.Session, event: Optional[MonitoringSession] = None):
