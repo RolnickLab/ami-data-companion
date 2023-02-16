@@ -555,7 +555,7 @@ def assign_sequence(
         obj_current.sequence_id = obj_previous.sequence_id
         obj_current.sequence_frame = obj_previous.sequence_frame + 1
     else:
-        new_sequence(obj_current, obj_previous)
+        new_sequence(obj_current, obj_previous, session=session)
     session.add(obj_current)
     session.add(obj_previous)
     if commit:
