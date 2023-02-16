@@ -1,5 +1,6 @@
 from typing import Generator, Sequence, Any, Optional, Union, Iterable
 from collections import namedtuple
+import datetime
 
 import torch
 from torch import nn
@@ -483,16 +484,21 @@ class FeatureExtractor(QuebecVermontMothSpeciesClassifierMixedResolution):
         save_classified_objects(self.db_path, object_ids, data)
 
 
+def make_sequence_id(date: datetime.date, obj_id: int):
+    sequence_id = f"{date.strftime('%Y%m%d')}-SEQ-{obj_id}"
+    return sequence_id
+
+
 def new_sequence(
     obj_current: DetectedObject,
     obj_previous: DetectedObject,
-    session: Optional[orm.Session] = None,
+    session: orm.Session,
 ):
     """
     Create a new sequence ID and assign it to the current & previous detections.
     """
     # obj_current.sequence_id = uuid.uuid4() # @TODO ensure this is unique, or
-    sequence_id = f"{obj_previous.monitoring_session.day.strftime('%Y%m%d')}-SEQ-{obj_previous.id}"
+    sequence_id = make_sequence_id(obj_previous.monitoring_session.day, obj_previous.id)
     obj_previous.sequence_id = sequence_id
     obj_previous.sequence_frame = 0
 
@@ -503,10 +509,30 @@ def new_sequence(
         f"Created new sequence beginning with obj {obj_previous.id}: {sequence_id}"
     )
 
-    if session:
-        session.add(obj_current)
-        session.add(obj_previous)
-        session.flush()
+    session.add(obj_current)
+    session.add(obj_previous)
+
+    return sequence_id
+
+
+def assign_solo_sequence(
+    obj_current: DetectedObject,
+    session: orm.Session,
+):
+    """
+    Create a new sequence ID and assign it to the current & previous detections.
+    """
+    # obj_current.sequence_id = uuid.uuid4() # @TODO ensure this is unique, or
+    sequence_id = make_sequence_id(obj_current.monitoring_session.day, obj_current.id)
+
+    obj_current.sequence_id = sequence_id
+    obj_current.sequence_frame = 0
+
+    logger.info(
+        f"Created new single-frame sequence for obj {obj_current.id}: {sequence_id}"
+    )
+
+    session.add(obj_current)
 
     return sequence_id
 
@@ -632,6 +658,11 @@ def compare_objects(
             logger.info(
                 f"Assigned {obj_current.id} to sequence {sequence_id} as frame #{frame_num}. Tracking cost: {lowest_cost}"
             )
+
+        # If current object was not assigned to a sequence, create one for it by itself
+        if not obj_current.sequence_id:
+            sequence_id = assign_solo_sequence(obj_current, session=session)
+
     if commit:
         session.flush()
         session.commit()

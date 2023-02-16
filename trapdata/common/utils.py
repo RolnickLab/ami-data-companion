@@ -96,8 +96,8 @@ def format_timedelta_hours(td: datetime.timedelta) -> str:
         display_parts.append(f"{str(hours).lstrip('0')} hours")
     if minutes:
         display_parts.append(f"{str(minutes).lstrip('0')} min")
-    if not hours and not minutes and seconds:
-        display_parts.append(f"{str(seconds).lstrip('0')} seconds")
+    if not hours and not minutes:
+        display_parts.append(f"{str(seconds).lstrip('0') or '0'} seconds")
 
     display_str = ", ".join(display_parts)
     return display_str

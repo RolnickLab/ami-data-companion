@@ -193,7 +193,7 @@ class AnnotatedImage(Widget):
                 color = constants.POSITIVE_COLOR
                 if best_annotation.specific_label_score:
                     score = int(round(best_annotation.specific_label_score * 100, 0))
-                    label_text = f"{best_annotation.specific_label}\n{score}%"
+                    label_text = f"{best_annotation.specific_label} ({score}%)\n"
                 else:
                     label_text = f"{best_annotation.specific_label}"
 
@@ -208,9 +208,9 @@ class AnnotatedImage(Widget):
 
             if annotation.sequence_id and label_text:
                 label_text = (
-                    # f"{label_text}\n"
-                    f"{label_text} {annotation.sequence_frame + 1} of {track_info['total_frames']}\n"
-                    f"{format_timedelta_hours(track_info['end_time']-track_info['start_time'])}\n"
+                    f"{label_text}"
+                    f"{annotation.sequence_frame + 1} of {track_info['total_frames']} "
+                    f"({format_timedelta_hours(track_info['end_time']-track_info['start_time'])})\n"
                     # f"{annotation.sequence_id}\n"
                     # f"frame {track_info['current_frame']} / {track_info['total_frames']}\n"
                     # f"first seen {track_info['start_time'].strftime('%-I:%-M %p')}\n"

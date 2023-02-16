@@ -434,15 +434,24 @@ def get_unique_species_by_track(
     db_path, monitoring_session=None, classification_threshold: float = -1
 ):
     # @TODO Return single objects that are not part of a sequence
+    # @TODO @IMPORTANT THIS NEEDS WORK!
+
     Session = db.get_session_class(db_path)
     session = Session()
+
+    # species = session.execute(
+    #     sa.select(DetectedObject.specific_label)
+    #     .where(DetectedObject.monitoring_session_id == monitoring_session.id)
+    #     .distinct()
+    # ).scalars()
+
     sequences = session.execute(
         sa.select(
             sa.func.coalesce(DetectedObject.sequence_id, DetectedObject.id).label(
                 "sequence_id"
             ),
             sa.func.count().label("count"),
-            sa.func.max(DetectedObject.specific_label_score).label("count"),
+            sa.func.max(DetectedObject.specific_label_score).label("score"),
         )
         .group_by("sequence_id")
         .where(DetectedObject.monitoring_session_id == monitoring_session.id)
