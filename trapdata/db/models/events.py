@@ -10,6 +10,7 @@ from trapdata.db import Base, get_session
 from trapdata.common.logs import logger
 from trapdata.common.utils import export_report
 from trapdata.db.models.images import TrapImage
+from trapdata.db.models.detections import DetectedObject
 from trapdata.common.filemanagement import find_images, group_images_by_day
 
 
@@ -68,13 +69,29 @@ class MonitoringSession(Base):
             f"\tnum_detected_objects={self.num_detected_objects!r})"
         )
 
-    def update_aggregates(self):
+    def update_aggregates(self, session: orm.Session):
         # Requires and active session
         logger.info(f"Updating cached values for event {self.day}")
-        self.num_images = len(self.images)
-        self.num_detected_objects = len(self.detected_objects)
-        self.start_time: datetime.datetime = self.images[0].timestamp
-        self.end_time: datetime.datetime = self.images[-1].timestamp
+        self.num_images = session.execute(
+            sa.select(sa.func.count(1)).where(
+                TrapImage.monitoring_session_id == self.id
+            )
+        ).scalar_one()
+        self.num_detected_objects = session.execute(
+            sa.select(sa.func.count(1)).where(
+                DetectedObject.monitoring_session_id == self.id
+            )
+        ).scalar_one()
+        self.start_time: datetime.datetime = session.execute(
+            sa.select(sa.func.min(TrapImage.timestamp)).where(
+                TrapImage.monitoring_session_id == self.id
+            )
+        ).scalar_one()
+        self.end_time: datetime.datetime = session.execute(
+            sa.select(sa.func.max(TrapImage.timestamp)).where(
+                TrapImage.monitoring_session_id == self.id
+            )
+        ).scalar_one()
 
     def duration(self) -> Optional[datetime.timedelta]:
         if self.start_time and self.end_time:
@@ -159,7 +176,7 @@ def save_monitoring_session(db_path, base_directory, session):
             sesh.bulk_save_objects(ms_images)
 
             # Manually update aggregate & cached values after bulk update
-            ms.update_aggregates()
+            ms.update_aggregates(sesh)
 
         logger.debug("Committing changes to DB")
         sesh.commit()
@@ -215,7 +232,7 @@ def get_monitoring_sessions_from_db(
             .all()
         )
         if update_aggregates:
-            [item.update_aggregates() for item in items]
+            [item.update_aggregates(sesh) for item in items]
         return items
 
 
@@ -238,7 +255,7 @@ def get_monitoring_session_by_date(
             )
             .all()
         )
-        [item.update_aggregates() for item in items]
+        [item.update_aggregates(sesh) for item in items]
         return items
 
 
