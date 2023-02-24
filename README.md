@@ -20,19 +20,20 @@ Desktop app for analyzing images from autonomous insect monitoring stations usin
 ### Dependencies
 
 
-- Requires Python 3.7 *or above*. Use Anaconda (or just "conda") if you need to maintain multiple versions of Python or are unfamiliar with using Python and scientific packages, it is especially helpful on Windows. https://www.anaconda.com/
-- Requires Git to clone the source code and stay up-to-date with the latest changes. Anaconda comes with Git, but the GitHub Desktop application works well if you are less familiar with git. https://desktop.github.com/
+- Requires Python 3.10. Use [Anaconda](https://www.anaconda.com/) (or [miniconda](https://docs.conda.io/en/latest/miniconda.html)) if you need to maintain multiple versions of Python or are unfamiliar with using Python and scientific packages, it is especially helpful on Windows. [PyEnv](https://github.com/pyenv/pyenv) is also popular tool for managing multiple versions of python if you are familiar with the command line.
+- Requires Git to clone the source code and stay up-to-date with the latest changes. Anaconda comes with Git, but the [GitHub Desktop](https://desktop.github.com/) application works well if you are less familiar with Git. 
 
 ### Installation (for non-developers)
 
 Install (or upgrade) the package with the following command
 
-```
+```sh
 pip install --editable "git+https://github.com/RolnickLab/ami-data-manager.git#egg=trapdata"
 ```
 
 Optionally test the installation with the following command
-```
+
+```sh
 trapdata-test
 ```
 
@@ -40,25 +41,26 @@ trapdata-test
 
 Create an environment just for AMI and the trapdata manager using conda (or virtualenv) 
 
-```
+```sh
 conda create -n ami python=3.10 anaconda
 ```
 
 Clone the repository using the command line or the GitHub desktop app.
 
-```
+```sh
 git clone git@github.com:RolnickLab/ami-data-manager.git
 ```
 
 Install as an editable package. This will install the dependencies and install the `trapdata` console command
 
-```
+```sh
 cd ami-data-manager 
 pip install -e .
 ```
 
 Test the whole backend pipeline without the GUI using this command
-```
+
+```sh
 python trapdata/tests/test_pipeline.py
 ```
 
@@ -66,14 +68,13 @@ python trapdata/tests/test_pipeline.py
 
 - Make a directory of sample images to test & learn the whole workflow more quickly.
 
-- Launch the app by opening a terminal, activating your python environment and then typing the command: 
-```trapdata```
+- Launch the app by opening a terminal and then typing the command ```trapdata```. You may need to activate your Python 3.10 environment first (`conda activate ami`).
 
 - When the app GUI window opens, it will prompt you to select the root directory with your trapdata. Choose the directory with your sample images.
 
-- The first time you process an image the app will download all of the ML models needed, which can take some time. The progress is only visible in the console!
+- The first time you process an image the app will download all of the ML models needed, which can take some time. _The status is only visible in the console!_
 
-- **Important** Look at the output in the console/terminal to see the status of the application. The GUI may appear to hang or be stuck when scanning or processing a larger number of images, but it is not. For the time being, most feedback will only appear in the terminal.
+- **Important:** Look at the text in the console/terminal/shell to see the status of the application. The GUI may appear to hang or be stuck when scanning or processing a larger number of images, but it is not. For the time being, most feedback will only appear in the terminal.
 
 - All progress and intermediate results are saved to a local database, so if you close the program or it crashes, the status will not be lost and you can pick up where it left off.
 
