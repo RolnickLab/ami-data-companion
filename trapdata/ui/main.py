@@ -95,7 +95,11 @@ class Queue(Label):
             task_name = "Trapdata Queue Processor"
             self.bgtask = threading.Thread(
                 target=partial(
-                    start_pipeline, self.app.db_path, self.app.config, single
+                    start_pipeline,
+                    self.app.db_path,
+                    self.app.image_base_path,
+                    self.app.config,
+                    single,
                 ),
                 daemon=True,  # PyTorch will be killed abruptly, leaving memory in GPU
                 name=task_name,

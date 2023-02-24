@@ -64,6 +64,8 @@ def detections(
 ) -> Optional[str]:
     """
     Export detected objects from database in the specified format.
+
+    Dates and
     """
     objects = get_detected_objects(settings.database_url, limit=limit, offset=offset)
     logger.info(f"Preparing to export {objects.count()} records as {format}")
