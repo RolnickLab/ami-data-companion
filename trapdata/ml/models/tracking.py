@@ -15,7 +15,7 @@ from rich.progress import track
 
 from trapdata import logger
 from trapdata import constants
-from trapdata.common.types import BoundingBox, SystemPath
+from trapdata.common.types import BoundingBox, FilePath
 from trapdata.ml.utils import get_device
 from trapdata.ml.models.classification import (
     QuebecVermontMothSpeciesClassifierMixedResolution,
@@ -438,7 +438,7 @@ class FeatureExtractor(QuebecVermontMothSpeciesClassifierMixedResolution):
     input_size = 300
 
     def get_queue(self):
-        return ObjectsWithoutFeaturesQueue(self.db_path)
+        return ObjectsWithoutFeaturesQueue(self.db_path, self.deployment_path)
 
     def get_dataset(self):
         dataset = ClassificationIterableDatabaseDataset(
@@ -669,7 +669,7 @@ def compare_objects(
 
 
 def get_events_that_need_tracks(
-    base_directory: SystemPath, session: orm.Session
+    base_directory: FilePath, session: orm.Session
 ) -> Sequence[MonitoringSession]:
     stmt = (
         select(MonitoringSession)

@@ -45,18 +45,18 @@ from trapdata.ml.models.tracking import (
 
 # @newrelic.agent.background_task()
 def test_tracking(db_path, image_base_directory, sample_size, skip_queue):
-
     # db_path = ":memory:"
     get_db(db_path, create=True)
     Session = get_session_class(db_path)
 
     get_or_create_monitoring_sessions(db_path, image_base_directory)
 
-    clear_all_queues(db_path)
+    clear_all_queues(db_path, image_base_directory)
 
     with Session() as session:
         ms = session.execute(
             select(MonitoringSession)
+            .filter_by(base_directory=str(image_base_directory))
             .order_by(MonitoringSession.num_images.desc())
             .limit(1)
         ).scalar()
@@ -68,14 +68,22 @@ def test_tracking(db_path, image_base_directory, sample_size, skip_queue):
                 add_image_to_queue(db_path, image.id)
 
     if torch.cuda.is_available():
-        object_detector = MothObjectDetector_FasterRCNN(db_path=db_path, batch_size=2)
+        object_detector = MothObjectDetector_FasterRCNN(
+            db_path=db_path, deployment_path=image_base_directory, batch_size=2
+        )
     else:
         object_detector = GenericObjectDetector_FasterRCNN_MobileNet(
-            db_path=db_path, batch_size=2
+            db_path=db_path, deployment_path=image_base_directory, batch_size=2
         )
-    moth_nonmoth_classifier = MothNonMothClassifier(db_path=db_path, batch_size=300)
-    species_classifier = UKDenmarkMothSpeciesClassifier(db_path=db_path, batch_size=300)
-    feature_extractor = FeatureExtractor(db_path=db_path, batch_size=50)
+    moth_nonmoth_classifier = MothNonMothClassifier(
+        db_path=db_path, deployment_path=image_base_directory, batch_size=300
+    )
+    species_classifier = UKDenmarkMothSpeciesClassifier(
+        db_path=db_path, deployment_path=image_base_directory, batch_size=300
+    )
+    feature_extractor = FeatureExtractor(
+        db_path=db_path, deployment_path=image_base_directory, batch_size=50
+    )
 
     check_db(db_path, quiet=False)
 
@@ -89,7 +97,7 @@ def test_tracking(db_path, image_base_directory, sample_size, skip_queue):
     with Session() as session:
         objects = (
             session.execute(
-                select(DetectedObject).where(DetectedObject.cnn_features.isnot(None))
+                select(DetectedObject).where(DetectedObject.cnn_features.is_not(None))
             )
             .unique()
             .scalars()
@@ -106,7 +114,7 @@ def test_tracking(db_path, image_base_directory, sample_size, skip_queue):
             num_features == 2048  # Num features expected for ResNet model
         )  # This is dependent on the input size & type of model
         result = cosine_similarity(object.cnn_features, object.cnn_features)
-        assert round(result, 1) == 1.0, "Cosine simularity of same object is not 1!"
+        assert round(result, 1) == 1.0, "Cosine similarity of same object is not 1!"
 
     with Session() as session:
         find_all_tracks(monitoring_session=ms, session=session)

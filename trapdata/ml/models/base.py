@@ -67,8 +67,9 @@ class InferenceBaseClass:
     single = True
     queue: Optional[QueueManager] = None
 
-    def __init__(self, db_path, **kwargs):
+    def __init__(self, db_path: str, deployment_path: FilePath, **kwargs):
         self.db_path = db_path
+        self.deployment_path = deployment_path
 
         for k, v in kwargs.items():
             setattr(self, k, v)
