@@ -147,6 +147,22 @@ class Resnet50Classifier(InferenceBaseClass):
         return result
 
 
+class Resnet50ClassifierLowRes(Resnet50Classifier):
+    input_size = 128
+
+    def get_model(self):
+        num_classes = len(self.category_map)
+        model = torchvision.models.resnet50(weights=None)
+        num_ftrs = model.fc.in_features
+        model.fc = torch.nn.Linear(num_ftrs, num_classes)
+        model = model.to(self.device)
+        checkpoint = torch.load(self.weights, map_location=self.device)
+        state_dict = checkpoint.get("model_state_dict") or checkpoint
+        model.load_state_dict(state_dict)
+        model.eval()
+        return model
+
+
 class BinaryClassifier(EfficientNetClassifier):
     stage = 2
     type = "binary_classification"
@@ -217,6 +233,21 @@ class QuebecVermontMothSpeciesClassifierMixedResolution(
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "quebec-vermont-moth-model_v07_resnet50_2022-12-22-07-54.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "quebec-vermont_moth-category-map_19Jan2023.json"
+    )
+
+
+class QuebecVermontMothSpeciesClassifierLowResolution(
+    SpeciesClassifier, Resnet50ClassifierLowRes
+):
+    name = "Quebec & Vermont Species Classifier - Low Resolution"
+    description = "Trained on February 24, 2022 using lower resolution images"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "moths_quebecvermont_resnet50_randaug_mixres_128_fev24.pth"
     )
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
