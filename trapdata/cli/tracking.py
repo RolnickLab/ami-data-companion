@@ -49,7 +49,8 @@ def run(event_dates: List[datetime.datetime]):
     Find tracks in all monitoring sessions .
     """
     feature_extrator = FeatureExtractor(
-        db_path=settings.database_url, user_data_path=settings.user_data_path
+        db_path=settings.database_url,
+        user_data_path=settings.user_data_path,
     )
     feature_extrator.run()
 
