@@ -49,10 +49,10 @@ class QueueStatusTable(BoxLayout):
         table = GridLayout(
             rows=num_rows,
             cols=num_cols,
-            padding=0,
-            spacing=0,
+            padding=10,
+            spacing=10,
             row_default_height=80,
-            row_force_default=True,
+            # row_force_default=True,
         )
 
         header = data.pop(0)

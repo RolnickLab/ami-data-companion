@@ -61,7 +61,7 @@ class QueueManager:
 
 
 class ImageQueue(QueueManager):
-    name = "Images"
+    name = "Unprocessed images"
     description = "Raw images from camera needing object detection"
 
     def ids(self) -> sa.ScalarSelect:
@@ -630,6 +630,7 @@ def all_queues(db_path, base_directory):
             DetectedObjectQueue(db_path, base_directory),
             UnclassifiedObjectQueue(db_path, base_directory),
             ObjectsWithoutFeaturesQueue(db_path, base_directory),
+            UntrackedObjectsQueue(db_path, base_directory),
         ]
     }
 
