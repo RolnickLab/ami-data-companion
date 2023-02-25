@@ -6,7 +6,12 @@ from trapdata.db.base import get_session_class
 from trapdata.common.types import FilePath
 
 
-def start_pipeline(db_path, deployment_path: FilePath, config, single=False):
+def start_pipeline(
+    db_path: str,
+    deployment_path: FilePath,
+    config: dict,
+    single: bool = False,
+):
     user_data_path = pathlib.Path(config.get("paths", "user_data_path"))
     logger.info(f"Local user data path: {user_data_path}")
     num_workers = int(config.get("performance", "num_workers"))
@@ -53,6 +58,7 @@ def start_pipeline(db_path, deployment_path: FilePath, config, single=False):
     Model_4 = ml.models.tracking.FeatureExtractor
     model_4 = Model_4(
         db_path=db_path,
+        deployment_path=deployment_path,
         cnn_features_model=model_3,
         user_data_path=user_data_path,
         batch_size=int(config.get("performance", "classification_batch_size")),

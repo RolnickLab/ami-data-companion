@@ -86,7 +86,7 @@ class Queue(Label):
         if self.bgtask:
             logger.info(f"Background task changed status: {self.bgtask}")
 
-    def start(self, *args, single=False):
+    def start(self, *args, single: bool = False):
         # @NOTE can't change a widget property from a bg thread
         if not self.running:
             if self.bgtask:
@@ -96,10 +96,10 @@ class Queue(Label):
             self.bgtask = threading.Thread(
                 target=partial(
                     start_pipeline,
-                    self.app.db_path,
-                    self.app.config,
-                    self.app.image_base_path,
-                    single,
+                    db_path=self.app.db_path,
+                    deployment_path=self.app.image_base_path,
+                    config=self.app.config,
+                    single=single,
                 ),
                 daemon=True,  # PyTorch will be killed abruptly, leaving memory in GPU
                 name=task_name,
