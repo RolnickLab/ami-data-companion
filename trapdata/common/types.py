@@ -1,3 +1,5 @@
+import pathlib
+from typing import Union
 from dataclasses import dataclass
 
 
@@ -11,3 +13,6 @@ class CoordinateDMS:
 class Location:
     latitude: CoordinateDMS
     longitude: CoordinateDMS
+
+
+FilePath = Union[pathlib.Path, str]

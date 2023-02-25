@@ -171,7 +171,7 @@ class BinaryClassifier(EfficientNetClassifier):
 
     def get_dataset(self):
         dataset = ClassificationIterableDatabaseDataset(
-            queue=DetectedObjectQueue(self.db_path),
+            queue=DetectedObjectQueue(self.db_path, self.deployment_path),
             image_transforms=self.get_transforms(),
             batch_size=self.batch_size,
         )
@@ -206,7 +206,7 @@ class SpeciesClassifier:
 
     def get_dataset(self):
         dataset = ClassificationIterableDatabaseDataset(
-            queue=UnclassifiedObjectQueue(self.db_path),
+            queue=UnclassifiedObjectQueue(self.db_path, self.deployment_path),
             image_transforms=self.get_transforms(),
             batch_size=self.batch_size,
         )

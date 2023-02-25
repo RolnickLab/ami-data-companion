@@ -65,7 +65,6 @@ class AnnotatedImage(Widget):
     bg = ObjectProperty()
 
     def __init__(self, *args, **kwargs):
-
         super().__init__(*args, **kwargs)
 
         app = App.get_running_app()
@@ -75,7 +74,6 @@ class AnnotatedImage(Widget):
 
         # Arranging Canvas
         with self.canvas:
-
             # Update canvas when the window size changes
             self.bind(pos=self.update_rect, size=self.update_rect)
 
@@ -89,7 +87,6 @@ class AnnotatedImage(Widget):
         self.draw()
 
     def draw(self, *args):
-
         self.canvas.clear()
 
         if not self.image_path.exists():
@@ -356,7 +353,7 @@ class PreviewWindow(RelativeLayout):
         @TODO this should skip the queue all together and just process the image in one shot/chain
         """
         app = App.get_running_app()
-        clear_all_queues(app.db_path)
+        clear_all_queues(app.db_path, app.image_base_path)
         delete_objects_for_image(app.db_path, self.current_sample.id)
         add_image_to_queue(app.db_path, self.current_sample.id)
         app.start_queue(single=True)

@@ -8,7 +8,7 @@ import PIL.Image
 
 from trapdata import db
 from trapdata import constants
-from trapdata.db.models.images import TrapImage
+from trapdata.db.models.images import TrapImage, completely_classified
 from trapdata.common.logs import logger
 from trapdata.common.utils import bbox_area, bbox_center, export_report
 from trapdata.common.filemanagement import (
@@ -142,7 +142,6 @@ class DetectedObject(db.Base):
 def save_detected_objects(
     db_path, image_ids, detected_objects_data, user_data_path=None
 ):
-
     orm_objects = []
     with db.get_session(db_path) as sesh:
         images = sesh.query(TrapImage).filter(TrapImage.id.in_(image_ids)).all()
@@ -300,6 +299,8 @@ def get_objects_for_species(db_path, species_label, monitoring_session=None):
 
 
 def get_object_counts_for_image(db_path, image_id):
+    # @TODO this could all be one query. It runs on every frame of the playback.
+
     # Every object detected
     num_objects = get_objects_for_image(db_path, image_id).count()
 
@@ -313,14 +314,14 @@ def get_object_counts_for_image(db_path, image_id):
     num_species = get_species_for_image(db_path, image_id).count()
 
     # Has every object detected in this image been fully processed?
-    completely_classified = True if num_classifications == num_detections else False
+    is_completely_classified = completely_classified(db_path, image_id)
 
     return {
         "num_objects": num_objects,
         "num_detections": num_detections,
         "num_species": num_species,
         "num_classifications": num_classifications,
-        "completely_classified": completely_classified,
+        "completely_classified": is_completely_classified,
     }
 
 
