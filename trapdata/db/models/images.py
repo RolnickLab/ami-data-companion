@@ -109,7 +109,7 @@ def completely_classified(db_path, image_id):
 
     with get_session(db_path) as sesh:
         img = sesh.query(TrapImage).get(image_id)
-        if img.in_queue or not img.last_processed:
+        if not img or not img.last_processed or img.in_queue:
             return False
 
         else:

@@ -27,5 +27,4 @@ class Location:
 # [x1, y1, x2, y2] The origin is top-left corner; x1<x2; y1<y2; integer values in the list
 BoundingBox = tuple[float, float, float, float]
 
-SystemPath = Union[pathlib.Path, str]
-OptionalSystemPath = Union[pathlib.Path, str, None]
+FilePath = Union[pathlib.Path, str]

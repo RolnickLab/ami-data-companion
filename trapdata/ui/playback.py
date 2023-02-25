@@ -385,7 +385,7 @@ class PreviewWindow(RelativeLayout):
         @TODO this should skip the queue all together and just process the image in one shot/chain
         """
         app = App.get_running_app()
-        clear_all_queues(app.db_path)
+        clear_all_queues(app.db_path, app.image_base_path)
         delete_objects_for_image(app.db_path, self.current_sample.id)
         add_image_to_queue(app.db_path, self.current_sample.id)
         app.start_queue(single=True)

@@ -11,7 +11,7 @@ import PIL.Image
 
 from trapdata import db
 from trapdata import constants
-from trapdata.db.models.images import TrapImage
+from trapdata.db.models.images import TrapImage, completely_classified
 from trapdata.common.logs import logger
 from trapdata.common.utils import bbox_area, bbox_center, export_report
 from trapdata.common.filemanagement import (
@@ -510,6 +510,8 @@ def get_objects_for_species(db_path, species_label, monitoring_session=None):
 
 
 def get_object_counts_for_image(db_path, image_id):
+    # @TODO this could all be one query. It runs on every frame of the playback.
+
     # Every object detected
     num_objects = get_objects_for_image(db_path, image_id).count()
 
@@ -523,14 +525,14 @@ def get_object_counts_for_image(db_path, image_id):
     num_species = get_species_for_image(db_path, image_id).count()
 
     # Has every object detected in this image been fully processed?
-    completely_classified = True if num_classifications == num_detections else False
+    is_completely_classified = completely_classified(db_path, image_id)
 
     return {
         "num_objects": num_objects,
         "num_detections": num_detections,
         "num_species": num_species,
         "num_classifications": num_classifications,
-        "completely_classified": completely_classified,
+        "completely_classified": is_completely_classified,
     }
 
 

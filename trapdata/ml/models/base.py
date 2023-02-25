@@ -7,6 +7,7 @@ from sentry_sdk import start_transaction
 import torchvision.transforms
 
 from trapdata import logger
+from trapdata.common.types import FilePath
 from trapdata.ml.utils import (
     get_device,
     get_or_download_file,
@@ -46,7 +47,8 @@ class InferenceBaseClass:
     See examples in `classification.py` and `localization.py`
     """
 
-    db_path = None
+    db_path: str
+    deployment_path: FilePath
     name = "Unknown Inference Model"
     description = str()
     model_type = None
@@ -219,7 +221,6 @@ class InferenceBaseClass:
         torch.cuda.empty_cache()
 
         for i, batch in enumerate(self.dataloader):
-
             if not batch:
                 # @TODO review this once we switch to streaming IterableDataset
                 logger.info(f"Batch {i+1} is empty, skipping")
