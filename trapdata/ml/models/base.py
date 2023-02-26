@@ -65,7 +65,7 @@ class InferenceBaseClass:
     type = "unknown"
     stage = 0
     single = True
-    queue: Optional[QueueManager] = None
+    queue: QueueManager
 
     def __init__(self, db_path: str, deployment_path: FilePath, **kwargs):
         self.db_path = db_path
@@ -159,8 +159,7 @@ class InferenceBaseClass:
         def get_queue(self):
             return DetectedObjectQueue(self.db_path)
         """
-        return None
-        # raise NotImplementedError
+        return QueueManager(db_path=self.db_path, base_directory=self.deployment_path)
 
     def get_dataset(self):
         """

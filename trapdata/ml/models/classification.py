@@ -202,7 +202,7 @@ class MothNonMothClassifier(BinaryClassifier):
     positive_negative_label = "nonmoth"
 
 
-class SpeciesClassifier:
+class SpeciesClassifier(InferenceBaseClass):
     stage = 4
     type = "fine_grained_classifier"
 

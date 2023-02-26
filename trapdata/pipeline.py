@@ -16,9 +16,9 @@ def start_pipeline(
     logger.info(f"Local user data path: {user_data_path}")
     num_workers = int(config.get("performance", "num_workers"))
 
-    model_1_name = config.get("models", "localization_model")
-    Model_1 = ml.models.object_detectors[model_1_name]
-    model_1 = Model_1(
+    object_detector_name = config.get("models", "localization_model")
+    ObjectDetector = ml.models.object_detectors[object_detector_name]
+    object_detector = ObjectDetector(
         db_path=db_path,
         deployment_path=deployment_path,
         user_data_path=user_data_path,
@@ -26,12 +26,13 @@ def start_pipeline(
         num_workers=num_workers,
         single=single,
     )
-    model_1.run()
-    logger.info("Localization complete")
+    if object_detector.queue.queue_count() > 0:
+        object_detector.run()
+        logger.info("Localization complete")
 
-    model_2_name = config.get("models", "binary_classification_model")
-    Model_2 = ml.models.binary_classifiers[model_2_name]
-    model_2 = Model_2(
+    binary_classifier_name = config.get("models", "binary_classification_model")
+    BinaryClassifier = ml.models.binary_classifiers[binary_classifier_name]
+    binary_classifier = BinaryClassifier(
         db_path=db_path,
         deployment_path=deployment_path,
         user_data_path=user_data_path,
@@ -39,12 +40,13 @@ def start_pipeline(
         num_workers=num_workers,
         single=single,
     )
-    model_2.run()
-    logger.info("Binary classification complete")
+    if binary_classifier.queue.queue_count() > 0:
+        binary_classifier.run()
+        logger.info("Binary classification complete")
 
-    model_3_name = config.get("models", "taxon_classification_model")
-    Model_3 = ml.models.species_classifiers[model_3_name]
-    model_3 = Model_3(
+    species_classifier_name = config.get("models", "taxon_classification_model")
+    SpeciesClassifier = ml.models.species_classifiers[species_classifier_name]
+    species_classifier = SpeciesClassifier(
         db_path=db_path,
         deployment_path=deployment_path,
         user_data_path=user_data_path,
@@ -52,20 +54,22 @@ def start_pipeline(
         num_workers=num_workers,
         single=single,
     )
-    model_3.run()
-    logger.info("Species classification complete")
+    if species_classifier.queue.queue_count() > 0:
+        species_classifier.run()
+        logger.info("Species classification complete")
 
-    Model_4 = ml.models.tracking.FeatureExtractor
-    model_4 = Model_4(
+    FeatureExtractor = ml.models.tracking.FeatureExtractor
+    feature_extractor = FeatureExtractor(
         db_path=db_path,
         deployment_path=deployment_path,
-        cnn_features_model=model_3,
         user_data_path=user_data_path,
         batch_size=int(config.get("performance", "classification_batch_size")),
         num_workers=num_workers,
         single=single,
     )
-    model_4.run()
+    if feature_extractor.queue.queue_count() > 0:
+        feature_extractor.run()
+        logger.info("Feature extraction complete")
 
     Session = get_session_class(db_path)
     with Session() as session:

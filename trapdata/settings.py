@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     localization_model: Optional[ml.models.ObjectDetectorChoice]
     binary_classification_model: Optional[ml.models.BinaryClassifierChoice]
     species_classification_model: Optional[ml.models.SpeciesClassifierChoice]
-    tracking_algorithm: Optional[ml.models.TrackingAlgorithmChoice]
+    feature_extractor: Optional[ml.models.FeatureExtractorChoice]
     localization_batch_size: int = Field(2)
     classification_batch_size: int = Field(20)
     num_workers: int = Field(1)
@@ -73,9 +73,15 @@ class Settings(BaseSettings):
                 "kivy_type": "options",
                 "kivy_section": "models",
             },
-            "tracking_algorithm": {
-                "title": "Occurence tracking algorithm (de-duplication)",
-                "description": "Method of identifying and tracking the same individual moth across multiple images.",
+            # "tracking_algorithm": {
+            #     "title": "Occurrence tracking algorithm (de-duplication)",
+            #     "description": "Method of identifying and tracking the same individual moth across multiple images.",
+            #     "kivy_type": "options",
+            #     "kivy_section": "models",
+            # },
+            "feature_extractor": {
+                "title": "Feature extractor used for image similarity search and occurrence tracking",
+                "description": "CNN model for extracting the embedded feature vector of an image used for similarity comparisons.",
                 "kivy_type": "options",
                 "kivy_section": "models",
             },
