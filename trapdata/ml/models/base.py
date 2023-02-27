@@ -2,6 +2,7 @@ from typing import Optional
 import json
 
 import torch
+import torch.utils.data
 from sentry_sdk import start_transaction
 
 import torchvision.transforms
@@ -57,8 +58,8 @@ class InferenceBaseClass:
     weights = None
     labels_path = None
     category_map = {}
-    model: Optional[torch.nn.Module] = None
-    transforms = None
+    model: torch.nn.Module
+    transforms: torchvision.transforms.Compose
     batch_size = 4
     num_workers = 1
     user_data_path = None
@@ -66,6 +67,8 @@ class InferenceBaseClass:
     stage = 0
     single = True
     queue: QueueManager
+    dataset: torch.utils.data.Dataset
+    dataloader: torch.utils.data.DataLoader
 
     def __init__(self, db_path: str, deployment_path: FilePath, **kwargs):
         self.db_path = db_path
@@ -120,7 +123,7 @@ class InferenceBaseClass:
         else:
             return {}
 
-    def get_model(self):
+    def get_model(self) -> torch.nn.Module:
         """
         This method must be implemented by a subclass.
 
@@ -157,11 +160,11 @@ class InferenceBaseClass:
 
         from trapdata.db.models.queue import DetectedObjectQueue
         def get_queue(self):
-            return DetectedObjectQueue(self.db_path)
+            return DetectedObjectQueue(self.db_path, self.deployment_path)
         """
-        return QueueManager(db_path=self.db_path, base_directory=self.deployment_path)
+        raise NotImplementedError
 
-    def get_dataset(self):
+    def get_dataset(self) -> torch.utils.data.Dataset:
         """
         This method must be implemented by a subclass.
 

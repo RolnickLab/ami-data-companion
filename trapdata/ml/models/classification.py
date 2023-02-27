@@ -171,9 +171,12 @@ class BinaryClassifier(EfficientNetClassifier):
     positive_binary_label = None
     positive_negative_label = None
 
+    def get_queue(self) -> DetectedObjectQueue:
+        return DetectedObjectQueue(self.db_path, self.deployment_path)
+
     def get_dataset(self):
         dataset = ClassificationIterableDatabaseDataset(
-            queue=DetectedObjectQueue(self.db_path, self.deployment_path),
+            queue=self.queue,
             image_transforms=self.get_transforms(),
             batch_size=self.batch_size,
         )
@@ -206,9 +209,12 @@ class SpeciesClassifier(InferenceBaseClass):
     stage = 4
     type = "fine_grained_classifier"
 
+    def get_queue(self) -> UnclassifiedObjectQueue:
+        return UnclassifiedObjectQueue(self.db_path, self.deployment_path)
+
     def get_dataset(self):
         dataset = ClassificationIterableDatabaseDataset(
-            queue=UnclassifiedObjectQueue(self.db_path, self.deployment_path),
+            queue=self.queue,
             image_transforms=self.get_transforms(),
             batch_size=self.batch_size,
         )
