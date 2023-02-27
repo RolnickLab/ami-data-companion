@@ -88,9 +88,7 @@ class SpeciesRow(BoxLayout):
 
         self.add_widget(label)
         self.add_widget(Label(text=str(species["count"]), valign="top"))
-        self.add_widget(
-            Label(text=str(round(species["mean_score"] * 100, 1)), valign="top")
-        )
+        self.add_widget(Label(text=str(round(species["score"] * 100, 1)), valign="top"))
         for i in range(NUM_EXAMPLES_PER_ROW):
             try:
                 example = species["examples"][i]
@@ -169,9 +167,10 @@ class SpeciesListLayout(RecycleView):
         species_rows = [
             {
                 "species": {
+                    "sequence": item["sequence_id"],
                     "name": item["label"] or "Unclassified",
-                    "count": item["count"],
-                    "mean_score": item["mean_score"],
+                    "count": item["sequence_frame_count"],
+                    "score": item["sequence_best_score"],
                     "examples": item["examples"],
                     "image_height": row_height,
                     "monitoring_session": self.monitoring_session,
@@ -186,7 +185,7 @@ class SpeciesListLayout(RecycleView):
         header_row = [
             {
                 "species": None,
-                "heading": ["Label", "Count", "Avg. Score", "Examples"]
+                "heading": ["Label", "Num Frames", "Score", "Examples"]
                 + example_placeholders,
                 "height": 50,
             }

@@ -76,7 +76,8 @@ class DetectedObject(db.Base):
             f"\tpath={self.path!r}, \n"
             f"\tspecific_label={self.specific_label!r}, \n"
             f"\tbbox={self.bbox!r}, \n"
-            f"\timage_id={self.image_id!r})"
+            f"\timage_id={self.image_id!r})\n"
+            f"\tsequence_id={self.sequence_id!r})\n"
         )
 
     def cropped_image_data(
@@ -158,9 +159,7 @@ class DetectedObject(db.Base):
         else:
             return 1
 
-    def track_info(
-        self, session: orm.Session
-    ) -> dict[str, Union[datetime.datetime, datetime.datetime, int, int]]:
+    def track_info(self, session: orm.Session) -> dict[str, Any]:
         """
         Return the start time, end time duration in minutes, and number of frames for a track
         """
@@ -223,7 +222,7 @@ class DetectedObject(db.Base):
                 logger.debug(f"Using current label {self.specific_label}")
             return best_sibling
         else:
-            logger.debug(f"No siblings")
+            # logger.debug(f"No siblings")
             return self
 
     def report_data(self) -> dict[str, Any]:
@@ -410,7 +409,9 @@ def get_species_for_image(db_path, image_id):
         )
 
 
-def get_unique_species(db_path, monitoring_session=None):
+def get_unique_species(
+    db_path, monitoring_session=None, classification_threshold: float = -1
+):
     query = (
         sa.select(
             sa.func.coalesce(
@@ -418,7 +419,14 @@ def get_unique_species(db_path, monitoring_session=None):
                 DetectedObject.binary_label,
                 DetectedObject.path,
             ).label("label"),
+            sa.func.coalesce(
+                DetectedObject.specific_label_score,
+                DetectedObject.binary_label_score,
+            ).label("score"),
             sa.func.count().label("count"),
+        )
+        .where(
+            DetectedObject.score >= classification_threshold,
         )
         .group_by("label")
         .order_by(sa.desc("count"))
@@ -431,7 +439,10 @@ def get_unique_species(db_path, monitoring_session=None):
 
 
 def get_unique_species_by_track(
-    db_path, monitoring_session=None, classification_threshold: float = -1
+    db_path,
+    monitoring_session=None,
+    classification_threshold: float = -1,
+    num_examples=3,
 ):
     # @TODO Return single objects that are not part of a sequence
     # @TODO @IMPORTANT THIS NEEDS WORK!
@@ -439,65 +450,51 @@ def get_unique_species_by_track(
     Session = db.get_session_class(db_path)
     session = Session()
 
-    # species = session.execute(
-    #     sa.select(DetectedObject.specific_label)
-    #     .where(DetectedObject.monitoring_session_id == monitoring_session.id)
-    #     .distinct()
-    # ).scalars()
-
+    # Select all sequences where at least one example is above the score threshold
     sequences = session.execute(
         sa.select(
-            sa.func.coalesce(DetectedObject.sequence_id, DetectedObject.id).label(
-                "sequence_id"
+            DetectedObject.sequence_id,
+            sa.func.count(DetectedObject.id).label(
+                "sequence_frame_count"
+            ),  # frames in track
+            sa.func.max(DetectedObject.specific_label_score).label(
+                "sequence_best_score"
             ),
-            sa.func.count().label("count"),
-            sa.func.max(DetectedObject.specific_label_score).label("score"),
         )
         .group_by("sequence_id")
-        .where(DetectedObject.monitoring_session_id == monitoring_session.id)
-        .order_by(sa.desc("count"))
+        .where((DetectedObject.monitoring_session_id == monitoring_session.id))
+        .having(
+            sa.func.max(DetectedObject.specific_label_score)
+            >= classification_threshold,
+        )
+        .order_by(DetectedObject.specific_label)
     ).all()
 
-    picks = []
-    for sequence, count, score in sequences:
-        sequence_pick = session.execute(
+    rows = []
+    for sequence in sequences:
+        examples = session.execute(
             sa.select(
                 DetectedObject.image_id.label("source_image_id"),
                 DetectedObject.specific_label.label("label"),
                 DetectedObject.specific_label_score.label("score"),
                 DetectedObject.path.label("cropped_image_path"),
                 DetectedObject.sequence_id,
-            ).where(
-                (DetectedObject.specific_label_score == score)
-                & (DetectedObject.monitoring_session_id == monitoring_session.id)
-                & (
-                    (DetectedObject.sequence_id == sequence)
-                    | (DetectedObject.id == sequence)
-                )
             )
-        ).all()[0]
-        picks.append(sequence_pick)
-
-    species = {}
-    for pick in picks:
-        if not pick.score:
-            continue
-        if pick.score < classification_threshold:
-            continue
-        if pick.label in species.keys():
-            species[pick.label]["count"] += 1
-            species[pick.label]["mean_score"] = statistics.mean(
-                [species[pick.label]["mean_score"], pick.score]
+            .where(
+                (DetectedObject.monitoring_session_id == monitoring_session.id)
+                & (DetectedObject.sequence_id == sequence.sequence_id)
+                & (DetectedObject.specific_label_score == sequence.sequence_best_score)
             )
-            species[pick.label]["examples"].append(pick._mapping)
-        else:
-            species[pick.label] = {}
-            species[pick.label]["count"] = 1
-            species[pick.label]["mean_score"] = pick.score
-            species[pick.label]["examples"] = [pick._mapping]
-            species[pick.label]["label"] = pick.label
-
-    return species.values()
+            # .order_by(sa.func.random())
+            .order_by(sa.desc("score"))
+            .limit(3)
+        ).all()
+        row = dict(sequence._mapping)
+        if examples:
+            row["label"] = examples[0].label
+            row["examples"] = [example._mapping for example in examples]
+        rows.append(row)
+    return rows
 
 
 def get_objects_for_species(db_path, species_label, monitoring_session=None):
