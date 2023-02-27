@@ -9,8 +9,7 @@ from sqlalchemy_utils import aggregated, observes
 from trapdata.db import Base, get_session
 from trapdata.common.logs import logger
 from trapdata.common.utils import export_report
-from trapdata.db.models.images import TrapImage
-from trapdata.db.models.detections import DetectedObject
+from trapdata.db import models
 from trapdata.common.filemanagement import find_images, group_images_by_day
 
 
@@ -74,22 +73,22 @@ class MonitoringSession(Base):
         logger.info(f"Updating cached values for event {self.day}")
         self.num_images = session.execute(
             sa.select(sa.func.count(1)).where(
-                TrapImage.monitoring_session_id == self.id
+                models.TrapImage.monitoring_session_id == self.id
             )
         ).scalar_one()
         self.num_detected_objects = session.execute(
             sa.select(sa.func.count(1)).where(
-                DetectedObject.monitoring_session_id == self.id
+                models.DetectedObject.monitoring_session_id == self.id
             )
         ).scalar_one()
         self.start_time: datetime.datetime = session.execute(
-            sa.select(sa.func.min(TrapImage.timestamp)).where(
-                TrapImage.monitoring_session_id == self.id
+            sa.select(sa.func.min(models.TrapImage.timestamp)).where(
+                models.TrapImage.monitoring_session_id == self.id
             )
         ).scalar_one()
         self.end_time: datetime.datetime = session.execute(
-            sa.select(sa.func.max(TrapImage.timestamp)).where(
-                TrapImage.monitoring_session_id == self.id
+            sa.select(sa.func.max(models.TrapImage.timestamp)).where(
+                models.TrapImage.monitoring_session_id == self.id
             )
         ).scalar_one()
 

@@ -11,8 +11,8 @@ import PIL.Image
 
 from trapdata import db
 from trapdata import constants
-from trapdata.db.models.images import TrapImage, completely_classified
-from trapdata.db.models.events import MonitoringSession
+from trapdata.db.models.images import completely_classified
+from trapdata.db import models
 from trapdata.common.logs import logger
 from trapdata.common.utils import bbox_area, bbox_center, export_report
 from trapdata.common.filemanagement import (
@@ -83,7 +83,7 @@ class DetectedObject(db.Base):
 
     def cropped_image_data(
         self,
-        source_image: Union[TrapImage, None] = None,
+        source_image: Union[models.TrapImage, None] = None,
         base_path: Union[pathlib.Path, str, None] = None,
     ):
         """
@@ -106,7 +106,7 @@ class DetectedObject(db.Base):
     def save_cropped_image_data(
         self,
         base_path: Union[pathlib.Path, str, None] = None,
-        source_image: Union[TrapImage, None] = None,
+        source_image: Union[models.TrapImage, None] = None,
     ):
         """
         @TODO need consistent way of discovering the user_data_path in the application settings
@@ -257,7 +257,11 @@ def save_detected_objects(
 ):
     orm_objects = []
     with db.get_session(db_path) as sesh:
-        images = sesh.query(TrapImage).filter(TrapImage.id.in_(image_ids)).all()
+        images = (
+            sesh.query(models.TrapImage)
+            .filter(models.TrapImage.id.in_(image_ids))
+            .all()
+        )
 
     timestamp = datetime.datetime.now()
 
@@ -350,10 +354,10 @@ def get_detected_objects(
         return (
             sesh.query(DetectedObject)
             .filter_by(**query_kwargs)
-            .filter(MonitoringSession.base_directory == deployment_path)
+            .filter(models.MonitoringSession.base_directory == deployment_path)
             .join(
-                MonitoringSession,
-                MonitoringSession.id == DetectedObject.monitoring_session_id,
+                models.MonitoringSession,
+                models.MonitoringSession.id == DetectedObject.monitoring_session_id,
             )
             .offset(offset)
             .limit(limit)
