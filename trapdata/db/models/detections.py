@@ -9,6 +9,7 @@ import PIL.Image
 from trapdata import db
 from trapdata import constants
 from trapdata.db.models.images import TrapImage, completely_classified
+from trapdata.db.models.events import MonitoringSession
 from trapdata.common.logs import logger
 from trapdata.common.utils import bbox_area, bbox_center, export_report
 from trapdata.common.filemanagement import (
@@ -212,7 +213,9 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
         sesh.commit()
 
 
-def get_detected_objects(db_path, monitoring_session=None, limit=None, offset=0):
+def get_detected_objects(
+    db_path, deployment_path: str, monitoring_session=None, limit=None, offset=0
+):
     query_kwargs = {}
 
     if monitoring_session:
@@ -222,9 +225,14 @@ def get_detected_objects(db_path, monitoring_session=None, limit=None, offset=0)
         return (
             sesh.query(DetectedObject)
             .filter_by(**query_kwargs)
+            .filter(MonitoringSession.base_directory == deployment_path)
+            .join(
+                MonitoringSession,
+                MonitoringSession.id == DetectedObject.monitoring_session_id,
+            )
             .offset(offset)
             .limit(limit)
-        )
+        ).all()
 
 
 def get_objects_for_image(db_path, image_id):
