@@ -10,7 +10,7 @@ import math
 import PIL.Image
 from torchvision import transforms
 import torch.utils.data
-from sqlalchemy import orm, select, func
+from sqlalchemy import orm, select, update, func
 from rich.progress import track
 
 from trapdata import logger
@@ -244,9 +244,7 @@ class TrackingCostOriginal:
         img2_moth = torch.unsqueeze(img2_moth, 0).to(self.device)
 
         img1_moth = self._transform_image(self.image1)
-        print(img1_moth.shape)
         img1_moth = torch.unsqueeze(img1_moth, 0).to(self.device)
-        print(img1_moth.shape)
 
         # getting model features for each image
         with torch.no_grad():
@@ -362,7 +360,6 @@ class UntrackedObjectsIterableDatabaseDataset(torch.utils.data.IterableDataset):
 
     def __len__(self):
         count = self.queue.queue_count()
-        print("TRACKING QUEUE COUNT:", count)
         return count
 
     def __iter__(
@@ -556,6 +553,7 @@ def assign_sequence(
         obj_current.sequence_frame = obj_previous.sequence_frame + 1
     else:
         new_sequence(obj_current, obj_previous, session=session)
+
     session.add(obj_current)
     session.add(obj_previous)
     if commit:
@@ -568,7 +566,7 @@ def compare_objects(
     image_current: TrapImage,
     session: orm.Session,
     image_previous: Optional[TrapImage] = None,
-    skip_existing: bool = True,
+    skip_existing: bool = False,
     commit: bool = True,
 ):
     """
@@ -643,23 +641,24 @@ def compare_objects(
             costs.append((final_cost, obj_previous))
 
         costs.sort(key=lambda cost: cost[0])
-        if not costs:
-            continue
-        lowest_cost, best_match = costs[0]
+        if costs:
+            lowest_cost, best_match = costs[0]
 
-        if lowest_cost <= constants.TRACKING_COST_THRESHOLD:
-            sequence_id, frame_num = assign_sequence(
-                obj_current=obj_current,
-                obj_previous=best_match,
-                final_cost=lowest_cost,
-                session=session,
-                commit=False,
-            )
-            logger.info(
-                f"Assigned {obj_current.id} to sequence {sequence_id} as frame #{frame_num}. Tracking cost: {lowest_cost}"
-            )
+            if lowest_cost <= constants.TRACKING_COST_THRESHOLD:
+                sequence_id, frame_num = assign_sequence(
+                    obj_current=obj_current,
+                    obj_previous=best_match,
+                    final_cost=lowest_cost,
+                    session=session,
+                    commit=False,
+                )
+                logger.info(
+                    f"Assigned {obj_current.id} to sequence {sequence_id} as frame #{frame_num}. Tracking cost: {lowest_cost}"
+                )
 
-        # If current object was not assigned to a sequence, create one for it by itself
+    # Check all objects
+    # If current object was not assigned to a sequence, create one for it by itself
+    for obj_current in objects_current:
         if not obj_current.sequence_id:
             sequence_id = assign_solo_sequence(obj_current, session=session)
 
@@ -679,7 +678,8 @@ def get_events_that_need_tracks(
             & (MonitoringSession.base_directory == str(base_directory))
         )
     )
-    return session.execute(stmt).unique().scalars().all()
+    results = session.execute(stmt).unique().scalars().all()
+    return results
 
 
 def find_all_tracks(
@@ -690,6 +690,20 @@ def find_all_tracks(
     Retrieve all images for an Event / Monitoring Session and find all sequential objects.
     """
     logger.info(f"Calculating tracks for {monitoring_session.day}")
+
+    # The queue is less applicable to tracks, since we are calculating tracks for all objects
+    # in the session, but for now... @TODO queue by monitoring session rather than object.
+    session.execute(
+        update(DetectedObject)
+        .where(
+            (DetectedObject.monitoring_session == monitoring_session)
+            & (DetectedObject.in_queue == True)
+            & (DetectedObject.cnn_features.is_not(None))
+        )
+        .values({"in_queue": False})
+    )
+    session.commit()
+
     images = (
         session.execute(
             select(TrapImage)
