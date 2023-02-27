@@ -413,7 +413,12 @@ class TrapDataApp(App):
         """
         app = self
         user_data_path = app.config.get("paths", "user_data_path")
-        objects = list(detected_objects or get_detected_objects(app.db_path))
+        objects = list(
+            detected_objects
+            or get_detected_objects(
+                db_path=app.db_path, deployment_path=app.image_base_path
+            )
+        )
         timestamp = int(time.time())
         trap = pathlib.Path(app.image_base_path).name
         report_name = report_name or f"{trap}-all-detections-{timestamp}"
