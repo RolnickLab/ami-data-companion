@@ -70,29 +70,29 @@ class ImageQueue(QueueManager):
             .scalar_subquery()
         )
 
-    def queue_count(self) -> Union[int, None]:
+    def queue_count(self) -> int:
         with get_session(self.db_path) as sesh:
             stmt = sa.select(sa.func.count(TrapImage.id)).where(
                 (TrapImage.id.in_(self.ids()) & (TrapImage.in_queue.is_(True)))
             )
             count = sesh.execute(stmt).scalar()
-            return count
+            return count or 0
 
-    def unprocessed_count(self) -> Union[int, None]:
+    def unprocessed_count(self) -> int:
         with get_session(self.db_path) as sesh:
             stmt = sa.select(sa.func.count(TrapImage.id)).where(
                 (TrapImage.id.in_(self.ids()) & (TrapImage.last_processed.is_(None)))
             )
             count = sesh.execute(stmt).scalar()
-            return count
+            return count or 0
 
-    def done_count(self) -> Union[int, None]:
+    def done_count(self) -> int:
         with get_session(self.db_path) as sesh:
             stmt = sa.select(sa.func.count(TrapImage.id)).where(
                 (TrapImage.id.in_(self.ids()) & (TrapImage.last_processed.is_not(None)))
             )
             count = sesh.execute(stmt).scalar()
-            return count
+            return count or 0
 
     def add_unprocessed(self, *_) -> None:
         logger.info("Adding all unprocessed deployment images to queue")
