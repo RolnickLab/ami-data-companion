@@ -237,6 +237,9 @@ class DetectedObject(db.Base):
         return {
             "trap": pathlib.Path(self.monitoring_session.base_directory).name,
             "event": self.monitoring_session.day.isoformat(),
+            "sequence": self.sequence_id,
+            "sequence_frame": self.sequence_frame,
+            "sequence_cost": self.sequence_previous_cost,
             "source_image": self.image.absolute_path,
             "cropped_image": self.path,
             "timestamp": self.image.timestamp.isoformat(),
