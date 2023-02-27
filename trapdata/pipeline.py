@@ -81,3 +81,10 @@ def start_pipeline(
             ml.models.tracking.find_all_tracks(
                 monitoring_session=event, session=session
             )
+
+        # Debug extra unprocessed objects:
+        # from trapdata.ml.models.tracking import UntrackedObjectsQueue
+        # queue = UntrackedObjectsQueue(db_path=db_path, base_directory=deployment_path)
+        # queue.add_unprocessed()
+        # for obj, previous_objects in queue.pull_n_from_queue(100):
+        #     print(len(previous_objects), obj)

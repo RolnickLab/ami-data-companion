@@ -71,7 +71,7 @@ def update_info_bar(widget: Label, image: TrapImage, stats: dict):
 
 
 def update_title(widget: Label, image: TrapImage):
-    text = f"{image.timestamp.strftime('%c')}"  # ({image.path})\n"
+    text = f"{image.timestamp.strftime('%c')}"  # (image #{image.id})\n"
 
     widget.text = text
     # widget.bold = True
@@ -147,7 +147,6 @@ class AnnotatedImage(Widget):
 
         color = [1, 1, 1, 1]
         for i, annotation in enumerate(self.annotations):
-
             if not annotation.bbox:
                 logger.warn(f"No bbox for detected object {annotation.id}. Skipping.")
                 continue
@@ -229,7 +228,7 @@ class AnnotatedImage(Widget):
                 self.bbox_widgets.append(
                     Label(
                         text=label_text,
-                        center=((x1 + w2 / 2), y2 - 40),
+                        center=((x1 + w2 / 2), y2 - 42),
                         color=color,
                         bold=True,
                         halign="center",

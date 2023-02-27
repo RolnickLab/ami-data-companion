@@ -196,7 +196,7 @@ class DetectedObjectQueue(QueueManager):
             return count
 
     def add_unprocessed(self, *_) -> None:
-        logger.info(f"Adding detected objects from deployment to queue")
+        logger.info(f"Adding detected objects in deployment to queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)
@@ -211,7 +211,7 @@ class DetectedObjectQueue(QueueManager):
             sesh.commit()
 
     def clear_queue(self, *_) -> None:
-        logger.info("Removing detected objects from deployment from queue")
+        logger.info("Removing detected objects in deployment from queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)
@@ -317,7 +317,7 @@ class UnclassifiedObjectQueue(QueueManager):
             return count
 
     def add_unprocessed(self, *_) -> None:
-        logger.info("Adding unclassified objects from deployment to queue")
+        logger.info("Adding unclassified objects in deployment to queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)
@@ -332,7 +332,7 @@ class UnclassifiedObjectQueue(QueueManager):
             sesh.commit()
 
     def clear_queue(self, *_) -> None:
-        logger.info("Removing unclassified objects from deployment from queue")
+        logger.info("Removing unclassified objects in deployment from queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)
@@ -439,7 +439,7 @@ class ObjectsWithoutFeaturesQueue(QueueManager):
             return count or 0
 
     def add_unprocessed(self, *_) -> None:
-        logger.info("Adding objects without feature from deployment to queue")
+        logger.info("Adding objects without feature in deployment to queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)
@@ -561,7 +561,7 @@ class UntrackedObjectsQueue(QueueManager):
             return count or 0
 
     def add_unprocessed(self, *_) -> None:
-        logger.info("Adding without tracks from deployment to queue")
+        logger.info("Adding objects without tracks in deployment to queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)
@@ -576,7 +576,7 @@ class UntrackedObjectsQueue(QueueManager):
             sesh.commit()
 
     def clear_queue(self, *_) -> None:
-        logger.info("Removing untracked objects of deployment from queue")
+        logger.info("Removing untracked objects in deployment from queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)

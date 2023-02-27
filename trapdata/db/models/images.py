@@ -24,6 +24,7 @@ class TrapImage(Base):
     notes = sa.Column(sa.JSON)
     width = sa.Column(sa.Integer)
     height = sa.Column(sa.Integer)
+    # position
     # diag
     # centroid
     # cnn features

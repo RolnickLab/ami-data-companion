@@ -653,7 +653,7 @@ def compare_objects(
                     commit=False,
                 )
                 logger.info(
-                    f"Assigned {obj_current.id} to sequence {sequence_id} as frame #{frame_num}. Tracking cost: {lowest_cost}"
+                    f"Assigned {obj_current.id} to sequence {sequence_id} as frame #{frame_num}. Tracking cost: {round(lowest_cost, 2)}"
                 )
 
     # Check all objects
