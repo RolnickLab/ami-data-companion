@@ -1,6 +1,7 @@
 # @TODO use this settings module in Kivy
 import sys
-from typing import Union, Optional
+from typing import Union, Optional, Any
+import configparser
 
 import pathlib
 
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         env_prefix = "ami_"
+        extra = "ignore"
 
         fields = {
             "database_url": {
@@ -107,17 +109,64 @@ class Settings(BaseSettings):
             },
         }
 
+        @classmethod
+        def customise_sources(
+            cls,
+            init_settings,
+            env_settings,
+            file_secret_settings,
+        ):
+            return (
+                init_settings,
+                kivy_settings_source,
+                env_settings,
+                file_secret_settings,
+            )
+
+
+def kivy_settings_path() -> pathlib.Path:
+    project_root = pathlib.Path(__file__).parent
+    kivy_settings_path = project_root / "ui" / "trapdata.ini"
+    return kivy_settings_path
+
+
+def kivy_settings_source(settings: BaseSettings) -> dict[str, str]:
+    """
+    Load settings set by user in the Kivy GUI app.
+    """
+    path = kivy_settings_path()
+    if not path.exists():
+        return {}
+    else:
+        config = configparser.ConfigParser()
+        config.read(kivy_settings_path())
+        kivy_settings = [config.items(section) for section in config.sections()]
+        kivy_settings_flat = dict(
+            [item for section in kivy_settings for item in section]
+        )
+        null_values = ["None"]
+        kivy_settings_flat = {
+            k: v for k, v in kivy_settings_flat.items() if v not in null_values
+        }
+        return kivy_settings_flat
+
 
 def read_settings(*args, **kwargs):
     try:
         settings = Settings(*args, **kwargs)  # type: ignore
     except ValidationError as e:
+        rprint(
+            f"""
+            Configuration for the CLI is currently set in the following sources, in order of priority:
+             - Kivy settings panel in the GUI app
+             - Directly in the Kivy settings file: {kivy_settings_path()}
+             - ".env" file (see ".env.example"), prefix settings with "AMI_"
+             - The system environment (os.environ)
+            """
+        )
         # @TODO can we make this output more friendly with the rich library?
         rprint(e)
         print(e)
-        rprint(
-            "Configuration for the CLI is currently set in `.env` or environment variables, see `.env.example`"
-        )
         sys.exit(1)
     else:
         return settings
@@ -127,4 +176,4 @@ settings = read_settings()
 
 
 if __name__ == "__main__":
-    print(settings.schema_json(indent=2))
+    rprint(settings)  # .schema_json(indent=2))
