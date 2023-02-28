@@ -266,11 +266,12 @@ class TrapDataApp(App):
     def build_settings(self, settings):
         from trapdata.settings import settings as app_settings
 
-        kivy_settings = []
+        kivy_settings = {}
         for key, options in app_settings.schema()["properties"].items():
             section = options.get("kivy_section", "Other")
             type_ = options.get("kivy_type", "string")
-            kivy_settings.append(
+            kivy_settings.setdefault(section, [])
+            kivy_settings[section].append(
                 {
                     "key": key,
                     "type": type_,
@@ -281,11 +282,12 @@ class TrapDataApp(App):
             )
         print(kivy_settings)
 
-        settings.add_json_panel(
-            "Other",
-            self.config,
-            data=json.dumps(kivy_settings),
-        )
+        for section, items in kivy_settings.items():
+            settings.add_json_panel(
+                section.title(),
+                self.config,
+                data=json.dumps(items),
+            )
         # settings.add_json_panel(
         #     "Paths",
         #     self.config,
