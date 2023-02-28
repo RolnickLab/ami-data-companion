@@ -192,10 +192,18 @@ class TrapDataApp(App):
 
         return sm
 
+    def on_config_change(self, config, section, key, value):
+        if key == "image_base_path":
+            self.image_base_path = value
+        return super().on_config_change(config, section, key, value)
+
     def on_image_base_path(self, *args):
         """
         When a base path is set, create a queue status
         """
+        if self.screen_manager.current == "menu":
+            self.screen_manager.current_screen.image_base_path = self.image_base_path
+
         if self.queue and self.queue.clock:
             Clock.unschedule(self.queue.clock)
         self.queue = Queue(app=self)
@@ -225,8 +233,8 @@ class TrapDataApp(App):
         config.setdefaults(
             "paths",
             {
+                "image_base_path": self.image_base_path,
                 "user_data_path": self.user_data_dir,
-                # "image_base_path": self.user_data_dir,
                 "database_url": default_db_connection_string,
             },
         )
@@ -257,6 +265,13 @@ class TrapDataApp(App):
 
     def build_settings(self, settings):
         path_settings = [
+            {
+                "key": "image_base_path",
+                "type": "path",
+                "title": "Trap images",
+                "desc": "The root folder for a single trap, containing images from all nights to be processed. It is recommended to start with a small sample.",
+                "section": "paths",
+            },
             {
                 "key": "user_data_path",
                 "type": "path",

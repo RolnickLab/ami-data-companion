@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     database_url: Union[SqliteDsn, PostgresDsn]
     user_data_path: pathlib.Path
     # local_weights_path: pathlib.Path
+    image_base_path: pathlib.Path
     localization_model: Optional[ml.models.ObjectDetectorChoice]
     binary_classification_model: Optional[ml.models.BinaryClassifierChoice]
     species_classification_model: Optional[ml.models.SpeciesClassifierChoice]
@@ -45,6 +46,12 @@ class Settings(BaseSettings):
         extra = "ignore"
 
         fields = {
+            "image_base_path": {
+                "title": "Trap images",
+                "description": "The root folder containing images from all nights that will be processed. It is recommended to start with a small sample.",
+                "kivy_type": "path",
+                "kivy_section": "paths",
+            },
             "database_url": {
                 "title": "Database connection string",
                 "description": "Defaults to a local SQLite database that will automatically be created. Supports PostgreSQL.",
