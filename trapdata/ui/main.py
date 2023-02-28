@@ -264,124 +264,43 @@ class TrapDataApp(App):
         # config.write()
 
     def build_settings(self, settings):
-        path_settings = [
-            {
-                "key": "image_base_path",
-                "type": "path",
-                "title": "Trap images",
-                "desc": "The root folder for a single trap, containing images from all nights to be processed. It is recommended to start with a small sample.",
-                "section": "paths",
-            },
-            {
-                "key": "user_data_path",
-                "type": "path",
-                "title": "Local directory for models, thumbnails & reports",
-                "desc": "Model weights are between 100-200Mb and will be downloaded the first time a model is used.",
-                "section": "paths",
-            },
-            {
-                "key": "database_url",
-                "type": "string",
-                "title": "Database connection string",
-                "desc": "Defaults to a local SQLite database that will automatically be created. Supports PostgreSQL.",
-                "section": "paths",
-            },
-        ]
-        model_settings = [
-            {
-                "key": "localization_model",
-                "type": "options",
-                "title": "Localization model",
-                "desc": "Model & settings to use for object detection in original images from camera trap.",
-                "options": list(ml.models.object_detectors.keys()),
-                "section": "models",
-            },
-            {
-                "key": "binary_classification_model",
-                "type": "options",
-                "title": "Binary classification model",
-                "desc": "Model & settings to use for moth / non-moth classification of cropped images after object detection.",
-                "options": list(ml.models.binary_classifiers.keys()),
-                "section": "models",
-            },
-            {
-                "key": "taxon_classification_model",
-                "type": "options",
-                "title": "Species classification model",
-                "desc": "Model & settings to use for fine-grained species or taxon-level classification of cropped images after moth/non-moth detection.",
-                "options": list(ml.models.species_classifiers.keys()),
-                "section": "models",
-            },
-            {
-                "key": "tracking_algorithm",
-                "type": "options",
-                "title": "Occurrence tracking algorithm (de-duplication)",
-                "desc": "Method of identifying and tracking the same individual moth across multiple images.",
-                "options": [],
-                "section": "models",
-            },
-            {
-                "key": "classification_threshold",
-                "type": "numeric",
-                "title": "Confidence threshold for species classification",
-                "desc": "Only consider species-level identifications that have a confidence greater or equal to this value. Valid range: 0.0-1.0",
-                "section": "models",
-            },
-        ]
+        from trapdata.settings import settings as app_settings
 
-        performance_settings = [
-            {
-                "key": "use_gpu",
-                "type": "bool",
-                "title": "Use GPU if available",
-                "section": "performance",
-            },
-            {
-                "key": "localization_batch_size",
-                "type": "numeric",
-                "title": "Localization batch size",
-                "desc": (
-                    "Number of images to process per-batch during localization. "
-                    "These are large images (e.g. 4096x2160px), smaller batch sizes are appropriate (1-10). "
-                    "Reduce this if you run out of memory."
-                ),
-                "section": "performance",
-            },
-            {
-                "key": "classification_batch_size",
-                "type": "numeric",
-                "title": "Classification batch size",
-                "desc": (
-                    "Number of images to process per-batch during classification. "
-                    "These are small images (e.g. 50x100px), larger batch sizes are appropriate (10-200). "
-                    "Reduce this if you run out of memory."
-                ),
-                "section": "performance",
-            },
-            {
-                "key": "num_workers",
-                "type": "numeric",
-                "title": "Number of workers",
-                "desc": "Number of parallel workers for the PyTorch dataloader. See https://pytorch.org/docs/stable/data.html",
-                "section": "performance",
-            },
-        ]
+        kivy_settings = []
+        for key, options in app_settings.schema()["properties"].items():
+            section = options.get("kivy_section", "Other")
+            type_ = options.get("kivy_type", "string")
+            kivy_settings.append(
+                {
+                    "key": key,
+                    "type": type_,
+                    "title": options["title"],
+                    "desc": options["description"],
+                    "section": section,
+                }
+            )
+        print(kivy_settings)
 
         settings.add_json_panel(
-            "Paths",
+            "Other",
             self.config,
-            data=json.dumps(path_settings),
+            data=json.dumps(kivy_settings),
         )
-        settings.add_json_panel(
-            "Model selection",
-            self.config,
-            data=json.dumps(model_settings),
-        )
-        settings.add_json_panel(
-            "Performance settings",
-            self.config,
-            data=json.dumps(performance_settings),
-        )
+        # settings.add_json_panel(
+        #     "Paths",
+        #     self.config,
+        #     data=json.dumps(path_settings),
+        # )
+        # settings.add_json_panel(
+        #     "Model selection",
+        #     self.config,
+        #     data=json.dumps(model_settings),
+        # )
+        # settings.add_json_panel(
+        #     "Performance settings",
+        #     self.config,
+        #     data=json.dumps(performance_settings),
+        # )
 
     def export_events(self):
         """
