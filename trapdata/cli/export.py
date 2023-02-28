@@ -69,7 +69,7 @@ def detections(
         settings.database_url,
         limit=limit,
         offset=offset,
-        deployment_path=settings.image_base_path,
+        image_base_path=settings.image_base_path,
     )
     logger.info(f"Preparing to export {len(objects)} records as {format}")
     df = pd.DataFrame([obj.report_data() for obj in objects])

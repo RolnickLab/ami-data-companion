@@ -215,7 +215,7 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
 
 
 def get_detected_objects(
-    db_path, deployment_path: FilePath, monitoring_session=None, limit=None, offset=0
+    db_path, image_base_path: FilePath, monitoring_session=None, limit=None, offset=0
 ):
     query_kwargs = {}
 
@@ -226,7 +226,7 @@ def get_detected_objects(
         return (
             sesh.query(DetectedObject)
             .filter_by(**query_kwargs)
-            .filter(MonitoringSession.base_directory == str(deployment_path))
+            .filter(MonitoringSession.base_directory == str(image_base_path))
             .join(
                 MonitoringSession,
                 MonitoringSession.id == DetectedObject.monitoring_session_id,

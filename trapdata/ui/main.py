@@ -429,7 +429,7 @@ class TrapDataApp(App):
         objects = list(
             detected_objects
             or get_detected_objects(
-                db_path=app.db_path, deployment_path=app.image_base_path
+                db_path=app.db_path, image_base_path=app.image_base_path
             )
         )
         timestamp = int(time.time())

@@ -44,7 +44,7 @@ class InferenceBaseClass:
     """
 
     db_path: str
-    deployment_path: FilePath
+    image_base_path: FilePath
     name = "Unknown Inference Model"
     description = str()
     model_type = None
