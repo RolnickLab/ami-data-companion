@@ -9,6 +9,7 @@ from functools import partial
 # import multiprocessing
 import threading
 from sqlalchemy import orm
+from rich import print
 
 import kivy
 from kivy.app import App
@@ -205,6 +206,7 @@ class TrapDataApp(App):
         The Settings class reads the Kivy settings file.
         """
         self.app_settings = Settings(_env_file=None)  # noqa
+        print(self.app_settings)
 
     def on_config_change(self, config, section, key, value):
         if key == "image_base_path":
@@ -280,19 +282,25 @@ class TrapDataApp(App):
 
     def build_settings(self, settings):
         kivy_settings = {}
-        for key, options in Settings.schema()["properties"].items():
+        properties = Settings.schema()["properties"]  # Main list of settings
+        definitions = Settings.schema()["definitions"]  # Enum choices for drop-downs
+        for key, options in properties.items():
             section = options.get("kivy_section", "Other")
             type_ = options.get("kivy_type", "string")
             kivy_settings.setdefault(section, [])
-            kivy_settings[section].append(
-                {
-                    "key": key,
-                    "type": type_,
-                    "title": options["title"],
-                    "desc": options["description"],
-                    "section": section,
-                }
-            )
+            setting = {
+                "key": key,
+                "type": type_,
+                "title": options["title"],
+                "desc": options["description"],
+                "section": section,
+            }
+            # @TODO the following seems sketchy, is there a parser for this format? (OpenAPI?)
+            if type_ == "options" and "allOf" in options:
+                choice_type = options["allOf"][0]["$ref"].split("/")[-1]
+                choices = definitions[choice_type]["enum"]
+                setting["options"] = choices
+            kivy_settings[section].append(setting)
 
         for section, items in kivy_settings.items():
             settings.add_json_panel(
