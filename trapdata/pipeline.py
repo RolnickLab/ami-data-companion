@@ -72,6 +72,9 @@ def start_pipeline(
         feature_extractor.run()
         logger.info("Feature extraction complete")
 
+    # @TODO this should only generate tracks with cnn_features for all detections
+    # in a monitoring session. Consider creating or updating a QueueManager
+    # instead of the code below.
     Session = get_session_class(db_path)
     with Session() as session:
         events = ml.models.tracking.get_events_that_need_tracks(
