@@ -1,22 +1,20 @@
 import datetime
-from typing import Type, Optional, Iterable, List
 
 import typer
 from rich import print
-import pandas as pd
 from sqlalchemy import select
 
 from trapdata.db.base import get_session_class
 from trapdata.db.models.detections import get_unique_species_by_track
-from trapdata.db.models.events import (
-    MonitoringSession,
-    get_monitoring_session_by_date,
-    get_monitoring_sessions_from_db,
-)
+from trapdata.db.models import MonitoringSession
 from trapdata.settings import settings
-from trapdata import logger
 
 cli = typer.Typer()
+
+
+@cli.command()
+def nothing():
+    print("It works!")
 
 
 @cli.command()
