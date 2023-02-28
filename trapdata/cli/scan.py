@@ -10,7 +10,7 @@ import pandas as pd
 
 from trapdata.db.models.detections import get_detected_objects
 from trapdata.db.models.events import get_monitoring_sessions_from_db
-from trapdata.settings import settings
+from trapdata.cli import settings
 from trapdata import logger
 
 cli = typer.Typer()

@@ -1,5 +1,5 @@
-# @TODO use this settings module in Kivy
 import sys
+from functools import lru_cache
 from typing import Union, Optional, Any
 import configparser
 
@@ -11,6 +11,7 @@ from pydantic import (
     FileUrl,
     PostgresDsn,
     ValidationError,
+    validator,
 )
 from rich import print as rprint
 
@@ -29,15 +30,24 @@ class SqliteDsn(FileUrl):
 class Settings(BaseSettings):
     database_url: Union[SqliteDsn, PostgresDsn]
     user_data_path: pathlib.Path
-    # local_weights_path: pathlib.Path
     image_base_path: pathlib.Path
     localization_model: Optional[ml.models.ObjectDetectorChoice]
     binary_classification_model: Optional[ml.models.BinaryClassifierChoice]
-    species_classification_model: Optional[ml.models.SpeciesClassifierChoice]
+    taxon_classification_model: Optional[ml.models.SpeciesClassifierChoice]
     tracking_algorithm: Optional[ml.models.TrackingAlgorithmChoice]
     localization_batch_size: int = Field(2)
     classification_batch_size: int = Field(20)
     num_workers: int = Field(1)
+
+    @validator("image_base_path", "user_data_path")
+    def validate_path(cls, v):
+        """
+        Expand relative paths into a normalized path.
+
+        This is important because the `image_base_path` is currently
+        stored in the database for objects and must be an exact match.
+        """
+        return pathlib.Path(v).resolve()
 
     class Config:
         env_file = ".env"
@@ -76,14 +86,14 @@ class Settings(BaseSettings):
                 "kivy_type": "options",
                 "kivy_section": "models",
             },
-            "species_classification_model": {
+            "taxon_classification_model": {
                 "title": "Species classification model",
                 "description": "Model & settings to use for fine-grained species or taxon-level classification of cropped images after moth/non-moth detection.",
                 "kivy_type": "options",
                 "kivy_section": "models",
             },
             "tracking_algorithm": {
-                "title": "Occurence tracking algorithm (de-duplication)",
+                "title": "Occurrence tracking algorithm (de-duplication)",
                 "description": "Method of identifying and tracking the same individual moth across multiple images.",
                 "kivy_type": "options",
                 "kivy_section": "models",
@@ -125,8 +135,8 @@ class Settings(BaseSettings):
         ):
             return (
                 init_settings,
-                kivy_settings_source,
                 env_settings,
+                kivy_settings_source,
                 file_secret_settings,
             )
 
@@ -158,29 +168,25 @@ def kivy_settings_source(settings: BaseSettings) -> dict[str, str]:
         return kivy_settings_flat
 
 
+cli_help_message = f"""
+    Configuration for the CLI is currently set in the following sources, in order of priority:
+        - The system environment (os.environ)
+        - ".env" file (see ".env.example"), prefix settings with "AMI_"
+        - Kivy settings panel in the GUI app
+        - Directly in the Kivy settings file: {kivy_settings_path()}
+    """
+
+
+@lru_cache
 def read_settings(*args, **kwargs):
     try:
-        settings = Settings(*args, **kwargs)  # type: ignore
+        return Settings(*args, **kwargs)
     except ValidationError as e:
-        rprint(
-            f"""
-            Configuration for the CLI is currently set in the following sources, in order of priority:
-             - Kivy settings panel in the GUI app
-             - Directly in the Kivy settings file: {kivy_settings_path()}
-             - ".env" file (see ".env.example"), prefix settings with "AMI_"
-             - The system environment (os.environ)
-            """
-        )
-        # @TODO can we make this output more friendly with the rich library?
+        # @TODO the validation errors could be printed in a more helpful way:
+        rprint(cli_help_message)
         rprint(e)
-        print(e)
         sys.exit(1)
-    else:
-        return settings
-
-
-settings = read_settings()
 
 
 if __name__ == "__main__":
-    rprint(settings)  # .schema_json(indent=2))
+    rprint(read_settings())  # .schema_json(indent=2))

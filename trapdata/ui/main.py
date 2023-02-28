@@ -25,6 +25,7 @@ from kivy.properties import (
     BooleanProperty,
 )
 
+from trapdata.settings import Settings
 from trapdata import logger
 from trapdata import ml
 from trapdata.db.models.events import (
@@ -264,10 +265,8 @@ class TrapDataApp(App):
         # config.write()
 
     def build_settings(self, settings):
-        from trapdata.settings import settings as app_settings
-
         kivy_settings = {}
-        for key, options in app_settings.schema()["properties"].items():
+        for key, options in Settings.schema()["properties"].items():
             section = options.get("kivy_section", "Other")
             type_ = options.get("kivy_type", "string")
             kivy_settings.setdefault(section, [])
@@ -280,7 +279,6 @@ class TrapDataApp(App):
                     "section": section,
                 }
             )
-        print(kivy_settings)
 
         for section, items in kivy_settings.items():
             settings.add_json_panel(
@@ -288,21 +286,7 @@ class TrapDataApp(App):
                 self.config,
                 data=json.dumps(items),
             )
-        # settings.add_json_panel(
-        #     "Paths",
-        #     self.config,
-        #     data=json.dumps(path_settings),
-        # )
-        # settings.add_json_panel(
-        #     "Model selection",
-        #     self.config,
-        #     data=json.dumps(model_settings),
-        # )
-        # settings.add_json_panel(
-        #     "Performance settings",
-        #     self.config,
-        #     data=json.dumps(performance_settings),
-        # )
+        logger.info(f"Kivy settings file: {self.config.filename}")
 
     def export_events(self):
         """

@@ -60,6 +60,7 @@ def choose_directory(use_saved: bool = True, starting_path: Optional[str] = None
             selected_dir = selection[0]
             app.config.set("paths", "image_base_path", selected_dir)
             app.config.write()
+            app.destroy_settings()
 
     return selected_dir
 
