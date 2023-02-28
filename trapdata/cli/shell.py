@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from sqlalchemy import select
 
 from trapdata.db.base import get_session_class
-from trapdata.settings import settings
+from trapdata.cli import settings
 from trapdata.db.models import *
 
 cli = typer.Typer()
