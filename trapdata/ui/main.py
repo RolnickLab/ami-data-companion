@@ -151,6 +151,7 @@ class TrapDataApp(App):
     image_base_path = StringProperty(allownone=True)
     screen_manager = ObjectProperty()
     use_kivy_settings = False
+    app_settings = ObjectProperty()
 
     def on_stop(self):
         # The Kivy event loop is about to stop, set a stop signal;
@@ -191,11 +192,24 @@ class TrapDataApp(App):
         sm.add_widget(QueueScreen(name="queue"))
         self.screen_manager = sm
 
+        self.refresh_app_settings()
+
         return sm
+
+    def refresh_app_settings(self):
+        """
+        Create a Pydantic BaseSettings instance for accessing
+        the app settings in a standardized way whether functions are called
+        from the GUI, from the CLI or another API.
+
+        The Settings class reads the Kivy settings file.
+        """
+        self.app_settings = Settings(_env_file=None)  # noqa
 
     def on_config_change(self, config, section, key, value):
         if key == "image_base_path":
             self.image_base_path = value
+        self.refresh_app_settings()
         return super().on_config_change(config, section, key, value)
 
     def on_image_base_path(self, *args):
