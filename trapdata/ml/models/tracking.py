@@ -18,7 +18,8 @@ from trapdata import constants
 from trapdata.common.types import BoundingBox, FilePath
 from trapdata.ml.utils import get_device
 from trapdata.ml.models.classification import (
-    QuebecVermontMothSpeciesClassifierMixedResolution,
+    MothNonMothClassifier,
+    QuebecVermontMothSpeciesClassifierLowResolution,
     ClassificationIterableDatabaseDataset,
 )
 from trapdata.db.models.queue import UntrackedObjectsQueue, ObjectsWithoutFeaturesQueue
@@ -427,15 +428,14 @@ class UntrackedObjectsIterableDatabaseDataset(torch.utils.data.IterableDataset):
         pass
 
 
-# class FeatureExtractor(MothNonMothClassifier):
-class FeatureExtractor(QuebecVermontMothSpeciesClassifierMixedResolution):
+class FeatureExtractor(InferenceBaseClass):
     name = "Default Feature Extractor"
     stage = 4
     type = "feature_extractor"
     input_size = 300
 
     def get_queue(self):
-        return ObjectsWithoutFeaturesQueue(self.db_path, self.deployment_path)
+        return ObjectsWithoutFeaturesQueue(self.db_path, self.image_base_path)
 
     def get_dataset(self):
         dataset = ClassificationIterableDatabaseDataset(
@@ -479,6 +479,16 @@ class FeatureExtractor(QuebecVermontMothSpeciesClassifierMixedResolution):
             for features in batch_output
         ]
         save_classified_objects(self.db_path, object_ids, data)
+
+
+class QuebecVermontFeatureExtractor(
+    FeatureExtractor, QuebecVermontMothSpeciesClassifierLowResolution
+):
+    name = "Features from Quebec/Vermont species model"
+
+
+class MothNonMothFeatureExtractor(FeatureExtractor, MothNonMothClassifier):
+    name = "Features from general Moth/Non-Moth model"
 
 
 def make_sequence_id(date: datetime.date, obj_id: int):
@@ -609,6 +619,12 @@ def compare_objects(
     img_shape = PIL.Image.open(image_current.absolute_path).size
 
     for obj_current in objects_current:
+        if not obj_current.cnn_features:
+            logger.warn(
+                f"Object is missing CNN features, can't determine track for object {obj_current.id}"
+            )
+            break
+
         if skip_existing and obj_current.sequence_id:
             logger.debug(
                 f"Skipping obj {obj_current.id}, already assigned to sequence {obj_current.sequence_id} as frame {obj_current.sequence_frame}"
@@ -618,6 +634,12 @@ def compare_objects(
         logger.debug(f"Comparing obj {obj_current.id} to all objects in previous frame")
         costs = []
         for obj_previous in objects_previous:
+            if not obj_previous.cnn_features:
+                logger.warn(
+                    f"An object in the previous frame is missing features, can't determine track for object {obj_current.id}"
+                )
+                break
+
             final_cost = total_cost(
                 obj_current.cnn_features,
                 obj_previous.cnn_features,
@@ -659,7 +681,7 @@ def compare_objects(
     # Check all objects
     # If current object was not assigned to a sequence, create one for it by itself
     for obj_current in objects_current:
-        if not obj_current.sequence_id:
+        if obj_current.cnn_features and not obj_current.sequence_id:
             sequence_id = assign_solo_sequence(obj_current, session=session)
 
     if commit:

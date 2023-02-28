@@ -9,6 +9,7 @@ from functools import partial
 # import multiprocessing
 import threading
 from sqlalchemy import orm
+from rich import print
 
 import kivy
 from kivy.app import App
@@ -25,6 +26,7 @@ from kivy.properties import (
     BooleanProperty,
 )
 
+from trapdata.settings import Settings
 from trapdata import logger
 from trapdata import ml
 from trapdata.db.models.events import (
@@ -97,7 +99,7 @@ class Queue(Label):
                 target=partial(
                     start_pipeline,
                     db_path=self.app.db_path,
-                    deployment_path=self.app.image_base_path,
+                    image_base_path=self.app.image_base_path,
                     config=self.app.config,
                     single=single,
                 ),
@@ -140,7 +142,7 @@ class Queue(Label):
 
     def clear(self):
         self.stop()
-        clear_all_queues(self.app.db_path)
+        clear_all_queues(self.app.db_path, self.app.image_base_path)
 
 
 class TrapDataApp(App):
@@ -150,6 +152,7 @@ class TrapDataApp(App):
     image_base_path = StringProperty(allownone=True)
     screen_manager = ObjectProperty()
     use_kivy_settings = False
+    app_settings = ObjectProperty()
 
     def on_stop(self):
         # The Kivy event loop is about to stop, set a stop signal;
@@ -192,12 +195,34 @@ class TrapDataApp(App):
         sm.add_widget(QueueScreen(name="queue"))
         self.screen_manager = sm
 
+        self.refresh_app_settings()
+
         return sm
+
+    def refresh_app_settings(self):
+        """
+        Create a Pydantic BaseSettings instance for accessing
+        the app settings in a standardized way whether functions are called
+        from the GUI, from the CLI or another API.
+
+        The Settings class reads the Kivy settings file.
+        """
+        self.app_settings = Settings(_env_file=None)  # noqa
+        print(self.app_settings)
+
+    def on_config_change(self, config, section, key, value):
+        if key == "image_base_path":
+            self.image_base_path = value
+        self.refresh_app_settings()
+        return super().on_config_change(config, section, key, value)
 
     def on_image_base_path(self, *args):
         """
         When a base path is set, create a queue status
         """
+        if self.screen_manager.current == "menu":
+            self.screen_manager.current_screen.image_base_path = self.image_base_path
+
         if self.queue and self.queue.clock:
             Clock.unschedule(self.queue.clock)
         self.queue = Queue(app=self)
@@ -227,8 +252,8 @@ class TrapDataApp(App):
         config.setdefaults(
             "paths",
             {
+                "image_base_path": self.image_base_path,
                 "user_data_path": self.user_data_dir,
-                # "image_base_path": self.user_data_dir,
                 "database_url": default_db_connection_string,
             },
         )
@@ -239,10 +264,10 @@ class TrapDataApp(App):
                 "binary_classification_model": list(
                     ml.models.binary_classifiers.keys()
                 )[0],
-                "taxon_classification_model": list(
+                "species_classification_model": list(
                     ml.models.species_classifiers.keys()
                 )[0],
-                "tracking_algorithm": None,
+                "feature_extractor": list(ml.models.feature_extractors.keys())[0],
                 "classification_threshold": 0.5,
             },
         )
@@ -258,117 +283,35 @@ class TrapDataApp(App):
         # config.write()
 
     def build_settings(self, settings):
-        path_settings = [
-            {
-                "key": "user_data_path",
-                "type": "path",
-                "title": "Local directory for models, thumbnails & reports",
-                "desc": "Model weights are between 100-200Mb and will be downloaded the first time a model is used.",
-                "section": "paths",
-            },
-            {
-                "key": "database_url",
-                "type": "string",
-                "title": "Database connection string",
-                "desc": "Defaults to a local SQLite database that will automatically be created. Supports PostgreSQL.",
-                "section": "paths",
-            },
-        ]
-        model_settings = [
-            {
-                "key": "localization_model",
-                "type": "options",
-                "title": "Localization model",
-                "desc": "Model & settings to use for object detection in original images from camera trap.",
-                "options": list(ml.models.object_detectors.keys()),
-                "section": "models",
-            },
-            {
-                "key": "binary_classification_model",
-                "type": "options",
-                "title": "Binary classification model",
-                "desc": "Model & settings to use for moth / non-moth classification of cropped images after object detection.",
-                "options": list(ml.models.binary_classifiers.keys()),
-                "section": "models",
-            },
-            {
-                "key": "taxon_classification_model",
-                "type": "options",
-                "title": "Species classification model",
-                "desc": "Model & settings to use for fine-grained species or taxon-level classification of cropped images after moth/non-moth detection.",
-                "options": list(ml.models.species_classifiers.keys()),
-                "section": "models",
-            },
-            {
-                "key": "tracking_algorithm",
-                "type": "options",
-                "title": "Occurrence tracking algorithm (de-duplication)",
-                "desc": "Method of identifying and tracking the same individual moth across multiple images.",
-                "options": [],
-                "section": "models",
-            },
-            {
-                "key": "classification_threshold",
-                "type": "numeric",
-                "title": "Confidence threshold for species classification",
-                "desc": "Only consider species-level identifications that have a confidence greater or equal to this value. Valid range: 0.0-1.0",
-                "section": "models",
-            },
-        ]
+        kivy_settings = {}
+        properties = Settings.schema()["properties"]  # Main list of settings
+        definitions = Settings.schema()["definitions"]  # Enum choices for drop-downs
+        for key, options in properties.items():
+            section = options.get("kivy_section", "Other")
+            type_ = options.get("kivy_type", "string")
+            kivy_settings.setdefault(section, [])
+            setting = {
+                "key": key,
+                "type": type_,
+                "title": options["title"],
+                "desc": options["description"],
+                "section": section,
+            }
+            # @TODO the following seems sketchy, is there a parser for this format? (OpenAPI?)
+            if type_ == "options" and "allOf" in options:
+                choice_type = options["allOf"][0]["$ref"].split("/")[-1]
+                choices = definitions[choice_type]["enum"]
+                setting["options"] = choices
+            kivy_settings[section].append(setting)
 
-        performance_settings = [
-            {
-                "key": "use_gpu",
-                "type": "bool",
-                "title": "Use GPU if available",
-                "section": "performance",
-            },
-            {
-                "key": "localization_batch_size",
-                "type": "numeric",
-                "title": "Localization batch size",
-                "desc": (
-                    "Number of images to process per-batch during localization. "
-                    "These are large images (e.g. 4096x2160px), smaller batch sizes are appropriate (1-10). "
-                    "Reduce this if you run out of memory."
-                ),
-                "section": "performance",
-            },
-            {
-                "key": "classification_batch_size",
-                "type": "numeric",
-                "title": "Classification batch size",
-                "desc": (
-                    "Number of images to process per-batch during classification. "
-                    "These are small images (e.g. 50x100px), larger batch sizes are appropriate (10-200). "
-                    "Reduce this if you run out of memory."
-                ),
-                "section": "performance",
-            },
-            {
-                "key": "num_workers",
-                "type": "numeric",
-                "title": "Number of workers",
-                "desc": "Number of parallel workers for the PyTorch dataloader. See https://pytorch.org/docs/stable/data.html",
-                "section": "performance",
-            },
-        ]
-
-        settings.add_json_panel(
-            "Paths",
-            self.config,
-            data=json.dumps(path_settings),
-        )
-        settings.add_json_panel(
-            "Model selection",
-            self.config,
-            data=json.dumps(model_settings),
-        )
-        settings.add_json_panel(
-            "Performance settings",
-            self.config,
-            data=json.dumps(performance_settings),
-        )
+        for section, items in kivy_settings.items():
+            print(section, items)
+            settings.add_json_panel(
+                section.title(),
+                self.config,
+                data=json.dumps(items, default=str),
+            )
+        logger.info(f"Kivy settings file: {self.config.filename}")
 
     def export_events(self):
         """
@@ -416,7 +359,7 @@ class TrapDataApp(App):
         objects = list(
             detected_objects
             or get_detected_objects(
-                db_path=app.db_path, deployment_path=app.image_base_path
+                db_path=app.db_path, image_base_path=app.image_base_path
             )
         )
         timestamp = int(time.time())

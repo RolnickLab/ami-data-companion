@@ -7,7 +7,7 @@ from sqlalchemy import select
 from trapdata.db.base import get_session_class
 from trapdata.db.models.detections import get_unique_species_by_track
 from trapdata.db.models import MonitoringSession
-from trapdata.settings import settings
+from trapdata.cli import settings
 
 cli = typer.Typer()
 

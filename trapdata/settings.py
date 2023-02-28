@@ -1,6 +1,7 @@
-# @TODO use this settings module in Kivy
 import sys
+from functools import lru_cache
 from typing import Union, Optional
+import configparser
 
 import pathlib
 
@@ -10,6 +11,7 @@ from pydantic import (
     FileUrl,
     PostgresDsn,
     ValidationError,
+    validator,
 )
 from rich import print as rprint
 
@@ -28,7 +30,7 @@ class SqliteDsn(FileUrl):
 class Settings(BaseSettings):
     database_url: Union[SqliteDsn, PostgresDsn]
     user_data_path: pathlib.Path
-    # local_weights_path: pathlib.Path
+    image_base_path: pathlib.Path
     localization_model: Optional[ml.models.ObjectDetectorChoice]
     binary_classification_model: Optional[ml.models.BinaryClassifierChoice]
     species_classification_model: Optional[ml.models.SpeciesClassifierChoice]
@@ -37,12 +39,29 @@ class Settings(BaseSettings):
     classification_batch_size: int = Field(20)
     num_workers: int = Field(1)
 
+    @validator("image_base_path", "user_data_path")
+    def validate_path(cls, v):
+        """
+        Expand relative paths into a normalized path.
+
+        This is important because the `image_base_path` is currently
+        stored in the database for objects and must be an exact match.
+        """
+        return pathlib.Path(v).resolve()
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         env_prefix = "ami_"
+        extra = "ignore"
 
         fields = {
+            "image_base_path": {
+                "title": "Trap images",
+                "description": "The root folder containing images from all nights that will be processed. It is recommended to start with a small sample.",
+                "kivy_type": "path",
+                "kivy_section": "paths",
+            },
             "database_url": {
                 "title": "Database connection string",
                 "description": "Defaults to a local SQLite database that will automatically be created. Supports PostgreSQL.",
@@ -113,24 +132,67 @@ class Settings(BaseSettings):
             },
         }
 
+        @classmethod
+        def customise_sources(
+            cls,
+            init_settings,
+            env_settings,
+            file_secret_settings,
+        ):
+            return (
+                init_settings,
+                env_settings,
+                kivy_settings_source,
+                file_secret_settings,
+            )
 
+
+def kivy_settings_path() -> pathlib.Path:
+    project_root = pathlib.Path(__file__).parent
+    kivy_settings_path = project_root / "ui" / "trapdata.ini"
+    return kivy_settings_path
+
+
+def kivy_settings_source(settings: BaseSettings) -> dict[str, str]:
+    """
+    Load settings set by user in the Kivy GUI app.
+    """
+    path = kivy_settings_path()
+    if not path.exists():
+        return {}
+    else:
+        config = configparser.ConfigParser()
+        config.read(kivy_settings_path())
+        kivy_settings = [config.items(section) for section in config.sections()]
+        kivy_settings_flat = dict(
+            [item for section in kivy_settings for item in section]
+        )
+        null_values = ["None"]
+        kivy_settings_flat = {
+            k: v for k, v in kivy_settings_flat.items() if v not in null_values
+        }
+        return kivy_settings_flat
+
+
+cli_help_message = f"""
+    Configuration for the CLI is currently set in the following sources, in order of priority:
+        - The system environment (os.environ)
+        - ".env" file (see ".env.example"), prefix settings with "AMI_"
+        - Kivy settings panel in the GUI app
+        - Directly in the Kivy settings file: {kivy_settings_path()}
+    """
+
+
+@lru_cache
 def read_settings(*args, **kwargs):
     try:
-        settings = Settings(*args, **kwargs)  # type: ignore
+        return Settings(*args, **kwargs)
     except ValidationError as e:
-        # @TODO can we make this output more friendly with the rich library?
+        # @TODO the validation errors could be printed in a more helpful way:
+        rprint(cli_help_message)
         rprint(e)
-        print(e)
-        rprint(
-            "Configuration for the CLI is currently set in `.env` or environment variables, see `.env.example`"
-        )
         sys.exit(1)
-    else:
-        return settings
-
-
-settings = read_settings()
 
 
 if __name__ == "__main__":
-    print(settings.schema_json(indent=2))
+    rprint(read_settings())  # .schema_json(indent=2))

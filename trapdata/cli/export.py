@@ -10,8 +10,9 @@ import pandas as pd
 
 from trapdata.db.models.detections import get_detected_objects
 from trapdata.db.models.events import get_monitoring_sessions_from_db
-from trapdata.settings import settings
 from trapdata import logger
+from trapdata.cli import settings
+
 
 cli = typer.Typer()
 
@@ -65,8 +66,13 @@ def detections(
     """
     Export detected objects from database in the specified format.
     """
-    objects = get_detected_objects(settings.database_url, limit=limit, offset=offset)
-    logger.info(f"Preparing to export {objects.count()} records as {format}")
+    objects = get_detected_objects(
+        settings.database_url,
+        limit=limit,
+        offset=offset,
+        image_base_path=settings.image_base_path,
+    )
+    logger.info(f"Preparing to export {len(objects)} records as {format}")
     df = pd.DataFrame([obj.report_data() for obj in objects])
     return export(df=df, format=format, outfile=outfile)
 
@@ -79,7 +85,9 @@ def events(
     """
     Export a summary of monitoring sessions from database in the specified format.
     """
-    objects = get_monitoring_sessions_from_db(db_path=settings.database_url)
+    objects = get_monitoring_sessions_from_db(
+        db_path=settings.database_url, base_directory=settings.image_base_path
+    )
     df = pd.DataFrame([obj.report_data() for obj in objects])
     return export(df=df, format=format, outfile=outfile)
 

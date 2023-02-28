@@ -28,5 +28,8 @@ SpeciesClassifierChoice = Enum(
     {Model.get_key(): Model.name for Model in SpeciesClassifier.__subclasses__()},
 )
 
-feature_extractors = {"Default": FeatureExtractor}
-FeatureExtractorChoice = Enum("TrackingAlgorithm", {"default": FeatureExtractor})
+feature_extractors = {Model.name: Model for Model in FeatureExtractor.__subclasses__()}
+FeatureExtractorChoice = Enum(
+    "TrackingAlgorithm",
+    {Model.get_key(): Model.name for Model in FeatureExtractor.__subclasses__()},
+)

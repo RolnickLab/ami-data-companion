@@ -69,20 +69,20 @@ def test_tracking(db_path, image_base_directory, sample_size, skip_queue):
 
     if torch.cuda.is_available():
         object_detector = MothObjectDetector_FasterRCNN(
-            db_path=db_path, deployment_path=image_base_directory, batch_size=2
+            db_path=db_path, image_base_path=image_base_directory, batch_size=2
         )
     else:
         object_detector = GenericObjectDetector_FasterRCNN_MobileNet(
-            db_path=db_path, deployment_path=image_base_directory, batch_size=2
+            db_path=db_path, image_base_path=image_base_directory, batch_size=2
         )
     moth_nonmoth_classifier = MothNonMothClassifier(
-        db_path=db_path, deployment_path=image_base_directory, batch_size=300
+        db_path=db_path, image_base_path=image_base_directory, batch_size=300
     )
     species_classifier = UKDenmarkMothSpeciesClassifier(
-        db_path=db_path, deployment_path=image_base_directory, batch_size=300
+        db_path=db_path, image_base_path=image_base_directory, batch_size=300
     )
     feature_extractor = FeatureExtractor(
-        db_path=db_path, deployment_path=image_base_directory, batch_size=50
+        db_path=db_path, image_base_path=image_base_directory, batch_size=50
     )
 
     check_db(db_path, quiet=False)

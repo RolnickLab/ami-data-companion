@@ -20,7 +20,7 @@ from trapdata.ml.models.tracking import (
     FeatureExtractor,
 )
 from trapdata.ml.utils import get_device
-from trapdata.settings import settings
+from trapdata.cli import settings
 from trapdata import logger
 
 cli = typer.Typer()
@@ -51,6 +51,7 @@ def run(event_dates: List[datetime.datetime]):
     feature_extrator = FeatureExtractor(
         db_path=settings.database_url,
         user_data_path=settings.user_data_path,
+        image_base_path=settings.image_base_path,
     )
     feature_extrator.run()
 

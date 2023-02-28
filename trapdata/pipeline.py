@@ -8,7 +8,7 @@ from trapdata.common.types import FilePath
 
 def start_pipeline(
     db_path: str,
-    deployment_path: FilePath,
+    image_base_path: FilePath,
     config: dict,
     single: bool = False,
 ):
@@ -20,7 +20,7 @@ def start_pipeline(
     ObjectDetector = ml.models.object_detectors[object_detector_name]
     object_detector = ObjectDetector(
         db_path=db_path,
-        deployment_path=deployment_path,
+        image_base_path=image_base_path,
         user_data_path=user_data_path,
         batch_size=int(config.get("performance", "localization_batch_size")),
         num_workers=num_workers,
@@ -34,7 +34,7 @@ def start_pipeline(
     BinaryClassifier = ml.models.binary_classifiers[binary_classifier_name]
     binary_classifier = BinaryClassifier(
         db_path=db_path,
-        deployment_path=deployment_path,
+        image_base_path=image_base_path,
         user_data_path=user_data_path,
         batch_size=int(config.get("performance", "classification_batch_size")),
         num_workers=num_workers,
@@ -48,7 +48,7 @@ def start_pipeline(
     SpeciesClassifier = ml.models.species_classifiers[species_classifier_name]
     species_classifier = SpeciesClassifier(
         db_path=db_path,
-        deployment_path=deployment_path,
+        image_base_path=image_base_path,
         user_data_path=user_data_path,
         batch_size=int(config.get("performance", "classification_batch_size")),
         num_workers=num_workers,
@@ -58,10 +58,11 @@ def start_pipeline(
         species_classifier.run()
         logger.info("Species classification complete")
 
-    FeatureExtractor = ml.models.tracking.FeatureExtractor
+    feature_extractor_name = config.get("models", "feature_extractor")
+    FeatureExtractor = ml.models.feature_extractors[feature_extractor_name]
     feature_extractor = FeatureExtractor(
         db_path=db_path,
-        deployment_path=deployment_path,
+        image_base_path=image_base_path,
         user_data_path=user_data_path,
         batch_size=int(config.get("performance", "classification_batch_size")),
         num_workers=num_workers,
@@ -74,7 +75,7 @@ def start_pipeline(
     Session = get_session_class(db_path)
     with Session() as session:
         events = ml.models.tracking.get_events_that_need_tracks(
-            base_directory=deployment_path,
+            base_directory=image_base_path,
             session=session,
         )
         for event in events:
@@ -84,7 +85,7 @@ def start_pipeline(
 
         # Debug extra unprocessed objects:
         # from trapdata.ml.models.tracking import UntrackedObjectsQueue
-        # queue = UntrackedObjectsQueue(db_path=db_path, base_directory=deployment_path)
+        # queue = UntrackedObjectsQueue(db_path=db_path, base_directory=image_base_path)
         # queue.add_unprocessed()
         # for obj, previous_objects in queue.pull_n_from_queue(100):
         #     print(len(previous_objects), obj)

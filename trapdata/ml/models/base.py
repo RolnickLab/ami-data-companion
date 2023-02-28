@@ -49,7 +49,7 @@ class InferenceBaseClass:
     """
 
     db_path: str
-    deployment_path: FilePath
+    image_base_path: FilePath
     name = "Unknown Inference Model"
     description = str()
     model_type = None
@@ -70,9 +70,9 @@ class InferenceBaseClass:
     dataset: torch.utils.data.Dataset
     dataloader: torch.utils.data.DataLoader
 
-    def __init__(self, db_path: str, deployment_path: FilePath, **kwargs):
+    def __init__(self, db_path: str, image_base_path: FilePath, **kwargs):
         self.db_path = db_path
-        self.deployment_path = deployment_path
+        self.image_base_path = image_base_path
 
         for k, v in kwargs.items():
             setattr(self, k, v)
@@ -160,7 +160,7 @@ class InferenceBaseClass:
 
         from trapdata.db.models.queue import DetectedObjectQueue
         def get_queue(self):
-            return DetectedObjectQueue(self.db_path, self.deployment_path)
+            return DetectedObjectQueue(self.db_path, self.image_base_path)
         """
         raise NotImplementedError
 

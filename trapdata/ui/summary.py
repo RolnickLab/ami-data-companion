@@ -222,7 +222,7 @@ class SpeciesSummaryScreen(Screen):
             records = list(
                 get_detected_objects(
                     db_path=app.db_path,
-                    deployment_path=app.image_base_path,
+                    image_base_path=app.image_base_path,
                     monitoring_session=self.monitoring_session,
                 )
             )

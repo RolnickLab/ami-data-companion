@@ -11,6 +11,7 @@ import PIL.Image
 
 from trapdata import db
 from trapdata import constants
+from trapdata.common.types import FilePath
 from trapdata.db.models.images import completely_classified
 from trapdata.db import models
 from trapdata.common.logs import logger
@@ -346,7 +347,7 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
 
 
 def get_detected_objects(
-    db_path, deployment_path: str, monitoring_session=None, limit=None, offset=0
+    db_path, image_base_path: FilePath, monitoring_session=None, limit=None, offset=0
 ):
     query_kwargs = {}
 
@@ -357,7 +358,7 @@ def get_detected_objects(
         return (
             sesh.query(DetectedObject)
             .filter_by(**query_kwargs)
-            .filter(models.MonitoringSession.base_directory == deployment_path)
+            .filter(models.MonitoringSession.base_directory == str(image_base_path))
             .join(
                 models.MonitoringSession,
                 models.MonitoringSession.id == DetectedObject.monitoring_session_id,

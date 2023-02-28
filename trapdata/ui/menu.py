@@ -1,4 +1,5 @@
 import pathlib
+from typing import Optional
 
 import kivy
 from kivy.app import App
@@ -23,7 +24,6 @@ from plyer import filechooser
 from trapdata import logger
 from trapdata import db
 from trapdata import TrapImage
-from trapdata.common import settings
 from trapdata.db.models.queue import add_monitoring_session_to_queue
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 
@@ -34,7 +34,7 @@ kivy.require("2.1.0")
 Builder.load_file(str(pathlib.Path(__file__).parent / "menu.kv"))
 
 
-def choose_directory(cache=True, setting_key="last_root_directory", starting_path=None):
+def choose_directory(use_saved: bool = True, starting_path: Optional[str] = None):
     """
     Prompt the user to select a directory where trap data has been saved.
     The subfolders of this directory should be timestamped directories
@@ -44,30 +44,23 @@ def choose_directory(cache=True, setting_key="last_root_directory", starting_pat
     """
     # @TODO Look for SDCARD / USB Devices first?
 
-    if cache:
-        selected_dir = settings.read_setting(setting_key)
+    app = App.get_running_app()
+    image_base_path = app.config.get("paths", "image_base_path")
+    selected_dir = None
+    if image_base_path and use_saved:
+        selected_dir = image_base_path
+
     else:
-        selected_dir = None
+        selection = filechooser.choose_dir(
+            title="Choose the root directory for your nightly trap data",
+            path=starting_path,
+        )
 
-    if selected_dir:
-        selected_dir = pathlib.Path(selected_dir)
-
-        if selected_dir.is_dir():
-            return selected_dir
-        else:
-            settings.delete_setting(setting_key)
-
-    selection = filechooser.choose_dir(
-        title="Choose the root directory for your nightly trap data",
-        path=starting_path,
-    )
-
-    if selection:
-        selected_dir = selection[0]
-    else:
-        return None
-
-    settings.save_setting(setting_key, selected_dir)
+        if selection:
+            selected_dir = selection[0]
+            app.config.set("paths", "image_base_path", selected_dir)
+            app.config.write()
+            app.destroy_settings()
 
     return selected_dir
 
@@ -209,17 +202,18 @@ class DataMenuScreen(Screen):
         Clock.schedule_once(self.setup, 1)
 
     def setup(self, *args):
-        if not self.image_base_path:
-            self.image_base_path = choose_directory(cache=True)
+        last_directory = self.app.config.get("paths", "image_base_path")
+        if last_directory:
+            self.image_base_path = last_directory
 
     def choose_root_directory(self, *args):
         try:
             self.image_base_path = choose_directory(
-                cache=False, starting_path=self.image_base_path
+                use_saved=False, starting_path=self.image_base_path
             )
         except Exception as e:
             logger.error(f"Failed to choose directory with a starting path: {e}")
-            self.image_base_path = choose_directory(cache=False)
+            self.image_base_path = choose_directory(use_saved=False)
 
     def reload(self):
         """
