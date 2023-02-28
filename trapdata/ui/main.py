@@ -140,7 +140,7 @@ class Queue(Label):
 
     def clear(self):
         self.stop()
-        clear_all_queues(self.app.db_path)
+        clear_all_queues(self.app.db_path, self.app.image_base_path)
 
 
 class TrapDataApp(App):
