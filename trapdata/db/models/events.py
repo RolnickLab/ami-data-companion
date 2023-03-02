@@ -140,7 +140,7 @@ def save_monitoring_session(db_path, base_directory, session):
             sesh.flush()
 
         num_existing_images = (
-            sesh.query(TrapImage).filter_by(monitoring_session_id=ms.id).count()
+            sesh.query(models.TrapImage).filter_by(monitoring_session_id=ms.id).count()
         )
         if session["num_images"] > num_existing_images:
             logger.info(
@@ -163,12 +163,14 @@ def save_monitoring_session(db_path, base_directory, session):
                     "height": image["shape"][1],
                     # file hash?
                 }
-                db_img = sesh.query(TrapImage).filter_by(**img_kwargs).one_or_none()
+                db_img = (
+                    sesh.query(models.TrapImage).filter_by(**img_kwargs).one_or_none()
+                )
                 if db_img:
                     # logger.debug(f"Found existing Image in db: {img}")
                     pass
                 else:
-                    db_img = TrapImage(**img_kwargs)
+                    db_img = models.TrapImage(**img_kwargs)
                     logger.debug(f"Adding new Image to db: {db_img}")
                 ms_images.append(db_img)
             logger.info(f"Bulk saving {len(ms_images)} objects")
@@ -279,7 +281,7 @@ def get_monitoring_session_images(db_path, ms):
     # @TODO this is likely to slow things down. Some monitoring sessions have thousands of images.
     with get_session(db_path) as sesh:
         images = list(
-            sesh.query(TrapImage).filter_by(monitoring_session_id=ms.id).all()
+            sesh.query(models.TrapImage).filter_by(monitoring_session_id=ms.id).all()
         )
     logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")
     return images
@@ -291,9 +293,9 @@ def get_monitoring_session_image_ids(db_path, ms):
     # This could be in the thousands
     with get_session(db_path) as sesh:
         images = list(
-            sesh.query(TrapImage.id)
+            sesh.query(models.TrapImage.id)
             .filter_by(monitoring_session_id=ms.id)
-            .order_by(TrapImage.timestamp)
+            .order_by(models.TrapImage.timestamp)
             .all()
         )
     logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")
