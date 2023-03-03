@@ -26,7 +26,7 @@ from kivy.properties import (
     BooleanProperty,
 )
 
-from trapdata.settings import Settings
+from trapdata.settings import Settings, ValidationError
 from trapdata import logger
 from trapdata import ml
 from trapdata.db.models.events import (
@@ -250,7 +250,7 @@ class TrapDataApp(App):
         config.setdefaults(
             "paths",
             {
-                "image_base_path": self.image_base_path,
+                "image_base_path": "",  # Using None here gets converted into a string
                 "user_data_path": self.user_data_dir,
                 "database_url": default_db_connection_string,
             },
