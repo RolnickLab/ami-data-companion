@@ -7,7 +7,7 @@ from trapdata.cli import settings
 from trapdata.db import models
 from trapdata import logger
 
-cli = typer.Typer()
+cli = typer.Typer(no_args_is_help=True)
 
 
 @cli.command(name="settings")

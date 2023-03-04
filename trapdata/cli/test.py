@@ -4,7 +4,7 @@ from rich import print
 
 from trapdata.tests import test_pipeline
 
-cli = typer.Typer()
+cli = typer.Typer(no_args_is_help=True)
 
 
 @cli.command()
