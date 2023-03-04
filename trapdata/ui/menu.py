@@ -248,21 +248,22 @@ class DataMenuScreen(Screen):
         image_base_path = value
         logger.info("Base directory changed!")
 
-        self.app.image_base_path = str(image_base_path)
+        if image_base_path:
+            self.app.image_base_path = image_base_path
 
-        self.data_ready = False
+            self.data_ready = False
 
-        if image_base_path and self.db_ready():
-            label_text = f"Looking for capture data in \n\n{image_base_path}"
-            self.status_popup = Popup(
-                title="Status",
-                content=Label(text=label_text),
-                size_hint=(None, None),
-                size=("550dp", "200dp"),
-                auto_dismiss=False,
-                on_open=self.get_monitoring_sessions,
-            )
-            self.status_popup.open()
+            if image_base_path and self.db_ready():
+                label_text = f"Looking for capture data in \n\n{image_base_path}"
+                self.status_popup = Popup(
+                    title="Status",
+                    content=Label(text=label_text),
+                    size_hint=(None, None),
+                    size=("550dp", "200dp"),
+                    auto_dismiss=False,
+                    on_open=self.get_monitoring_sessions,
+                )
+                self.status_popup.open()
 
     def on_data_ready(self, *args):
         if self.data_ready:

@@ -28,9 +28,11 @@ class SqliteDsn(FileUrl):
 
 
 class Settings(BaseSettings):
-    database_url: Union[SqliteDsn, PostgresDsn]
-    user_data_path: pathlib.Path
-    image_base_path: pathlib.Path
+    database_url: Union[
+        SqliteDsn, PostgresDsn, None
+    ]  # @TODO Make a subclass where this is required. For now it must accept None for the initial startup
+    user_data_path: Optional[pathlib.Path]
+    image_base_path: Optional[pathlib.Path]
     localization_model: Optional[ml.models.ObjectDetectorChoice]
     binary_classification_model: Optional[ml.models.BinaryClassifierChoice]
     species_classification_model: Optional[ml.models.SpeciesClassifierChoice]
@@ -47,7 +49,10 @@ class Settings(BaseSettings):
         This is important because the `image_base_path` is currently
         stored in the database for objects and must be an exact match.
         """
-        return pathlib.Path(v).resolve()
+        if v:
+            return pathlib.Path(v).resolve()
+        else:
+            return None
 
     class Config:
         env_file = ".env"
