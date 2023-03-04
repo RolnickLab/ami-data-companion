@@ -488,28 +488,34 @@ def get_unique_species_by_track(
 
     rows = []
     for sequence in sequences:
-        examples = session.execute(
+        frames = session.execute(
             sa.select(
                 DetectedObject.image_id.label("source_image_id"),
                 DetectedObject.specific_label.label("label"),
                 DetectedObject.specific_label_score.label("score"),
                 DetectedObject.path.label("cropped_image_path"),
                 DetectedObject.sequence_id,
-            )
-            .where(
+                DetectedObject.timestamp,
+            ).where(
                 (DetectedObject.monitoring_session_id == monitoring_session.id)
                 & (DetectedObject.sequence_id == sequence.sequence_id)
                 & (DetectedObject.specific_label_score == sequence.sequence_best_score)
             )
             # .order_by(sa.func.random())
             .order_by(sa.desc("score"))
-            .limit(3)
         ).all()
         row = dict(sequence._mapping)
-        if examples:
-            row["label"] = examples[0].label
-            row["examples"] = [example._mapping for example in examples]
+        timestamps = [frame.timestamp for frame in frames]
+        start_time = min(timestamps)
+        end_time = max(timestamps)
+        if frames:
+            row["label"] = frames[0].label
+            row["examples"] = [example._mapping for example in frames[:num_examples]]
+            row["start_time"] = start_time
+            row["total_time"] = end_time - start_time
         rows.append(row)
+
+    rows = reversed(sorted(rows, key=lambda row: row["sequence_best_score"]))
     return rows
 
 

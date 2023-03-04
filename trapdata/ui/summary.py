@@ -27,7 +27,7 @@ from trapdata.db.models.detections import (
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "summary.kv"))
 
-NUM_EXAMPLES_PER_ROW = 4
+NUM_EXAMPLES_PER_ROW = 1
 
 
 def load_image_in_playback(monitoring_session: MonitoringSession, image_id: int):
@@ -86,9 +86,6 @@ class SpeciesRow(BoxLayout):
         )
         label.bind(size=label.setter("text_size"))
 
-        self.add_widget(label)
-        self.add_widget(Label(text=str(species["count"]), valign="top"))
-        self.add_widget(Label(text=str(round(species["score"] * 100, 1)), valign="top"))
         for i in range(NUM_EXAMPLES_PER_ROW):
             try:
                 example = species["examples"][i]
@@ -103,6 +100,12 @@ class SpeciesRow(BoxLayout):
                 widget = Label(text="")
 
             self.add_widget(widget)
+
+        self.add_widget(label)
+        self.add_widget(Label(text=str(species["count"]), valign="top"))
+        self.add_widget(Label(text=str(round(species["score"] * 100, 1)), valign="top"))
+        self.add_widget(Label(text=str(species["start_time"]), valign="top"))
+        self.add_widget(Label(text=str(species["total_time"]), valign="top"))
 
 
 class SpeciesListLayout(RecycleView):
@@ -172,6 +175,8 @@ class SpeciesListLayout(RecycleView):
                     "count": item["sequence_frame_count"],
                     "score": item["sequence_best_score"],
                     "examples": item["examples"],
+                    "start_time": item["start_time"],
+                    "total_time": item["total_time"],
                     "image_height": row_height,
                     "monitoring_session": self.monitoring_session,
                 },
@@ -185,7 +190,14 @@ class SpeciesListLayout(RecycleView):
         header_row = [
             {
                 "species": None,
-                "heading": ["Label", "Num Frames", "Score", "Examples"]
+                "heading": [
+                    "Example",
+                    "Label",
+                    "Num Frames",
+                    "Score",
+                    "Arrival",
+                    "Duration",
+                ]
                 + example_placeholders,
                 "height": 50,
             }
