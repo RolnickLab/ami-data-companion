@@ -266,7 +266,7 @@ class TrapDataApp(App):
                     ml.models.species_classifiers.keys()
                 )[0],
                 "tracking_algorithm": None,
-                "classification_threshold": 0.5,
+                "classification_threshold": 0.6,
             },
         )
         config.setdefaults(

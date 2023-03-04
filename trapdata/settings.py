@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     binary_classification_model: Optional[ml.models.BinaryClassifierChoice]
     taxon_classification_model: Optional[ml.models.SpeciesClassifierChoice]
     tracking_algorithm: Optional[ml.models.TrackingAlgorithmChoice]
+    classification_threshold: float = Field(0.6)
     localization_batch_size: int = Field(2)
     classification_batch_size: int = Field(20)
     num_workers: int = Field(1)
@@ -101,6 +102,12 @@ class Settings(BaseSettings):
                 "title": "Occurrence tracking algorithm (de-duplication)",
                 "description": "Method of identifying and tracking the same individual moth across multiple images.",
                 "kivy_type": "options",
+                "kivy_section": "models",
+            },
+            "classification_threshold": {
+                "title": "Classification threshold",
+                "description": "Only show results with a confidence score greater or equal to this value.",
+                "kivy_type": "numeric",
                 "kivy_section": "models",
             },
             "localization_batch_size": {
