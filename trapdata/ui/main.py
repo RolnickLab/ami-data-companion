@@ -268,7 +268,7 @@ class TrapDataApp(App):
                     ml.models.species_classifiers.keys()
                 )[0],
                 "feature_extractor": list(ml.models.feature_extractors.keys())[0],
-                "classification_threshold": 0.5,
+                "classification_threshold": 0.6,
             },
         )
         config.setdefaults(
