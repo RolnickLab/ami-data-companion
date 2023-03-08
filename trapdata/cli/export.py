@@ -14,7 +14,7 @@ from trapdata import logger
 from trapdata.cli import settings
 
 
-cli = typer.Typer()
+cli = typer.Typer(no_args_is_help=True)
 
 
 class ExportFormat(str, enum.Enum):

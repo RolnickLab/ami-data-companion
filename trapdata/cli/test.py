@@ -9,12 +9,20 @@ from trapdata.db.models.detections import get_unique_species_by_track
 from trapdata.db.models import MonitoringSession
 from trapdata.cli import settings
 
-cli = typer.Typer()
+
+from trapdata.tests import test_pipeline
+
+cli = typer.Typer(no_args_is_help=True)
 
 
 @cli.command()
 def nothing():
     print("It works!")
+
+
+@cli.command()
+def pipeline():
+    test_pipeline.run()
 
 
 @cli.command()

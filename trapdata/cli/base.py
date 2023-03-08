@@ -3,7 +3,7 @@ import typer
 from trapdata.cli import export, shell, test, show, tracking
 
 
-cli = typer.Typer()
+cli = typer.Typer(no_args_is_help=True)
 cli.add_typer(export.cli, name="export", help="Export data in various formats")
 cli.add_typer(shell.cli, name="shell", help="Open an interactive shell")
 cli.add_typer(test.cli, name="test", help="Run tests")
