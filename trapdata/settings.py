@@ -2,35 +2,25 @@ import sys
 from functools import lru_cache
 from typing import Union, Optional, Any
 import configparser
-
 import pathlib
 
 from pydantic import (
     BaseSettings,
     Field,
-    FileUrl,
-    PostgresDsn,
     ValidationError,
     validator,
 )
+import sqlalchemy
 from rich import print as rprint
 
 from trapdata import ml
 
 
-class SqliteDsn(FileUrl):
-    allowed_schemes = {
-        "sqlite",
-        "sqlite+pysqlite",
-        "sqlite+aiosqlite",
-        "sqlite+pysqlcipher",
-    }
-
-
 class Settings(BaseSettings):
-    database_url: Union[
-        SqliteDsn, PostgresDsn, None
-    ]  # @TODO Make a subclass where this is required. For now it must accept None for the initial startup
+    # @TODO Make a subclass where this is required. For now it must accept None for the initial startup
+    database_url: Optional[
+        str  # Can't use Pydantic DSN validators if filenames have spaces
+    ] = None
     user_data_path: Optional[pathlib.Path]
     image_base_path: Optional[pathlib.Path]
     localization_model: Optional[ml.models.ObjectDetectorChoice]
@@ -54,6 +44,10 @@ class Settings(BaseSettings):
             return pathlib.Path(v).resolve()
         else:
             return None
+
+    @validator("database_url")
+    def validate_database_dsn(cls, v):
+        return sqlalchemy.engine.url.make_url(v)
 
     class Config:
         env_file = ".env"
