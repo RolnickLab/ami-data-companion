@@ -12,6 +12,7 @@ rich
 pandas
 sqlalchemy>2.0
 sqlalchemy_utils==0.39.0
+alembic==1.10.2
 sentry-sdk
 
 torch==1.13.1
