@@ -133,7 +133,7 @@ class Settings(BaseSettings):
         }
 
         @classmethod
-        def customise_sources(
+        def customise_sources(  # UK spelling
             cls,
             init_settings,
             env_settings,
