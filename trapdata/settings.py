@@ -1,12 +1,11 @@
 import sys
 from functools import lru_cache
-from typing import Union, Optional, Any
+from typing import Optional
 import configparser
 import pathlib
 
 from pydantic import (
     BaseSettings,
-    Field,
     ValidationError,
     validator,
 )
