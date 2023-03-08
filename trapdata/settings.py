@@ -21,16 +21,16 @@ class Settings(BaseSettings):
     database_url: Optional[
         str  # Can't use Pydantic DSN validators if filenames have spaces
     ] = None
-    user_data_path: Optional[pathlib.Path]
-    image_base_path: Optional[pathlib.Path]
-    localization_model: Optional[ml.models.ObjectDetectorChoice]
-    binary_classification_model: Optional[ml.models.BinaryClassifierChoice]
-    taxon_classification_model: Optional[ml.models.SpeciesClassifierChoice]
-    tracking_algorithm: Optional[ml.models.TrackingAlgorithmChoice]
-    classification_threshold: float = Field(0.6)
-    localization_batch_size: int = Field(2)
-    classification_batch_size: int = Field(20)
-    num_workers: int = Field(1)
+    user_data_path: Optional[pathlib.Path] = None
+    image_base_path: Optional[pathlib.Path] = None
+    localization_model: Optional[ml.models.ObjectDetectorChoice] = None
+    binary_classification_model: Optional[ml.models.BinaryClassifierChoice] = None
+    taxon_classification_model: Optional[ml.models.SpeciesClassifierChoice] = None
+    tracking_algorithm: Optional[ml.models.TrackingAlgorithmChoice] = None
+    classification_threshold: float = 0.6
+    localization_batch_size: int = 2
+    classification_batch_size: int = 20
+    num_workers: int = 1
 
     @validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
