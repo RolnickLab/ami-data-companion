@@ -44,7 +44,7 @@ def start_pipeline(
         binary_classifier.run()
         logger.info("Binary classification complete")
 
-    species_classifier_name = config.get("models", "taxon_classification_model")
+    species_classifier_name = config.get("models", "species_classification_model")
     SpeciesClassifier = ml.models.species_classifiers[species_classifier_name]
     species_classifier = SpeciesClassifier(
         db_path=db_path,

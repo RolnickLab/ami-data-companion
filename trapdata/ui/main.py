@@ -305,7 +305,6 @@ class TrapDataApp(App):
             kivy_settings[section].append(setting)
 
         for section, items in kivy_settings.items():
-            print(section, items)
             settings.add_json_panel(
                 section.title(),
                 self.config,

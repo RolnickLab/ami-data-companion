@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     image_base_path: Optional[pathlib.Path] = None
     localization_model: Optional[ml.models.ObjectDetectorChoice] = None
     binary_classification_model: Optional[ml.models.BinaryClassifierChoice] = None
-    taxon_classification_model: Optional[ml.models.SpeciesClassifierChoice] = None
+    species_classification_model: Optional[ml.models.SpeciesClassifierChoice] = None
     feature_extractor: Optional[ml.models.FeatureExtractorChoice]
     classification_threshold: float = 0.6
     localization_batch_size: int = 2
