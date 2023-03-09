@@ -64,7 +64,7 @@ def get_db(db_path, create=False):
 
     # @TODO See this post for a more complete implementation
     # https://pawamoy.github.io/posts/testing-fastapi-ormar-alembic-apps/
-    logger.info("Running any database migrations if necessary")
+    logger.debug("Running any database migrations if necessary")
     alembic.upgrade(alembic_cfg, "head")
 
     return db
