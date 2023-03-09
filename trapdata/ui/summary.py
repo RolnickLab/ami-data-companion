@@ -68,7 +68,7 @@ class SpeciesRow(BoxLayout):
         for value in heading:
             label = Label(
                 text=value,
-                halign="left",
+                halign="center",
                 valign="top",
                 bold=True,
             )
@@ -81,7 +81,7 @@ class SpeciesRow(BoxLayout):
         # print(species)
         label = Label(
             text=species["name"],
-            halign="right",
+            halign="center",
             valign="middle",
         )
         label.bind(size=label.setter("text_size"))
@@ -102,10 +102,22 @@ class SpeciesRow(BoxLayout):
             self.add_widget(widget)
 
         self.add_widget(label)
-        self.add_widget(Label(text=str(species["count"]), valign="top"))
-        self.add_widget(Label(text=str(round(species["score"] * 100, 1)), valign="top"))
-        self.add_widget(Label(text=str(species["start_time"]), valign="top"))
-        self.add_widget(Label(text=str(species["total_time"]), valign="top"))
+        self.add_widget(
+            Label(text=str(species["count"]), valign="middle", halign="center")
+        )
+        self.add_widget(
+            Label(
+                text=str(round(species["score"] * 100, 1)),
+                valign="middle",
+                halign="center",
+            )
+        )
+        self.add_widget(
+            Label(text=str(species["start_time"]), valign="middle", halign="center")
+        )
+        self.add_widget(
+            Label(text=str(species["total_time"]), valign="middle", halign="center")
+        )
 
 
 class SpeciesListLayout(RecycleView):
@@ -193,7 +205,7 @@ class SpeciesListLayout(RecycleView):
                 "heading": [
                     "Example",
                     "Label",
-                    "Num Frames",
+                    "Frames",
                     "Score",
                     "Arrival",
                     "Duration",
