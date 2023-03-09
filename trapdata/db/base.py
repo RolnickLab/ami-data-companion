@@ -50,17 +50,24 @@ def get_db(db_path, create=False, update=False):
 
     alembic_cfg = get_alembic_config(db_path)
 
+    # @TODO this is basically checking if the environment is the local app install
+    # let's make a way to set & check the environment.
+    if db.dialect.name != "sqlite" and (create or update):
+        logger.warn(
+            "Database is something other that sqlite, you must create & update it with the CLI tools."
+        )
+        return db
+
     if create:
         from . import Base
 
         logger.info("Creating database tables if necessary")
-        if db.dialect.name == "sqlite":
-            db_filepath = pathlib.Path(db.url.database)
-            if not db_filepath.exists():
-                logger.info(f"Creating {db_filepath} and parent directories")
-                db_filepath.parent.mkdir(parents=True, exist_ok=True)
-        Base.metadata.create_all(db, checkfirst=True)
-        alembic.stamp(alembic_cfg, "head")
+        db_filepath = pathlib.Path(db.url.database)
+        if not db_filepath.exists():
+            logger.info(f"Creating {db_filepath} and parent directories")
+            db_filepath.parent.mkdir(parents=True, exist_ok=True)
+            Base.metadata.create_all(db, checkfirst=True)
+            alembic.stamp(alembic_cfg, "head")
 
     if update:
         # @TODO See this post for a more complete implementation
@@ -78,7 +85,7 @@ def get_session_class(db_path, **kwargs) -> orm.sessionmaker[orm.Session]:
     Then we don't have to pass around the db_path
     """
     Session = orm.sessionmaker(
-        bind=get_db(db_path),
+        bind=get_db(db_path, create=False, update=False),
         expire_on_commit=False,  # Currently only need this for `pull_n_from_queue`
         autoflush=False,
         autocommit=False,
