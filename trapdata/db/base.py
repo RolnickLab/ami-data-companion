@@ -23,7 +23,7 @@ def get_alembic_config(db_path: str) -> Config:
     return alembic_cfg
 
 
-def get_db(db_path, create=False, update=True):
+def get_db(db_path, create=False, update=False):
     """
     db_path supports any database URL format supported by sqlalchemy
     sqlite_filepath = "~/trapdata.db"
@@ -62,9 +62,9 @@ def get_db(db_path, create=False, update=True):
         Base.metadata.create_all(db, checkfirst=True)
         alembic.stamp(alembic_cfg, "head")
 
-    # @TODO See this post for a more complete implementation
-    # https://pawamoy.github.io/posts/testing-fastapi-ormar-alembic-apps/
     if update:
+        # @TODO See this post for a more complete implementation
+        # https://pawamoy.github.io/posts/testing-fastapi-ormar-alembic-apps/
         logger.debug("Running any database migrations if necessary")
         alembic.upgrade(alembic_cfg, "head")
 
@@ -111,7 +111,7 @@ def get_session(db_path: str, **kwargs) -> Generator[orm.Session, None, None]:
         session.close()
 
 
-def check_db(db_path, create=True, quiet=False):
+def check_db(db_path, create=True, update=True, quiet=False):
     """
     Try opening a database session.
     """
@@ -120,7 +120,7 @@ def check_db(db_path, create=True, quiet=False):
     logger.debug(f"Checking DB {db_path}")
 
     try:
-        get_db(db_path, create=True)
+        get_db(db_path, create=create, update=update)
         with get_session(db_path) as sesh:
             # May have to check each model to detect schema changes
             # @TODO probably a better way to do this!
