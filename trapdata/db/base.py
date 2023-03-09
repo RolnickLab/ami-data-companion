@@ -1,6 +1,7 @@
 import contextlib
 import pathlib
 from typing import Generator
+from rich import print
 
 import sqlalchemy as sa
 import sqlalchemy.exc
@@ -124,9 +125,9 @@ def check_db(db_path, create=True, update=True, quiet=False):
     """
     from trapdata.db.models import __models__
 
-    logger.debug(f"Checking DB {db_path}")
-
+    db_dsn = get_safe_db_path(db_path)
     try:
+        logger.info(f"Checking DB {db_dsn}")
         get_db(db_path, create=create, update=update)
         with get_session(db_path) as sesh:
             # May have to check each model to detect schema changes
@@ -137,8 +138,14 @@ def check_db(db_path, create=True, update=True, quiet=False):
                 logger.debug(
                     f"Found {count} records in table '{ModelClass.__tablename__}'"
                 )
-    except sa.exc.OperationalError as e:
-        logger.error(f"Error opening database session: {e}")
+    except (sqlalchemy.exc.OperationalError, alembic.util.exc.CommandError) as e:
+        msg = f"Error opening database session: {e}"
+        logger.error(msg)
+        if db_dsn.get_dialect().name == "sqlite":
+            # @TODO standardize the way we check for a local environment and sqlite
+            print(
+                f'[b][yellow]Quick fix:[/yellow][/b] rename or delete the local database file: "{str(db_dsn.database)}"'
+            )
         if quiet:
             return False
         else:
