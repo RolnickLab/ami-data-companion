@@ -2,45 +2,34 @@ import sys
 from functools import lru_cache
 from typing import Union, Optional
 import configparser
-
 import pathlib
 
 from pydantic import (
     BaseSettings,
-    Field,
-    FileUrl,
-    PostgresDsn,
     ValidationError,
     validator,
 )
+import sqlalchemy
 from rich import print as rprint
 
 from trapdata import ml
 
 
-class SqliteDsn(FileUrl):
-    allowed_schemes = {
-        "sqlite",
-        "sqlite+pysqlite",
-        "sqlite+aiosqlite",
-        "sqlite+pysqlcipher",
-    }
-
-
 class Settings(BaseSettings):
-    database_url: Union[
-        SqliteDsn, PostgresDsn, None
-    ]  # @TODO Make a subclass where this is required. For now it must accept None for the initial startup
-    user_data_path: Optional[pathlib.Path]
-    image_base_path: Optional[pathlib.Path]
-    localization_model: Optional[ml.models.ObjectDetectorChoice]
-    binary_classification_model: Optional[ml.models.BinaryClassifierChoice]
-    species_classification_model: Optional[ml.models.SpeciesClassifierChoice]
+    # @TODO Make a subclass where this is required. For now it must accept None for the initial startup
+    database_url: Optional[
+        str  # Can't use Pydantic DSN validators if filenames have spaces
+    ] = None
+    user_data_path: Optional[pathlib.Path] = None
+    image_base_path: Optional[pathlib.Path] = None
+    localization_model: Optional[ml.models.ObjectDetectorChoice] = None
+    binary_classification_model: Optional[ml.models.BinaryClassifierChoice] = None
+    taxon_classification_model: Optional[ml.models.SpeciesClassifierChoice] = None
     feature_extractor: Optional[ml.models.FeatureExtractorChoice]
-    classification_threshold: float = Field(0.6)
-    localization_batch_size: int = Field(2)
-    classification_batch_size: int = Field(20)
-    num_workers: int = Field(1)
+    classification_threshold: float = 0.6
+    localization_batch_size: int = 2
+    classification_batch_size: int = 20
+    num_workers: int = 1
 
     @validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
@@ -54,6 +43,10 @@ class Settings(BaseSettings):
             return pathlib.Path(v).resolve()
         else:
             return None
+
+    @validator("database_url")
+    def validate_database_dsn(cls, v):
+        return sqlalchemy.engine.url.make_url(v)
 
     class Config:
         env_file = ".env"
@@ -145,7 +138,7 @@ class Settings(BaseSettings):
         }
 
         @classmethod
-        def customise_sources(
+        def customise_sources(  # UK spelling
             cls,
             init_settings,
             env_settings,
