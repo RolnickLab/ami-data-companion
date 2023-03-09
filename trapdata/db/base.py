@@ -3,14 +3,24 @@ import pathlib
 from typing import Generator
 
 import sqlalchemy as sa
+import sqlalchemy.exc
 from sqlalchemy import orm
+from alembic.config import Config
+from alembic import command as alembic
 
 from trapdata import logger
 
 
-def get_safe_db_path(db):
+def get_safe_db_path(db_path: str):
     # Return filepath or URL of database without credentials
-    return db.path
+    return sa.engine.url.make_url(db_path)
+
+
+def get_alembic_config(db_path: str) -> Config:
+    alembic_cfg = Config()
+    alembic_cfg.set_main_option("script_location", "trapdata.db:migrations")
+    alembic_cfg.set_main_option("sqlalchemy.url", str(db_path))
+    return alembic_cfg
 
 
 def get_db(db_path, create=False):
@@ -38,6 +48,8 @@ def get_db(db_path, create=False):
         },
     )
 
+    alembic_cfg = get_alembic_config(db_path)
+
     if create:
         from . import Base
 
@@ -48,11 +60,17 @@ def get_db(db_path, create=False):
                 logger.info(f"Creating {db_filepath} and parent directories")
                 db_filepath.parent.mkdir(parents=True, exist_ok=True)
         Base.metadata.create_all(db, checkfirst=True)
+        # alembic.stamp(alembic_cfg, "head")
+
+    # @TODO See this post for a more complete implementation
+    # https://pawamoy.github.io/posts/testing-fastapi-ormar-alembic-apps/
+    logger.debug("Running any database migrations if necessary")
+    alembic.upgrade(alembic_cfg, "head")
 
     return db
 
 
-def get_session_class(db_path, **kwargs) -> type[orm.Session]:
+def get_session_class(db_path, **kwargs) -> orm.sessionmaker[orm.Session]:
     """
     Use this to create a pre-configured Session class.
     Attach it to the running app.
