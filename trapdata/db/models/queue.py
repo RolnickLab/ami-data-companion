@@ -384,7 +384,7 @@ class ObjectsWithoutFeaturesQueue(QueueManager):
     name = "Detections without features"
     description = """
     Objects that have been identified as something of interest (e.g. a moth)
-    and need CNN features stored for using to generate tracks & simularity later. 
+    and need CNN features stored for using to generate tracks & similarity later. 
     """
 
     def ids(self) -> sa.ScalarSelect:

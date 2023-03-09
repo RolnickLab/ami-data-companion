@@ -298,7 +298,7 @@ def save_detected_objects(
                     object_data["area_pixels"] = area_pixels
 
                 for k, v in object_data.items():
-                    logger.debug(f"Adding {k}: {v} to detected object {detection.id}")
+                    logger.debug(f"Adding {k} to detected object {detection.id}")
                     setattr(detection, k, v)
 
                 detection.monitoring_session_id = image.monitoring_session_id
@@ -332,7 +332,7 @@ def save_detected_objects(
 
 
 def save_classified_objects(db_path, object_ids, classified_objects_data):
-    # logger.debug(f"Callback was called! {object_ids}, {classified_objects_data}")
+    logger.debug(f"Saving data to classified objects: {object_ids}")
 
     orm_objects = []
     timestamp = datetime.datetime.now()
@@ -346,7 +346,7 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
 
         logger.debug(f"Updating classified object {obj}")
         for k, v in object_data.items():
-            logger.debug(f"Adding {k}: {v} to detected object {obj.id}")
+            logger.debug(f"Adding {k} to detected object {obj.id}")
             setattr(obj, k, v)
 
         orm_objects.append(obj)
