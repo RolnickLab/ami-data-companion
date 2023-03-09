@@ -1,4 +1,5 @@
 import pathlib
+import datetime
 from typing import Optional
 
 import sqlalchemy as sa
@@ -7,6 +8,11 @@ from sqlalchemy_utils import aggregated
 
 from trapdata.db import Base, get_session
 from trapdata import constants
+from trapdata.common.filemanagement import (
+    get_image_dimensions,
+    get_image_filesize,
+    get_image_timestamp,
+)
 
 
 class TrapImage(Base):
@@ -58,6 +64,17 @@ class TrapImage(Base):
             .limit(1)
         ).scalar()
         return img
+
+    def update_source_data(self, session: orm.Session, commit=True):
+        img_path = self.absolute_path
+        self.width, self.height = get_image_dimensions(img_path)
+        self.timestamp = get_image_timestamp(img_path)
+        self.filesize = get_image_filesize(img_path)
+        self.last_read = datetime.datetime.now()
+        session.add(self)
+        if commit:
+            session.flush()
+            session.commit()
 
     # @TODO let's keep the precious detected objects, even if the Monitoring Session or Image is deleted?
     detected_objects = orm.relationship(

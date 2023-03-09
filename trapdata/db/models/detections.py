@@ -227,6 +227,16 @@ class DetectedObject(db.Base):
             # logger.debug(f"No siblings")
             return self
 
+    def update_data_from_source_image(self, session: orm.Session, commit=True):
+        self.timestamp = self.image.timestamp
+        self.source_image_height = self.image.height
+        self.source_image_width = self.image.width
+        self.source_image_previous_frame = self.image.previous_image(session)
+        session.add(self)
+        if commit:
+            session.flush()
+            session.commit()
+
     def report_data(self) -> dict[str, Any]:
         if self.specific_label:
             label = self.specific_label

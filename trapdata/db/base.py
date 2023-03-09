@@ -23,7 +23,7 @@ def get_alembic_config(db_path: str) -> Config:
     return alembic_cfg
 
 
-def get_db(db_path, create=False):
+def get_db(db_path, create=False, update=True):
     """
     db_path supports any database URL format supported by sqlalchemy
     sqlite_filepath = "~/trapdata.db"
@@ -64,8 +64,9 @@ def get_db(db_path, create=False):
 
     # @TODO See this post for a more complete implementation
     # https://pawamoy.github.io/posts/testing-fastapi-ormar-alembic-apps/
-    logger.debug("Running any database migrations if necessary")
-    alembic.upgrade(alembic_cfg, "head")
+    if update:
+        logger.debug("Running any database migrations if necessary")
+        alembic.upgrade(alembic_cfg, "head")
 
     return db
 
@@ -77,7 +78,7 @@ def get_session_class(db_path, **kwargs) -> orm.sessionmaker[orm.Session]:
     Then we don't have to pass around the db_path
     """
     Session = orm.sessionmaker(
-        bind=get_db(db_path),
+        bind=get_db(db_path, create=False, update=False),
         expire_on_commit=False,  # Currently only need this for `pull_n_from_queue`
         autoflush=False,
         autocommit=False,
