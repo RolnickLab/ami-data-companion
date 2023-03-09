@@ -231,7 +231,8 @@ class DetectedObject(db.Base):
         self.timestamp = self.image.timestamp
         self.source_image_height = self.image.height
         self.source_image_width = self.image.width
-        self.source_image_previous_frame = self.image.previous_image(session)
+        previous_frame = self.image.previous_image(session)
+        self.source_image_previous_frame = previous_frame.id if previous_frame else None
         session.add(self)
         if commit:
             session.flush()
