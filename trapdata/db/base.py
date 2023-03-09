@@ -60,7 +60,7 @@ def get_db(db_path, create=False):
                 logger.info(f"Creating {db_filepath} and parent directories")
                 db_filepath.parent.mkdir(parents=True, exist_ok=True)
         Base.metadata.create_all(db, checkfirst=True)
-        # alembic.stamp(alembic_cfg, "head")
+        alembic.stamp(alembic_cfg, "head")
 
     # @TODO See this post for a more complete implementation
     # https://pawamoy.github.io/posts/testing-fastapi-ormar-alembic-apps/
