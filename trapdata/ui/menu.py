@@ -227,15 +227,16 @@ class DataMenuScreen(Screen):
         # Try to open a database session.
         # # @TODO add GUI indicator asking to recreate DB if it fails to open?
         if not db.check_db(self.app.db_path, create=True, update=True, quiet=True):
-            msg = (
-                f"Error reading or creating database: \n\n"
-                f"{self.app.db_path} \n\n"
-                f"Trying deleting the DB file and it will be recreated on next launch."
-            )
-            logger.error(msg)
+            db_dsn = db.base.get_safe_db_path(self.app.db_path)
             Popup(
                 title="Error reading or creating database",
-                content=Label(text=msg),
+                content=Label(
+                    text=(
+                        f"Error reading or creating database: \n\n"
+                        f'"{db_dsn.database}" \n\n'
+                        f"Trying renaming or deleting the database and it will be recreated on next launch."
+                    )
+                ),
                 size_hint=(None, None),
                 size=("550dp", "200dp"),
                 # on_dismiss=sys.exit,
