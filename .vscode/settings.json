@@ -15,6 +15,7 @@
         "kivy",
         "resnet",
         "sesh",
+        "sessionmaker",
         "softmax",
         "sqlalchemy",
         "torchvision",
