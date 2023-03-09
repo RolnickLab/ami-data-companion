@@ -5,8 +5,7 @@ from .models import *
 
 
 def test_db():
-
-    db = get_db(directory=None, create=True)
+    db = get_db(directory=None, create=True, update=True)
     with orm.Session(db) as session:
         new_ms = MonitoringSession(
             base_directory=TEST_IMAGES_BASE_PATH,

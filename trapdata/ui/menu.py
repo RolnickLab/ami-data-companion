@@ -226,7 +226,7 @@ class DataMenuScreen(Screen):
     def db_ready(self):
         # Try to open a database session.
         # # @TODO add GUI indicator asking to recreate DB if it fails to open?
-        if not db.check_db(self.app.db_path, create=True, quiet=True):
+        if not db.check_db(self.app.db_path, create=True, update=True, quiet=True):
             Popup(
                 title="Error reading or creating database",
                 content=Label(
