@@ -487,6 +487,8 @@ def get_unique_species_by_track(
             sa.func.max(DetectedObject.specific_label_score).label(
                 "sequence_best_score"
             ),
+            sa.func.min(DetectedObject.timestamp).label("sequence_start_time"),
+            sa.func.max(DetectedObject.timestamp).label("sequence_end_time"),
         )
         .group_by("sequence_id")
         .where((DetectedObject.monitoring_session_id == monitoring_session.id))
@@ -507,26 +509,26 @@ def get_unique_species_by_track(
                 DetectedObject.path.label("cropped_image_path"),
                 DetectedObject.sequence_id,
                 DetectedObject.timestamp,
-            ).where(
+            )
+            .where(
                 (DetectedObject.monitoring_session_id == monitoring_session.id)
                 & (DetectedObject.sequence_id == sequence.sequence_id)
-                & (DetectedObject.specific_label_score == sequence.sequence_best_score)
             )
             # .order_by(sa.func.random())
             .order_by(sa.desc("score"))
+            .limit(num_examples)
         ).all()
         row = dict(sequence._mapping)
-        timestamps = [frame.timestamp for frame in frames]
-        start_time = min(timestamps)
-        end_time = max(timestamps)
         if frames:
-            row["label"] = frames[0].label
+            best_example = frames[0]
+            row["label"] = best_example.label
             row["examples"] = [example._mapping for example in frames[:num_examples]]
-            row["start_time"] = start_time
-            row["total_time"] = end_time - start_time
+            row["sequence_duration"] = (
+                sequence.sequence_end_time - sequence.sequence_start_time
+            )
         rows.append(row)
 
-    rows = reversed(sorted(rows, key=lambda row: row["sequence_best_score"]))
+    rows = reversed(sorted(rows, key=lambda row: row["sequence_start_time"]))
     return rows
 
 

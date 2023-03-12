@@ -9,6 +9,8 @@ from kivy.uix.label import Label
 from kivy.uix.button import ButtonBehavior, Button
 from kivy.uix.recycleview import RecycleView
 from kivy.uix.boxlayout import BoxLayout
+
+# from kivy.uix.carousel
 from kivy.uix.popup import Popup
 from kivy.uix.image import Image
 from kivy.lang import Builder
@@ -86,10 +88,11 @@ class SpeciesRow(BoxLayout):
         )
         label.bind(size=label.setter("text_size"))
 
+        cell = BoxLayout()
         for i in range(NUM_EXAMPLES_PER_ROW):
             try:
                 example = species["examples"][i]
-                widget = ImageToPlaybackButton(
+                image_widget = ImageToPlaybackButton(
                     source=example["cropped_image_path"],
                     size_hint_y=None,
                     height=species["image_height"],
@@ -97,10 +100,11 @@ class SpeciesRow(BoxLayout):
                     source_image_id=example["source_image_id"],
                 )
             except IndexError:
-                widget = Label(text="")
+                image_widget = Label(text="")
 
-            self.add_widget(widget)
+            cell.add_widget(image_widget)
 
+        self.add_widget(cell)
         self.add_widget(label)
         self.add_widget(
             Label(text=str(species["count"]), valign="middle", halign="center")
@@ -116,7 +120,7 @@ class SpeciesRow(BoxLayout):
             Label(text=str(species["start_time"]), valign="middle", halign="center")
         )
         self.add_widget(
-            Label(text=str(species["total_time"]), valign="middle", halign="center")
+            Label(text=str(species["duration"]), valign="middle", halign="center")
         )
 
 
@@ -174,10 +178,13 @@ class SpeciesListLayout(RecycleView):
         #     num_examples=NUM_EXAMPLES_PER_ROW,
         # )
         classification_summary = get_unique_species_by_track(
-            app.db_path, ms, classification_threshold=classification_threshold
+            app.db_path,
+            ms,
+            classification_threshold=classification_threshold,
+            num_examples=NUM_EXAMPLES_PER_ROW,
         )
 
-        row_height = 100  # @TODO make dynamic? Or fit images to specific size
+        row_height = 300  # @TODO make dynamic? Or fit images to specific size
 
         species_rows = [
             {
@@ -187,8 +194,8 @@ class SpeciesListLayout(RecycleView):
                     "count": item["sequence_frame_count"],
                     "score": item["sequence_best_score"],
                     "examples": item["examples"],
-                    "start_time": item["start_time"],
-                    "total_time": item["total_time"],
+                    "start_time": item["sequence_start_time"],
+                    "duration": item["sequence_duration"],
                     "image_height": row_height,
                     "monitoring_session": self.monitoring_session,
                 },
