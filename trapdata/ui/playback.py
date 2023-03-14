@@ -210,7 +210,7 @@ class AnnotatedImage(Widget):
                     f"{label_text}"
                     f"{annotation.sequence_frame + 1} of {track_info['total_frames']} "
                     f"({format_timedelta_hours(track_info['end_time']-track_info['start_time'])})\n"
-                    # f"{annotation.sequence_id}\n"
+                    f"{annotation.sequence_id}\n"
                     # f"frame {track_info['current_frame']} / {track_info['total_frames']}\n"
                     # f"first seen {track_info['start_time'].strftime('%-I:%-M %p')}\n"
                     # f"last seen {track_info['end_time'].strftime('%-I:%-M %p')}\n"

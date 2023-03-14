@@ -53,6 +53,7 @@ class ImageToPlaybackButton(ButtonBehavior, Image):
 class SpeciesRow(BoxLayout):
     species = ObjectProperty(allownone=True)
     heading = ListProperty(allownone=True)
+    image_column_size_hint_x = 2.5
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -67,28 +68,32 @@ class SpeciesRow(BoxLayout):
 
     def make_heading(self, heading: list[str]):
         self.clear_widgets()
-        for value in heading:
+        for i, value in enumerate(heading):
             label = Label(
                 text=value,
                 halign="center",
                 valign="top",
                 bold=True,
             )
+            if i == 0:
+                # This is the image thumbnail
+                label.size_hint_x = self.image_column_size_hint_x
             label.bind(size=label.setter("text_size"))
             self.add_widget(label)
 
     def make_row(self, species: dict):
         self.clear_widgets()
 
-        # print(species)
+        label_text = f"{species['name']}\n\n{species['sequence']}"
+
         label = Label(
-            text=species["name"],
-            halign="center",
+            text=label_text,
+            halign="left",
             valign="middle",
         )
         label.bind(size=label.setter("text_size"))
 
-        cell = BoxLayout()
+        cell = BoxLayout(padding=(20, 0), size_hint_x=self.image_column_size_hint_x)
         for i in range(NUM_EXAMPLES_PER_ROW):
             try:
                 example = species["examples"][i]
@@ -189,12 +194,12 @@ class SpeciesListLayout(RecycleView):
         species_rows = [
             {
                 "species": {
-                    "sequence": item["sequence_id"],
+                    "sequence": item["sequence_id"].split("-", 1)[-1],
                     "name": item["label"] or "Unclassified",
                     "count": item["sequence_frame_count"],
                     "score": item["sequence_best_score"],
                     "examples": item["examples"],
-                    "start_time": item["sequence_start_time"],
+                    "start_time": item["sequence_start_time"].strftime("%H:%m"),
                     "duration": item["sequence_duration"],
                     "image_height": row_height,
                     "monitoring_session": self.monitoring_session,
