@@ -71,7 +71,7 @@ def update_info_bar(widget: Label, image: TrapImage, stats: dict):
 
 
 def update_title(widget: Label, image: TrapImage):
-    text = f"{image.timestamp.strftime('%c')}"  # (image #{image.id})\n"
+    text = f"{image.timestamp.strftime('%c')} (#{image.id})"
 
     widget.text = text
     # widget.bold = True
