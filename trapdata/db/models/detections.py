@@ -1,16 +1,19 @@
 import datetime
 import pathlib
-from typing import Iterable, Union, Optional, Any
+import statistics
+from typing import Iterable, Union, Optional, Any, Sequence, TypedDict
 
 import sqlalchemy as sa
 from sqlalchemy import orm
+from sqlalchemy_utils import UUIDType
+
 import PIL.Image
 
 from trapdata import db
 from trapdata import constants
 from trapdata.common.types import FilePath
-from trapdata.db.models.images import TrapImage, completely_classified
-from trapdata.db.models.events import MonitoringSession
+from trapdata.db.models.images import completely_classified
+from trapdata.db import models
 from trapdata.common.logs import logger
 from trapdata.common.utils import bbox_area, bbox_center, export_report
 from trapdata.common.filemanagement import (
@@ -32,6 +35,12 @@ class DetectedObject(db.Base):
     path = sa.Column(
         sa.String(255)
     )  # @TODO currently these are absolute paths to help the pytorch dataloader, but relative would be ideal
+    timestamp = sa.Column(
+        sa.DateTime(timezone=True)
+    )  # @TODO add migration for these fields
+    source_image_width = sa.Column(sa.Integer)
+    source_image_height = sa.Column(sa.Integer)
+    source_image_previous_frame = sa.Column(sa.Integer)
     specific_label = sa.Column(sa.String(255))
     specific_label_score = sa.Column(sa.Numeric(asdecimal=False))
     binary_label = sa.Column(sa.String(255))
@@ -40,6 +49,14 @@ class DetectedObject(db.Base):
     model_name = sa.Column(sa.String(255))
     in_queue = sa.Column(sa.Boolean, default=False)
     notes = sa.Column(sa.JSON)
+    # sequence_id = sa.Column(UUIDType)
+    sequence_id = sa.Column(sa.String(255))
+    sequence_frame = sa.Column(sa.Integer)
+    sequence_previous_id = sa.Column(sa.Integer)
+    sequence_previous_cost = sa.Column(sa.Float)
+    cnn_features = sa.Column(sa.JSON)
+
+    # @TODO add updated & created timestamps to all db models
 
     image = orm.relationship(
         "TrapImage",
@@ -60,12 +77,14 @@ class DetectedObject(db.Base):
             f"\timage={image!r}, \n"
             f"\tpath={self.path!r}, \n"
             f"\tspecific_label={self.specific_label!r}, \n"
-            f"\tbbox={self.bbox!r})"
+            f"\tbbox={self.bbox!r}, \n"
+            f"\timage_id={self.image_id!r})\n"
+            f"\tsequence_id={self.sequence_id!r})\n"
         )
 
     def cropped_image_data(
         self,
-        source_image: Union[TrapImage, None] = None,
+        source_image: Union[models.TrapImage, None] = None,
         base_path: Union[pathlib.Path, str, None] = None,
     ):
         """
@@ -88,7 +107,7 @@ class DetectedObject(db.Base):
     def save_cropped_image_data(
         self,
         base_path: Union[pathlib.Path, str, None] = None,
-        source_image: Union[TrapImage, None] = None,
+        source_image: Union[models.TrapImage, None] = None,
     ):
         """
         @TODO need consistent way of discovering the user_data_path in the application settings
@@ -115,6 +134,110 @@ class DetectedObject(db.Base):
         self.path = str(fpath)
         return fpath
 
+    def width(self):
+        pass  # Use bbox
+
+    def height(self):
+        pass  # Use bbox
+
+    def previous_frame_detections(
+        self, session: orm.Session
+    ) -> Sequence["DetectedObject"]:
+        stmt = sa.select(DetectedObject).where(
+            DetectedObject.image_id == self.source_image_previous_frame
+        )
+        return session.execute(stmt).unique().scalars().all()
+
+    def track_length(self, session: orm.Session) -> int:
+        """
+        Return the start time, end time duration in minutes, and number of frames for a track
+        """
+        if self.sequence_id:
+            stmt = sa.select(
+                sa.func.max(DetectedObject.sequence_frame).label("last_frame_num"),
+            ).where((DetectedObject.sequence_id == self.sequence_id))
+            row = session.execute(stmt).one()
+            return row.last_frame_num + 1
+        else:
+            return 1
+
+    def track_info(self, session: orm.Session) -> dict[str, Any]:
+        """
+        Return the start time, end time duration in minutes, and number of frames for a track
+        """
+
+        if self.sequence_id:
+            stmt = sa.select(
+                sa.func.min(DetectedObject.timestamp).label("start"),
+                sa.func.max(DetectedObject.timestamp).label("end"),
+                sa.func.max(DetectedObject.sequence_frame).label("last_frame_num"),
+            ).where((DetectedObject.sequence_id == self.sequence_id))
+            start_time, end_time, last_frame_num = session.execute(stmt).one()
+            num_frames = last_frame_num + 1
+        else:
+            start_time, end_time = self.timestamp, self.timestamp
+            num_frames = 1
+
+        def get_minutes(timedelta):
+            return int(round(timedelta.seconds / 60, 0))
+
+        return dict(
+            start_time=start_time,
+            end_time=end_time,
+            current_time=get_minutes(
+                self.timestamp - start_time
+            ),  # @TODO This is the incorrect time
+            total_time=get_minutes(end_time - start_time),
+            current_frame=self.sequence_frame,
+            total_frames=num_frames,
+        )
+
+        # stmt = (
+        #     sa.select(DetectedObject.image.timestamp)
+        #     .where(
+        #         (DetectedObject.sequence_id == self.sequence_id)
+        #         & DetectedObject.sequence_id.isnot(None)
+        #         & DetectedObject.specific_label_score.isnot(None)
+        #     )
+        #     .order_by(DetectedObject.sequence_frame))
+        # )
+
+    def best_sibling(self, session: orm.Session):
+        """
+        Return the detected object from the same sequence with
+        the highest confidence score from the species classification.
+        """
+        stmt = (
+            sa.select(DetectedObject)
+            .where(
+                (DetectedObject.sequence_id == self.sequence_id)
+                & DetectedObject.sequence_id.isnot(None)
+                & DetectedObject.specific_label_score.isnot(None)
+            )
+            .order_by(DetectedObject.specific_label_score.desc())
+        )
+        best_sibling = session.execute(stmt).unique().scalars().first()
+        if best_sibling:
+            if best_sibling.specific_label != self.specific_label:
+                logger.debug(f"Found better label! {best_sibling.specific_label}")
+            else:
+                logger.debug(f"Using current label {self.specific_label}")
+            return best_sibling
+        else:
+            # logger.debug(f"No siblings")
+            return self
+
+    def update_data_from_source_image(self, session: orm.Session, commit=True):
+        self.timestamp = self.image.timestamp
+        self.source_image_height = self.image.height
+        self.source_image_width = self.image.width
+        previous_frame = self.image.previous_image(session)
+        self.source_image_previous_frame = previous_frame.id if previous_frame else None
+        session.add(self)
+        if commit:
+            session.flush()
+            session.commit()
+
     def report_data(self) -> dict[str, Any]:
         if self.specific_label:
             label = self.specific_label
@@ -126,6 +249,9 @@ class DetectedObject(db.Base):
         return {
             "trap": pathlib.Path(self.monitoring_session.base_directory).name,
             "event": self.monitoring_session.day.isoformat(),
+            "sequence": self.sequence_id,
+            "sequence_frame": self.sequence_frame,
+            "sequence_cost": self.sequence_previous_cost,
             "source_image": self.image.absolute_path,
             "cropped_image": self.path,
             "timestamp": self.image.timestamp.isoformat(),
@@ -146,50 +272,67 @@ def save_detected_objects(
 ):
     orm_objects = []
     with db.get_session(db_path) as sesh:
-        images = sesh.query(TrapImage).filter(TrapImage.id.in_(image_ids)).all()
+        images = (
+            sesh.query(models.TrapImage)
+            .filter(models.TrapImage.id.in_(image_ids))
+            .all()
+        )
 
     timestamp = datetime.datetime.now()
 
-    for image, detected_objects in zip(images, detected_objects_data):
-        image.last_processed = timestamp
-        # sesh.add(image)
-        orm_objects.append(image)
-
-        for object_data in detected_objects:
-            detection = DetectedObject(
-                last_detected=timestamp,
-                in_queue=True,
-            )
-
-            if "bbox" in object_data:
-                area_pixels = bbox_area(object_data["bbox"])
-                object_data["area_pixels"] = area_pixels
-
-            for k, v in object_data.items():
-                logger.debug(f"Adding {k}: {v} to detected object {detection.id}")
-                setattr(detection, k, v)
-
-            detection.monitoring_session_id = image.monitoring_session_id
-            detection.image_id = image.id
-
-            detection.save_cropped_image_data(
-                source_image=image,
-                base_path=user_data_path,
-            )
-
-            logger.debug(f"Creating detected object {detection} for image {image}")
-
-            orm_objects.append(detection)
-
     with db.get_session(db_path) as sesh:
-        # @TODO this could be faster! Especially for sqlite
-        logger.info(f"Bulk saving {len(orm_objects)} objects")
-        sesh.bulk_save_objects(orm_objects)
-        sesh.commit()
+        for image, detected_objects in zip(images, detected_objects_data):
+            image.last_processed = timestamp
+
+            # sesh.add(image)
+            orm_objects.append(image)
+
+            for object_data in detected_objects:
+                detection = DetectedObject(
+                    last_detected=timestamp,
+                    in_queue=True,
+                )
+
+                if "bbox" in object_data:
+                    area_pixels = bbox_area(object_data["bbox"])
+                    object_data["area_pixels"] = area_pixels
+
+                for k, v in object_data.items():
+                    logger.debug(f"Adding {k} to detected object {detection.id}")
+                    setattr(detection, k, v)
+
+                detection.monitoring_session_id = image.monitoring_session_id
+                detection.image_id = image.id
+
+                detection.save_cropped_image_data(
+                    source_image=image,
+                    base_path=user_data_path,
+                )
+
+                detection.timestamp = image.timestamp
+
+                previous_image = image.previous_image(sesh)
+                detection.source_image_previous_frame = (
+                    previous_image.id if previous_image else None
+                )
+                detection.source_image_width = image.width
+                detection.source_image_height = image.height
+                logger.debug(
+                    f"Previous image: {detection.source_image_previous_frame}, current image: {image.id}"
+                )
+
+                logger.debug(f"Creating detected object {detection} for image {image}")
+
+                orm_objects.append(detection)
+
+            # @TODO this could be faster! Especially for sqlite
+            logger.info(f"Bulk saving {len(orm_objects)} objects")
+            sesh.bulk_save_objects(orm_objects)
+            sesh.commit()
 
 
 def save_classified_objects(db_path, object_ids, classified_objects_data):
-    # logger.debug(f"Callback was called! {object_ids}, {classified_objects_data}")
+    logger.debug(f"Saving data to classified objects: {object_ids}")
 
     orm_objects = []
     timestamp = datetime.datetime.now()
@@ -203,7 +346,7 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
 
         logger.debug(f"Updating classified object {obj}")
         for k, v in object_data.items():
-            logger.debug(f"Adding {k}: {v} to detected object {obj.id}")
+            logger.debug(f"Adding {k} to detected object {obj.id}")
             setattr(obj, k, v)
 
         orm_objects.append(obj)
@@ -226,10 +369,10 @@ def get_detected_objects(
         return (
             sesh.query(DetectedObject)
             .filter_by(**query_kwargs)
-            .filter(MonitoringSession.base_directory == str(image_base_path))
+            .filter(models.MonitoringSession.base_directory == str(image_base_path))
             .join(
-                MonitoringSession,
-                MonitoringSession.id == DetectedObject.monitoring_session_id,
+                models.MonitoringSession,
+                models.MonitoringSession.id == DetectedObject.monitoring_session_id,
             )
             .offset(offset)
             .limit(limit)
@@ -239,6 +382,21 @@ def get_detected_objects(
 def get_objects_for_image(db_path, image_id):
     with db.get_session(db_path) as sesh:
         return sesh.query(DetectedObject.binary_label).filter_by(image_id=image_id)
+
+
+def get_unique_objects_for_image(db_path, image_id) -> Sequence[DetectedObject]:
+    with db.get_session(db_path) as sesh:
+        objects = (
+            sesh.execute(
+                sa.select(DetectedObject)
+                .where(DetectedObject.image_id == image_id)
+                .order_by(DetectedObject.last_detected.desc())
+            )
+            .unique(lambda d: str(d.bbox))
+            .scalars()
+            .all()
+        )
+        return objects
 
 
 def delete_objects_for_image(db_path, image_id):
@@ -278,7 +436,9 @@ def get_species_for_image(db_path, image_id):
         )
 
 
-def get_unique_species(db_path, monitoring_session=None):
+def get_unique_species(
+    db_path, monitoring_session=None, classification_threshold: float = -1
+):
     query = (
         sa.select(
             sa.func.coalesce(
@@ -286,7 +446,14 @@ def get_unique_species(db_path, monitoring_session=None):
                 DetectedObject.binary_label,
                 DetectedObject.path,
             ).label("label"),
+            sa.func.coalesce(
+                DetectedObject.specific_label_score,
+                DetectedObject.binary_label_score,
+            ).label("score"),
             sa.func.count().label("count"),
+        )
+        .where(
+            DetectedObject.score >= classification_threshold,
         )
         .group_by("label")
         .order_by(sa.desc("count"))
@@ -296,6 +463,73 @@ def get_unique_species(db_path, monitoring_session=None):
 
     with db.get_session(db_path) as sesh:
         return sesh.execute(query).all()
+
+
+def get_unique_species_by_track(
+    db_path,
+    monitoring_session=None,
+    classification_threshold: float = -1,
+    num_examples=3,
+):
+    # @TODO Return single objects that are not part of a sequence
+    # @TODO @IMPORTANT THIS NEEDS WORK!
+
+    Session = db.get_session_class(db_path)
+    session = Session()
+
+    # Select all sequences where at least one example is above the score threshold
+    sequences = session.execute(
+        sa.select(
+            DetectedObject.sequence_id,
+            sa.func.count(DetectedObject.id).label(
+                "sequence_frame_count"
+            ),  # frames in track
+            sa.func.max(DetectedObject.specific_label_score).label(
+                "sequence_best_score"
+            ),
+            sa.func.min(DetectedObject.timestamp).label("sequence_start_time"),
+            sa.func.max(DetectedObject.timestamp).label("sequence_end_time"),
+        )
+        .group_by("sequence_id")
+        .where((DetectedObject.monitoring_session_id == monitoring_session.id))
+        .having(
+            sa.func.max(DetectedObject.specific_label_score)
+            >= classification_threshold,
+        )
+        .order_by(DetectedObject.specific_label)
+    ).all()
+
+    rows = []
+    for sequence in sequences:
+        frames = session.execute(
+            sa.select(
+                DetectedObject.image_id.label("source_image_id"),
+                DetectedObject.specific_label.label("label"),
+                DetectedObject.specific_label_score.label("score"),
+                DetectedObject.path.label("cropped_image_path"),
+                DetectedObject.sequence_id,
+                DetectedObject.timestamp,
+            )
+            .where(
+                (DetectedObject.monitoring_session_id == monitoring_session.id)
+                & (DetectedObject.sequence_id == sequence.sequence_id)
+            )
+            # .order_by(sa.func.random())
+            .order_by(sa.desc("score"))
+            .limit(num_examples)
+        ).all()
+        row = dict(sequence._mapping)
+        if frames:
+            best_example = frames[0]
+            row["label"] = best_example.label
+            row["examples"] = [example._mapping for example in frames[:num_examples]]
+            row["sequence_duration"] = (
+                sequence.sequence_end_time - sequence.sequence_start_time
+            )
+        rows.append(row)
+
+    rows = reversed(sorted(rows, key=lambda row: row["sequence_start_time"]))
+    return rows
 
 
 def get_objects_for_species(db_path, species_label, monitoring_session=None):

@@ -141,7 +141,7 @@ class MonitoringSessionRow(BoxLayout):
         )
 
         add_to_queue_btn = AddToQueueButton(
-            text="Add to Queue",
+            text="Add Session to Queue",
             monitoring_session=ms,
             disabled=btn_disabled,
         )

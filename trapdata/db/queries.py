@@ -175,5 +175,5 @@ def update_all_aggregates(directory):
 
     with get_session(directory) as sesh:
         for ms in sesh.query(None).all():
-            ms.update_aggregates()
+            ms.update_aggregates(sesh)
         sesh.commit()

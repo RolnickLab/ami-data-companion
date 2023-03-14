@@ -88,7 +88,7 @@ class Queue(Label):
         if self.bgtask:
             logger.info(f"Background task changed status: {self.bgtask}")
 
-    def start(self, *args, single=False):
+    def start(self, *args, single: bool = False):
         # @NOTE can't change a widget property from a bg thread
         if not self.running:
             if self.bgtask:
@@ -98,10 +98,10 @@ class Queue(Label):
             self.bgtask = threading.Thread(
                 target=partial(
                     start_pipeline,
-                    self.app.db_path,
-                    self.app.image_base_path,
-                    self.app.config,
-                    single,
+                    db_path=self.app.db_path,
+                    image_base_path=self.app.image_base_path,
+                    config=self.app.config,
+                    single=single,
                 ),
                 daemon=True,  # PyTorch will be killed abruptly, leaving memory in GPU
                 name=task_name,
@@ -184,6 +184,8 @@ class TrapDataApp(App):
         # Just in case we are in a bind:
         Window.fullscreen = 0
         Window.show_cursor = True
+        # Window.clearcolor = (1, 1, 1, 1.0)
+        # Window.size = (600, 400)
 
         sm = ScreenManager()
         sm.add_widget(DataMenuScreen(name="menu"))
@@ -262,10 +264,10 @@ class TrapDataApp(App):
                 "binary_classification_model": list(
                     ml.models.binary_classifiers.keys()
                 )[0],
-                "taxon_classification_model": list(
+                "species_classification_model": list(
                     ml.models.species_classifiers.keys()
                 )[0],
-                "tracking_algorithm": None,
+                "feature_extractor": list(ml.models.feature_extractors.keys())[0],
                 "classification_threshold": 0.6,
             },
         )
@@ -306,7 +308,7 @@ class TrapDataApp(App):
             settings.add_json_panel(
                 section.title(),
                 self.config,
-                data=json.dumps(items),
+                data=json.dumps(items, default=str),
             )
         logger.info(f"Kivy settings file: {self.config.filename}")
 

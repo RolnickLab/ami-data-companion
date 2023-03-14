@@ -1,4 +1,4 @@
-from typing import Union, Sequence
+from typing import Sequence, Union, Optional
 
 import sqlalchemy as sa
 
@@ -25,22 +25,14 @@ class QueueManager:
         """
         return sa.select().scalar_subquery()
 
-    def get_model(self):
-        """
-        The primary SQLAlchemy model for common queries.
+    def queue_count(self) -> int:
+        return 0
 
-        If this is a custom queue, you must override the default methods
-        """
-        raise NotImplementedError
+    def unprocessed_count(self) -> int:
+        return 0
 
-    def queue_count(self):
-        raise NotImplementedError
-
-    def unprocessed_count(self):
-        raise NotImplementedError
-
-    def done_count(self):
-        raise NotImplementedError
+    def done_count(self) -> int:
+        return 0
 
     def add_unprocessed(self, *_):
         raise NotImplementedError
@@ -61,7 +53,7 @@ class QueueManager:
 
 
 class ImageQueue(QueueManager):
-    name = "Images"
+    name = "Unprocessed images"
     description = "Raw images from camera needing object detection"
 
     def ids(self) -> sa.ScalarSelect:
@@ -78,29 +70,29 @@ class ImageQueue(QueueManager):
             .scalar_subquery()
         )
 
-    def queue_count(self) -> Union[int, None]:
+    def queue_count(self) -> int:
         with get_session(self.db_path) as sesh:
             stmt = sa.select(sa.func.count(TrapImage.id)).where(
                 (TrapImage.id.in_(self.ids()) & (TrapImage.in_queue.is_(True)))
             )
             count = sesh.execute(stmt).scalar()
-            return count
+            return count or 0
 
-    def unprocessed_count(self) -> Union[int, None]:
+    def unprocessed_count(self) -> int:
         with get_session(self.db_path) as sesh:
             stmt = sa.select(sa.func.count(TrapImage.id)).where(
                 (TrapImage.id.in_(self.ids()) & (TrapImage.last_processed.is_(None)))
             )
             count = sesh.execute(stmt).scalar()
-            return count
+            return count or 0
 
-    def done_count(self) -> Union[int, None]:
+    def done_count(self) -> int:
         with get_session(self.db_path) as sesh:
             stmt = sa.select(sa.func.count(TrapImage.id)).where(
                 (TrapImage.id.in_(self.ids()) & (TrapImage.last_processed.is_not(None)))
             )
             count = sesh.execute(stmt).scalar()
-            return count
+            return count or 0
 
     def add_unprocessed(self, *_) -> None:
         logger.info("Adding all unprocessed deployment images to queue")
@@ -204,7 +196,7 @@ class DetectedObjectQueue(QueueManager):
             return count
 
     def add_unprocessed(self, *_) -> None:
-        logger.info(f"Adding detected objects from deployment to queue")
+        logger.info(f"Adding detected objects in deployment to queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)
@@ -219,7 +211,7 @@ class DetectedObjectQueue(QueueManager):
             sesh.commit()
 
     def clear_queue(self, *_) -> None:
-        logger.info("Removing detected objects from deployment from queue")
+        logger.info("Removing detected objects in deployment from queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)
@@ -325,7 +317,7 @@ class UnclassifiedObjectQueue(QueueManager):
             return count
 
     def add_unprocessed(self, *_) -> None:
-        logger.info("Adding unclassified objects from deployment to queue")
+        logger.info("Adding unclassified objects in deployment to queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)
@@ -340,7 +332,7 @@ class UnclassifiedObjectQueue(QueueManager):
             sesh.commit()
 
     def clear_queue(self, *_) -> None:
-        logger.info("Removing unclassified objects from deployment from queue")
+        logger.info("Removing unclassified objects in deployment from queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)
@@ -388,6 +380,262 @@ class UnclassifiedObjectQueue(QueueManager):
             return objs
 
 
+class ObjectsWithoutFeaturesQueue(QueueManager):
+    name = "Detections without features"
+    description = """
+    Objects that have been identified as something of interest (e.g. a moth)
+    and need CNN features stored for using to generate tracks & similarity later. 
+    """
+
+    def ids(self) -> sa.ScalarSelect:
+        """
+        Return subquery of all IDs managed by the scope of this queue.
+        """
+        return (
+            sa.select(DetectedObject.id)
+            .where(
+                (MonitoringSession.base_directory == str(self.base_directory))
+                & (DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
+            )
+            .join(
+                MonitoringSession,
+                DetectedObject.monitoring_session_id == MonitoringSession.id,
+            )
+            .scalar_subquery()
+        )
+
+    def queue_count(self) -> int:
+        with get_session(self.db_path) as sesh:
+            stmt = sa.select(sa.func.count(DetectedObject.id)).where(
+                (
+                    (DetectedObject.id.in_(self.ids()))
+                    & DetectedObject.in_queue.is_(True)
+                    & DetectedObject.cnn_features.is_(None)
+                )
+            )
+            count = sesh.execute(stmt).scalar()
+            return count or 0
+
+    def unprocessed_count(self) -> int:
+        with get_session(self.db_path) as sesh:
+            stmt = sa.select(sa.func.count(DetectedObject.id)).where(
+                (
+                    (DetectedObject.id.in_(self.ids()))
+                    & DetectedObject.cnn_features.is_(None)
+                )
+            )
+            count = sesh.execute(stmt).scalar()
+            return count or 0
+
+    def done_count(self) -> int:
+        with get_session(self.db_path) as sesh:
+            stmt = sa.select(sa.func.count(DetectedObject.id)).where(
+                (
+                    (DetectedObject.id.in_(self.ids()))
+                    & DetectedObject.cnn_features.is_not(None)
+                )
+            )
+            count = sesh.execute(stmt).scalar()
+            return count or 0
+
+    def add_unprocessed(self, *_) -> None:
+        logger.info("Adding objects without feature in deployment to queue")
+        with get_session(self.db_path) as sesh:
+            stmt = (
+                sa.update(DetectedObject)
+                .where(
+                    (DetectedObject.id.in_(self.ids()))
+                    & (DetectedObject.in_queue.is_(False))
+                    & (DetectedObject.cnn_features.is_(None))
+                )
+                .values({"in_queue": True})
+            )
+            sesh.execute(stmt)
+            sesh.commit()
+
+    def clear_queue(self, *_) -> None:
+        logger.info("Removing objects without features in deployment from queue")
+        with get_session(self.db_path) as sesh:
+            stmt = (
+                sa.update(DetectedObject)
+                .where(
+                    (DetectedObject.id.in_(self.ids()))
+                    & (DetectedObject.in_queue.is_(True))
+                    & (DetectedObject.cnn_features.is_(None))
+                )
+                .values({"in_queue": False})
+            )
+            sesh.execute(stmt)
+            sesh.commit()
+
+    def pull_n_from_queue(self, n: int) -> Sequence[DetectedObject]:
+        logger.debug(f"Attempting to pull {n} objects without features from queue")
+        select_stmt = (
+            sa.select(DetectedObject.id)
+            .where(
+                (DetectedObject.id.in_(self.ids()))
+                & (DetectedObject.in_queue.is_(True))
+                & (DetectedObject.cnn_features.is_(None))
+            )
+            .limit(n)
+            .with_for_update()
+        )
+        update_stmt = (
+            sa.update(DetectedObject)
+            .where(DetectedObject.id.in_(select_stmt.scalar_subquery()))
+            .values({"in_queue": False})
+            .returning(DetectedObject.id)
+        )
+        with get_session(self.db_path) as sesh:
+            record_ids = sesh.execute(update_stmt).scalars().all()
+            sesh.commit()
+            objs = (
+                sesh.execute(
+                    sa.select(DetectedObject).where(DetectedObject.id.in_(record_ids))
+                )
+                .unique()
+                .scalars()
+                .all()
+            )
+            logger.info(f"Pulled {len(objs)} objects without features from queue")
+            return objs
+
+
+class UntrackedObjectsQueue(QueueManager):
+    name = "Untracked detections"
+    description = """
+    Objects that have been identified as something of interest (e.g. a moth)
+    but have not yet been "tracked" e.g. grouped into multiple frames of the same organism.
+    """
+
+    def ids(self) -> sa.ScalarSelect:
+        """
+        Return subquery of all IDs managed by the scope of this queue.
+        """
+        return (
+            sa.select(DetectedObject.id)
+            .where(
+                (MonitoringSession.base_directory == str(self.base_directory))
+                & (DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
+                & (DetectedObject.cnn_features.is_not(None))
+            )
+            .join(
+                MonitoringSession,
+                DetectedObject.monitoring_session_id == MonitoringSession.id,
+            )
+            .scalar_subquery()
+        )
+
+    def queue_count(self) -> int:
+        with get_session(self.db_path) as sesh:
+            stmt = sa.select(sa.func.count(DetectedObject.id)).where(
+                (
+                    (DetectedObject.id.in_(self.ids()))
+                    & DetectedObject.in_queue.is_(True)
+                    & DetectedObject.sequence_id.is_(None)
+                )
+            )
+            count = sesh.execute(stmt).scalar()
+            return count or 0
+
+    def unprocessed_count(self) -> int:
+        with get_session(self.db_path) as sesh:
+            stmt = sa.select(sa.func.count(DetectedObject.id)).where(
+                (
+                    (DetectedObject.id.in_(self.ids()))
+                    & DetectedObject.sequence_id.is_(None)
+                )
+            )
+            count = sesh.execute(stmt).scalar()
+            return count or 0
+
+    def done_count(self) -> int:
+        with get_session(self.db_path) as sesh:
+            stmt = sa.select(sa.func.count(DetectedObject.id)).where(
+                (
+                    (DetectedObject.id.in_(self.ids()))
+                    & DetectedObject.sequence_id.is_not(None)
+                )
+            )
+            count = sesh.execute(stmt).scalar()
+            return count or 0
+
+    def add_unprocessed(self, *_) -> None:
+        logger.info("Adding objects without tracks in deployment to queue")
+        with get_session(self.db_path) as sesh:
+            stmt = (
+                sa.update(DetectedObject)
+                .where(
+                    (DetectedObject.id.in_(self.ids()))
+                    & (DetectedObject.in_queue.is_(False))
+                    & (DetectedObject.sequence_id.is_(None))
+                )
+                .values({"in_queue": True})
+            )
+            sesh.execute(stmt)
+            sesh.commit()
+
+    def clear_queue(self, *_) -> None:
+        logger.info("Removing untracked objects in deployment from queue")
+        with get_session(self.db_path) as sesh:
+            stmt = (
+                sa.update(DetectedObject)
+                .where(
+                    (DetectedObject.id.in_(self.ids()))
+                    & (DetectedObject.in_queue.is_(True))
+                    & (DetectedObject.sequence_id.is_(None))
+                )
+                .values({"in_queue": False})
+            )
+            sesh.execute(stmt)
+            sesh.commit()
+
+    def pull_n_from_queue(
+        self, n: int
+    ) -> Sequence[tuple[DetectedObject, Sequence[DetectedObject]]]:
+        """
+        Fetch detected objects that need to be assigned to a sequence / track and
+        all of the objects from the previous frame that will be compared.
+        This will return more DetectedObjects than specified by `n` because
+        it includes all of the related objects.
+
+        This could also happen on a MonitoringSession scope
+        """
+        logger.debug(f"Attempting to pull {n} objects without tracks from queue")
+        select_stmt = (
+            sa.select(DetectedObject.id)
+            .where(
+                (DetectedObject.id.in_(self.ids()))
+                & (DetectedObject.in_queue.is_(True))
+                & (DetectedObject.sequence_id.is_(None))
+            )
+            .limit(n)
+            .with_for_update()
+        )
+        update_stmt = (
+            sa.update(DetectedObject)
+            .where(DetectedObject.id.in_(select_stmt.scalar_subquery()))
+            .values({"in_queue": False})
+            .returning(DetectedObject.id)
+        )
+        with get_session(self.db_path) as sesh:
+            record_ids = sesh.execute(update_stmt).scalars().all()
+            sesh.commit()
+            objs = (
+                sesh.execute(
+                    sa.select(DetectedObject).where(DetectedObject.id.in_(record_ids))
+                )
+                .unique()
+                .scalars()
+                .all()
+            )
+            logger.info(f"Pulled {len(objs)} objects without tracks from queue")
+            objs_with_comparisons = [
+                (obj, obj.previous_frame_detections(sesh)) for obj in objs
+            ]
+            return objs_with_comparisons
+
+
 def all_queues(db_path, base_directory):
     return {
         q.name: q
@@ -395,6 +643,8 @@ def all_queues(db_path, base_directory):
             ImageQueue(db_path, base_directory),
             DetectedObjectQueue(db_path, base_directory),
             UnclassifiedObjectQueue(db_path, base_directory),
+            ObjectsWithoutFeaturesQueue(db_path, base_directory),
+            UntrackedObjectsQueue(db_path, base_directory),
         ]
     }
 
@@ -430,7 +680,9 @@ def add_sample_to_queue(db_path, sample_size=10):
     return images
 
 
-def add_monitoring_session_to_queue(db_path, monitoring_session, limit=None):
+def add_monitoring_session_to_queue(
+    db_path, monitoring_session, limit: Optional[int] = None
+):
     """
     Add images captured during a give Monitoring Session to the
     processing queue. If a limit is specified, only add that many

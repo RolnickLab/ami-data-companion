@@ -1,5 +1,7 @@
 import csv
+import datetime
 import pathlib
+import random
 import string
 from typing import Union, Any
 
@@ -78,3 +80,30 @@ def export_report(
             writer.writerow(record.values())
 
     return filepath
+
+
+def format_timedelta(td: datetime.timedelta) -> str:
+    minutes, seconds = divmod(td.seconds + td.days * 86400, 60)
+    hours, minutes = divmod(minutes, 60)
+    return "{:d}:{:02d}:{:02d}".format(hours, minutes, seconds)
+
+
+def format_timedelta_hours(td: datetime.timedelta) -> str:
+    minutes, seconds = divmod(td.seconds + td.days * 86400, 60)
+    hours, minutes = divmod(minutes, 60)
+    display_parts = []
+    if hours:
+        display_parts.append(f"{str(hours).lstrip('0')} hours")
+    if minutes:
+        display_parts.append(f"{str(minutes).lstrip('0')} min")
+    if not hours and not minutes:
+        display_parts.append(f"{str(seconds).lstrip('0') or '0'} seconds")
+
+    display_str = ", ".join(display_parts)
+    return display_str
+
+
+def random_color():
+    color = [random.random() for _ in range(3)]
+    color.append(0.8)  # alpha
+    return color

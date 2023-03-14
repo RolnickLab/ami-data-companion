@@ -13,6 +13,8 @@ import tempfile
 import PIL.Image
 import PIL.ExifTags
 
+import imagesize
+
 
 from .logs import logger
 from . import constants
@@ -145,6 +147,20 @@ def construct_exif(
     return exif
 
 
+def get_image_dimensions(img_path):
+    """
+    Get the dimensions of an image without loading it into memory.
+    """
+    return imagesize.get(img_path)
+
+
+def get_image_filesize(img_path):
+    """
+    Return the filesize of an image in bytes.
+    """
+    return pathlib.Path(img_path).stat().st_size
+
+
 def get_image_timestamp(img_path):
     """
     Parse the date and time a photo was taken from its EXIF data.
@@ -196,6 +212,8 @@ def find_images(
                 relative_path = pathlib.Path(walk_path) / name
                 full_path = base_directory / relative_path
                 path = full_path if absolute_paths else relative_path
+                shape = get_image_dimensions(path)
+                filesize = get_image_filesize(path)
 
                 if include_timestamps:
                     try:
@@ -211,13 +229,19 @@ def find_images(
                 else:
                     date = None
 
-                yield {"path": path, "timestamp": date}
+                yield {
+                    "path": path,
+                    "timestamp": date,
+                    "shape": shape,
+                    "filesize": filesize,
+                    # "hash": None,
+                }
 
 
 def group_images_by_day(images, maximum_gap_minutes=6 * 60):
     """
     Find consecutive images and group them into daily/nightly monitoring sessions.
-    If the time between two photos is greater than `maximumm_time_gap` (in minutes)
+    If the time between two photos is greater than `maximum_time_gap` (in minutes)
     then start a new session group. Each new group uses the first photo's day
     as the day of the session even if consecutive images are taken past midnight.
     # @TODO add other group by methods? like image size, camera model, random sample batches, etc. Add to UI settings

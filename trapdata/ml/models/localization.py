@@ -121,9 +121,12 @@ class ObjectDetector(InferenceBaseClass):
             ]
         )
 
+    def get_queue(self) -> ImageQueue:
+        return ImageQueue(self.db_path, self.image_base_path)
+
     def get_dataset(self):
         dataset = LocalizationIterableDatabaseDataset(
-            queue=ImageQueue(self.db_path, self.image_base_path),
+            queue=self.queue,
             image_transforms=self.get_transforms(),
             batch_size=self.batch_size,
         )

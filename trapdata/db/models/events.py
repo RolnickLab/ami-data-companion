@@ -9,7 +9,7 @@ from sqlalchemy_utils import aggregated, observes
 from trapdata.db import Base, get_session
 from trapdata.common.logs import logger
 from trapdata.common.utils import export_report
-from trapdata.db.models.images import TrapImage
+from trapdata.db import models
 from trapdata.common.filemanagement import find_images, group_images_by_day
 
 
@@ -59,20 +59,38 @@ class MonitoringSession(Base):
 
     def __repr__(self):
         return (
-            f"MonitoringSession("
+            f"MonitoringSession(\n"
+            f"\tid={self.id !r}, \n"
+            f"\tday={self.day.strftime('%Y-%m-%d') !r}, \n"
             f"\tstart_time={self.start_time.strftime('%c') if self.start_time else None !r}, \n"
             f"\tend_time={self.end_time.strftime('%c') if self.end_time else None!r}, \n"
             f"\tnum_images={self.num_images!r}, \n"
             f"\tnum_detected_objects={self.num_detected_objects!r})"
         )
 
-    def update_aggregates(self):
+    def update_aggregates(self, session: orm.Session):
         # Requires and active session
-        logger.info(f"Updating cached values for {self}")
-        self.num_images = len(self.images)
-        self.num_detected_objects = len(self.detected_objects)
-        self.start_time: datetime.datetime = self.images[0].timestamp
-        self.end_time: datetime.datetime = self.images[-1].timestamp
+        logger.info(f"Updating cached values for event {self.day}")
+        self.num_images = session.execute(
+            sa.select(sa.func.count(1)).where(
+                models.TrapImage.monitoring_session_id == self.id
+            )
+        ).scalar_one()
+        self.num_detected_objects = session.execute(
+            sa.select(sa.func.count(1)).where(
+                models.DetectedObject.monitoring_session_id == self.id
+            )
+        ).scalar_one()
+        self.start_time: datetime.datetime = session.execute(
+            sa.select(sa.func.min(models.TrapImage.timestamp)).where(
+                models.TrapImage.monitoring_session_id == self.id
+            )
+        ).scalar_one()
+        self.end_time: datetime.datetime = session.execute(
+            sa.select(sa.func.max(models.TrapImage.timestamp)).where(
+                models.TrapImage.monitoring_session_id == self.id
+            )
+        ).scalar_one()
 
     def duration(self) -> Optional[datetime.timedelta]:
         if self.start_time and self.end_time:
@@ -92,7 +110,6 @@ class MonitoringSession(Base):
         return duration
 
     def report_data(self) -> dict[str, Any]:
-
         duration = self.duration()
 
         return {
@@ -123,7 +140,7 @@ def save_monitoring_session(db_path, base_directory, session):
             sesh.flush()
 
         num_existing_images = (
-            sesh.query(TrapImage).filter_by(monitoring_session_id=ms.id).count()
+            sesh.query(models.TrapImage).filter_by(monitoring_session_id=ms.id).count()
         )
         if session["num_images"] > num_existing_images:
             logger.info(
@@ -135,28 +152,32 @@ def save_monitoring_session(db_path, base_directory, session):
             ms_images = []
             for image in session["images"]:
                 path = pathlib.Path(image["path"]).relative_to(ms.base_directory)
-                absolute_path = pathlib.Path(ms.base_directory) / path
+                # absolute_path = pathlib.Path(ms.base_directory) / path
                 img_kwargs = {
                     "monitoring_session_id": ms.id,
                     "base_path": ms.base_directory,
                     "path": str(path),
                     "timestamp": image["timestamp"],
-                    "filesize": absolute_path.stat().st_size,
+                    "filesize": image["filesize"],
+                    "width": image["shape"][0],
+                    "height": image["shape"][1],
                     # file hash?
                 }
-                db_img = sesh.query(TrapImage).filter_by(**img_kwargs).one_or_none()
+                db_img = (
+                    sesh.query(models.TrapImage).filter_by(**img_kwargs).one_or_none()
+                )
                 if db_img:
                     # logger.debug(f"Found existing Image in db: {img}")
                     pass
                 else:
-                    db_img = TrapImage(**img_kwargs)
+                    db_img = models.TrapImage(**img_kwargs)
                     logger.debug(f"Adding new Image to db: {db_img}")
                 ms_images.append(db_img)
             logger.info(f"Bulk saving {len(ms_images)} objects")
             sesh.bulk_save_objects(ms_images)
 
             # Manually update aggregate & cached values after bulk update
-            ms.update_aggregates()
+            ms.update_aggregates(sesh)
 
         logger.debug("Committing changes to DB")
         sesh.commit()
@@ -164,7 +185,6 @@ def save_monitoring_session(db_path, base_directory, session):
 
 
 def save_monitoring_sessions(db_path, base_directory, sessions):
-
     for session in sessions:
         save_monitoring_session(db_path, base_directory, session)
 
@@ -213,7 +233,30 @@ def get_monitoring_sessions_from_db(
             .all()
         )
         if update_aggregates:
-            [item.update_aggregates() for item in items]
+            [item.update_aggregates(sesh) for item in items]
+        return items
+
+
+def get_monitoring_session_by_date(
+    db_path: str,
+    event_dates: list[datetime.date],
+    base_directory: Union[pathlib.Path, str, None] = None,
+):
+    query_kwargs = {}
+
+    if base_directory:
+        query_kwargs["base_directory"] = str(base_directory)
+
+    with get_session(db_path) as sesh:
+        items = (
+            sesh.query(MonitoringSession)
+            .where(MonitoringSession.day.in_(event_dates))
+            .filter_by(
+                **query_kwargs,
+            )
+            .all()
+        )
+        [item.update_aggregates(sesh) for item in items]
         return items
 
 
@@ -238,7 +281,7 @@ def get_monitoring_session_images(db_path, ms):
     # @TODO this is likely to slow things down. Some monitoring sessions have thousands of images.
     with get_session(db_path) as sesh:
         images = list(
-            sesh.query(TrapImage).filter_by(monitoring_session_id=ms.id).all()
+            sesh.query(models.TrapImage).filter_by(monitoring_session_id=ms.id).all()
         )
     logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")
     return images
@@ -250,9 +293,9 @@ def get_monitoring_session_image_ids(db_path, ms):
     # This could be in the thousands
     with get_session(db_path) as sesh:
         images = list(
-            sesh.query(TrapImage.id)
+            sesh.query(models.TrapImage.id)
             .filter_by(monitoring_session_id=ms.id)
-            .order_by(TrapImage.timestamp)
+            .order_by(models.TrapImage.timestamp)
             .all()
         )
     logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")

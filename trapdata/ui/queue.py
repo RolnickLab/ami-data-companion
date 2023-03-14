@@ -49,10 +49,10 @@ class QueueStatusTable(BoxLayout):
         table = GridLayout(
             rows=num_rows,
             cols=num_cols,
-            padding=0,
-            spacing=0,
-            row_default_height=120,
-            row_force_default=True,
+            padding=10,
+            spacing=10,
+            row_default_height=80,
+            # row_force_default=True,
         )
 
         header = data.pop(0)
@@ -116,9 +116,9 @@ class QueueStatusTable(BoxLayout):
                 return "Unknown"
 
         for i, (name, queue) in enumerate(queues):
-            clear_button = Button(text="Clear")
+            clear_button = Button(text="Deque all")
             clear_button.bind(on_release=partial(queue.clear_queue))
-            add_button = Button(text="Add to Queue")  # Add remaining unprocessed
+            add_button = Button(text="Queue all")  # Add remaining unprocessed
             add_button.bind(on_release=partial(queue.add_unprocessed))
 
             # try:

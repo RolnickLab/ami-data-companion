@@ -1,6 +1,6 @@
 import sys
 from functools import lru_cache
-from typing import Optional
+from typing import Union, Optional
 import configparser
 import pathlib
 
@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     image_base_path: Optional[pathlib.Path] = None
     localization_model: Optional[ml.models.ObjectDetectorChoice] = None
     binary_classification_model: Optional[ml.models.BinaryClassifierChoice] = None
-    taxon_classification_model: Optional[ml.models.SpeciesClassifierChoice] = None
-    tracking_algorithm: Optional[ml.models.TrackingAlgorithmChoice] = None
+    species_classification_model: Optional[ml.models.SpeciesClassifierChoice] = None
+    feature_extractor: Optional[ml.models.FeatureExtractorChoice]
     classification_threshold: float = 0.6
     localization_batch_size: int = 2
     classification_batch_size: int = 20
@@ -85,15 +85,21 @@ class Settings(BaseSettings):
                 "kivy_type": "options",
                 "kivy_section": "models",
             },
-            "taxon_classification_model": {
+            "species_classification_model": {
                 "title": "Species classification model",
                 "description": "Model & settings to use for fine-grained species or taxon-level classification of cropped images after moth/non-moth detection.",
                 "kivy_type": "options",
                 "kivy_section": "models",
             },
-            "tracking_algorithm": {
-                "title": "Occurrence tracking algorithm (de-duplication)",
-                "description": "Method of identifying and tracking the same individual moth across multiple images.",
+            # "tracking_algorithm": {
+            #     "title": "Occurrence tracking algorithm (de-duplication)",
+            #     "description": "Method of identifying and tracking the same individual moth across multiple images.",
+            #     "kivy_type": "options",
+            #     "kivy_section": "models",
+            # },
+            "feature_extractor": {
+                "title": "Feature extractor used for image similarity search and occurrence tracking",
+                "description": "CNN model for extracting the embedded feature vector of an image used for similarity comparisons.",
                 "kivy_type": "options",
                 "kivy_section": "models",
             },

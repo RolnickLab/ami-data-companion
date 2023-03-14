@@ -21,7 +21,9 @@ class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
         self.batch_size = batch_size
 
     def __len__(self):
-        return self.queue.queue_count()
+        queue_count = self.queue.queue_count()
+        logger.info(f"Current queue count: {queue_count}")
+        return queue_count
 
     def __iter__(self):
         while len(self):
@@ -169,9 +171,12 @@ class BinaryClassifier(EfficientNetClassifier):
     positive_binary_label = None
     positive_negative_label = None
 
+    def get_queue(self) -> DetectedObjectQueue:
+        return DetectedObjectQueue(self.db_path, self.image_base_path)
+
     def get_dataset(self):
         dataset = ClassificationIterableDatabaseDataset(
-            queue=DetectedObjectQueue(self.db_path, self.image_base_path),
+            queue=self.queue,
             image_transforms=self.get_transforms(),
             batch_size=self.batch_size,
         )
@@ -200,25 +205,29 @@ class MothNonMothClassifier(BinaryClassifier):
     positive_negative_label = "nonmoth"
 
 
-class SpeciesClassifier:
-    stage = 3
+class SpeciesClassifier(InferenceBaseClass):
+    stage = 4
     type = "fine_grained_classifier"
+
+    def get_queue(self) -> UnclassifiedObjectQueue:
+        return UnclassifiedObjectQueue(self.db_path, self.image_base_path)
 
     def get_dataset(self):
         dataset = ClassificationIterableDatabaseDataset(
-            queue=UnclassifiedObjectQueue(self.db_path, self.image_base_path),
+            queue=self.queue,
             image_transforms=self.get_transforms(),
             batch_size=self.batch_size,
         )
         return dataset
 
     def save_results(self, object_ids, batch_output):
-        # Here we are saving the moth/non-moth labels
+        # Here we are saving the specific taxon labels
         classified_objects_data = [
             {
                 "specific_label": label,
                 "specific_label_score": score,
                 "model_name": self.name,
+                "in_queue": True,  # Put back in queue for the feature extractor & tracking
             }
             for label, score in batch_output
         ]
