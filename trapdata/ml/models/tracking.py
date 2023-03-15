@@ -491,6 +491,25 @@ class MothNonMothFeatureExtractor(FeatureExtractor, MothNonMothClassifier):
     name = "Features from general Moth/Non-Moth model"
 
 
+def clear_sequences(monitoring_session: MonitoringSession, session: orm.Session):
+    logger.info(f"Clearing existing sequences for {monitoring_session.day}")
+    stmt = (
+        update(DetectedObject)
+        .where(DetectedObject.monitoring_session_id == monitoring_session.id)
+        .values(
+            {
+                "sequence_id": None,
+                "sequence_frame": None,
+                "sequence_previous_id": None,
+                "sequence_previous_cost": None,
+            }
+        )
+    )
+    session.execute(stmt)
+    session.flush()
+    session.commit()
+
+
 def make_sequence_id(date: datetime.date, obj_id: int):
     sequence_id = f"{date.strftime('%Y%m%d')}-SEQ-{obj_id}"
     return sequence_id
@@ -535,7 +554,7 @@ def assign_solo_sequence(
     obj_current.sequence_id = sequence_id
     obj_current.sequence_frame = 0
 
-    logger.info(
+    logger.debug(
         f"Created new single-frame sequence for obj {obj_current.id}: {sequence_id}"
     )
 
@@ -674,7 +693,7 @@ def compare_objects(
                     session=session,
                     commit=False,
                 )
-                logger.info(
+                logger.debug(
                     f"Assigned {obj_current.id} to sequence {sequence_id} as frame #{frame_num}. Tracking cost: {round(lowest_cost, 2)}"
                 )
 
@@ -711,6 +730,8 @@ def find_all_tracks(
     """
     Retrieve all images for an Event / Monitoring Session and find all sequential objects.
     """
+    clear_sequences(monitoring_session, session)
+
     logger.info(f"Calculating tracks for {monitoring_session.day}")
 
     # The queue is less applicable to tracks, since we are calculating tracks for all objects

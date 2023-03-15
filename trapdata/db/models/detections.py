@@ -268,7 +268,11 @@ class DetectedObject(db.Base):
 
 
 def save_detected_objects(
-    db_path, image_ids, detected_objects_data, user_data_path=None
+    db_path,
+    image_ids,
+    detected_objects_data,
+    user_data_path=None,
+    delete_existing=True,
 ):
     orm_objects = []
     with db.get_session(db_path) as sesh:
@@ -282,6 +286,14 @@ def save_detected_objects(
 
     with db.get_session(db_path) as sesh:
         for image, detected_objects in zip(images, detected_objects_data):
+            existing_objects = image.detected_objects
+            if delete_existing and len(existing_objects):
+                logger.info(
+                    f"Deleting {len(existing_objects)} existing objects for image {image.id}"
+                )
+                for existing_obj in existing_objects:
+                    sesh.delete(existing_obj)
+
             image.last_processed = timestamp
 
             # sesh.add(image)

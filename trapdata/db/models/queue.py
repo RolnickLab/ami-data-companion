@@ -149,7 +149,7 @@ class DetectedObjectQueue(QueueManager):
         Return subquery of all IDs managed by the scope of this queue.
         """
         return (
-            sa.select(DetectedObject.id)
+            sa.select(sa.func.max(DetectedObject.id))
             .where(
                 (MonitoringSession.base_directory == str(self.base_directory))
                 & DetectedObject.bbox.is_not(None)
@@ -158,6 +158,7 @@ class DetectedObjectQueue(QueueManager):
                 MonitoringSession,
                 DetectedObject.monitoring_session_id == MonitoringSession.id,
             )
+            .group_by(DetectedObject.bbox)
             .scalar_subquery()
         )
 
@@ -270,7 +271,7 @@ class UnclassifiedObjectQueue(QueueManager):
         Return subquery of all IDs managed by the scope of this queue.
         """
         return (
-            sa.select(DetectedObject.id)
+            sa.select(sa.func.max(DetectedObject.id))
             .where(
                 (MonitoringSession.base_directory == str(self.base_directory))
                 & (DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
@@ -279,6 +280,7 @@ class UnclassifiedObjectQueue(QueueManager):
                 MonitoringSession,
                 DetectedObject.monitoring_session_id == MonitoringSession.id,
             )
+            .group_by(DetectedObject.bbox)
             .scalar_subquery()
         )
 
@@ -392,7 +394,7 @@ class ObjectsWithoutFeaturesQueue(QueueManager):
         Return subquery of all IDs managed by the scope of this queue.
         """
         return (
-            sa.select(DetectedObject.id)
+            sa.select(sa.func.max(DetectedObject.id))
             .where(
                 (MonitoringSession.base_directory == str(self.base_directory))
                 & (DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
@@ -401,6 +403,7 @@ class ObjectsWithoutFeaturesQueue(QueueManager):
                 MonitoringSession,
                 DetectedObject.monitoring_session_id == MonitoringSession.id,
             )
+            .group_by(DetectedObject.bbox)
             .scalar_subquery()
         )
 
@@ -513,7 +516,7 @@ class UntrackedObjectsQueue(QueueManager):
         Return subquery of all IDs managed by the scope of this queue.
         """
         return (
-            sa.select(DetectedObject.id)
+            sa.select(sa.func.max(DetectedObject.id))
             .where(
                 (MonitoringSession.base_directory == str(self.base_directory))
                 & (DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
@@ -523,6 +526,7 @@ class UntrackedObjectsQueue(QueueManager):
                 MonitoringSession,
                 DetectedObject.monitoring_session_id == MonitoringSession.id,
             )
+            .group_by(DetectedObject.bbox)
             .scalar_subquery()
         )
 
@@ -680,45 +684,29 @@ def add_sample_to_queue(db_path, sample_size=10):
     return images
 
 
-def add_monitoring_session_to_queue(
-    db_path, monitoring_session, limit: Optional[int] = None
-):
+def add_monitoring_session_to_queue(db_path, monitoring_session):
     """
     Add images captured during a give Monitoring Session to the
-    processing queue. If a limit is specified, only add that many
-    additional images to the queue. Will not add duplicates to the queue.
+    processing queue.
+    @TODO option to add random sample or subset
     """
     ms = monitoring_session
 
-    # @TODO This may be a faster way to add all images to the queue
-    # image_ids = get_monitoring_session_image_ids(ms)
-    # logger.info(f"Adding {len(image_ids)} images into queue")
-
-    # with get_session(db_path) as sesh:
-    #     sesh.execute(
-    #         sa.update(Image)
-    #         .where(Image.monitoring_session_id == ms.id)
-    #         .values(in_queue=True)
-    #     )
-
     logger.info(f"Adding all images for Monitoring Session {ms.id} to queue")
     with get_session(db_path) as sesh:
-        images = []
-        for image in (
-            sesh.query(TrapImage)
-            .filter_by(
-                in_queue=False,
-                last_processed=None,
-                monitoring_session_id=ms.id,
+        count = sesh.execute(
+            sa.select(sa.func.count()).where(TrapImage.monitoring_session_id == ms.id)
+        ).scalar()
+        logger.info(f"Adding {count} images to queue")
+        stmt = (
+            sa.update(TrapImage)
+            .where(
+                TrapImage.in_queue.is_(False)
+                & (TrapImage.monitoring_session_id == ms.id)
             )
-            .order_by(TrapImage.timestamp)
-            .limit(limit)
-            .all()
-        ):
-            image.in_queue = True
-            images.append(image)
-        logger.info(f"Adding {len(images)} images to queue")
-        sesh.bulk_save_objects(images)
+            .values({"in_queue": True})
+        )
+        sesh.execute(stmt)
         sesh.commit()
 
 
