@@ -7,10 +7,8 @@ the same individual, tracked over multiple frames in the original images
 from a monitoring session.
 """
 import datetime
-import pathlib
 
 import sqlalchemy as sa
-from sqlalchemy import orm
 from trapdata.db import models
 from trapdata import db
 

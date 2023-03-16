@@ -10,14 +10,10 @@ import pandas as pd
 from trapdata import logger
 from trapdata.cli import settings
 from trapdata.db import get_session_class
-from trapdata.db.models.detections import (
-    get_detected_objects,
-    num_occurrences_for_event,
-    num_species_for_event,
-)
 from trapdata.db.models.events import get_monitoring_sessions_from_db
 from trapdata.db.models.deployments import list_deployments
 from trapdata.db.models.occurrences import list_occurrences
+from trapdata.db.models.detections import get_detected_objects
 
 cli = typer.Typer(no_args_is_help=True)
 
@@ -140,6 +136,19 @@ def deployments(
     """
     Export info about deployments inferred from image base directories.
     """
+    Session = get_session_class(settings.database_url)
+    session = Session()
+    deployments = list_deployments(session)
+
+    df = pd.DataFrame(deployments)
+    return export(df=df, format=format, outfile=outfile)
+
+
+@cli.command()
+def deployments(
+    format: ExportFormat = ExportFormat.json,
+    outfile: Optional[pathlib.Path] = None,
+) -> Optional[str]:
     Session = get_session_class(settings.database_url)
     session = Session()
     deployments = list_deployments(session)
