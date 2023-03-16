@@ -109,16 +109,21 @@ class MonitoringSession(Base):
             duration = "Unknown duration"
         return duration
 
+    @property
+    def deployment(self) -> str:
+        return models.deployments.deployment_name(str(self.base_directory))
+
     def report_data(self) -> dict[str, Any]:
         duration = self.duration()
 
         return {
-            "trap": pathlib.Path(str(self.base_directory)).name,
+            "id": self.id,
+            "deployment": self.deployment,
             "event": self.day.isoformat(),
             "duration_minutes": int(round(duration.seconds / 60, 0)) if duration else 0,
             "duration_label": self.duration_label,
-            "num_images": self.num_images,
-            "num_detected_objects": self.num_detected_objects,
+            "num_source_images": self.num_images,
+            "num_detections": self.num_detected_objects,
             "start_time": self.start_time.isoformat(),
             "end_time": self.end_time.isoformat(),
         }

@@ -247,8 +247,9 @@ class DetectedObject(db.Base):
             score = self.binary_label_score
 
         return {
-            "trap": pathlib.Path(self.monitoring_session.base_directory).name,
+            "deployment": self.monitoring_session.deployment,
             "event": self.monitoring_session.day.isoformat(),
+            "event_id": self.monitoring_session_id,
             "sequence": self.sequence_id,
             "sequence_frame": self.sequence_frame,
             "sequence_cost": self.sequence_previous_cost,
@@ -475,73 +476,6 @@ def get_unique_species(
 
     with db.get_session(db_path) as sesh:
         return sesh.execute(query).all()
-
-
-def get_unique_species_by_track(
-    db_path,
-    monitoring_session=None,
-    classification_threshold: float = -1,
-    num_examples=3,
-):
-    # @TODO Return single objects that are not part of a sequence
-    # @TODO @IMPORTANT THIS NEEDS WORK!
-
-    Session = db.get_session_class(db_path)
-    session = Session()
-
-    # Select all sequences where at least one example is above the score threshold
-    sequences = session.execute(
-        sa.select(
-            DetectedObject.sequence_id,
-            sa.func.count(DetectedObject.id).label(
-                "sequence_frame_count"
-            ),  # frames in track
-            sa.func.max(DetectedObject.specific_label_score).label(
-                "sequence_best_score"
-            ),
-            sa.func.min(DetectedObject.timestamp).label("sequence_start_time"),
-            sa.func.max(DetectedObject.timestamp).label("sequence_end_time"),
-        )
-        .group_by("sequence_id")
-        .where((DetectedObject.monitoring_session_id == monitoring_session.id))
-        .having(
-            sa.func.max(DetectedObject.specific_label_score)
-            >= classification_threshold,
-        )
-        .order_by(DetectedObject.specific_label)
-    ).all()
-
-    rows = []
-    for sequence in sequences:
-        frames = session.execute(
-            sa.select(
-                DetectedObject.image_id.label("source_image_id"),
-                DetectedObject.specific_label.label("label"),
-                DetectedObject.specific_label_score.label("score"),
-                DetectedObject.path.label("cropped_image_path"),
-                DetectedObject.sequence_id,
-                DetectedObject.timestamp,
-            )
-            .where(
-                (DetectedObject.monitoring_session_id == monitoring_session.id)
-                & (DetectedObject.sequence_id == sequence.sequence_id)
-            )
-            # .order_by(sa.func.random())
-            .order_by(sa.desc("score"))
-            .limit(num_examples)
-        ).all()
-        row = dict(sequence._mapping)
-        if frames:
-            best_example = frames[0]
-            row["label"] = best_example.label
-            row["examples"] = [example._mapping for example in frames[:num_examples]]
-            row["sequence_duration"] = (
-                sequence.sequence_end_time - sequence.sequence_start_time
-            )
-        rows.append(row)
-
-    rows = reversed(sorted(rows, key=lambda row: row["sequence_start_time"]))
-    return rows
 
 
 def get_objects_for_species(db_path, species_label, monitoring_session=None):
