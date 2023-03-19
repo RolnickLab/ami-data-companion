@@ -56,7 +56,7 @@ def get_db(db_path, create=False, update=False):
         connect_args=connect_args.get(db_path.drivername, {}),
     )
 
-    alembic_cfg = get_alembic_config(db_path)
+    alembic_cfg = get_alembic_config(db_path.render_as_string(hide_password=False))
 
     # @TODO this is basically checking if the environment is the local app install
     # let's make a way to set & check the environment.
