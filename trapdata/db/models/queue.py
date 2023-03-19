@@ -158,7 +158,7 @@ class DetectedObjectQueue(QueueManager):
                 MonitoringSession,
                 DetectedObject.monitoring_session_id == MonitoringSession.id,
             )
-            .group_by(DetectedObject.bbox)
+            .group_by(DetectedObject.bbox.cast(sa.String))
             .scalar_subquery()
         )
 
@@ -280,7 +280,7 @@ class UnclassifiedObjectQueue(QueueManager):
                 MonitoringSession,
                 DetectedObject.monitoring_session_id == MonitoringSession.id,
             )
-            .group_by(DetectedObject.bbox)
+            .group_by(DetectedObject.bbox.cast(sa.String))
             .scalar_subquery()
         )
 
@@ -403,7 +403,7 @@ class ObjectsWithoutFeaturesQueue(QueueManager):
                 MonitoringSession,
                 DetectedObject.monitoring_session_id == MonitoringSession.id,
             )
-            .group_by(DetectedObject.bbox)
+            .group_by(DetectedObject.bbox.cast(sa.String))
             .scalar_subquery()
         )
 
@@ -526,7 +526,7 @@ class UntrackedObjectsQueue(QueueManager):
                 MonitoringSession,
                 DetectedObject.monitoring_session_id == MonitoringSession.id,
             )
-            .group_by(DetectedObject.bbox)
+            .group_by(DetectedObject.bbox.cast(sa.String))
             .scalar_subquery()
         )
 

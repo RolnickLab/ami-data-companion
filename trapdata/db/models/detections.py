@@ -508,7 +508,6 @@ def get_unique_species_by_track(
             sa.func.max(DetectedObject.specific_label_score)
             >= classification_threshold,
         )
-        .order_by(DetectedObject.specific_label)
     ).all()
 
     rows = []
