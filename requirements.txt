@@ -13,6 +13,7 @@ pandas
 sqlalchemy>2.0
 sqlalchemy_utils==0.39.0
 alembic==1.10.2
+psycopg2-binary==2.9.5
 sentry-sdk
 imagesize
 
