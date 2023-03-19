@@ -12,7 +12,7 @@ import torchvision
 from trapdata import logger
 
 
-def get_device(device_str=None):
+def get_device(device_str=None) -> torch.device:
     """
     Select CUDA if available.
 
@@ -35,7 +35,7 @@ def get_or_download_file(path, destination_dir=None, prefix=None):
         raise Exception("Specify a URL or path to fetch file from.")
 
     # If path is a local path instead of a URL then urlretrieve will just return that path
-    destination_dir = destination_dir or os.environ["LOCAL_WEIGHTS_PATH"]
+    destination_dir = destination_dir or os.environ.get("LOCAL_WEIGHTS_PATH")
     fname = path.rsplit("/", 1)[-1]
     if destination_dir:
         destination_dir = pathlib.Path(destination_dir)

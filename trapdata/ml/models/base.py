@@ -1,14 +1,21 @@
+from typing import Optional
 import json
 
 import torch
+import torch.utils.data
 from sentry_sdk import start_transaction
 
+import torchvision.transforms
+
 from trapdata import logger
+from trapdata.common.types import FilePath
 from trapdata.ml.utils import (
     get_device,
     get_or_download_file,
     StopWatch,
 )
+from trapdata.db.models.queue import QueueManager
+from trapdata.common.utils import slugify
 
 
 class BatchEmptyException(Exception):
@@ -41,7 +48,8 @@ class InferenceBaseClass:
     See examples in `classification.py` and `localization.py`
     """
 
-    db_path = None
+    db_path: str
+    image_base_path: FilePath
     name = "Unknown Inference Model"
     description = str()
     model_type = None
@@ -50,17 +58,21 @@ class InferenceBaseClass:
     weights = None
     labels_path = None
     category_map = {}
-    model = None
-    transforms = None
+    model: torch.nn.Module
+    transforms: torchvision.transforms.Compose
     batch_size = 4
     num_workers = 1
     user_data_path = None
     type = "unknown"
     stage = 0
     single = True
+    queue: QueueManager
+    dataset: torch.utils.data.Dataset
+    dataloader: torch.utils.data.DataLoader
 
-    def __init__(self, db_path, **kwargs):
+    def __init__(self, db_path: str, image_base_path: FilePath, **kwargs):
         self.db_path = db_path
+        self.image_base_path = image_base_path
 
         for k, v in kwargs.items():
             setattr(self, k, v)
@@ -71,12 +83,20 @@ class InferenceBaseClass:
         self.category_map = self.get_labels(self.labels_path)
         self.weights = self.get_weights(self.weights_path)
         self.transforms = self.get_transforms()
+        self.queue = self.get_queue()
         self.dataset = self.get_dataset()
         self.dataloader = self.get_dataloader()
         logger.info(
             f"Loading {self.type} model (stage: {self.stage}) for {self.name} with {len(self.category_map or [])} categories"
         )
         self.model = self.get_model()
+
+    @classmethod
+    def get_key(cls):
+        if hasattr(cls, "key") and cls.key:  # type: ignore
+            return cls.key  # type: ignore
+        else:
+            return slugify(cls.name)
 
     def get_weights(self, weights_path):
         if weights_path:
@@ -100,11 +120,14 @@ class InferenceBaseClass:
             index_to_label = {index: label for label, index in labels.items()}
 
             return index_to_label
+        else:
+            return {}
 
-    def get_model(self):
+    def get_model(self) -> torch.nn.Module:
         """
-        # This method must be implemented by a subclass.
-        # Example:
+        This method must be implemented by a subclass.
+
+        Example:
 
         model = torch.nn.Module()
         checkpoint = torch.load(self.weights, map_location=self.device)
@@ -115,10 +138,11 @@ class InferenceBaseClass:
         """
         raise NotImplementedError
 
-    def get_transforms(self):
+    def get_transforms(self) -> torchvision.transforms.Compose:
         """
-        # This method must be implemented by a subclass.
-        # Example:
+        This method must be implemented by a subclass.
+
+        Example:
 
         transforms = torchvision.transforms.Compose(
             [
@@ -129,10 +153,22 @@ class InferenceBaseClass:
         """
         raise NotImplementedError
 
-    def get_dataset(self):
+    def get_queue(self) -> QueueManager:
         """
-        # This method must be implemented by a subclass.
-        # Example:
+        This method must be implemented by a subclass.
+        Example:
+
+        from trapdata.db.models.queue import DetectedObjectQueue
+        def get_queue(self):
+            return DetectedObjectQueue(self.db_path, self.image_base_path)
+        """
+        raise NotImplementedError
+
+    def get_dataset(self) -> torch.utils.data.Dataset:
+        """
+        This method must be implemented by a subclass.
+
+        Example:
 
         dataset = torch.utils.data.Dataset()
         return dataset
@@ -188,7 +224,6 @@ class InferenceBaseClass:
         torch.cuda.empty_cache()
 
         for i, batch in enumerate(self.dataloader):
-
             if not batch:
                 # @TODO review this once we switch to streaming IterableDataset
                 logger.info(f"Batch {i+1} is empty, skipping")

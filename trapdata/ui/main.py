@@ -9,6 +9,7 @@ from functools import partial
 # import multiprocessing
 import threading
 from sqlalchemy import orm
+from rich import print
 
 import kivy
 from kivy.app import App
@@ -25,8 +26,13 @@ from kivy.properties import (
     BooleanProperty,
 )
 
+from trapdata.settings import Settings, ValidationError
 from trapdata import logger
 from trapdata import ml
+from trapdata.db.models.events import (
+    get_monitoring_sessions_from_db,
+    export_monitoring_sessions,
+)
 from trapdata.db.models.detections import get_detected_objects, export_detected_objects
 from trapdata.db.models.queue import clear_all_queues
 from trapdata.pipeline import start_pipeline
@@ -82,7 +88,7 @@ class Queue(Label):
         if self.bgtask:
             logger.info(f"Background task changed status: {self.bgtask}")
 
-    def start(self, *args, single=False):
+    def start(self, *args, single: bool = False):
         # @NOTE can't change a widget property from a bg thread
         if not self.running:
             if self.bgtask:
@@ -91,7 +97,11 @@ class Queue(Label):
             task_name = "Trapdata Queue Processor"
             self.bgtask = threading.Thread(
                 target=partial(
-                    start_pipeline, self.app.db_path, self.app.config, single
+                    start_pipeline,
+                    db_path=self.app.db_path,
+                    image_base_path=self.app.image_base_path,
+                    config=self.app.config,
+                    single=single,
                 ),
                 daemon=True,  # PyTorch will be killed abruptly, leaving memory in GPU
                 name=task_name,
@@ -132,7 +142,7 @@ class Queue(Label):
 
     def clear(self):
         self.stop()
-        clear_all_queues(self.app.db_path)
+        clear_all_queues(self.app.db_path, self.app.image_base_path)
 
 
 class TrapDataApp(App):
@@ -142,6 +152,7 @@ class TrapDataApp(App):
     image_base_path = StringProperty(allownone=True)
     screen_manager = ObjectProperty()
     use_kivy_settings = False
+    app_settings = ObjectProperty()
 
     def on_stop(self):
         # The Kivy event loop is about to stop, set a stop signal;
@@ -173,6 +184,8 @@ class TrapDataApp(App):
         # Just in case we are in a bind:
         Window.fullscreen = 0
         Window.show_cursor = True
+        # Window.clearcolor = (1, 1, 1, 1.0)
+        # Window.size = (600, 400)
 
         sm = ScreenManager()
         sm.add_widget(DataMenuScreen(name="menu"))
@@ -182,12 +195,34 @@ class TrapDataApp(App):
         sm.add_widget(QueueScreen(name="queue"))
         self.screen_manager = sm
 
+        self.refresh_app_settings()
+
         return sm
+
+    def refresh_app_settings(self):
+        """
+        Create a Pydantic BaseSettings instance for accessing
+        the app settings in a standardized way whether functions are called
+        from the GUI, from the CLI or another API.
+
+        The Settings class reads the Kivy settings file.
+        """
+        self.app_settings = Settings(_env_file=None)  # noqa
+        print(self.app_settings)
+
+    def on_config_change(self, config, section, key, value):
+        if key == "image_base_path":
+            self.image_base_path = value
+        self.refresh_app_settings()
+        return super().on_config_change(config, section, key, value)
 
     def on_image_base_path(self, *args):
         """
         When a base path is set, create a queue status
         """
+        if self.screen_manager.current == "menu":
+            self.screen_manager.current_screen.image_base_path = self.image_base_path
+
         if self.queue and self.queue.clock:
             Clock.unschedule(self.queue.clock)
         self.queue = Queue(app=self)
@@ -217,8 +252,8 @@ class TrapDataApp(App):
         config.setdefaults(
             "paths",
             {
+                "image_base_path": "",  # Using None here gets converted into a string
                 "user_data_path": self.user_data_dir,
-                # "image_base_path": self.user_data_dir,
                 "database_url": default_db_connection_string,
             },
         )
@@ -229,10 +264,11 @@ class TrapDataApp(App):
                 "binary_classification_model": list(
                     ml.models.binary_classifiers.keys()
                 )[0],
-                "taxon_classification_model": list(
+                "species_classification_model": list(
                     ml.models.species_classifiers.keys()
                 )[0],
-                "tracking_algorithm": None,
+                "feature_extractor": list(ml.models.feature_extractors.keys())[0],
+                "classification_threshold": 0.6,
             },
         )
         config.setdefaults(
@@ -247,128 +283,105 @@ class TrapDataApp(App):
         # config.write()
 
     def build_settings(self, settings):
-        path_settings = [
-            {
-                "key": "user_data_path",
-                "type": "path",
-                "title": "Local directory for models, thumbnails & reports",
-                "desc": "Model weights are between 100-200Mb and will be downloaded the first time a model is used.",
-                "section": "paths",
-            },
-            {
-                "key": "database_url",
-                "type": "string",
-                "title": "Database connection string",
-                "desc": "Defaults to a local SQLite database that will automatically be created. Supports PostgreSQL.",
-                "section": "paths",
-            },
-        ]
-        model_settings = [
-            {
-                "key": "localization_model",
-                "type": "options",
-                "title": "Localization model",
-                "desc": "Model & settings to use for object detection in original images from camera trap.",
-                "options": list(ml.models.object_detectors.keys()),
-                "section": "models",
-            },
-            {
-                "key": "binary_classification_model",
-                "type": "options",
-                "title": "Binary classification model",
-                "desc": "Model & settings to use for moth / non-moth classification of cropped images after object detection.",
-                "options": list(ml.models.binary_classifiers.keys()),
-                "section": "models",
-            },
-            {
-                "key": "taxon_classification_model",
-                "type": "options",
-                "title": "Species classification model",
-                "desc": "Model & settings to use for fine-grained species or taxon-level classification of cropped images after moth/non-moth detection.",
-                "options": list(ml.models.species_classifiers.keys()),
-                "section": "models",
-            },
-            {
-                "key": "tracking_algorithm",
-                "type": "options",
-                "title": "Occurence tracking algorithm (de-duplication)",
-                "desc": "Method of identifying and tracking the same individual moth across multiple images.",
-                "options": [],
-                "section": "models",
-            },
-        ]
+        kivy_settings = {}
+        properties = Settings.schema()["properties"]  # Main list of settings
+        definitions = Settings.schema()["definitions"]  # Enum choices for drop-downs
+        for key, options in properties.items():
+            section = options.get("kivy_section", "Other")
+            type_ = options.get("kivy_type", "string")
+            kivy_settings.setdefault(section, [])
+            setting = {
+                "key": key,
+                "type": type_,
+                "title": options["title"],
+                "desc": options["description"],
+                "section": section,
+            }
+            # @TODO the following seems sketchy, is there a parser for this format? (OpenAPI?)
+            if type_ == "options" and "allOf" in options:
+                choice_type = options["allOf"][0]["$ref"].split("/")[-1]
+                choices = definitions[choice_type]["enum"]
+                setting["options"] = choices
+            kivy_settings[section].append(setting)
 
-        performance_settings = [
-            {
-                "key": "use_gpu",
-                "type": "bool",
-                "title": "Use GPU if available",
-                "section": "performance",
-            },
-            {
-                "key": "localization_batch_size",
-                "type": "numeric",
-                "title": "Localization batch size",
-                "desc": (
-                    "Number of images to process per-batch during localization. "
-                    "These are large images (e.g. 4096x2160px), smaller batch sizes are appropriate (1-10). "
-                    "Reduce this if you run out of memory."
-                ),
-                "section": "performance",
-            },
-            {
-                "key": "classification_batch_size",
-                "type": "numeric",
-                "title": "Classification batch size",
-                "desc": (
-                    "Number of images to process per-batch during classification. "
-                    "These are small images (e.g. 50x100px), larger batch sizes are appropriate (10-200). "
-                    "Reduce this if you run out of memory."
-                ),
-                "section": "performance",
-            },
-            {
-                "key": "num_workers",
-                "type": "numeric",
-                "title": "Number of workers",
-                "desc": "Number of parallel workers for the PyTorch dataloader. See https://pytorch.org/docs/stable/data.html",
-                "section": "performance",
-            },
-        ]
+        for section, items in kivy_settings.items():
+            settings.add_json_panel(
+                section.title(),
+                self.config,
+                data=json.dumps(items, default=str),
+            )
+        logger.info(f"Kivy settings file: {self.config.filename}")
 
-        settings.add_json_panel(
-            "Paths",
-            self.config,
-            data=json.dumps(path_settings),
-        )
-        settings.add_json_panel(
-            "Model selection",
-            self.config,
-            data=json.dumps(model_settings),
-        )
-        settings.add_json_panel(
-            "Performance settings",
-            self.config,
-            data=json.dumps(performance_settings),
-        )
-
-    def export(self, detected_objects=None, report_name=None):
+    def export_events(self):
+        """
+        User initiated export of Monitoring Sessions / Survey Events
+        with a pop-up.
+        """
         app = self
         user_data_path = app.config.get("paths", "user_data_path")
-        records = list(detected_objects or get_detected_objects(app.db_path))
+        items = list(
+            get_monitoring_sessions_from_db(
+                db_path=app.db_path, base_directory=app.image_base_path
+            )
+        )
         timestamp = int(time.time())
-        report_name = report_name or f"all-detections-{timestamp}"
-        filepath = export_detected_objects(records, report_name, user_data_path)
-        logger.info(f"Exported detections to {filepath}")
+        trap = pathlib.Path(app.image_base_path).name
+        report_name = f"{trap}-monitoring_events-{timestamp}"
+        filepath = export_monitoring_sessions(
+            items=items,
+            directory=user_data_path,
+            report_name=report_name,
+        )
+        if filepath:
+            logger.info(f"Exported monitoring events to {filepath}")
+            msg = (
+                f"{len(items)} events have been exported to: \n\n"
+                f'"{filepath.name}" \n\n'
+                f"In the directory: \n{filepath.parent} \n"
+            )
+        else:
+            msg = "Nothing exported, no report created"
+            logger.warn(msg)
         Popup(
             title="Report exported",
-            content=Label(
-                text=(
-                    f"{len(records)} detected objects have been exported to: \n\n"
-                    f'"{filepath.name}" \n\n'
-                    f"In the directory: \n{filepath.parent} \n"
-                )
-            ),
+            content=Label(text=msg),
+            size_hint=(None, None),
+            size=("550dp", "220dp"),
+        ).open()
+
+    def export_detections(self, detected_objects=None, report_name=None):
+        """
+        User initiated export of Detected Objects with a pop-up.
+        """
+        app = self
+        user_data_path = app.config.get("paths", "user_data_path")
+        objects = list(
+            detected_objects
+            or get_detected_objects(
+                db_path=app.db_path, image_base_path=app.image_base_path
+            )
+        )
+        timestamp = int(time.time())
+        trap = pathlib.Path(app.image_base_path).name
+        report_name = report_name or f"{trap}-all-detections-{timestamp}"
+        filepath = export_detected_objects(
+            items=objects,
+            directory=user_data_path,
+            report_name=report_name,
+        )
+        if filepath:
+            logger.info(f"Exported detections to {filepath}")
+            msg = (
+                f"{len(objects)} detected objects have been exported to: \n\n"
+                f'"{filepath.name}" \n\n'
+                f"In the directory: \n{filepath.parent} \n"
+            )
+        else:
+            msg = "Nothing exported, no report created"
+            logger.warn(msg)
+        Popup(
+            title="Report exported",
+            content=Label(text=msg),
             size_hint=(None, None),
             size=("550dp", "220dp"),
         ).open()

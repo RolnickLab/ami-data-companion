@@ -10,10 +10,12 @@
     "cSpell.words": [
         "argmax",
         "astype",
+        "customise",
         "fasterrcnn",
         "kivy",
         "resnet",
         "sesh",
+        "sessionmaker",
         "softmax",
         "sqlalchemy",
         "torchvision",

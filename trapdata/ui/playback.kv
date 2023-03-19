@@ -28,19 +28,33 @@
 
 
 <ImagePlaybackScreen>:
+    canvas.before:
+        Color:
+            rgba: 1, 1, 1, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
     id: playback_screen
     BoxLayout:
         id: playback_layout
         orientation: "vertical"
+        Label:
+            id: title_bar 
+            text: "image title"
+            halign: "left"
+            valign: "bottom"
+            color: [0, 0, 0, 1]
+            orientation: "horizontal"
+            size_hint_y: 0.05
         PreviewWindow:
             id: image_preview 
-            size_hint_y: 0.8
+            size_hint_y: 0.75
         Label:
             id: info_bar 
             text: ""
-            halign: "center"
-            valign: "middle"
-            color: [1, 1, 1, 1]
+            halign: "left"
+            valign: "bottom"
+            color: [0, 0, 0, 1]
             orientation: "horizontal"
             size_hint_y: 0.1
         BoxLayout:
@@ -48,20 +62,25 @@
             orientation: "horizontal"
             size_hint_y: 0.1
             Button:
-                text: "Back"
+                text: "Home"
                 on_press: root.exit()
             Button:
+                text: "Summary"
+                on_press: root.show_summary_screen() 
+            Button:
                 id: queue_button
-                text: "Add to Queue" 
+                text: "Add to\nQueue" 
                 on_press: root.ids.image_preview.add_current_sample_to_queue() 
+                halign: "center"
             Button:
-                text: "Process Single\n(Clears Queue)"
+                text: "Process\nNow *"
                 on_press: root.ids.image_preview.process_now() 
+                halign: "center"
             Button:
-                text: "< Previous"
+                text: "<"
                 on_press: root.ids.image_preview.prev_sample() 
             Button:
-                text: "Next >"   
+                text: ">"   
                 on_press: root.ids.image_preview.next_sample() 
             Button:
                 text: "Pause"   
@@ -70,3 +89,6 @@
                 id: play_button
                 text: "Play"   
                 on_press: root.play() 
+            Button:
+                text: "Settings"
+                on_press: app.open_settings()

@@ -1,4 +1,6 @@
 import pathlib
+import datetime
+from typing import Optional
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -6,6 +8,11 @@ from sqlalchemy_utils import aggregated
 
 from trapdata.db import Base, get_session
 from trapdata import constants
+from trapdata.common.filemanagement import (
+    get_image_dimensions,
+    get_image_filesize,
+    get_image_timestamp,
+)
 
 
 class TrapImage(Base):
@@ -21,18 +28,53 @@ class TrapImage(Base):
     last_processed = sa.Column(sa.DateTime)
     in_queue = sa.Column(sa.Boolean, default=False)
     notes = sa.Column(sa.JSON)
+    width = sa.Column(sa.Integer)
+    height = sa.Column(sa.Integer)
+    # position
+    # diag
+    # centroid
+    # cnn features
 
     @property
-    def absolute_path(self, directory=None):
+    def absolute_path(self, directory: Optional[str] = None) -> pathlib.Path:
         # @TODO this directory argument can be removed once the image has the base
         # path stored in itself
         if not directory:
-            directory = self.base_path
-        return pathlib.Path(directory) / self.path
+            directory = str(self.base_path)
+        return pathlib.Path(directory) / str(self.path)
 
     @aggregated("detected_objects", sa.Column(sa.Integer))
     def num_detected_objects(self):
         return sa.func.count("1")
+
+    def previous_image(self, session: orm.Session) -> Optional["TrapImage"]:
+        img = session.execute(
+            sa.select(TrapImage)
+            .filter(TrapImage.timestamp < self.timestamp)
+            .order_by(TrapImage.timestamp.desc())
+            .limit(1)
+        ).scalar()
+        return img
+
+    def next_image(self, session: orm.Session) -> Optional["TrapImage"]:
+        img = session.execute(
+            sa.select(TrapImage)
+            .filter(TrapImage.timestamp > self.timestamp)
+            .order_by(TrapImage.timestamp.asc())
+            .limit(1)
+        ).scalar()
+        return img
+
+    def update_source_data(self, session: orm.Session, commit=True):
+        img_path = self.absolute_path
+        self.width, self.height = get_image_dimensions(img_path)
+        self.timestamp = get_image_timestamp(img_path)
+        self.filesize = get_image_filesize(img_path)
+        self.last_read = datetime.datetime.now()
+        session.add(self)
+        if commit:
+            session.flush()
+            session.commit()
 
     # @TODO let's keep the precious detected objects, even if the Monitoring Session or Image is deleted?
     detected_objects = orm.relationship(
@@ -85,7 +127,7 @@ def completely_classified(db_path, image_id):
 
     with get_session(db_path) as sesh:
         img = sesh.query(TrapImage).get(image_id)
-        if img.in_queue or not img.last_processed:
+        if not img or not img.last_processed or img.in_queue:
             return False
 
         else:

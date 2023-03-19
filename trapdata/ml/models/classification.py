@@ -21,7 +21,9 @@ class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
         self.batch_size = batch_size
 
     def __len__(self):
-        return self.queue.queue_count()
+        queue_count = self.queue.queue_count()
+        logger.info(f"Current queue count: {queue_count}")
+        return queue_count
 
     def __iter__(self):
         while len(self):
@@ -40,129 +42,6 @@ class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
 
     def transform(self, cropped_image):
         return self.image_transforms(cropped_image)
-
-
-class BinaryClassificationDatabaseDataset(torch.utils.data.Dataset):
-    def __init__(self, db_path, image_transforms):
-        super().__init__()
-
-        self.db_path = db_path
-        self.transform = image_transforms
-        self.query_args = {
-            "in_queue": True,
-            "binary_label": None,
-        }
-
-    def __len__(self):
-        with db.get_session(self.db_path) as sesh:
-            count = (
-                sesh.query(models.DetectedObject)
-                .filter(models.DetectedObject.bbox.is_not(None))
-                .filter_by(**self.query_args)
-                .count()
-            )
-            logger.info(f"Detected Objects found in queue: {count}")
-            return int(count)
-
-    def __getitem__(self, idx):
-        # What properties do we need while session is open?
-        item_id, img_path, bbox = None, None, None
-
-        with db.get_session(self.db_path) as sesh:
-            next_obj = (
-                sesh.query(models.DetectedObject)
-                .filter(models.DetectedObject.bbox.is_not(None))
-                .filter_by(**self.query_args)
-                .options(db.orm.joinedload(models.DetectedObject.image))
-                .first()
-            )
-            if not next_obj:
-                return
-
-            item_id = next_obj.id
-            img_path = next_obj.image.absolute_path
-            bbox = next_obj.bbox
-
-            next_obj.in_queue = False
-            sesh.add(next_obj)
-            sesh.commit()
-
-        # @TODO improve. Can't the main transforms chain do this?
-        # if we pass the bbox to get_transforms?
-        img = Image.open(img_path)
-        img = torchvision.transforms.ToTensor()(img)
-        x1, y1, x2, y2 = bbox
-        cropped_image = img[
-            :,
-            int(y1) : int(y2),
-            int(x1) : int(x2),
-        ]
-        cropped_image = torchvision.transforms.ToPILImage()(cropped_image)
-        item = (item_id, self.transform(cropped_image))
-
-        return item
-
-
-class SpeciesClassificationDatabaseDataset(torch.utils.data.Dataset):
-    def __init__(self, db_path, image_transforms):
-        super().__init__()
-
-        self.db_path = db_path
-        self.transform = image_transforms
-        self.query_args = {
-            "in_queue": True,
-            "specific_label": None,
-            "binary_label": constants.POSITIVE_BINARY_LABEL,
-        }
-
-    def __len__(self):
-        with db.get_session(self.db_path) as sesh:
-            count = (
-                sesh.query(models.DetectedObject)
-                .filter(models.DetectedObject.bbox.is_not(None))
-                .filter_by(**self.query_args)
-                .count()
-            )
-            logger.info(f"Objects for species classification found in queue: {count}")
-            return int(count)
-
-    def __getitem__(self, idx):
-        # What properties do we need while session is open?
-        item_id, img_path, bbox = None, None, None
-
-        with db.get_session(self.db_path) as sesh:
-            next_obj = (
-                sesh.query(models.DetectedObject)
-                .filter(models.DetectedObject.bbox.is_not(None))
-                .filter_by(**self.query_args)
-                .options(db.orm.joinedload(models.DetectedObject.image))
-                .first()
-            )
-            if not next_obj:
-                return
-
-            item_id = next_obj.id
-            img_path = next_obj.image.absolute_path
-            bbox = next_obj.bbox
-
-            next_obj.in_queue = False
-            sesh.add(next_obj)
-            sesh.commit()
-
-        # @TODO improve. Can't the main transforms chain do this?
-        # if we pass the bbox to get_transforms?
-        img = Image.open(img_path)
-        img = torchvision.transforms.ToTensor()(img)
-        x1, y1, x2, y2 = bbox
-        cropped_image = img[
-            :,
-            int(y1) : int(y2),
-            int(x1) : int(x2),
-        ]
-        cropped_image = torchvision.transforms.ToPILImage()(cropped_image)
-        item = (item_id, self.transform(cropped_image))
-
-        return item
 
 
 class EfficientNetClassifier(InferenceBaseClass):
@@ -208,15 +87,96 @@ class EfficientNetClassifier(InferenceBaseClass):
         return result
 
 
+class Resnet50(torch.nn.Module):
+    def __init__(self, num_classes):
+        """
+        Args:
+            config: provides parameters for model generation
+        """
+        super(Resnet50, self).__init__()
+        self.num_classes = num_classes
+        self.backbone = torchvision.models.resnet50(weights="DEFAULT")
+        out_dim = self.backbone.fc.in_features
+
+        self.backbone = torch.nn.Sequential(*list(self.backbone.children())[:-2])
+        self.avgpool = torch.nn.AdaptiveAvgPool2d(output_size=(1, 1))
+        self.classifier = torch.nn.Linear(out_dim, self.num_classes, bias=False)
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
+
+        return x
+
+
+class Resnet50Classifier(InferenceBaseClass):
+    input_size = 300
+
+    def get_model(self):
+        num_classes = len(self.category_map)
+        model = Resnet50(num_classes=num_classes)
+        model = model.to(self.device)
+        # state_dict = torch.hub.load_state_dict_from_url(weights_url)
+        checkpoint = torch.load(self.weights, map_location=self.device)
+        # The model state dict is nested in some checkpoints, and not in others
+        state_dict = checkpoint.get("model_state_dict") or checkpoint
+        model.load_state_dict(state_dict)
+        model.eval()
+        return model
+
+    def get_transforms(self):
+        mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
+        return torchvision.transforms.Compose(
+            [
+                torchvision.transforms.Resize((self.input_size, self.input_size)),
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize(mean, std),
+            ]
+        )
+
+    def post_process_batch(self, output):
+        predictions = torch.nn.functional.softmax(output, dim=1)
+        predictions = predictions.cpu().numpy()
+
+        categories = predictions.argmax(axis=1)
+        labels = [self.category_map[cat] for cat in categories]
+        scores = predictions.max(axis=1).astype(float)
+
+        result = list(zip(labels, scores))
+        logger.debug(f"Post-processing result batch: {result}")
+        return result
+
+
+class Resnet50ClassifierLowRes(Resnet50Classifier):
+    input_size = 128
+
+    def get_model(self):
+        num_classes = len(self.category_map)
+        model = torchvision.models.resnet50(weights=None)
+        num_ftrs = model.fc.in_features
+        model.fc = torch.nn.Linear(num_ftrs, num_classes)
+        model = model.to(self.device)
+        checkpoint = torch.load(self.weights, map_location=self.device)
+        state_dict = checkpoint.get("model_state_dict") or checkpoint
+        model.load_state_dict(state_dict)
+        model.eval()
+        return model
+
+
 class BinaryClassifier(EfficientNetClassifier):
     stage = 2
     type = "binary_classification"
     positive_binary_label = None
     positive_negative_label = None
 
+    def get_queue(self) -> DetectedObjectQueue:
+        return DetectedObjectQueue(self.db_path, self.image_base_path)
+
     def get_dataset(self):
         dataset = ClassificationIterableDatabaseDataset(
-            queue=DetectedObjectQueue(self.db_path),
+            queue=self.queue,
             image_transforms=self.get_transforms(),
             batch_size=self.batch_size,
         )
@@ -245,32 +205,79 @@ class MothNonMothClassifier(BinaryClassifier):
     positive_negative_label = "nonmoth"
 
 
-class SpeciesClassifier(EfficientNetClassifier):
-    stage = 3
+class SpeciesClassifier(InferenceBaseClass):
+    stage = 4
     type = "fine_grained_classifier"
+
+    def get_queue(self) -> UnclassifiedObjectQueue:
+        return UnclassifiedObjectQueue(self.db_path, self.image_base_path)
 
     def get_dataset(self):
         dataset = ClassificationIterableDatabaseDataset(
-            queue=UnclassifiedObjectQueue(self.db_path),
+            queue=self.queue,
             image_transforms=self.get_transforms(),
             batch_size=self.batch_size,
         )
         return dataset
 
     def save_results(self, object_ids, batch_output):
-        # Here we are saving the moth/non-moth labels
+        # Here we are saving the specific taxon labels
         classified_objects_data = [
             {
                 "specific_label": label,
                 "specific_label_score": score,
                 "model_name": self.name,
+                "in_queue": True,  # Put back in queue for the feature extractor & tracking
             }
             for label, score in batch_output
         ]
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
 
 
-class QuebecVermontMothSpeciesClassifier(SpeciesClassifier):
+class QuebecVermontMothSpeciesClassifierMixedResolution(
+    SpeciesClassifier, Resnet50Classifier
+):
+    name = "Quebec & Vermont Species Classifier - Mixed Resolution"
+    description = "Trained on December 22, 2022 using lower resolution images"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "quebec-vermont-moth-model_v07_resnet50_2022-12-22-07-54.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "quebec-vermont_moth-category-map_19Jan2023.json"
+    )
+
+
+class QuebecVermontMothSpeciesClassifierLowResolution(
+    SpeciesClassifier, Resnet50ClassifierLowRes
+):
+    name = "Quebec & Vermont Species Classifier - Low Resolution"
+    description = "Trained on February 24, 2022 using lower resolution images"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "moths_quebecvermont_resnet50_randaug_mixres_128_fev24.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "quebec-vermont_moth-category-map_19Jan2023.json"
+    )
+
+
+class PanamaMothSpeciesClassifierMixedResolution(SpeciesClassifier, Resnet50Classifier):
+    name = "Panama Species Classifier - Mixed Resolution"
+    description = "Trained on December 22, 2022 using lower resolution images"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_moth-model_v01_resnet50_2023-01-24-09-51.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_moth-category-map_24Jan2023.json"
+    )
+
+
+class QuebecVermontMothSpeciesClassifier(SpeciesClassifier, EfficientNetClassifier):
     name = "Quebec & Vermont Species Classifier"
     description = "Trained on September 8, 2022 using local species checklist from GBIF"
     weights_path = (
@@ -283,7 +290,7 @@ class QuebecVermontMothSpeciesClassifier(SpeciesClassifier):
     )
 
 
-class UKDenmarkMothSpeciesClassifier(SpeciesClassifier):
+class UKDenmarkMothSpeciesClassifier(SpeciesClassifier, EfficientNetClassifier):
     name = "UK & Denmark Species Classifier"
     description = (
         "Trained on September 8, 2022 using local species checklist from GBIF."

@@ -1,18 +1,30 @@
 import contextlib
 import pathlib
+from typing import Generator
+from rich import print
 
 import sqlalchemy as sa
+import sqlalchemy.exc
 from sqlalchemy import orm
+from alembic.config import Config
+from alembic import command as alembic
 
 from trapdata import logger
 
 
-def get_safe_db_path(db):
+def get_safe_db_path(db_path: str):
     # Return filepath or URL of database without credentials
-    return db.path
+    return sa.engine.url.make_url(db_path)
 
 
-def get_db(db_path, create=False):
+def get_alembic_config(db_path: str) -> Config:
+    alembic_cfg = Config()
+    alembic_cfg.set_main_option("script_location", "trapdata.db:migrations")
+    alembic_cfg.set_main_option("sqlalchemy.url", str(db_path))
+    return alembic_cfg
+
+
+def get_db(db_path, create=False, update=False):
     """
     db_path supports any database URL format supported by sqlalchemy
     sqlite_filepath = "~/trapdata.db"
@@ -37,28 +49,44 @@ def get_db(db_path, create=False):
         },
     )
 
+    alembic_cfg = get_alembic_config(db_path)
+
+    # @TODO this is basically checking if the environment is the local app install
+    # let's make a way to set & check the environment.
+    if db.dialect.name != "sqlite" and (create or update):
+        logger.warn(
+            "Database is something other that sqlite, you must create & update it with the CLI tools."
+        )
+        return db
+
     if create:
         from . import Base
 
         logger.info("Creating database tables if necessary")
-        if db.dialect.name == "sqlite":
-            db_filepath = pathlib.Path(db.url.database)
-            if not db_filepath.exists():
-                logger.info(f"Creating {db_filepath} and parent directories")
-                db_filepath.parent.mkdir(parents=True, exist_ok=True)
-        Base.metadata.create_all(db, checkfirst=True)
+        db_filepath = pathlib.Path(db.url.database)
+        if not db_filepath.exists():
+            logger.info(f"Creating {db_filepath} and parent directories")
+            db_filepath.parent.mkdir(parents=True, exist_ok=True)
+            Base.metadata.create_all(db, checkfirst=True)
+            alembic.stamp(alembic_cfg, "head")
+
+    if update:
+        # @TODO See this post for a more complete implementation
+        # https://pawamoy.github.io/posts/testing-fastapi-ormar-alembic-apps/
+        logger.debug("Running any database migrations if necessary")
+        alembic.upgrade(alembic_cfg, "head")
 
     return db
 
 
-def get_session_class(db_path, **kwargs) -> type[orm.Session]:
+def get_session_class(db_path, **kwargs) -> orm.sessionmaker[orm.Session]:
     """
     Use this to create a pre-configured Session class.
     Attach it to the running app.
     Then we don't have to pass around the db_path
     """
     Session = orm.sessionmaker(
-        bind=get_db(db_path),
+        bind=get_db(db_path, create=False, update=False),
         expire_on_commit=False,  # Currently only need this for `pull_n_from_queue`
         autoflush=False,
         autocommit=False,
@@ -68,7 +96,7 @@ def get_session_class(db_path, **kwargs) -> type[orm.Session]:
 
 
 @contextlib.contextmanager
-def get_session(db_path: str, **kwargs) -> orm.Session:
+def get_session(db_path: str, **kwargs) -> Generator[orm.Session, None, None]:
     """
     Convenience method to start and close a pre-configured database session.
 
@@ -91,16 +119,16 @@ def get_session(db_path: str, **kwargs) -> orm.Session:
         session.close()
 
 
-def check_db(db_path, create=True, quiet=False):
+def check_db(db_path, create=True, update=True, quiet=False):
     """
     Try opening a database session.
     """
     from trapdata.db.models import __models__
 
-    logger.debug(f"Checking DB {db_path}")
-
+    db_dsn = get_safe_db_path(db_path)
     try:
-        get_db(db_path, create=True)
+        logger.info(f"Checking DB {db_dsn}")
+        get_db(db_path, create=create, update=update)
         with get_session(db_path) as sesh:
             # May have to check each model to detect schema changes
             # @TODO probably a better way to do this!
@@ -110,8 +138,14 @@ def check_db(db_path, create=True, quiet=False):
                 logger.debug(
                     f"Found {count} records in table '{ModelClass.__tablename__}'"
                 )
-    except sa.exc.OperationalError as e:
-        logger.error(f"Error opening database session: {e}")
+    except (sqlalchemy.exc.OperationalError, alembic.util.exc.CommandError) as e:
+        msg = f"Error opening database session: {e}"
+        logger.error(msg)
+        if db_dsn.get_dialect().name == "sqlite":
+            # @TODO standardize the way we check for a local environment and sqlite
+            print(
+                f'[b][yellow]Quick fix:[/yellow][/b] rename or delete the local database file: "{str(db_dsn.database)}"'
+            )
         if quiet:
             return False
         else:

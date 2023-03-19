@@ -26,11 +26,14 @@
                 text: "View Queue"
                 on_press: root.manager.current = "queue"
             Button:
-                text: "Change Trap"
+                text: "Choose Trap"
                 on_press: root.choose_root_directory() 
             Button:
-                text: "Export All"
-                on_press: app.export() 
+                text: "Export Events"
+                on_press: app.export_events() 
+            Button:
+                text: "Export Detections"
+                on_press: app.export_detections() 
             Button:
                 text: "Settings"
                 on_press: app.open_settings()
