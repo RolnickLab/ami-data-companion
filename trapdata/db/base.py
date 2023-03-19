@@ -39,14 +39,21 @@ def get_db(db_path, create=False, update=False):
         # logger.debug(f"Using DB from path: {db_path}")
         # logger.debug(f"Using DB from path: {get_safe_db_path()}")
 
-    db = sa.create_engine(
-        str(db_path),
-        echo=False,
-        future=True,
-        connect_args={
+    db_path = get_safe_db_path(db_path)
+
+    connect_args = {
+        "sqlite": {
             "timeout": 10,  # A longer timeout is necessary for SQLite and multiple PyTorch workers
             "check_same_thread": False,
         },
+        "postgresql": {},
+    }
+
+    db = sa.create_engine(
+        db_path,
+        echo=False,
+        future=True,
+        connect_args=connect_args.get(db_path.drivername, {}),
     )
 
     alembic_cfg = get_alembic_config(db_path)
