@@ -1,6 +1,6 @@
 import contextlib
 import pathlib
-from typing import Generator
+from typing import Generator, Optional
 from rich import print
 
 import sqlalchemy as sa
@@ -79,12 +79,27 @@ def get_db(db_path, create=False, update=False):
     return db
 
 
-def get_session_class(db_path, **kwargs) -> orm.sessionmaker[orm.Session]:
+def get_session_class(
+    db_path: Optional[str] = None, **kwargs
+) -> orm.sessionmaker[orm.Session]:
     """
     Use this to create a pre-configured Session class.
     Attach it to the running app.
     Then we don't have to pass around the db_path
     """
+    if not db_path:
+        # @TODO this is the first attempt at using the db_url from the global settings
+        # this may need some testing or review.
+        # The assertion is present because currently all settings need to be optional
+        # when the app is first initialized.
+        # This should really be pulling initialized settings from the app entry point, but we
+        # have multiple entry points (CLI and Kivy app).
+        from trapdata.settings import read_settings
+
+        settings = read_settings()
+        assert settings.database_url, "Configure a database_url in the app settings"
+        db_path = settings.database_url
+
     Session = orm.sessionmaker(
         bind=get_db(db_path, create=False, update=False),
         expire_on_commit=False,  # Currently only need this for `pull_n_from_queue`
@@ -96,7 +111,9 @@ def get_session_class(db_path, **kwargs) -> orm.sessionmaker[orm.Session]:
 
 
 @contextlib.contextmanager
-def get_session(db_path: str, **kwargs) -> Generator[orm.Session, None, None]:
+def get_session(
+    db_path: Optional[str] = None, **kwargs
+) -> Generator[orm.Session, None, None]:
     """
     Convenience method to start and close a pre-configured database session.
 
