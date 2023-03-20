@@ -1,4 +1,3 @@
-import sys
 import enum
 import pathlib
 import csv
@@ -8,11 +7,12 @@ import typer
 from rich import print
 import pandas as pd
 
-from trapdata.db.models.detections import get_detected_objects
-from trapdata.db.models.events import get_monitoring_sessions_from_db
 from trapdata import logger
 from trapdata.cli import settings
-
+from trapdata.db import get_session_class
+from trapdata.db.models.detections import get_detected_objects
+from trapdata.db.models.events import get_monitoring_sessions_from_db
+from trapdata.db.models.deployments import list_deployments
 
 cli = typer.Typer(no_args_is_help=True)
 
@@ -28,6 +28,7 @@ def export(
     format: ExportFormat = ExportFormat.json,
     outfile: Optional[pathlib.Path] = None,
 ) -> Union[str, None]:
+    df = df.convert_dtypes()
     if format is ExportFormat.json:
         output = df.to_json(
             path_or_buf=outfile,
@@ -56,8 +57,30 @@ def export(
 
 
 @cli.command()
+def occurrences(
+    # deployment: Optional[str] = None,
+    format: ExportFormat = ExportFormat.json,
+    limit: Optional[int] = 10,
+    offset: int = 0,
+    outfile: Optional[pathlib.Path] = None,
+) -> Optional[str]:
+    """
+    Export grouped occurrences from database in the specified format.
+    """
+    objects = get_detected_objects(
+        settings.database_url,
+        limit=limit,
+        offset=offset,
+        image_base_path=settings.image_base_path,
+    )
+    logger.info(f"Preparing to export {len(objects)} records as {format}")
+    df = pd.DataFrame([obj.report_data() for obj in objects])
+    return export(df=df, format=format, outfile=outfile)
+
+
+@cli.command()
 def detections(
-    # trap: Optional[str] = None,
+    # deployment: Optional[str] = None,
     format: ExportFormat = ExportFormat.json,
     limit: Optional[int] = 10,
     offset: int = 0,
@@ -89,6 +112,19 @@ def events(
         db_path=settings.database_url, base_directory=settings.image_base_path
     )
     df = pd.DataFrame([obj.report_data() for obj in objects])
+    return export(df=df, format=format, outfile=outfile)
+
+
+@cli.command()
+def deployments(
+    format: ExportFormat = ExportFormat.json,
+    outfile: Optional[pathlib.Path] = None,
+) -> Optional[str]:
+    Session = get_session_class(settings.database_url)
+    session = Session()
+    deployments = list_deployments(session)
+
+    df = pd.DataFrame(deployments)
     return export(df=df, format=format, outfile=outfile)
 
 

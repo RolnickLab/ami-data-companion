@@ -247,8 +247,9 @@ class DetectedObject(db.Base):
             score = self.binary_label_score
 
         return {
-            "trap": pathlib.Path(self.monitoring_session.base_directory).name,
+            "deployment": self.monitoring_session.deployment,
             "event": self.monitoring_session.day.isoformat(),
+            "event_id": self.monitoring_session_id,
             "sequence": self.sequence_id,
             "sequence_frame": self.sequence_frame,
             "sequence_cost": self.sequence_previous_cost,
