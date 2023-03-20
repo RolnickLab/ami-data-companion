@@ -235,6 +235,7 @@ def get_monitoring_sessions_from_db(
             .filter_by(
                 **query_kwargs,
             )
+            .order_by(MonitoringSession.start_time)
             .all()
         )
         if update_aggregates:
