@@ -65,6 +65,8 @@ class Queue(Label):
     def check_queue(self, *args):
         if not self.bgtask:
             self.running = False
+            menu = self.app.screen_manager.get_screen("menu")
+            menu.reload()
         else:
             try:
                 self.running = self.bgtask.is_alive()
