@@ -120,6 +120,9 @@ def deployments(
     format: ExportFormat = ExportFormat.json,
     outfile: Optional[pathlib.Path] = None,
 ) -> Optional[str]:
+    """
+    Export info about deployments inferred from image base directories.
+    """
     Session = get_session_class(settings.database_url)
     session = Session()
     deployments = list_deployments(session)
