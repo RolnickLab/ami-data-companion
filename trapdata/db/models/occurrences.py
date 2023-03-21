@@ -6,9 +6,30 @@ And occurrence is a sequence of detections that are determined to be
 the same individual, tracked over multiple frames in the original images
 from a monitoring session.
 """
+import datetime
+import pathlib
+
 import sqlalchemy as sa
+from sqlalchemy import orm
 from trapdata.db import models
 from trapdata import db
+
+from pydantic import (
+    BaseModel,
+)
+
+
+class Occurrence(BaseModel):
+    label: str
+    score: float
+    sequence_id: int
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+    duration: datetime.timedelta
+    cropped_image_path: pathlib.Path
+    # detections: list[object]
+    # deployment: object
+    # captures: list[object]
 
 
 def get_unique_species_by_track(
