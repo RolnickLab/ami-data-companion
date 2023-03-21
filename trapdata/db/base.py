@@ -40,6 +40,7 @@ def get_db(db_path, create=False, update=False):
         # logger.debug(f"Using DB from path: {get_safe_db_path()}")
 
     db_path = get_safe_db_path(db_path)
+    dialect = db_path.get_dialect().name
 
     connect_args = {
         "sqlite": {
@@ -53,7 +54,7 @@ def get_db(db_path, create=False, update=False):
         db_path,
         echo=False,
         future=True,
-        connect_args=connect_args.get(db_path.drivername, {}),
+        connect_args=connect_args.get(dialect, {}),
     )
 
     alembic_cfg = get_alembic_config(db_path.render_as_string(hide_password=False))
