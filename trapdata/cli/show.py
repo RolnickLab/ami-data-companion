@@ -7,6 +7,10 @@ from sqlalchemy import select, func
 from trapdata.db.base import get_session_class
 from trapdata.cli import settings
 from trapdata.db import models
+from trapdata.db.models.detections import (
+    num_occurrences_for_event,
+    num_species_for_event,
+)
 from trapdata import logger
 
 cli = typer.Typer(no_args_is_help=True)
@@ -67,8 +71,26 @@ def events():
         .scalars()
         .all()
     )
+
+    table = Table("ID", "Day", "Images", "Detections", "Occurrences", "Species")
     for event in events:
-        print(event)
+        num_occurrences = num_occurrences_for_event(
+            db_path=settings.database_url, monitoring_session=event
+        )
+        num_species = num_species_for_event(
+            db_path=settings.database_url, monitoring_session=event
+        )
+        row_values = [
+            event.id,
+            event.day,
+            event.num_images,
+            event.num_detected_objects,
+            num_occurrences,
+            num_species,
+        ]
+        table.add_row(*[str(val) for val in row_values])
+
+    console.print(table)
 
 
 if __name__ == "__main__":

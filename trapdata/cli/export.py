@@ -10,9 +10,14 @@ import pandas as pd
 from trapdata import logger
 from trapdata.cli import settings
 from trapdata.db import get_session_class
-from trapdata.db.models.detections import get_detected_objects
+from trapdata.db.models.detections import (
+    get_detected_objects,
+    num_occurrences_for_event,
+    num_species_for_event,
+)
 from trapdata.db.models.events import get_monitoring_sessions_from_db
 from trapdata.db.models.deployments import list_deployments
+from trapdata.db.models.occurrences import list_occurrences
 
 cli = typer.Typer(no_args_is_help=True)
 
@@ -67,14 +72,14 @@ def occurrences(
     """
     Export grouped occurrences from database in the specified format.
     """
-    objects = get_detected_objects(
-        settings.database_url,
-        limit=limit,
-        offset=offset,
-        image_base_path=settings.image_base_path,
+    events = get_monitoring_sessions_from_db(
+        db_path=settings.database_url, base_directory=settings.image_base_path
     )
-    logger.info(f"Preparing to export {len(objects)} records as {format}")
-    df = pd.DataFrame([obj.report_data() for obj in objects])
+    occurrences = []
+    for event in events:
+        occurrences += list_occurrences(settings.database_url, event)
+    logger.info(f"Preparing to export {len(occurrences)} records as {format}")
+    df = pd.DataFrame([obj.dict() for obj in occurrences])
     return export(df=df, format=format, outfile=outfile)
 
 
@@ -108,10 +113,22 @@ def events(
     """
     Export a summary of monitoring sessions from database in the specified format.
     """
-    objects = get_monitoring_sessions_from_db(
+    monitoring_events = get_monitoring_sessions_from_db(
         db_path=settings.database_url, base_directory=settings.image_base_path
     )
-    df = pd.DataFrame([obj.report_data() for obj in objects])
+    items = []
+    for event in monitoring_events:
+        event_data = event.report_data()
+        num_occurrences = num_occurrences_for_event(
+            db_path=settings.database_url, monitoring_session=event
+        )
+        num_species = num_species_for_event(
+            db_path=settings.database_url, monitoring_session=event
+        )
+        event_data["num_occurrences"] = num_occurrences
+        event_data["num_species"] = num_species
+        items.append(event_data)
+    df = pd.DataFrame(items)
     return export(df=df, format=format, outfile=outfile)
 
 

@@ -20,16 +20,40 @@ from pydantic import (
 
 
 class Occurrence(BaseModel):
+    id: str
     label: str
-    score: float
-    sequence_id: int
+    best_score: float
     start_time: datetime.datetime
     end_time: datetime.datetime
     duration: datetime.timedelta
-    cropped_image_path: pathlib.Path
+    deployment: str
+    event: str
+    # cropped_image_path: pathlib.Path
+    # source_image_id: int
+    examples: list[dict]
     # detections: list[object]
     # deployment: object
     # captures: list[object]
+
+
+def list_occurrences(
+    db_path: str,
+    monitoring_session=None,
+    classification_threshold: float = -1,
+    num_examples: int = 3,
+):
+    occurrences = []
+    for item in get_unique_species_by_track(
+        db_path, monitoring_session, classification_threshold, num_examples
+    ):
+        prepped = {k.split("sequence_", 1)[-1]: v for k, v in item.items()}
+        if prepped["id"]:
+            prepped["event"] = monitoring_session.day.isoformat()
+            prepped["deployment"] = monitoring_session.deployment
+            print(prepped)
+            occur = Occurrence(**prepped)
+        occurrences.append(occur)
+    return occurrences
 
 
 def get_unique_species_by_track(
@@ -67,6 +91,7 @@ def get_unique_species_by_track(
     for sequence in sequences:
         frames = session.execute(
             sa.select(
+                models.DetectedObject.id,
                 models.DetectedObject.image_id.label("source_image_id"),
                 models.DetectedObject.specific_label.label("label"),
                 models.DetectedObject.specific_label_score.label("score"),
@@ -94,3 +119,16 @@ def get_unique_species_by_track(
 
     rows = reversed(sorted(rows, key=lambda row: row["sequence_start_time"]))
     return rows
+
+
+def sequence_display_name(sequence_id: str) -> str:
+    """
+    Shorter and more helpful name for user interfaces.
+
+    >>> sequence_display_name("20220406-SEQ-123")
+    SEQ-123
+    """
+    if not sequence_id:
+        return ""
+    else:
+        return sequence_id.split("-", 1)[-1]
