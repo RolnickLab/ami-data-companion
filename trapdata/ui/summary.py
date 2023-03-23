@@ -20,10 +20,10 @@ from trapdata import logger
 from trapdata import constants
 from trapdata.ui.playback import ImagePlaybackScreen
 from trapdata.db.models.events import MonitoringSession
-from trapdata.db.models.detections import (
-    get_detected_objects,
-    export_detected_objects,
+from trapdata.db.models.detections import get_detected_objects, export_detected_objects
+from trapdata.db.models.occurrences import (
     get_unique_species_by_track,
+    sequence_display_name,
 )
 
 
@@ -194,7 +194,7 @@ class SpeciesListLayout(RecycleView):
         species_rows = [
             {
                 "species": {
-                    "sequence": item["sequence_id"].split("-", 1)[-1],
+                    "sequence": sequence_display_name(item["sequence_id"]),
                     "name": item["label"] or "Unclassified",
                     "count": item["sequence_frame_count"],
                     "score": item["sequence_best_score"],

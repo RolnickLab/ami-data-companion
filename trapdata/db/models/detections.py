@@ -247,8 +247,9 @@ class DetectedObject(db.Base):
             score = self.binary_label_score
 
         return {
-            "trap": pathlib.Path(self.monitoring_session.base_directory).name,
+            "deployment": self.monitoring_session.deployment,
             "event": self.monitoring_session.day.isoformat(),
+            "event_id": self.monitoring_session_id,
             "sequence": self.sequence_id,
             "sequence_frame": self.sequence_frame,
             "sequence_cost": self.sequence_previous_cost,
@@ -446,6 +447,34 @@ def get_species_for_image(db_path, image_id):
             .filter(DetectedObject.specific_label.is_not(None))
             .distinct()
         )
+
+
+def num_species_for_event(
+    db_path, monitoring_session, classification_threshold: float = 0.6
+) -> int:
+    query = sa.select(
+        sa.func.count(DetectedObject.specific_label.distinct()),
+    ).where(
+        (DetectedObject.specific_label_score >= classification_threshold)
+        & (DetectedObject.monitoring_session == monitoring_session)
+    )
+
+    with db.get_session(db_path) as sesh:
+        return sesh.execute(query).scalar_one()
+
+
+def num_occurrences_for_event(
+    db_path, monitoring_session, classification_threshold: float = 0.6
+) -> int:
+    query = sa.select(
+        sa.func.count(DetectedObject.sequence_id.distinct()),
+    ).where(
+        (DetectedObject.specific_label_score >= classification_threshold)
+        & (DetectedObject.monitoring_session == monitoring_session)
+    )
+
+    with db.get_session(db_path) as sesh:
+        return sesh.execute(query).scalar_one()
 
 
 def get_unique_species(

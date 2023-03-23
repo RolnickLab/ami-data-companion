@@ -40,8 +40,9 @@ def get_db(db_path, create=False, update=False):
         # logger.debug(f"Using DB from path: {get_safe_db_path()}")
 
     db_path = get_safe_db_path(db_path)
+    dialect = db_path.get_dialect().name
 
-    connect_args = {
+    dialect_opts = {
         "sqlite": {
             "timeout": 10,  # A longer timeout is necessary for SQLite and multiple PyTorch workers
             "check_same_thread": False,
@@ -53,29 +54,25 @@ def get_db(db_path, create=False, update=False):
         db_path,
         echo=False,
         future=True,
-        connect_args=connect_args.get(db_path.drivername, {}),
+        connect_args=dialect_opts.get(dialect, {}),
     )
 
     alembic_cfg = get_alembic_config(db_path.render_as_string(hide_password=False))
 
     # @TODO this is basically checking if the environment is the local app install
     # let's make a way to set & check the environment.
-    if db.dialect.name != "sqlite" and (create or update):
+    if dialect != "sqlite" and (create or update):
         logger.warn(
             "Database is something other that sqlite, you must create & update it with the CLI tools."
         )
-        return db
-
-    if create:
+    elif create:
         from . import Base
 
-        logger.info("Creating database tables if necessary")
         db_filepath = pathlib.Path(db.url.database)
-        if not db_filepath.exists():
-            logger.info(f"Creating {db_filepath} and parent directories")
-            db_filepath.parent.mkdir(parents=True, exist_ok=True)
-            Base.metadata.create_all(db, checkfirst=True)
-            alembic.stamp(alembic_cfg, "head")
+        logger.info(f"Creating {db_filepath} and parent directories if necessary")
+        db_filepath.parent.mkdir(parents=True, exist_ok=True)
+        Base.metadata.create_all(db, checkfirst=True)
+        alembic.stamp(alembic_cfg, "head")
 
     if update:
         # @TODO See this post for a more complete implementation
