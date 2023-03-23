@@ -8,7 +8,7 @@ import pathlib
 import torch
 
 from trapdata import logger
-from trapdata.db import get_db, check_db
+from trapdata.db import get_db, check_db, get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import (
     add_sample_to_queue,
@@ -25,6 +25,11 @@ from trapdata.ml.models.classification import (
     MothNonMothClassifier,
     UKDenmarkMothSpeciesClassifier,
 )
+from trapdata.ml.models.tracking import (
+    MothNonMothFeatureExtractor,
+    get_events_that_need_tracks,
+    find_all_tracks,
+)
 
 
 # @newrelic.agent.background_task()
@@ -32,7 +37,7 @@ def end_to_end(db_path, image_base_directory, sample_size):
     # db_path = ":memory:"
     get_db(db_path, create=True)
 
-    get_or_create_monitoring_sessions(db_path, image_base_directory)
+    events = get_or_create_monitoring_sessions(db_path, image_base_directory)
 
     clear_all_queues(db_path, image_base_directory)
     add_sample_to_queue(db_path, sample_size=sample_size)
@@ -54,12 +59,22 @@ def end_to_end(db_path, image_base_directory, sample_size):
     species_classifier = UKDenmarkMothSpeciesClassifier(
         db_path=db_path, image_base_path=image_base_directory, batch_size=300
     )
+    feature_extractor = MothNonMothFeatureExtractor(
+        db_path=db_path, image_base_path=image_base_directory, batch_size=300
+    )
 
     check_db(db_path, quiet=False)
 
     object_detector.run()
     moth_nonmoth_classifier.run()
     species_classifier.run()
+    feature_extractor.run()
+
+    # @TODO standardize and clean up this method for find all tracks
+    Session = get_session_class(db_path=db_path)
+    with Session() as session:
+        for event in events:
+            find_all_tracks(monitoring_session=event, session=session)
 
 
 def run():
