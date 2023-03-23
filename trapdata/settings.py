@@ -4,11 +4,7 @@ from typing import Union, Optional
 import configparser
 import pathlib
 
-from pydantic import (
-    BaseSettings,
-    ValidationError,
-    validator,
-)
+from pydantic import BaseSettings, ValidationError, validator, Field
 import sqlalchemy
 from rich import print as rprint
 
@@ -22,10 +18,18 @@ class Settings(BaseSettings):
     ] = None
     user_data_path: Optional[pathlib.Path] = None
     image_base_path: Optional[pathlib.Path] = None
-    localization_model: Optional[ml.models.ObjectDetectorChoice] = None
-    binary_classification_model: Optional[ml.models.BinaryClassifierChoice] = None
-    species_classification_model: Optional[ml.models.SpeciesClassifierChoice] = None
-    feature_extractor: Optional[ml.models.FeatureExtractorChoice]
+    localization_model: ml.models.ObjectDetectorChoice = Field(
+        default=ml.models.DEFAULT_OBJECT_DETECTOR
+    )
+    binary_classification_model: ml.models.BinaryClassifierChoice = Field(
+        default=ml.models.DEFAULT_BINARY_CLASSIFIER
+    )
+    species_classification_model: ml.models.SpeciesClassifierChoice = Field(
+        ml.models.DEFAULT_SPECIES_CLASSIFIER
+    )
+    feature_extractor: ml.models.FeatureExtractorChoice = Field(
+        ml.models.DEFAULT_FEATURE_EXTRACTOR
+    )
     classification_threshold: float = 0.6
     localization_batch_size: int = 2
     classification_batch_size: int = 20
