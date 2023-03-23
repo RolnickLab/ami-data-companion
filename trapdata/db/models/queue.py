@@ -53,7 +53,7 @@ class QueueManager:
 
 
 class ImageQueue(QueueManager):
-    name = "Unprocessed images"
+    name = "Source images"
     description = "Raw images from camera needing object detection"
 
     def ids(self) -> sa.ScalarSelect:
