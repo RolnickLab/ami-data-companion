@@ -1,74 +1,70 @@
-import pathlib
+from sqlalchemy import orm
 
 from trapdata import logger
 from trapdata import ml
 from trapdata.db.base import get_session_class
 from trapdata.common.types import FilePath
-
-# @TODO Replace this pipeline file with the version in ml/pipeline.py after fully
-# switching the Kivy settings to Pydantic settings in main.py
+from trapdata.settings import Settings
 
 
 def start_pipeline(
-    db_path: str,
+    session: orm.Session,
     image_base_path: FilePath,
-    config: dict,
+    settings: Settings,
     single: bool = False,
 ):
-    user_data_path = pathlib.Path(config.get("paths", "user_data_path"))
-    logger.info(f"Local user data path: {user_data_path}")
-    num_workers = int(config.get("performance", "num_workers"))
+    logger.info(f"Local user data path: {settings.user_data_path}")
 
-    object_detector_name = config.get("models", "localization_model")
-    ObjectDetector = ml.models.object_detectors[object_detector_name]
+    ObjectDetector = ml.models.object_detectors[settings.localization_model.value]
     object_detector = ObjectDetector(
-        db_path=db_path,
+        db_path=settings.database_url,
         image_base_path=image_base_path,
-        user_data_path=user_data_path,
-        batch_size=int(config.get("performance", "localization_batch_size")),
-        num_workers=num_workers,
+        user_data_path=settings.user_data_path,
+        batch_size=settings.localization_batch_size,
+        num_workers=settings.num_workers,
         single=single,
     )
     if object_detector.queue.queue_count() > 0:
         object_detector.run()
         logger.info("Localization complete")
 
-    binary_classifier_name = config.get("models", "binary_classification_model")
-    BinaryClassifier = ml.models.binary_classifiers[binary_classifier_name]
+    BinaryClassifier = ml.models.binary_classifiers[
+        settings.binary_classification_model.value
+    ]
     binary_classifier = BinaryClassifier(
-        db_path=db_path,
+        db_path=settings.database_url,
         image_base_path=image_base_path,
-        user_data_path=user_data_path,
-        batch_size=int(config.get("performance", "classification_batch_size")),
-        num_workers=num_workers,
+        user_data_path=settings.user_data_path,
+        batch_size=settings.classification_batch_size,
+        num_workers=settings.num_workers,
         single=single,
     )
     if binary_classifier.queue.queue_count() > 0:
         binary_classifier.run()
         logger.info("Binary classification complete")
 
-    species_classifier_name = config.get("models", "species_classification_model")
-    SpeciesClassifier = ml.models.species_classifiers[species_classifier_name]
+    SpeciesClassifier = ml.models.species_classifiers[
+        settings.species_classification_model.value
+    ]
     species_classifier = SpeciesClassifier(
-        db_path=db_path,
+        db_path=settings.database_url,
         image_base_path=image_base_path,
-        user_data_path=user_data_path,
-        batch_size=int(config.get("performance", "classification_batch_size")),
-        num_workers=num_workers,
+        user_data_path=settings.user_data_path,
+        batch_size=settings.classification_batch_size,
+        num_workers=settings.num_workers,
         single=single,
     )
     if species_classifier.queue.queue_count() > 0:
         species_classifier.run()
         logger.info("Species classification complete")
 
-    feature_extractor_name = config.get("models", "feature_extractor")
-    FeatureExtractor = ml.models.feature_extractors[feature_extractor_name]
+    FeatureExtractor = ml.models.feature_extractors[settings.feature_extractor.value]
     feature_extractor = FeatureExtractor(
-        db_path=db_path,
+        db_path=settings.database_url,
         image_base_path=image_base_path,
-        user_data_path=user_data_path,
-        batch_size=int(config.get("performance", "classification_batch_size")),
-        num_workers=num_workers,
+        user_data_path=settings.user_data_path,
+        batch_size=settings.classification_batch_size,
+        num_workers=settings.classification_batch_size,
         single=single,
     )
     if feature_extractor.queue.queue_count() > 0:
@@ -79,13 +75,15 @@ def start_pipeline(
     # in a monitoring session. Consider creating or updating a QueueManager
     # instead of the code below.
     # @TODO standardize and clean up this method for find all tracks
-    Session = get_session_class(db_path)
+    Session = get_session_class(settings.database_url)
+    logger.info("Looking for events that need tracking")
     with Session() as session:
         events = ml.models.tracking.get_events_that_need_tracks(
             base_directory=image_base_path,
             session=session,
         )
         for event in events:
+            logger.info(f"Calculating tracks in event {event}")
             ml.models.tracking.find_all_tracks(
                 monitoring_session=event, session=session
             )

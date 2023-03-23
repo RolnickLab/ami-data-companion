@@ -662,10 +662,10 @@ def add_image_to_queue(db_path, image_id):
 
 
 def add_sample_to_queue(db_path, sample_size=10):
+    images = []
     with get_session(db_path) as sesh:
         num_in_queue = sesh.query(TrapImage).filter_by(in_queue=True).count()
         if num_in_queue < sample_size:
-            images = []
             for image in (
                 sesh.query(TrapImage)
                 .filter_by(

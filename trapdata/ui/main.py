@@ -252,6 +252,7 @@ class TrapDataApp(App):
             logger.warn("No queue found!")
 
     def build_config(self, config):
+        # @TODO get these defaults from settings.py
         default_db_connection_string = (
             f"sqlite+pysqlite:///{pathlib.Path(self.user_data_dir) / 'trapdata.db'}"
         )
