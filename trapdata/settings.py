@@ -9,15 +9,14 @@ import sqlalchemy
 from rich import print as rprint
 
 from trapdata import ml
+from trapdata.common.filemanagement import get_app_dir, default_database_dsn
 
 
 class Settings(BaseSettings):
-    # @TODO Make a subclass where this is required. For now it must accept None for the initial startup
-    database_url: Optional[
-        str  # Can't use Pydantic DSN validators if filenames have spaces
-    ] = None
-    user_data_path: Optional[pathlib.Path] = None
-    image_base_path: Optional[pathlib.Path] = None
+    # Can't use PyDantic DSN validator for database_url if sqlite filepath has spaces, see custom validator below
+    database_url: str = default_database_dsn()
+    user_data_path: pathlib.Path = get_app_dir()
+    image_base_path: Optional[pathlib.Path]
     localization_model: ml.models.ObjectDetectorChoice = Field(
         default=ml.models.DEFAULT_OBJECT_DETECTOR
     )
@@ -44,7 +43,7 @@ class Settings(BaseSettings):
         stored in the database for objects and must be an exact match.
         """
         if v:
-            return pathlib.Path(v).resolve()
+            return pathlib.Path(v).expanduser().resolve()
         else:
             return None
 

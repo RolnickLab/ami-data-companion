@@ -1,4 +1,6 @@
 from typing import Union, Literal, Optional
+from sys import platform as _sys_platform
+
 import pathlib
 import datetime
 import time
@@ -19,6 +21,7 @@ import imagesize
 from .logs import logger
 from . import constants
 
+APP_NAME_SLUG = "AMI"
 EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"
 
 
@@ -360,3 +363,70 @@ def dd_location_to_dms(
     lon_ref = "E" if lon[0] >= 1 else "W"
 
     return {"latitude": (lat, lat_ref), "longitude": (lon, lon_ref)}
+
+
+def get_platform() -> Literal["win", "macosx", "linux", "unknown"]:
+    """
+    A string identifying the current operating system. It is one
+    of: `'win'`, `'linux'`,  `'macosx'`, or `'unknown'`.
+    Adapted from kivy.utils.platform()
+    https://github.com/kivy/kivy/blob/master/kivy/utils.py
+    """
+    if _sys_platform in ("win32", "cygwin"):
+        return "win"
+    elif _sys_platform == "darwin":
+        return "macosx"
+    elif _sys_platform.startswith("linux"):
+        return "linux"
+    elif _sys_platform.startswith("freebsd"):
+        return "linux"
+    return "unknown"
+
+
+def get_app_dir(app_name: Optional[str] = None) -> pathlib.Path:
+    """
+    Returns the path to the directory in the users file system which the
+    application can use to store additional data.
+
+    Different platforms have different conventions with regards to where
+    the user can store data such as preferences, saved games and settings.
+    This function implements these conventions. The <app_name> directory
+    is created when the property is called, unless it already exists.
+
+    On Windows, `%APPDATA%/<app_name>` is returned.
+    On OS X, `~/Library/Application Support/<app_name>` is returned.
+    On Linux, `$XDG_CONFIG_HOME/<app_name>` is returned.
+
+    Adapted from kivy.app._get_user_data_dir()
+    https://github.com/kivy/kivy/blob/master/kivy/app.py
+    """
+    app_name = app_name or APP_NAME_SLUG
+    platform = get_platform()
+    data_dir = ""
+    if platform == "win":
+        data_dir = pathlib.Path(os.environ["APPDATA"])
+    elif platform == "macosx":
+        data_dir = pathlib.Path("~/Library/Application Support/")
+    else:  # _platform == 'linux' or anything else...:
+        data_dir = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", "~/.config"))
+    data_dir = data_dir.expanduser().resolve() / app_name
+    if not data_dir.exists():
+        data_dir.mkdir()
+    return data_dir
+
+
+def default_database_dsn(db_name: str = "trapdata") -> str:
+    return f"sqlite+pysqlite:///{get_app_dir() / db_name}.db"
+
+
+def initial_directory_choice():
+    """
+    Default to the user's home directory if no path to their
+    trap data has been selected yet.
+
+    This path likely will never be used, but it is helpful to
+    have a placeholder `path.Path` for type annotations
+    and it is a better starting directory for file dialog prompts
+    than "." which is the directory of this python package.
+    """
+    return pathlib.Path("~/")
