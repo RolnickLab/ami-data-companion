@@ -14,7 +14,7 @@ from trapdata.common.filemanagement import get_app_dir, default_database_dsn
 
 class Settings(BaseSettings):
     # Can't use PyDantic DSN validator for database_url if sqlite filepath has spaces, see custom validator below
-    database_url: str = default_database_dsn()
+    database_url: Union[str, sqlalchemy.engine.URL] = default_database_dsn()
     user_data_path: pathlib.Path = get_app_dir()
     image_base_path: Optional[pathlib.Path]
     localization_model: ml.models.ObjectDetectorChoice = Field(

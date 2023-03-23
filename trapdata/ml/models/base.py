@@ -1,8 +1,9 @@
-from typing import Optional
+from typing import Union
 import json
 
 import torch
 import torch.utils.data
+import sqlalchemy
 from sentry_sdk import start_transaction
 
 import torchvision.transforms
@@ -48,7 +49,7 @@ class InferenceBaseClass:
     See examples in `classification.py` and `localization.py`
     """
 
-    db_path: str
+    db_path: Union[str, sqlalchemy.engine.URL]
     image_base_path: FilePath
     name = "Unknown Inference Model"
     description = str()
@@ -70,7 +71,12 @@ class InferenceBaseClass:
     dataset: torch.utils.data.Dataset
     dataloader: torch.utils.data.DataLoader
 
-    def __init__(self, db_path: str, image_base_path: FilePath, **kwargs):
+    def __init__(
+        self,
+        db_path: Union[str, sqlalchemy.engine.URL],
+        image_base_path: FilePath,
+        **kwargs,
+    ):
         self.db_path = db_path
         self.image_base_path = image_base_path
 
