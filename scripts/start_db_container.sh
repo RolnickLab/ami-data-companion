@@ -13,4 +13,4 @@ docker run -d -i --name $CONTAINER_NAME -p $HOST_PORT:5432 -e POSTGRES_HOST_AUTH
 docker logs ami-db --tail 100
 
 echo 'Database started, Connection string: "postgresql://postgres@localhost:5432/ami"'
-echo "Stop (and destroy) database with 'docker stop $CONTAINER_NAME'"
+echo "Stop (and destroy) database with 'docker stop $CONTAINER_NAME' && docker remote $CONTAINER_NAME"
