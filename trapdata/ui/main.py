@@ -15,7 +15,7 @@ import kivy
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.uix.label import Label
-from kivy.uix.screenmanager import ScreenManager
+from kivy.uix.screenmanager import ScreenManager, NoTransition
 from kivy.uix.settings import SettingsWithSidebar
 from kivy.uix.popup import Popup
 from kivy.core.window import Window
@@ -67,6 +67,12 @@ class Queue(Label):
             self.running = False
         else:
             try:
+                new_status = self.bgtask.is_alive()
+                if self.running and new_status == False:
+                    # Pipeline went from running to stopped, reload stats on menu screen
+                    menu = self.app.screen_manager.get_screen("menu")
+                    if menu:
+                        menu.reload()
                 self.running = self.bgtask.is_alive()
             except ValueError:
                 self.running = False
@@ -187,7 +193,7 @@ class TrapDataApp(App):
         # Window.clearcolor = (1, 1, 1, 1.0)
         # Window.size = (600, 400)
 
-        sm = ScreenManager()
+        sm = ScreenManager(transition=NoTransition())
         sm.add_widget(DataMenuScreen(name="menu"))
         sm.add_widget(ImagePlaybackScreen(name="playback"))
         sm.add_widget(SpeciesSummaryScreen(name="summary"))
