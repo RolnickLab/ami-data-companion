@@ -7,6 +7,7 @@ from sqlalchemy import select, func
 from trapdata.db.base import get_session_class
 from trapdata.cli import settings
 from trapdata.db import models
+from trapdata.db.models.queue import all_queues
 from trapdata.db.models.detections import (
     num_occurrences_for_event,
     num_species_for_event,
@@ -87,6 +88,27 @@ def events():
             event.num_detected_objects,
             num_occurrences,
             num_species,
+        ]
+        table.add_row(*[str(val) for val in row_values])
+
+    console.print(table)
+
+
+@cli.command()
+def queue():
+    """
+    Show counts waiting in each queue.
+    """
+
+    table = Table("Queue", "Unprocessed", "Queued", "Done")
+    for name, queue in all_queues(
+        db_path=settings.database_url, base_directory=settings.image_base_path
+    ).items():
+        row_values = [
+            queue.name,
+            queue.unprocessed_count(),
+            queue.queue_count(),
+            queue.done_count(),
         ]
         table.add_row(*[str(val) for val in row_values])
 

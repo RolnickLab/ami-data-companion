@@ -1,4 +1,5 @@
 from typing import Sequence, Union, Optional
+from collections import OrderedDict
 
 import sqlalchemy as sa
 
@@ -640,17 +641,19 @@ class UntrackedObjectsQueue(QueueManager):
             return objs_with_comparisons
 
 
-def all_queues(db_path, base_directory):
-    return {
-        q.name: q
-        for q in [
-            ImageQueue(db_path, base_directory),
-            DetectedObjectQueue(db_path, base_directory),
-            UnclassifiedObjectQueue(db_path, base_directory),
-            ObjectsWithoutFeaturesQueue(db_path, base_directory),
-            UntrackedObjectsQueue(db_path, base_directory),
-        ]
-    }
+def all_queues(db_path, base_directory) -> OrderedDict[str, QueueManager]:
+    return OrderedDict(
+        {
+            q.name: q
+            for q in [
+                ImageQueue(db_path, base_directory),
+                DetectedObjectQueue(db_path, base_directory),
+                UnclassifiedObjectQueue(db_path, base_directory),
+                ObjectsWithoutFeaturesQueue(db_path, base_directory),
+                UntrackedObjectsQueue(db_path, base_directory),
+            ]
+        }
+    )
 
 
 def add_image_to_queue(db_path, image_id):

@@ -1,3 +1,5 @@
+import pathlib
+
 import typer
 from rich import print
 from rich.console import Console
@@ -9,7 +11,10 @@ from trapdata.settings import Settings as BaseSettings
 from trapdata.cli import settings
 from trapdata.db import models
 from trapdata.db.models.events import get_or_create_monitoring_sessions
-from trapdata.db.models.queue import add_sample_to_queue
+from trapdata.db.models.queue import (
+    add_sample_to_queue,
+    add_monitoring_session_to_queue,
+)
 from trapdata import logger
 from trapdata.ml.pipeline import start_pipeline
 
@@ -38,10 +43,20 @@ def queue_sample(sample_size: int = 4):
 
 
 @cli.command()
-def pipeline():
+def pipeline(import_data: bool = True):
     """
     Run all models on images currently in the queue.
     """
+    if import_data:
+        events = get_or_create_monitoring_sessions(
+            settings.database_url, settings.image_base_path
+        )
+        for event in events:
+            add_monitoring_session_to_queue(
+                db_path=settings.database_url,
+                monitoring_session=event,
+            )
+
     Session = get_session_class(settings.database_url)
     session = Session()
     start_pipeline(
@@ -52,13 +67,13 @@ def pipeline():
 
 
 @cli.command()
-def single():
+def single(deployment_data: pathlib.Path):
     """ """
     Session = get_session_class(settings.database_url)
     session = Session()
     start_pipeline(
         session=session,
-        image_base_path=settings.image_base_path,
+        image_base_path=deployment_data,
         settings=settings,
         single=True,
     )
