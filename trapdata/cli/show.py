@@ -1,5 +1,6 @@
 import typer
 from rich import print
+from rich.live import Live
 from rich.console import Console
 from rich.table import Table
 from sqlalchemy import select, func
@@ -94,12 +95,7 @@ def events():
     console.print(table)
 
 
-@cli.command()
-def queue():
-    """
-    Show counts waiting in each queue.
-    """
-
+def get_queue_table():
     table = Table("Queue", "Unprocessed", "Queued", "Done")
     for name, queue in all_queues(
         db_path=settings.database_url, base_directory=settings.image_base_path
@@ -111,8 +107,20 @@ def queue():
             queue.done_count(),
         ]
         table.add_row(*[str(val) for val in row_values])
+    return table
 
-    console.print(table)
+
+@cli.command()
+def queue():
+    """
+    Show counts waiting in each queue.
+    """
+
+    with Live(get_queue_table(), refresh_per_second=1) as live:
+        while True:
+            live.update(get_queue_table())
+
+    # console.print(table)
 
 
 if __name__ == "__main__":
