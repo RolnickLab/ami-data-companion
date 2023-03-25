@@ -9,7 +9,6 @@ from sqlalchemy import select, func
 from trapdata.db.base import get_session_class
 from trapdata.settings import Settings as BaseSettings
 from trapdata.cli import settings
-from trapdata.db import models
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import (
     add_sample_to_queue,
@@ -27,11 +26,6 @@ class PipelineSettings(BaseSettings):
     image_base_path: str  # Override default settings to enforce image_base_path
 
 
-base_settings = dict(settings)
-del base_settings["image_base_path"]
-settings = PipelineSettings(**base_settings)
-
-
 @cli.command()
 def queue_sample(sample_size: int = 4):
     """
@@ -47,6 +41,10 @@ def pipeline(import_data: bool = True):
     """
     Run all models on images currently in the queue.
     """
+    base_settings = dict(settings)
+    del base_settings["image_base_path"]
+    settings = PipelineSettings(**base_settings)
+
     if import_data:
         events = get_or_create_monitoring_sessions(
             settings.database_url, settings.image_base_path
