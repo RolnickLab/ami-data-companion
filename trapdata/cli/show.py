@@ -9,6 +9,10 @@ from trapdata.db.base import get_session_class
 from trapdata.cli import settings
 from trapdata.db import models
 from trapdata.db.models.queue import all_queues
+from trapdata.db.models.events import (
+    update_all_aggregates,
+    get_monitoring_sessions_from_db,
+)
 from trapdata.db.models.detections import (
     num_occurrences_for_event,
     num_species_for_event,
@@ -36,6 +40,7 @@ def deployments():
     """
     Session = get_session_class(settings.database_url)
     session = Session()
+    update_all_aggregates(session, settings.image_base_path)
     deployments = session.execute(
         select(
             models.MonitoringSession.base_directory,
@@ -46,6 +51,7 @@ def deployments():
     ).all()
 
     table = Table("Image Base Path", "Events", "Images", "Objects")
+    table.columns[0].overflow = "fold"
     for deployment in deployments:
         row_values = [str(field) for field in deployment._mapping.values()]
         table.add_row(*row_values)
@@ -61,12 +67,13 @@ def events():
     Session = get_session_class(settings.database_url)
     session = Session()
     # image_base_path = str(settings.image_base_path.resolve())
-    image_base_path = str(settings.image_base_path)
-    logger.info(f"Show monitoring events for images in {image_base_path}")
+
+    update_all_aggregates(session, settings.image_base_path)
+    logger.info(f"Show monitoring events for images in {settings.image_base_path}")
     events = (
         session.execute(
             select(models.MonitoringSession).where(
-                models.MonitoringSession.base_directory == image_base_path
+                models.MonitoringSession.base_directory == str(settings.image_base_path)
             )
         )
         .unique()
@@ -76,6 +83,7 @@ def events():
 
     table = Table("ID", "Day", "Images", "Detections", "Occurrences", "Species")
     for event in events:
+        event.update_aggregates(session)
         num_occurrences = num_occurrences_for_event(
             db_path=settings.database_url, monitoring_session=event
         )
@@ -91,7 +99,26 @@ def events():
             num_species,
         ]
         table.add_row(*[str(val) for val in row_values])
+    console.print(table)
 
+
+@cli.command()
+def occurrences():
+    events = get_monitoring_sessions_from_db(
+        db_path=settings.database_url, base_directory=settings.image_base_path
+    )
+    occurrences: list[models.occurrences.Occurrence] = []
+    for event in events:
+        occurrences += models.occurrences.list_occurrences(settings.database_url, event)
+
+    table = Table("Event", "Label", "Appearance", "Duration")
+    for occurrence in occurrences:
+        table.add_row(
+            occurrence.event,
+            occurrence.label,
+            str(occurrence.start_time),
+            str(occurrence.duration),
+        )
     console.print(table)
 
 
@@ -121,6 +148,28 @@ def queue():
             live.update(get_queue_table())
 
     # console.print(table)
+
+
+@cli.command()
+def missing_tracks():
+    """ """
+    Session = get_session_class(settings.database_url)
+    session = Session()
+    # image_base_path = str(settings.image_base_path.resolve())
+    image_base_path = str(settings.image_base_path)
+    logger.info(f"Show monitoring events for images in {image_base_path}")
+    items = (
+        session.execute(
+            select(models.DetectedObject).where(
+                models.DetectedObject.sequence_id.is_(None)
+            )
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+    print(items)
+    print(len(items))
 
 
 if __name__ == "__main__":
