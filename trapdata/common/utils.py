@@ -27,11 +27,19 @@ def get_sequential_sample(direction, images, last_sample=None):
 def slugify(s):
     # Quick method to make an acceptable attribute name or url part from a title
     # install python-slugify for handling unicode chars, numbers at the beginning, etc.
-    acceptable_chars = list(string.ascii_letters) + ["_"]
     separator = "_"
-    return "".join(
-        [chr for chr in s.replace(" ", separator).lower() if chr in acceptable_chars]
-    ).strip(separator)
+    acceptable_chars = list(string.ascii_letters) + [separator]
+    return (
+        "".join(
+            [
+                chr
+                for chr in s.replace(" ", separator).lower()
+                if chr in acceptable_chars
+            ]
+        )
+        .strip(separator)
+        .replace(separator * 2, separator)
+    )
 
 
 def bbox_area(bbox):
