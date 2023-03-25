@@ -9,6 +9,7 @@ import sqlalchemy
 from rich import print as rprint
 
 from trapdata import ml
+from trapdata.common.types import FilePath
 from trapdata.common.filemanagement import get_app_dir, default_database_dsn
 
 
@@ -24,10 +25,10 @@ class Settings(BaseSettings):
         default=ml.models.DEFAULT_BINARY_CLASSIFIER
     )
     species_classification_model: ml.models.SpeciesClassifierChoice = Field(
-        ml.models.DEFAULT_SPECIES_CLASSIFIER
+        default=ml.models.DEFAULT_SPECIES_CLASSIFIER
     )
     feature_extractor: ml.models.FeatureExtractorChoice = Field(
-        ml.models.DEFAULT_FEATURE_EXTRACTOR
+        default=ml.models.DEFAULT_FEATURE_EXTRACTOR
     )
     classification_threshold: float = 0.6
     localization_batch_size: int = 2
@@ -153,6 +154,10 @@ class Settings(BaseSettings):
                 kivy_settings_source,
                 file_secret_settings,
             )
+
+
+class PipelineSettings(Settings):
+    image_base_path: FilePath  # Override default settings to enforce image_base_path
 
 
 def kivy_settings_path() -> pathlib.Path:
