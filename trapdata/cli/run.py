@@ -7,7 +7,7 @@ from rich.table import Table
 from sqlalchemy import select, func
 
 from trapdata.db.base import get_session_class
-from trapdata.settings import Settings as BaseSettings
+from trapdata.settings import PipelineSettings
 from trapdata.cli import settings
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import (
@@ -20,10 +20,6 @@ from trapdata.ml.pipeline import start_pipeline
 cli = typer.Typer(no_args_is_help=True)
 
 console = Console()
-
-
-class PipelineSettings(BaseSettings):
-    image_base_path: str  # Override default settings to enforce image_base_path
 
 
 @cli.command()
