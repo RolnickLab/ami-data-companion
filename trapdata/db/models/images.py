@@ -51,6 +51,7 @@ class TrapImage(Base):
         img = session.execute(
             sa.select(TrapImage)
             .filter(TrapImage.timestamp < self.timestamp)
+            .filter(TrapImage.monitoring_session_id == self.monitoring_session_id)
             .order_by(TrapImage.timestamp.desc())
             .limit(1)
         ).scalar()
@@ -60,6 +61,7 @@ class TrapImage(Base):
         img = session.execute(
             sa.select(TrapImage)
             .filter(TrapImage.timestamp > self.timestamp)
+            .filter(TrapImage.monitoring_session_id == self.monitoring_session_id)
             .order_by(TrapImage.timestamp.asc())
             .limit(1)
         ).scalar()
