@@ -4,6 +4,7 @@
 import os
 import tempfile
 import pathlib
+import json
 
 import torch
 from rich import print
@@ -81,16 +82,18 @@ def process_images(settings: PipelineSettings):
     )
 
 
-def show_summary(settings: PipelineSettings):
+def get_summary(settings: PipelineSettings):
     Session = get_session_class(db_path=settings.database_url)
     session = Session()
-    print(summarize_tracks(session=session))
+    summary = summarize_tracks(session=session)
+    return summary
 
 
-def run():
-    deployment_sub_dir = "vermont"
-    image_base_path = pathlib.Path(__file__).parent / "images" / deployment_sub_dir
+def test_deployment(deployment_subdir="vermont"):
+    tests_dir = pathlib.Path(__file__).parent
+    image_base_path = tests_dir / "images" / deployment_subdir
     logger.info(f"Using test images from: {image_base_path}")
+    expected_results_path = tests_dir / "results" / f"{deployment_subdir}.json"
 
     local_weights_path = torch.hub.get_dir()
     logger.info(f"Looking for or downloading weights in {local_weights_path}")
@@ -111,7 +114,22 @@ def run():
             process_images(settings)
         logger.info(t)
 
-        show_summary(settings)
+        summary = get_summary(settings)
+
+        if expected_results_path.exists():
+            results = json.loads(json.dumps(summary, indent=2, default=str))
+            expected_results = json.load(open(expected_results_path))
+            assert (
+                results == expected_results
+            ), f"The pipeline returned different results than expected for the data in {image_base_path}"
+        else:
+            print("Saving new results to", expected_results_path)
+            json.dump(summary, open(expected_results_path, "w"), indent=2, default=str)
+
+
+def run():
+    for deployment in ["vermont", "sequential"]:
+        test_deployment(deployment)
 
 
 if __name__ == "__main__":

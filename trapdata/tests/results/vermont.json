@@ -1,0 +1,84 @@
+{
+  "null": [
+    {
+      "event": "2022-06-23",
+      "sequence": null,
+      "frame": null,
+      "image": 2,
+      "id": 5,
+      "path": "/home/michael/.config/trapdata/crops/b87284ac54a1cccf4f475bdf861fd1d8.jpg",
+      "binary_label": "nonmoth",
+      "specific_label": null,
+      "specific_label_score": null,
+      "cost": null
+    },
+    {
+      "event": "2022-06-23",
+      "sequence": null,
+      "frame": null,
+      "image": 2,
+      "id": 6,
+      "path": "/home/michael/.config/trapdata/crops/9b3f5c5c1b12bf0032a13b82aa5f25d4.jpg",
+      "binary_label": "nonmoth",
+      "specific_label": null,
+      "specific_label_score": null,
+      "cost": null
+    }
+  ],
+  "20220623-SEQ-1": [
+    {
+      "event": "2022-06-23",
+      "sequence": "20220623-SEQ-1",
+      "frame": 0,
+      "image": 2,
+      "id": 1,
+      "path": "/home/michael/.config/trapdata/crops/5724f4f49f019f465e564b8e31f6b79f.jpg",
+      "binary_label": "moth",
+      "specific_label": "Lophocampa caryae",
+      "specific_label_score": 0.2958777844905853,
+      "cost": null
+    }
+  ],
+  "20220623-SEQ-2": [
+    {
+      "event": "2022-06-23",
+      "sequence": "20220623-SEQ-2",
+      "frame": 0,
+      "image": 2,
+      "id": 2,
+      "path": "/home/michael/.config/trapdata/crops/bdbd02572aa1a7d61150b96a66e2c5d1.jpg",
+      "binary_label": "moth",
+      "specific_label": "Triphosa haesitata",
+      "specific_label_score": 0.17438466846942902,
+      "cost": null
+    }
+  ],
+  "20220623-SEQ-3": [
+    {
+      "event": "2022-06-23",
+      "sequence": "20220623-SEQ-3",
+      "frame": 0,
+      "image": 2,
+      "id": 3,
+      "path": "/home/michael/.config/trapdata/crops/329e3922c961d0f3c7825449886733e6.jpg",
+      "binary_label": "moth",
+      "specific_label": "Archips packardiana",
+      "specific_label_score": 0.4269407093524933,
+      "cost": null
+    }
+  ],
+  "20220623-SEQ-4": [
+    {
+      "event": "2022-06-23",
+      "sequence": "20220623-SEQ-4",
+      "frame": 0,
+      "image": 2,
+      "id": 4,
+      "path": "/home/michael/.config/trapdata/crops/46c9751585c54ca22142e7add9d748de.jpg",
+      "binary_label": "moth",
+      "specific_label": "Campaea perlata",
+      "specific_label_score": 0.7001850008964539,
+      "cost": null
+    }
+  ]
+}
