@@ -36,10 +36,10 @@ class Occurrence(BaseModel):
 
 def list_occurrences(
     db_path: str,
-    monitoring_session=None,
+    monitoring_session: models.MonitoringSession,
     classification_threshold: float = -1,
     num_examples: int = 3,
-):
+) -> list[Occurrence]:
     occurrences = []
     for item in get_unique_species_by_track(
         db_path, monitoring_session, classification_threshold, num_examples
@@ -48,9 +48,8 @@ def list_occurrences(
         if prepped["id"]:
             prepped["event"] = monitoring_session.day.isoformat()
             prepped["deployment"] = monitoring_session.deployment
-            print(prepped)
             occur = Occurrence(**prepped)
-        occurrences.append(occur)
+            occurrences.append(occur)
     return occurrences
 
 

@@ -9,6 +9,7 @@ from sqlalchemy_utils import aggregated, observes
 from trapdata.db import Base, get_session
 from trapdata.common.logs import logger
 from trapdata.common.utils import export_report
+from trapdata.common.types import FilePath
 from trapdata.db import models
 from trapdata.common.filemanagement import find_images, group_images_by_day
 
@@ -68,7 +69,7 @@ class MonitoringSession(Base):
             f"\tnum_detected_objects={self.num_detected_objects!r})"
         )
 
-    def update_aggregates(self, session: orm.Session):
+    def update_aggregates(self, session: orm.Session, commit=True):
         # Requires and active session
         logger.info(f"Updating cached values for event {self.day}")
         self.num_images = session.execute(
@@ -91,6 +92,8 @@ class MonitoringSession(Base):
                 models.TrapImage.monitoring_session_id == self.id
             )
         ).scalar_one()
+        if commit:
+            session.commit()
 
     def duration(self) -> Optional[datetime.timedelta]:
         if self.start_time and self.end_time:
@@ -306,6 +309,21 @@ def get_monitoring_session_image_ids(db_path, ms):
         )
     logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")
     return images
+
+
+def update_all_aggregates(session: orm.Session, image_base_path: FilePath):
+    for event in (
+        session.execute(
+            sa.select(MonitoringSession).where(
+                MonitoringSession.base_directory == str(image_base_path)
+            )
+        )
+        .unique()
+        .scalars()
+        .all()
+    ):
+        event.update_aggregates(session, commit=False)
+    session.commit()
 
 
 def export_monitoring_sessions(

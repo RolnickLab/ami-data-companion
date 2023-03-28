@@ -42,6 +42,8 @@ from trapdata.ml.models.tracking import (
     cosine_similarity,
 )
 
+# @TODO This can likely just be part of test_pipeline.py, with some child tests
+
 
 # @newrelic.agent.background_task()
 def test_tracking(db_path, image_base_directory, sample_size, skip_queue):

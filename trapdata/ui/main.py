@@ -252,6 +252,7 @@ class TrapDataApp(App):
             logger.warn("No queue found!")
 
     def build_config(self, config):
+        # @TODO get these defaults from settings.py
         default_db_connection_string = (
             f"sqlite+pysqlite:///{pathlib.Path(self.user_data_dir) / 'trapdata.db'}"
         )
@@ -266,14 +267,10 @@ class TrapDataApp(App):
         config.setdefaults(
             "models",
             {
-                "localization_model": list(ml.models.object_detectors.keys())[0],
-                "binary_classification_model": list(
-                    ml.models.binary_classifiers.keys()
-                )[0],
-                "species_classification_model": list(
-                    ml.models.species_classifiers.keys()
-                )[0],
-                "feature_extractor": list(ml.models.feature_extractors.keys())[0],
+                "localization_model": ml.models.DEFAULT_OBJECT_DETECTOR,
+                "binary_classification_model": ml.models.DEFAULT_BINARY_CLASSIFIER,
+                "species_classification_model": ml.models.DEFAULT_SPECIES_CLASSIFIER,
+                "feature_extractor": ml.models.DEFAULT_FEATURE_EXTRACTOR,
                 "classification_threshold": 0.6,
             },
         )

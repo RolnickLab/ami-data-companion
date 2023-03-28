@@ -4,28 +4,32 @@ from typing import Union, Optional
 import configparser
 import pathlib
 
-from pydantic import (
-    BaseSettings,
-    ValidationError,
-    validator,
-)
+from pydantic import BaseSettings, ValidationError, validator, Field
 import sqlalchemy
 from rich import print as rprint
 
 from trapdata import ml
+from trapdata.common.types import FilePath
+from trapdata.common.filemanagement import get_app_dir, default_database_dsn
 
 
 class Settings(BaseSettings):
-    # @TODO Make a subclass where this is required. For now it must accept None for the initial startup
-    database_url: Optional[
-        str  # Can't use Pydantic DSN validators if filenames have spaces
-    ] = None
-    user_data_path: Optional[pathlib.Path] = None
-    image_base_path: Optional[pathlib.Path] = None
-    localization_model: Optional[ml.models.ObjectDetectorChoice] = None
-    binary_classification_model: Optional[ml.models.BinaryClassifierChoice] = None
-    species_classification_model: Optional[ml.models.SpeciesClassifierChoice] = None
-    feature_extractor: Optional[ml.models.FeatureExtractorChoice]
+    # Can't use PyDantic DSN validator for database_url if sqlite filepath has spaces, see custom validator below
+    database_url: Union[str, sqlalchemy.engine.URL] = default_database_dsn()
+    user_data_path: pathlib.Path = get_app_dir()
+    image_base_path: Optional[pathlib.Path]
+    localization_model: ml.models.ObjectDetectorChoice = Field(
+        default=ml.models.DEFAULT_OBJECT_DETECTOR
+    )
+    binary_classification_model: ml.models.BinaryClassifierChoice = Field(
+        default=ml.models.DEFAULT_BINARY_CLASSIFIER
+    )
+    species_classification_model: ml.models.SpeciesClassifierChoice = Field(
+        default=ml.models.DEFAULT_SPECIES_CLASSIFIER
+    )
+    feature_extractor: ml.models.FeatureExtractorChoice = Field(
+        default=ml.models.DEFAULT_FEATURE_EXTRACTOR
+    )
     classification_threshold: float = 0.6
     localization_batch_size: int = 2
     classification_batch_size: int = 20
@@ -40,7 +44,7 @@ class Settings(BaseSettings):
         stored in the database for objects and must be an exact match.
         """
         if v:
-            return pathlib.Path(v).resolve()
+            return pathlib.Path(v).expanduser().resolve()
         else:
             return None
 
@@ -150,6 +154,10 @@ class Settings(BaseSettings):
                 kivy_settings_source,
                 file_secret_settings,
             )
+
+
+class PipelineSettings(Settings):
+    image_base_path: FilePath  # Override default settings to enforce image_base_path
 
 
 def kivy_settings_path() -> pathlib.Path:
