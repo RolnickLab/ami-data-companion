@@ -789,7 +789,10 @@ def find_all_tracks(
     session.commit()
 
 
-def summarize_tracks(session: orm.Session, event: Optional[MonitoringSession] = None):
+def summarize_tracks(
+    session: orm.Session,
+    event: Optional[MonitoringSession] = None,
+) -> dict[Union[str, None], list[dict]]:
     query_args = {}
     if event:
         query_args = {"monitoring_session": event}
@@ -800,6 +803,7 @@ def summarize_tracks(session: orm.Session, event: Optional[MonitoringSession] = 
             DetectedObject.sequence_id,
             func.count(DetectedObject.id),
         )
+        .where(DetectedObject.sequence_id.is_not(None))
         .group_by(DetectedObject.monitoring_session_id, DetectedObject.sequence_id)
         .filter_by(**query_args)
     ).all()

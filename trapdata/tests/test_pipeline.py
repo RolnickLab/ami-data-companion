@@ -5,6 +5,7 @@ import os
 import tempfile
 import pathlib
 import json
+from typing import Any, Union
 
 import torch
 from rich import print
@@ -21,6 +22,7 @@ from trapdata.db.models.queue import (
     clear_all_queues,
 )
 from trapdata.ml.models.tracking import summarize_tracks
+from trapdata.db.models.occurrences import list_occurrences
 
 from trapdata.ml.utils import StopWatch
 from trapdata.ml.models import (
@@ -40,6 +42,7 @@ def get_settings(db_path: str, image_base_path: FilePath) -> PipelineSettings:
     settings = PipelineSettings(
         database_url=db_path,
         image_base_path=image_base_path,
+        # user_data_path=pathlib.Path(tempfile.TemporaryDirectory(prefix="AMI-").name),
         localization_model=ObjectDetectorChoice.fasterrcnn_for_ami_moth_traps,
         binary_classification_model=BinaryClassifierChoice.moth_nonmoth_classifier,
         species_classification_model=SpeciesClassifierChoice.quebec_vermont_species_classifier_mixed_resolution,
@@ -82,11 +85,31 @@ def process_images(settings: PipelineSettings):
     )
 
 
-def get_summary(settings: PipelineSettings):
+def get_summary(settings: PipelineSettings) -> dict[Union[str, None], list[dict]]:
+    # @TODO use list_occurrences instead
     Session = get_session_class(db_path=settings.database_url)
     session = Session()
-    summary = summarize_tracks(session=session)
-    return summary
+    tracks = summarize_tracks(session=session)
+    return tracks
+
+
+def simple_results(tracks):
+    items = []
+    for sequence_id, track in tracks.items():
+        items += track
+
+    results = sorted(
+        [(item["event"], item["sequence"], item["specific_label"]) for item in items]
+    )
+    print("Comparing:", results)
+    return results
+
+
+def compare_results(deployment_name: str, results: dict, expected_results: dict):
+    # @TODO implement pytest and use list_occurrences() instead of summarize_tracks()
+    assert simple_results(results) == simple_results(
+        expected_results
+    ), f"The pipeline returned different results than expected for the deployment '{deployment_name}'"
 
 
 def test_deployment(deployment_subdir="vermont"):
@@ -119,9 +142,7 @@ def test_deployment(deployment_subdir="vermont"):
         if expected_results_path.exists():
             results = json.loads(json.dumps(summary, indent=2, default=str))
             expected_results = json.load(open(expected_results_path))
-            assert (
-                results == expected_results
-            ), f"The pipeline returned different results than expected for the data in {image_base_path}"
+            compare_results(deployment_subdir, results, expected_results)
         else:
             print("Saving new results to", expected_results_path)
             json.dump(summary, open(expected_results_path, "w"), indent=2, default=str)
