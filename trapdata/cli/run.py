@@ -39,11 +39,11 @@ def pipeline(import_data: bool = True):
     """
     base_settings = dict(settings)
     del base_settings["image_base_path"]
-    settings = PipelineSettings(**base_settings)
+    pipeline_settings = PipelineSettings(**base_settings)
 
     if import_data:
         events = get_or_create_monitoring_sessions(
-            settings.database_url, settings.image_base_path
+            pipeline_settings.database_url, pipeline_settings.image_base_path
         )
         for event in events:
             add_monitoring_session_to_queue(
@@ -55,7 +55,7 @@ def pipeline(import_data: bool = True):
     session = Session()
     start_pipeline(
         session=session,
-        image_base_path=settings.image_base_path,
+        image_base_path=pipeline_settings.image_base_path,
         settings=settings,
     )
 
