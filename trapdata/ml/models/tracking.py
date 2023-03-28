@@ -563,6 +563,18 @@ def assign_solo_sequence(
     return sequence_id
 
 
+def assign_solo_sequences(
+    detected_objects: Sequence[DetectedObject], session: orm.Session, commit=True
+):
+    # Check list of objects and assign a solo-sequence if they are missing one.
+    for obj in detected_objects:
+        if not obj.sequence_id:
+            assign_solo_sequence(obj, session=session)
+
+    if commit:
+        session.commit()
+
+
 def assign_sequence(
     obj_current: DetectedObject,
     obj_previous: DetectedObject,
@@ -605,11 +617,8 @@ def compare_objects(
     """
     if not image_previous:
         image_previous = image_current.previous_image(session)
-        assert image_previous, f"No image found before image {image_current.id}"
 
-    logger.debug(
-        f"Calculating tracking costs in image {image_current.id} vs. {image_previous.id}"
-    )
+    logger.debug(f"Calculating tracking costs for objects in image {image_current.id}")
     objects_current = (
         session.execute(
             select(DetectedObject)
@@ -621,16 +630,23 @@ def compare_objects(
         .all()
     )
 
-    objects_previous = (
-        session.execute(
-            select(DetectedObject)
-            .filter(DetectedObject.image == image_previous)
-            .where(DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
+    if image_previous:
+        objects_previous = (
+            session.execute(
+                select(DetectedObject)
+                .filter(DetectedObject.image == image_previous)
+                .where(DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
+            )
+            .unique()
+            .scalars()
+            .all()
         )
-        .unique()
-        .scalars()
-        .all()
-    )
+    else:
+        logger.debug(
+            "No previous frame found for image, assigning all current objects a solo-sequence"
+        )
+        objects_previous = list()
+
     logger.debug(
         f"Objects in current frame: {len(objects_current)}, objects in previous: {len(objects_previous)}"
     )
@@ -697,11 +713,8 @@ def compare_objects(
                     f"Assigned {obj_current.id} to sequence {sequence_id} as frame #{frame_num}. Tracking cost: {round(lowest_cost, 2)}"
                 )
 
-    # Check all objects
-    # If current object was not assigned to a sequence, create one for it by itself
-    for obj_current in objects_current:
-        if obj_current.cnn_features and not obj_current.sequence_id:
-            sequence_id = assign_solo_sequence(obj_current, session=session)
+    # Assign a sequence ID for any objects that still don't have one
+    assign_solo_sequences(objects_current, session=session, commit=False)
 
     if commit:
         session.flush()
@@ -762,13 +775,15 @@ def find_all_tracks(
         n_previous = max(n_current - 1, 0)
         image_current = images[n_current]
         image_previous = images[n_previous]
-        if image_current != image_previous:
-            compare_objects(
-                image_current=image_current,
-                image_previous=image_previous,
-                session=session,
-                commit=False,
-            )
+        if image_current == image_previous:
+            image_previous = None
+
+        compare_objects(
+            image_current=image_current,
+            image_previous=image_previous,
+            session=session,
+            commit=False,
+        )
     logger.info("Saving tracks to database")
     session.flush()
     session.commit()
@@ -809,6 +824,7 @@ def summarize_tracks(session: orm.Session, event: Optional[MonitoringSession] = 
                 image=obj.image_id,
                 id=obj.id,
                 path=obj.path,
+                binary_label=obj.binary_label,
                 specific_label=obj.specific_label,
                 specific_label_score=obj.specific_label_score,
                 cost=obj.sequence_previous_cost,
