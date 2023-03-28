@@ -76,6 +76,7 @@ class DetectedObject(db.Base):
             f"DetectedObject(\n"
             f"\timage={image!r}, \n"
             f"\tpath={self.path!r}, \n"
+            f"\tbinary_label={self.binary_label!r}, \n"
             f"\tspecific_label={self.specific_label!r}, \n"
             f"\tbbox={self.bbox!r}, \n"
             f"\timage_id={self.image_id!r})\n"

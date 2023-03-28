@@ -161,7 +161,8 @@ def missing_tracks():
     items = (
         session.execute(
             select(models.DetectedObject).where(
-                models.DetectedObject.sequence_id.is_(None)
+                (models.DetectedObject.sequence_id.is_(None))
+                & (models.DetectedObject.specific_label.is_not(None))
             )
         )
         .unique()
