@@ -49,5 +49,12 @@ def species_by_track(event_day: datetime.datetime):
     )
 
 
+@cli.command()
+def s3():
+    from ..common.s3 import test
+
+    print(test())
+
+
 if __name__ == "__main__":
     cli()
