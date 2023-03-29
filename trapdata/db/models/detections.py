@@ -18,6 +18,21 @@ from trapdata.common.utils import bbox_area, bbox_center, export_report
 from trapdata.db import models
 from trapdata.db.models.images import completely_classified
 
+from pydantic import BaseModel
+
+
+class DetectionListItem(BaseModel):
+    id: int
+    cropped_image_path: Optional[str]
+    bbox: Optional[list[int]]
+    area_pixels: Optional[int]
+    last_detected: Optional[datetime.datetime]
+    label: Optional[str]
+    score: Optional[int]
+    model_name: Optional[str]
+    in_queue: bool
+    notes: Optional[str]
+
 
 class DetectedObject(db.Base):
     __tablename__ = "detections"
@@ -261,7 +276,26 @@ class DetectedObject(db.Base):
         }
 
     def to_json(self):
-        return self.report_data()
+        path = pathlib.Path(self.path)
+        destination = pathlib.Path("crops") / path.name
+        import shutil
+
+        if not destination.exists():
+            shutil.copy(path, destination)
+        # public_url
+        public_url = f"https://object-arbutus.cloud.computecanada.ca/ami-trapdata/{str(destination)}"
+        return DetectionListItem(
+            id=self.id,
+            cropped_image_path=public_url,
+            bbox=self.bbox,
+            area_pixels=self.area_pixels,
+            last_detected=self.last_detected,
+            label=self.specific_label,
+            score=self.specific_label_score,
+            model_name=self.model_name,
+            in_queue=self.in_queue,
+            notes=self.notes,
+        )
 
 
 def save_detected_objects(
@@ -448,7 +482,9 @@ def get_species_for_image(db_path, image_id):
 def num_species_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(sa.func.count(DetectedObject.specific_label.distinct()),).where(
+    query = sa.select(
+        sa.func.count(DetectedObject.specific_label.distinct()),
+    ).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
@@ -460,7 +496,9 @@ def num_species_for_event(
 def num_occurrences_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(sa.func.count(DetectedObject.sequence_id.distinct()),).where(
+    query = sa.select(
+        sa.func.count(DetectedObject.sequence_id.distinct()),
+    ).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )

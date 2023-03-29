@@ -14,6 +14,16 @@ from trapdata.db import Base, get_session, models
 
 
 # Rename to TrapEvent? CapturePeriod? less confusing with other types of Sessions. CaptureSession? Or SurveyEvent or Survey?
+
+from pydantic import BaseModel
+
+
+class Event(BaseModel):
+    id: str
+    frames: list[dict]
+    example_frames: list[dict]
+
+
 class MonitoringSession(Base):
     __tablename__ = "monitoring_sessions"
 
@@ -285,11 +295,16 @@ def get_or_create_monitoring_sessions(db_path, base_directory):
     return get_monitoring_sessions_from_db(db_path, base_directory)
 
 
-def get_monitoring_session_images(db_path, ms):
+def get_monitoring_session_images(db_path, ms, limit=None, offset=None):
     # @TODO this is likely to slow things down. Some monitoring sessions have thousands of images.
     with get_session(db_path) as sesh:
         images = list(
-            sesh.query(models.TrapImage).filter_by(monitoring_session_id=ms.id).all()
+            sesh.query(models.TrapImage)
+            .filter_by(monitoring_session_id=ms.id)
+            .order_by(models.TrapImage.timestamp)
+            .limit(limit)
+            .offset(offset)
+            .all()
         )
     logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")
     return images

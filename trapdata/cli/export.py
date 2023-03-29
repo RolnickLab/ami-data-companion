@@ -1,6 +1,8 @@
 import csv
+import datetime
 import enum
 import pathlib
+import shutil
 from typing import Optional, Union
 
 import pandas as pd
@@ -16,7 +18,11 @@ from trapdata.db.models.detections import (
     num_occurrences_for_event,
     num_species_for_event,
 )
-from trapdata.db.models.events import get_monitoring_sessions_from_db
+from trapdata.db.models.events import (
+    get_monitoring_session_by_date,
+    get_monitoring_session_images,
+    get_monitoring_sessions_from_db,
+)
 from trapdata.db.models.occurrences import list_occurrences
 
 cli = typer.Typer(no_args_is_help=True)
@@ -79,6 +85,17 @@ def occurrences(
     for event in events:
         occurrences += list_occurrences(settings.database_url, event)
     logger.info(f"Preparing to export {len(occurrences)} records as {format}")
+
+    for occurrence in occurrences:
+        for example in occurrence.examples:
+            path = pathlib.Path(example["cropped_image_path"]).resolve()
+            destination = pathlib.Path("crops") / path.name
+            if not destination.exists():
+                shutil.copy(path, destination)
+            # public_url
+            public_url = f"https://object-arbutus.cloud.computecanada.ca/ami-trapdata/{str(destination)}"
+            example["cropped_image_path"] = public_url
+
     df = pd.DataFrame([obj.dict() for obj in occurrences])
     return export(df=df, format=format, outfile=outfile)
 
@@ -125,10 +142,77 @@ def events(
         num_species = num_species_for_event(
             db_path=settings.database_url, monitoring_session=event
         )
+        example_captures = get_monitoring_session_images(
+            settings.database_url, event, limit=5, offset=int(event.num_images / 2)
+        )
+        event_data["example_captures"] = [
+            img.report_data().dict() for img in example_captures
+        ]
         event_data["num_occurrences"] = num_occurrences
         event_data["num_species"] = num_species
         items.append(event_data)
     df = pd.DataFrame(items)
+    return export(df=df, format=format, outfile=outfile)
+
+
+@cli.command()
+def captures(
+    date: datetime.datetime,
+    format: ExportFormat = ExportFormat.json,
+    outfile: Optional[pathlib.Path] = None,
+) -> Optional[str]:
+    """
+    List of source images for a deployment
+    """
+    Session = get_session_class(settings.database_url)
+    session = Session()
+    events = get_monitoring_session_by_date(
+        db_path=settings.database_url,
+        base_directory=settings.image_base_path,
+        event_dates=[str(date.date())],
+    )
+    if not len(events):
+        raise Exception(f"No Monitoring Event with date: {date.date()}")
+
+    event = events[0]
+    captures = get_monitoring_session_images(settings.database_url, event, limit=100)
+    [session.add(img) for img in captures]
+
+    df = pd.DataFrame([img.report_detail().dict() for img in captures])
+    return export(df=df, format=format, outfile=outfile)
+
+
+@cli.command()
+def event_detail(
+    date: datetime.datetime,
+    format: ExportFormat = ExportFormat.json,
+    outfile: Optional[pathlib.Path] = None,
+) -> Optional[str]:
+    """
+    Export a summary of monitoring sessions from database in the specified format.
+    """
+    event = get_monitoring_session_by_date(
+        db_path=settings.database_url,
+        base_directory=settings.image_base_path,
+        event_dates=[date],
+    )[0]
+    event_data = event.report_data()
+    num_occurrences = num_occurrences_for_event(
+        db_path=settings.database_url, monitoring_session=event
+    )
+    num_species = num_species_for_event(
+        db_path=settings.database_url, monitoring_session=event
+    )
+    example_captures = get_monitoring_session_images(
+        settings.database_url, event, limit=5, offset=int(event.num_images / 2)
+    )
+    event_data["example_captures"] = [
+        img.report_data().dict() for img in example_captures
+    ]
+    event_data["num_occurrences"] = num_occurrences
+    event_data["num_species"] = num_species
+
+    df = pd.DataFrame([event_data]).iloc[0]
     return export(df=df, format=format, outfile=outfile)
 
 
