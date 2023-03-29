@@ -202,7 +202,7 @@ def captures(
     events = get_monitoring_session_by_date(
         db_path=settings.database_url,
         base_directory=settings.image_base_path,
-        event_dates=[str(date.date())],
+        event_dates=[date.date()],
     )
     if not len(events):
         raise Exception(f"No Monitoring Event with date: {date.date()}")

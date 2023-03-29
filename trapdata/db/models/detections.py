@@ -15,6 +15,21 @@ from trapdata.common.utils import bbox_area, bbox_center, export_report
 from trapdata.db import models
 from trapdata.db.models.images import completely_classified
 
+from pydantic import BaseModel
+
+
+class DetectionListItem(BaseModel):
+    id: int
+    cropped_image_path: Optional[str]
+    bbox: Optional[list[int]]
+    area_pixels: Optional[int]
+    last_detected: Optional[datetime.datetime]
+    label: Optional[str]
+    score: Optional[int]
+    model_name: Optional[str]
+    in_queue: bool
+    notes: Optional[str]
+
 
 class DetectionListItem(BaseModel):
     id: int
