@@ -9,8 +9,8 @@ homepage = "https://github.com/RolnickLab/ami-data-manager"
 repository = "https://github.com/RolnickLab/ami-data-manager"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["poetry"]
+build-backend = "poetry.masonry.api"
 
 [tool.poetry.dependencies]
 python = "^3.9"
@@ -29,6 +29,7 @@ sentry-sdk = "^1.18.0"
 imagesize = "^1.4.1"
 torch = "^2.0.0"
 torchvision = "^0.15.1"
+timm = "^0.6.13"
 structlog = "^22.3.0"
 kivy = { extras = ["base"], version = "^2.1.0" }
 plyer = "^2.1.0"
@@ -42,12 +43,11 @@ black = "^23.3.0"
 flake8 = "^6.0.0"
 ipython = "^8.11.0"
 pytest-cov = "^4.0.0"
-httpx = "^0.23.3"
 pytest-asyncio = "^0.21.0"
 pytest = "*"
 
 [tool.pytest.ini_options]
-asyncio_mode = 'auto' # not supported? 
+asyncio_mode = 'auto' # not supported?
 
 [tool.isort]
 profile = "black"
