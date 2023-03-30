@@ -44,19 +44,17 @@ ipython = "^8.11.0"
 pytest-cov = "^4.0.0"
 httpx = "^0.23.3"
 pytest-asyncio = "^0.21.0"
-
-[tool.poetry.group.test.dependencies]
 pytest = "*"
 
 [tool.pytest.ini_options]
-asyncio_mode = 'auto'
+asyncio_mode = 'auto' # not supported? 
 
 [tool.isort]
 profile = "black"
 
 [tool.poetry.scripts]
 trapdata = 'trapdata.ui.main:run'
-trapdata-test = 'trapdata.tests:run'
+trapdata-test = 'trapdata.tests.test_pipeline:process_deployments'
 ami = 'trapdata.cli.base:cli'
 
 # [tool.setuptools.package_data]

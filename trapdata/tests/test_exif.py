@@ -1,22 +1,20 @@
+import datetime
 import pathlib
 import tempfile
-import datetime
 
 import PIL.Image
-
 from trapdata import logger
 from trapdata.common.filemanagement import (
-    find_images,
-    construct_exif,
-    get_exif,
     EXIF_DATETIME_STR_FORMAT,
+    construct_exif,
+    find_images,
+    get_exif,
 )
-
 
 TEST_IMAGES = pathlib.Path(__file__).parent / "images"
 
 
-def run():
+def test_exif():
     logger.info(f"Using test images from: {TEST_IMAGES}")
     saved_images = []
     timestamp = datetime.datetime.now() - datetime.timedelta(days=365 * 100)
@@ -48,4 +46,4 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    test_exif()

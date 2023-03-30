@@ -1,39 +1,35 @@
 # import newrelic.agent
 # newrelic.agent.initialize(environment="staging")
 
-import os
-import tempfile
-import pathlib
 import json
-from typing import Any, Union
+import os
+import pathlib
+import tempfile
+from typing import Union
 
 import torch
 from rich import print
-
 from trapdata import logger
 from trapdata.common.types import FilePath
-from trapdata.settings import PipelineSettings
 from trapdata.db import check_db, get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
+from trapdata.db.models.occurrences import list_occurrences
 from trapdata.db.models.queue import (
-    add_sample_to_queue,
     add_monitoring_session_to_queue,
-    images_in_queue,
+    add_sample_to_queue,
     clear_all_queues,
+    images_in_queue,
+)
+from trapdata.ml.models import (
+    BinaryClassifierChoice,
+    FeatureExtractorChoice,
+    ObjectDetectorChoice,
+    SpeciesClassifierChoice,
 )
 from trapdata.ml.models.tracking import summarize_tracks
-from trapdata.db.models.occurrences import list_occurrences
-
-from trapdata.ml.utils import StopWatch
-from trapdata.ml.models import (
-    ObjectDetectorChoice,
-    BinaryClassifierChoice,
-    SpeciesClassifierChoice,
-    FeatureExtractorChoice,
-)
-
 from trapdata.ml.pipeline import start_pipeline
-
+from trapdata.ml.utils import StopWatch
+from trapdata.settings import PipelineSettings
 
 # @newrelic.agent.background_task()
 
@@ -112,7 +108,7 @@ def compare_results(deployment_name: str, results: dict, expected_results: dict)
     ), f"The pipeline returned different results than expected for the deployment '{deployment_name}'"
 
 
-def test_deployment(deployment_subdir="vermont"):
+def process_deployment(deployment_subdir="vermont"):
     tests_dir = pathlib.Path(__file__).parent
     image_base_path = tests_dir / "images" / deployment_subdir
     logger.info(f"Using test images from: {image_base_path}")
@@ -148,10 +144,33 @@ def test_deployment(deployment_subdir="vermont"):
             json.dump(summary, open(expected_results_path, "w"), indent=2, default=str)
 
 
-def run():
+# def test_feature_extractor():
+#     objects = (
+#         session.execute(
+#             select(DetectedObject).where(DetectedObject.cnn_features.is_not(None))
+#         )
+#         .unique()
+#         .scalars()
+#         .all()
+#     )
+#
+#     for object in objects:
+#         # logger.info(f"Number of features: {num_features}")
+#         # assert (
+#         #     num_features == 1536 * 10 * 10,
+#         # )  # This is dependent on the input size & type of model
+#         num_features = len(object.cnn_features)
+#         assert (
+#             num_features == 2048  # Num features expected for ResNet model
+#         )  # This is dependent on the input size & type of model
+#         result = cosine_similarity(object.cnn_features, object.cnn_features)
+#         assert round(result, 1) == 1.0, "Cosine similarity of same object is not 1!"
+
+
+def process_deployments():
     for deployment in ["vermont", "sequential"]:
-        test_deployment(deployment)
+        process_deployment(deployment)
 
 
 if __name__ == "__main__":
-    run()
+    process_deployments()
