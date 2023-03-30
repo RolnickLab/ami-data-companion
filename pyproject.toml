@@ -47,7 +47,7 @@ pytest-asyncio = "^0.21.0"
 pytest = "*"
 
 [tool.pytest.ini_options]
-asyncio_mode = 'auto' # not supported?
+asyncio_mode = 'auto'
 
 [tool.isort]
 profile = "black"
