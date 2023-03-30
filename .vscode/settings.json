@@ -12,7 +12,7 @@
         "source.sortImports": true,
         "source.fixAll.markdownlint": true,
         "source.fixAll": true
-    }
+    },
     "cSpell.words": [
         "argmax",
         "astype",
