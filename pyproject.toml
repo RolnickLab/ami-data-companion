@@ -38,7 +38,7 @@ pyobjus = [
     { version = "^1.2.1", platform = "linux" },
 ]
 
-[tool.poetry.group.dev.dependencies]
+# [tool.poetry.group.dev.dependencies] # Can't install these dev deps with pip, so they're in the main deps
 black = "^23.3.0"
 flake8 = "^6.0.0"
 ipython = "^8.11.0"
