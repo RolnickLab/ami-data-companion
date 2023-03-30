@@ -70,7 +70,7 @@ def deployments():
     deployments = list_deployments(session)
     table = Table(
         "Image Base Path",
-        "Events",
+        "Sessions",
         "Images",
         "Detections",
     )
