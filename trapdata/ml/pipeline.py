@@ -1,9 +1,8 @@
 from sqlalchemy import orm
 
-from trapdata import logger
-from trapdata import ml
-from trapdata.db.base import get_session_class
+from trapdata import logger, ml
 from trapdata.common.types import FilePath
+from trapdata.db.base import get_session_class
 from trapdata.settings import Settings
 
 

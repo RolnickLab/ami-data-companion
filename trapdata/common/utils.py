@@ -3,7 +3,7 @@ import datetime
 import pathlib
 import random
 import string
-from typing import Union, Any
+from typing import Any, Union
 
 
 def get_sequential_sample(direction, images, last_sample=None):

@@ -1,46 +1,41 @@
 # import newrelic.agent
 # newrelic.agent.initialize(environment="staging")
 
-import sys
 import os
-import tempfile
 import pathlib
+import sys
+import tempfile
 
-from sqlalchemy import select, orm
-from PIL import Image
 import torch
 from rich import print
+from sqlalchemy import select
 
 from trapdata import logger
-from trapdata import constants
-from trapdata.db import get_db, check_db, get_session_class
+from trapdata.db import check_db, get_db, get_session_class
+from trapdata.db.models.detections import DetectedObject
 from trapdata.db.models.events import (
-    get_or_create_monitoring_sessions,
     MonitoringSession,
+    get_or_create_monitoring_sessions,
 )
-from trapdata.db.models.images import TrapImage
 from trapdata.db.models.queue import (
-    ObjectsWithoutFeaturesQueue,
     add_image_to_queue,
     clear_all_queues,
-)
-from trapdata.db.models.detections import DetectedObject, get_detections_for_image
-
-from trapdata.ml.utils import StopWatch
-from trapdata.ml.models.localization import (
-    MothObjectDetector_FasterRCNN,
-    GenericObjectDetector_FasterRCNN_MobileNet,
 )
 from trapdata.ml.models.classification import (
     MothNonMothClassifier,
     UKDenmarkMothSpeciesClassifier,
 )
+from trapdata.ml.models.localization import (
+    GenericObjectDetector_FasterRCNN_MobileNet,
+    MothObjectDetector_FasterRCNN,
+)
 from trapdata.ml.models.tracking import (
     FeatureExtractor,
+    cosine_similarity,
     find_all_tracks,
     summarize_tracks,
-    cosine_similarity,
 )
+from trapdata.ml.utils import StopWatch
 
 # @TODO This can likely just be part of test_pipeline.py, with some child tests
 

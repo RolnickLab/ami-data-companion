@@ -1,21 +1,17 @@
 import pathlib
 
 import typer
-from rich import print
 from rich.console import Console
-from rich.table import Table
-from sqlalchemy import select, func
 
-from trapdata.db.base import get_session_class
-from trapdata.settings import PipelineSettings
 from trapdata.cli import settings
+from trapdata.db.base import get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import (
-    add_sample_to_queue,
     add_monitoring_session_to_queue,
+    add_sample_to_queue,
 )
-from trapdata import logger
 from trapdata.ml.pipeline import start_pipeline
+from trapdata.settings import PipelineSettings
 
 cli = typer.Typer(no_args_is_help=True)
 

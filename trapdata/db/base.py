@@ -1,13 +1,13 @@
 import contextlib
 import pathlib
 from typing import Generator
-from rich import print
 
 import sqlalchemy as sa
 import sqlalchemy.exc
-from sqlalchemy import orm
-from alembic.config import Config
 from alembic import command as alembic
+from alembic.config import Config
+from rich import print
+from sqlalchemy import orm
 
 from trapdata import logger
 

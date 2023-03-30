@@ -1,15 +1,14 @@
-from typing import Sequence, Union, Optional
 from collections import OrderedDict
+from typing import Sequence, Union
 
 import sqlalchemy as sa
 
-from trapdata.db import get_session
-from trapdata import logger
-from trapdata import constants
+from trapdata import constants, logger
 from trapdata.common.types import FilePath
-from trapdata.db.models.images import TrapImage
+from trapdata.db import get_session
 from trapdata.db.models.detections import DetectedObject
 from trapdata.db.models.events import MonitoringSession
+from trapdata.db.models.images import TrapImage
 
 
 class QueueManager:
@@ -198,7 +197,7 @@ class DetectedObjectQueue(QueueManager):
             return count
 
     def add_unprocessed(self, *_) -> None:
-        logger.info(f"Adding detected objects in deployment to queue")
+        logger.info("Adding detected objects in deployment to queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)
@@ -387,7 +386,7 @@ class ObjectsWithoutFeaturesQueue(QueueManager):
     name = "Detections without features"
     description = """
     Objects that have been identified as something of interest (e.g. a moth)
-    and need CNN features stored for using to generate tracks & similarity later. 
+    and need CNN features stored for using to generate tracks & similarity later.
     """
 
     def ids(self) -> sa.ScalarSelect:

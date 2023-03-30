@@ -1,11 +1,10 @@
 import enum
-import time
 import pathlib
+import time
 
 import sqlalchemy as sa
 import sqlalchemy.orm as orm
 import torch
-
 
 dbpath = pathlib.Path("queue_test.db")
 engine = sa.create_engine(f"sqlite:///{dbpath}")
@@ -126,7 +125,6 @@ class DatabaseDataset(torch.utils.data.IterableDataset):
         return queue_count()
 
     def __iter__(self):
-
         while len(self):
             worker_info = torch.utils.data.get_worker_info()
             # print("Worker info:", worker_info.id if worker_info else None)
@@ -207,9 +205,8 @@ def collate(self, results: list) -> tuple:
 
     if result is not None:
         return result
-    else: 
+    else:
         throw Exception('problem in obtaining batches')
-            
 
 '''
 

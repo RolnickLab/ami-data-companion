@@ -1,4 +1,4 @@
-from trapdata.ml.models import object_detectors, binary_classifiers, species_classifiers
+from trapdata.ml.models import binary_classifiers, object_detectors, species_classifiers
 
 
 def run():

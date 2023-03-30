@@ -1,10 +1,7 @@
 from enum import Enum, EnumMeta
 
+from .classification import BinaryClassifier, SpeciesClassifier
 from .localization import ObjectDetector
-from .classification import (
-    BinaryClassifier,
-    SpeciesClassifier,
-)
 from .tracking import FeatureExtractor
 
 

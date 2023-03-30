@@ -1,18 +1,18 @@
-import pathlib
 import datetime
+import pathlib
 from typing import Optional
 
 import sqlalchemy as sa
 from sqlalchemy import orm
 from sqlalchemy_utils import aggregated
 
-from trapdata.db import Base, get_session
 from trapdata import constants
 from trapdata.common.filemanagement import (
     get_image_dimensions,
     get_image_filesize,
     get_image_timestamp,
 )
+from trapdata.db import Base, get_session
 
 
 class TrapImage(Base):

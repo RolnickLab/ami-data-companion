@@ -4,12 +4,11 @@ import typer
 from rich import print
 from sqlalchemy import select
 
-from trapdata.db.base import get_session_class
-from trapdata.db.models.occurrences import get_unique_species_by_track
-from trapdata.db.models import MonitoringSession
 from trapdata.cli import settings
+from trapdata.db.base import check_db, get_session_class
+from trapdata.db.models import MonitoringSession
+from trapdata.db.models.occurrences import get_unique_species_by_track
 from trapdata.tests import test_pipeline
-from trapdata.db.base import check_db
 
 cli = typer.Typer(no_args_is_help=True)
 

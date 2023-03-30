@@ -1,7 +1,7 @@
 """
 Occurrence of an Individual Organism
 
-There is currently no database model representing an occurrence. 
+There is currently no database model representing an occurrence.
 And occurrence is a sequence of detections that are determined to be
 the same individual, tracked over multiple frames in the original images
 from a monitoring session.
@@ -9,12 +9,10 @@ from a monitoring session.
 import datetime
 
 import sqlalchemy as sa
-from trapdata.db import models
-from trapdata import db
+from pydantic import BaseModel
 
-from pydantic import (
-    BaseModel,
-)
+from trapdata import db
+from trapdata.db import models
 
 
 class Occurrence(BaseModel):

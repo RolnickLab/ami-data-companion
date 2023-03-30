@@ -1,39 +1,34 @@
 # import newrelic.agent
 # newrelic.agent.initialize(environment="staging")
 
-import os
-import tempfile
-import pathlib
 import json
-from typing import Any, Union
+import os
+import pathlib
+import tempfile
+from typing import Union
 
 import torch
 from rich import print
 
 from trapdata import logger
 from trapdata.common.types import FilePath
-from trapdata.settings import PipelineSettings
 from trapdata.db import check_db, get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import (
-    add_sample_to_queue,
     add_monitoring_session_to_queue,
-    images_in_queue,
     clear_all_queues,
+    images_in_queue,
+)
+from trapdata.ml.models import (
+    BinaryClassifierChoice,
+    FeatureExtractorChoice,
+    ObjectDetectorChoice,
+    SpeciesClassifierChoice,
 )
 from trapdata.ml.models.tracking import summarize_tracks
-from trapdata.db.models.occurrences import list_occurrences
-
-from trapdata.ml.utils import StopWatch
-from trapdata.ml.models import (
-    ObjectDetectorChoice,
-    BinaryClassifierChoice,
-    SpeciesClassifierChoice,
-    FeatureExtractorChoice,
-)
-
 from trapdata.ml.pipeline import start_pipeline
-
+from trapdata.ml.utils import StopWatch
+from trapdata.settings import PipelineSettings
 
 # @newrelic.agent.background_task()
 
@@ -60,7 +55,6 @@ def setup_db(settings: PipelineSettings):
 
 
 def add_images(settings: PipelineSettings):
-
     # db_path = ":memory:"
 
     events = get_or_create_monitoring_sessions(

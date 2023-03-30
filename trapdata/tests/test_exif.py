@@ -1,17 +1,16 @@
+import datetime
 import pathlib
 import tempfile
-import datetime
 
 import PIL.Image
 
 from trapdata import logger
 from trapdata.common.filemanagement import (
-    find_images,
-    construct_exif,
-    get_exif,
     EXIF_DATETIME_STR_FORMAT,
+    construct_exif,
+    find_images,
+    get_exif,
 )
-
 
 TEST_IMAGES = pathlib.Path(__file__).parent / "images"
 

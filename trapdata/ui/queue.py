@@ -2,18 +2,17 @@ import pathlib
 from functools import partial
 
 from kivy.app import App
-from kivy.uix.screenmanager import Screen
-from kivy.properties import ObjectProperty
-from kivy.uix.label import Label
-from kivy.uix.button import Button
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.lang import Builder
 from kivy.clock import Clock
+from kivy.lang import Builder
+from kivy.properties import ObjectProperty
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.label import Label
+from kivy.uix.screenmanager import Screen
 
 from trapdata import logger
 from trapdata.db.models.queue import all_queues
-
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "queue.kv"))
 

@@ -1,22 +1,17 @@
-from typing import Union
 import json
+from typing import Union
 
+import sqlalchemy
 import torch
 import torch.utils.data
-import sqlalchemy
-from sentry_sdk import start_transaction
-
 import torchvision.transforms
+from sentry_sdk import start_transaction
 
 from trapdata import logger
 from trapdata.common.types import FilePath
-from trapdata.ml.utils import (
-    get_device,
-    get_or_download_file,
-    StopWatch,
-)
-from trapdata.db.models.queue import QueueManager
 from trapdata.common.utils import slugify
+from trapdata.db.models.queue import QueueManager
+from trapdata.ml.utils import StopWatch, get_device, get_or_download_file
 
 
 class BatchEmptyException(Exception):
