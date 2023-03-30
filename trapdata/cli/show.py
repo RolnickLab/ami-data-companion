@@ -9,6 +9,7 @@ from trapdata import logger
 from trapdata.cli import settings
 from trapdata.db import models
 from trapdata.db.base import get_session_class
+from trapdata.db.models.deployments import list_deployments
 from trapdata.db.models.detections import (
     num_occurrences_for_event,
     num_species_for_event,
@@ -41,19 +42,11 @@ def deployments():
     Session = get_session_class(settings.database_url)
     session = Session()
     update_all_aggregates(session, settings.image_base_path)
-    deployments = session.execute(
-        select(
-            models.MonitoringSession.base_directory,
-            func.count(models.MonitoringSession.id),
-            func.sum(models.MonitoringSession.num_images),
-            func.sum(models.MonitoringSession.num_detected_objects),
-        ).group_by(models.MonitoringSession.base_directory)
-    ).all()
-
-    table = Table("Image Base Path", "Events", "Images", "Objects")
+    deployments = list_deployments(session)
+    table = Table("Image Base Path", "Events", "Images", "Detections")
     table.columns[0].overflow = "fold"
     for deployment in deployments:
-        row_values = [str(field) for field in deployment._mapping.values()]
+        row_values = [str(field) for field in deployment.dict().values()]
         table.add_row(*row_values)
 
     console.print(table)

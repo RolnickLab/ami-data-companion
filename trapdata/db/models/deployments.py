@@ -13,6 +13,18 @@ from sqlalchemy import orm
 from trapdata.common.types import FilePath
 from trapdata.db import models
 
+from pydantic import BaseModel
+
+
+class DeploymentListItem(BaseModel):
+    # id: int
+    name: str
+    num_events: int
+    num_source_images: int
+    num_detections: int
+    # num_occurrences: int
+    # num_species: int
+
 
 def deployment_name(image_base_path: FilePath) -> str:
     """
@@ -21,7 +33,7 @@ def deployment_name(image_base_path: FilePath) -> str:
     return pathlib.Path(image_base_path).name
 
 
-def list_deployments(session: orm.Session) -> list[dict]:
+def list_deployments(session: orm.Session) -> list[DeploymentListItem]:
     """
     List all image base directories that have been scanned.
     A proxy for "registered trap deployments".
@@ -34,7 +46,10 @@ def list_deployments(session: orm.Session) -> list[dict]:
             "num_detections"
         ),
     ).group_by(models.MonitoringSession.base_directory)
-    deployments = [dict(d._mapping) for d in session.execute(stmt).all()]
+    deployments = [
+        DeploymentListItem(**d._mapping) for d in session.execute(stmt).all()
+    ]
     for deployment in deployments:
-        deployment["name"] = deployment_name(deployment["name"])
+        deployment.name = deployment_name(deployment.name)
+
     return deployments

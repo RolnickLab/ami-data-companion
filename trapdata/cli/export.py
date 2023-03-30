@@ -228,5 +228,5 @@ def deployments(
     session = Session()
     deployments = list_deployments(session)
 
-    df = pd.DataFrame(deployments)
+    df = pd.DataFrame([d.dict() for d in deployments])
     return export(df=df, format=format, outfile=outfile)
