@@ -14,6 +14,18 @@ from sqlalchemy import orm
 from trapdata.common.types import FilePath
 from trapdata.db import models
 
+from pydantic import BaseModel
+
+
+class DeploymentListItem(BaseModel):
+    # id: int
+    name: str
+    num_events: int
+    num_source_images: int
+    num_detections: int
+    # num_occurrences: int
+    # num_species: int
+
 
 class DeploymentListItem(BaseModel):
     # id: int
