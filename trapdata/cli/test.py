@@ -5,18 +5,20 @@ import pytest
 import typer
 from rich import print
 from sqlalchemy import select
-
 from trapdata.cli import settings
 from trapdata.db.base import check_db, get_session_class
 from trapdata.db.models import MonitoringSession
 from trapdata.db.models.occurrences import get_unique_species_by_track
 from trapdata.tests.test_pipeline import process_deployments
 
-cli = typer.Typer()
+cli = typer.Typer(no_args_is_help=True)
 
 
-@cli.callback(invoke_without_command=True)
-def pytest_tests():
+@cli.command()
+def all():
+    """
+    Run pytest tests. Would like this to be the default command.
+    """
     # return_code = pytest.main(["--doctest-modules", "-v", "."])
     return_code = pytest.main(["-v", "."])
     sys.exit(return_code)
