@@ -24,7 +24,6 @@ from trapdata.db.models.detections import (
     get_unique_objects_for_image,
 )
 from trapdata.db.models.events import (
-    MonitoringSession,
     get_monitoring_session_image_ids,
 )
 from trapdata.db.models.images import TrapImage, get_image_with_objects

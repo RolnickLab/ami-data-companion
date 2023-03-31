@@ -1,12 +1,8 @@
 import pathlib
 
 import typer
-from rich import print
 from rich.console import Console
-from rich.table import Table
-from sqlalchemy import func, select
 
-from trapdata import logger
 from trapdata.cli import settings
 from trapdata.db.base import get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions

@@ -1,23 +1,21 @@
 import pathlib
 import time
-from functools import partial
 
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.lang import Builder
 from kivy.properties import ListProperty, NumericProperty, ObjectProperty
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button, ButtonBehavior
+from kivy.uix.button import ButtonBehavior
 from kivy.uix.image import Image
 from kivy.uix.label import Label
 
 # from kivy.uix.carousel
-from kivy.uix.popup import Popup
 from kivy.uix.recycleview import RecycleView
 from kivy.uix.screenmanager import Screen
 
-from trapdata import constants, logger
-from trapdata.db.models.detections import export_detected_objects, get_detected_objects
+from trapdata import logger
+from trapdata.db.models.detections import get_detected_objects
 from trapdata.db.models.events import MonitoringSession
 from trapdata.db.models.occurrences import (
     get_unique_species_by_track,

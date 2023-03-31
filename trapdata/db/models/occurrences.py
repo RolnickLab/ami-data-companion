@@ -1,7 +1,7 @@
 """
 Occurrence of an Individual Organism
 
-There is currently no database model representing an occurrence. 
+There is currently no database model representing an occurrence.
 And occurrence is a sequence of detections that are determined to be
 the same individual, tracked over multiple frames in the original images
 from a monitoring session.

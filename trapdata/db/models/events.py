@@ -4,7 +4,7 @@ from typing import Any, Iterable, Optional, Union
 
 import sqlalchemy as sa
 from sqlalchemy import orm
-from sqlalchemy_utils import aggregated, observes
+from sqlalchemy_utils import aggregated
 
 from trapdata.common.filemanagement import find_images, group_images_by_day
 from trapdata.common.logs import logger

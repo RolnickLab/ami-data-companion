@@ -1,14 +1,10 @@
 import pathlib
-import time
 
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.lang import Builder
 from kivy.properties import ObjectProperty
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.floatlayout import FloatLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.image import AsyncImage, Image
+from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.recycleview import RecycleView
 from kivy.uix.screenmanager import Screen
@@ -47,7 +43,7 @@ class SpeciesGrid(StackLayout):
 
         # self.add_widget(label)
 
-        stack = StackLayout(
+        StackLayout(
             orientation="lr-tb",
             spacing=(0, 0),
             padding=(0, 0),

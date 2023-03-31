@@ -1,6 +1,5 @@
 import random
 import statistics
-from collections import Counter
 
 import sqlalchemy as sa
 

@@ -1,4 +1,3 @@
-import sys
 
 import sentry_sdk
 import sqlalchemy

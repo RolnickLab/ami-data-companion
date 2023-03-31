@@ -1,16 +1,13 @@
 import datetime
 import pathlib
-import statistics
-from typing import Any, Iterable, Optional, Sequence, TypedDict, Union
+from typing import Any, Iterable, Sequence, Union
 
 import PIL.Image
 import sqlalchemy as sa
 from sqlalchemy import orm
-from sqlalchemy_utils import UUIDType
 
 from trapdata import constants, db
 from trapdata.common.filemanagement import (
-    EXIF_DATETIME_STR_FORMAT,
     absolute_path,
     construct_exif,
     save_image,

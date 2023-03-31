@@ -95,7 +95,6 @@ class TrapImage(Base):
     @property
     def classified(self):
         """Have all detected objects been classified"""
-        pass
 
     def __repr__(self):
         return (

@@ -49,6 +49,10 @@ def bbox_area(bbox):
     Bounding boxes are assumed to be in the format:
     [(top-left-coordinate-pair), (bottom-right-coordinate-pair)]
     or: [x1, y1, x2, y2]
+
+
+    >>> bbox_area([0, 0, 1, 1])
+    1
     """
     x1, y1, x2, y2 = bbox
     area = (y2 - y1) * (x2 - x1)

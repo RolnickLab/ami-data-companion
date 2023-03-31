@@ -1,7 +1,7 @@
 """
 Trap Deployment
 
-There is currently no database model representing trap deployments. 
+There is currently no database model representing trap deployments.
 The name of the directory that contains the raw images from a deployment
 is used as the deployment name.
 """

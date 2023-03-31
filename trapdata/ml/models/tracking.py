@@ -1,14 +1,12 @@
 import datetime
 import math
 from collections import namedtuple
-from typing import Any, Generator, Iterable, Optional, Sequence, Union
+from typing import Generator, Iterable, Optional, Sequence, Union
 
 import numpy as np
 import PIL.Image
 import torch
 import torch.utils.data
-import torchvision
-from rich.progress import track
 from sqlalchemy import func, orm, select, update
 from torch import nn
 from torchvision import transforms

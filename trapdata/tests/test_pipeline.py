@@ -14,10 +14,8 @@ from trapdata import logger
 from trapdata.common.types import FilePath
 from trapdata.db import check_db, get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
-from trapdata.db.models.occurrences import list_occurrences
 from trapdata.db.models.queue import (
     add_monitoring_session_to_queue,
-    add_sample_to_queue,
     clear_all_queues,
     images_in_queue,
 )

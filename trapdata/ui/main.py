@@ -33,7 +33,7 @@ from trapdata.db.models.events import (
     get_monitoring_sessions_from_db,
 )
 from trapdata.db.models.queue import clear_all_queues
-from trapdata.settings import Settings, ValidationError
+from trapdata.settings import Settings
 from trapdata.ui.pipeline import start_pipeline
 
 from .menu import DataMenuScreen
