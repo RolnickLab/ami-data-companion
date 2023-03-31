@@ -33,7 +33,7 @@ def queue_sample(sample_size: int = 4):
 
 
 @cli.command()
-def pipeline(import_data: bool = True):
+def pipeline(import_data: bool = False):
     """
     Run all models on images currently in the queue.
     """
