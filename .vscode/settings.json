@@ -24,4 +24,5 @@
         "torchvision",
         "trapdata"
     ],
+    "files.trimTrailingWhitespace": true,
 }
