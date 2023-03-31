@@ -750,7 +750,7 @@ def find_all_tracks(
         update(DetectedObject)
         .where(
             (DetectedObject.monitoring_session == monitoring_session)
-            & (DetectedObject.in_queue == True)
+            & (DetectedObject.in_queue.is_(True))
             & (DetectedObject.cnn_features.is_not(None))
         )
         .values({"in_queue": False})

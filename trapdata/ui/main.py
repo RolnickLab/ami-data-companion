@@ -65,7 +65,7 @@ class Queue(Label):
         else:
             try:
                 new_status = self.bgtask.is_alive()
-                if self.running and new_status == False:
+                if self.running and new_status is False:
                     # Pipeline went from running to stopped, reload stats on menu screen
                     menu = self.app.screen_manager.get_screen("menu")
                     if menu:

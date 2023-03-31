@@ -91,7 +91,9 @@ class Settings(BaseSettings):
             },
             "species_classification_model": {
                 "title": "Species classification model",
-                "description": "Model & settings to use for fine-grained species or taxon-level classification of cropped images after moth/non-moth detection.",
+                "description": (
+                    "Model & settings to use for fine-grained species or taxon-level classification of cropped images after moth/non-moth detection."
+                ),
                 "kivy_type": "options",
                 "kivy_section": "models",
             },

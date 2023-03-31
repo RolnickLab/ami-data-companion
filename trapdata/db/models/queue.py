@@ -197,7 +197,7 @@ class DetectedObjectQueue(QueueManager):
             return count
 
     def add_unprocessed(self, *_) -> None:
-        logger.info(f"Adding detected objects in deployment to queue")
+        logger.info("Adding detected objects in deployment to queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)

@@ -1,6 +1,4 @@
-
 import sentry_sdk
-import sqlalchemy
 
 sentry_sdk.init(
     dsn="https://d2f65f945fe343669bbd3be5116d5922@o4503927026876416.ingest.sentry.io/4503927029497856",

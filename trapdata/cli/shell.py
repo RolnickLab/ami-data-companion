@@ -12,7 +12,7 @@ def ipython():
     Open python shell with project loaded.
     """
     Session = get_session_class(settings.database_url)
-    session = Session()
+    session = Session()  # noqa: F841
     import ipdb
 
     ipdb.set_trace()
