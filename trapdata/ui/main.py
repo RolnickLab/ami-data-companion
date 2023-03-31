@@ -2,48 +2,45 @@
 # newrelic.agent.initialize(environment="staging")
 
 import json
-import time
 import pathlib
-from functools import partial
 
 # import multiprocessing
 import threading
-from sqlalchemy import orm
-from rich import print
+import time
+from functools import partial
 
 import kivy
 from kivy.app import App
 from kivy.clock import Clock
-from kivy.uix.label import Label
-from kivy.uix.screenmanager import ScreenManager, NoTransition
-from kivy.uix.settings import SettingsWithSidebar
-from kivy.uix.popup import Popup
 from kivy.core.window import Window
 from kivy.properties import (
+    BooleanProperty,
+    NumericProperty,
     ObjectProperty,
     StringProperty,
-    NumericProperty,
-    BooleanProperty,
 )
+from kivy.uix.label import Label
+from kivy.uix.popup import Popup
+from kivy.uix.screenmanager import NoTransition, ScreenManager
+from kivy.uix.settings import SettingsWithSidebar
+from rich import print
+from sqlalchemy import orm
 
-from trapdata.settings import Settings, ValidationError
-from trapdata import logger
-from trapdata import ml
+from trapdata import logger, ml
+from trapdata.db.models.detections import export_detected_objects, get_detected_objects
 from trapdata.db.models.events import (
-    get_monitoring_sessions_from_db,
     export_monitoring_sessions,
+    get_monitoring_sessions_from_db,
 )
-from trapdata.db.models.detections import get_detected_objects, export_detected_objects
 from trapdata.db.models.queue import clear_all_queues
+from trapdata.settings import Settings, ValidationError
 from trapdata.ui.pipeline import start_pipeline
 
 from .menu import DataMenuScreen
 from .playback import ImagePlaybackScreen
-
-from .summary import SpeciesSummaryScreen
-from .species_summary import SpeciesSummaryGridScreen
 from .queue import QueueScreen
-
+from .species_summary import SpeciesSummaryGridScreen
+from .summary import SpeciesSummaryScreen
 
 kivy.require("2.1.0")
 

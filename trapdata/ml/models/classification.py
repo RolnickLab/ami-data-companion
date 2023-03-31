@@ -1,14 +1,12 @@
+import timm
 import torch
 import torchvision
-import timm
 from PIL import Image
 
-from trapdata import logger
-from trapdata import constants
-from trapdata import db
+from trapdata import constants, db, logger
 from trapdata.db import models
-from trapdata.db.models.queue import DetectedObjectQueue, UnclassifiedObjectQueue
 from trapdata.db.models.detections import save_classified_objects
+from trapdata.db.models.queue import DetectedObjectQueue, UnclassifiedObjectQueue
 
 from .base import InferenceBaseClass
 

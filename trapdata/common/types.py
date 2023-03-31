@@ -1,7 +1,6 @@
-from typing import Union
-
 import pathlib
 from dataclasses import dataclass
+from typing import Union
 
 
 @dataclass

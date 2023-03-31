@@ -1,17 +1,16 @@
-import pathlib
 import datetime
-from typing import Optional, Union, Iterable, Any
+import pathlib
+from typing import Any, Iterable, Optional, Union
 
 import sqlalchemy as sa
 from sqlalchemy import orm
 from sqlalchemy_utils import aggregated, observes
 
-from trapdata.db import Base, get_session
-from trapdata.common.logs import logger
-from trapdata.common.utils import export_report
-from trapdata.common.types import FilePath
-from trapdata.db import models
 from trapdata.common.filemanagement import find_images, group_images_by_day
+from trapdata.common.logs import logger
+from trapdata.common.types import FilePath
+from trapdata.common.utils import export_report
+from trapdata.db import Base, get_session, models
 
 
 # Rename to TrapEvent? CapturePeriod? less confusing with other types of Sessions. CaptureSession? Or SurveyEvent or Survey?

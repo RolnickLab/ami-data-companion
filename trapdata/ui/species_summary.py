@@ -2,24 +2,20 @@ import pathlib
 import time
 
 from kivy.app import App
-from kivy.uix.screenmanager import Screen
+from kivy.clock import Clock
+from kivy.lang import Builder
 from kivy.properties import ObjectProperty
-from kivy.uix.label import Label
-from kivy.uix.recycleview import RecycleView
+from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.image import AsyncImage, Image
+from kivy.uix.label import Label
+from kivy.uix.recycleview import RecycleView
+from kivy.uix.screenmanager import Screen
 from kivy.uix.stacklayout import StackLayout
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.image import Image, AsyncImage
-from kivy.lang import Builder
-from kivy.clock import Clock
 
 from trapdata import logger
-from trapdata.db.models.detections import (
-    get_unique_species,
-    get_objects_for_species,
-)
-
+from trapdata.db.models.detections import get_objects_for_species, get_unique_species
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "species_summary.kv"))
 

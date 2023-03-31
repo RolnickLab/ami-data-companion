@@ -1,27 +1,25 @@
 import datetime
 import pathlib
 import statistics
-from typing import Iterable, Union, Optional, Any, Sequence, TypedDict
+from typing import Any, Iterable, Optional, Sequence, TypedDict, Union
 
+import PIL.Image
 import sqlalchemy as sa
 from sqlalchemy import orm
 from sqlalchemy_utils import UUIDType
 
-import PIL.Image
-
-from trapdata import db
-from trapdata import constants
-from trapdata.common.types import FilePath
-from trapdata.db.models.images import completely_classified
-from trapdata.db import models
-from trapdata.common.logs import logger
-from trapdata.common.utils import bbox_area, bbox_center, export_report
+from trapdata import constants, db
 from trapdata.common.filemanagement import (
-    save_image,
+    EXIF_DATETIME_STR_FORMAT,
     absolute_path,
     construct_exif,
-    EXIF_DATETIME_STR_FORMAT,
+    save_image,
 )
+from trapdata.common.logs import logger
+from trapdata.common.types import FilePath
+from trapdata.common.utils import bbox_area, bbox_center, export_report
+from trapdata.db import models
+from trapdata.db.models.images import completely_classified
 
 
 class DetectedObject(db.Base):

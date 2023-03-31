@@ -3,6 +3,7 @@ import datetime
 import typer
 from rich import print
 from sqlalchemy import select
+
 from trapdata.cli import settings
 from trapdata.db.base import check_db, get_session_class
 from trapdata.db.models import MonitoringSession

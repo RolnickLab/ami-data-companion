@@ -1,5 +1,4 @@
 from ..utils import TEST_IMAGES_BASE_PATH
-
 from .base import *
 from .models import *
 

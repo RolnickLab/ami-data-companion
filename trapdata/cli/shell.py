@@ -1,10 +1,9 @@
-import typer
-
 import sqlalchemy as sa
+import typer
 from sqlalchemy import select
 
-from trapdata.db.base import get_session_class
 from trapdata.cli import settings
+from trapdata.db.base import get_session_class
 from trapdata.db.models import *
 
 cli = typer.Typer(no_args_is_help=True)

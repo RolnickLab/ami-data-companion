@@ -1,7 +1,6 @@
 import typer
 
-from trapdata.cli import export, shell, test, show, run
-
+from trapdata.cli import export, run, shell, show, test
 
 cli = typer.Typer(no_args_is_help=True)
 cli.add_typer(export.cli, name="export", help="Export data in various formats")

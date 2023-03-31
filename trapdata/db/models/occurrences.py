@@ -9,12 +9,10 @@ from a monitoring session.
 import datetime
 
 import sqlalchemy as sa
-from trapdata.db import models
-from trapdata import db
+from pydantic import BaseModel
 
-from pydantic import (
-    BaseModel,
-)
+from trapdata import db
+from trapdata.db import models
 
 
 class Occurrence(BaseModel):

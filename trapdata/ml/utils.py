@@ -1,9 +1,8 @@
-import os
-
-import pathlib
-import json
-import time
 import datetime
+import json
+import os
+import pathlib
+import time
 import urllib.request
 
 import torch

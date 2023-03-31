@@ -3,29 +3,27 @@ import time
 from functools import partial
 
 from kivy.app import App
-from kivy.uix.screenmanager import Screen
-from kivy.properties import ObjectProperty, ListProperty, NumericProperty
-from kivy.uix.label import Label
-from kivy.uix.button import ButtonBehavior, Button
-from kivy.uix.recycleview import RecycleView
+from kivy.clock import Clock
+from kivy.lang import Builder
+from kivy.properties import ListProperty, NumericProperty, ObjectProperty
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button, ButtonBehavior
+from kivy.uix.image import Image
+from kivy.uix.label import Label
 
 # from kivy.uix.carousel
 from kivy.uix.popup import Popup
-from kivy.uix.image import Image
-from kivy.lang import Builder
-from kivy.clock import Clock
+from kivy.uix.recycleview import RecycleView
+from kivy.uix.screenmanager import Screen
 
-from trapdata import logger
-from trapdata import constants
-from trapdata.ui.playback import ImagePlaybackScreen
+from trapdata import constants, logger
+from trapdata.db.models.detections import export_detected_objects, get_detected_objects
 from trapdata.db.models.events import MonitoringSession
-from trapdata.db.models.detections import get_detected_objects, export_detected_objects
 from trapdata.db.models.occurrences import (
     get_unique_species_by_track,
     sequence_display_name,
 )
-
+from trapdata.ui.playback import ImagePlaybackScreen
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "summary.kv"))
 

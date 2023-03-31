@@ -1,15 +1,14 @@
-from typing import Sequence, Union, Optional
 from collections import OrderedDict
+from typing import Optional, Sequence, Union
 
 import sqlalchemy as sa
 
-from trapdata.db import get_session
-from trapdata import logger
-from trapdata import constants
+from trapdata import constants, logger
 from trapdata.common.types import FilePath
-from trapdata.db.models.images import TrapImage
+from trapdata.db import get_session
 from trapdata.db.models.detections import DetectedObject
 from trapdata.db.models.events import MonitoringSession
+from trapdata.db.models.images import TrapImage
 
 
 class QueueManager:

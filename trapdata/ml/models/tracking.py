@@ -1,31 +1,30 @@
-from typing import Generator, Sequence, Any, Optional, Union, Iterable
-from collections import namedtuple
 import datetime
-
-import torch
-from torch import nn
-import torchvision
-import numpy as np
 import math
-import PIL.Image
-from torchvision import transforms
-import torch.utils.data
-from sqlalchemy import orm, select, update, func
-from rich.progress import track
+from collections import namedtuple
+from typing import Any, Generator, Iterable, Optional, Sequence, Union
 
-from trapdata import logger
-from trapdata import constants
+import numpy as np
+import PIL.Image
+import torch
+import torch.utils.data
+import torchvision
+from rich.progress import track
+from sqlalchemy import func, orm, select, update
+from torch import nn
+from torchvision import transforms
+
+from trapdata import constants, logger
 from trapdata.common.types import BoundingBox, FilePath
-from trapdata.ml.utils import get_device
-from trapdata.ml.models.classification import (
-    MothNonMothClassifier,
-    QuebecVermontMothSpeciesClassifierLowResolution,
-    ClassificationIterableDatabaseDataset,
-)
-from trapdata.db.models.queue import UntrackedObjectsQueue, ObjectsWithoutFeaturesQueue
+from trapdata.db.models.detections import DetectedObject, save_classified_objects
 from trapdata.db.models.events import MonitoringSession
 from trapdata.db.models.images import TrapImage
-from trapdata.db.models.detections import DetectedObject, save_classified_objects
+from trapdata.db.models.queue import ObjectsWithoutFeaturesQueue, UntrackedObjectsQueue
+from trapdata.ml.models.classification import (
+    ClassificationIterableDatabaseDataset,
+    MothNonMothClassifier,
+    QuebecVermontMothSpeciesClassifierLowResolution,
+)
+from trapdata.ml.utils import get_device
 
 # from trapdata.db.models.detections import save_untracked_detection
 from .base import InferenceBaseClass

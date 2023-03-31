@@ -3,39 +3,32 @@ from typing import Optional
 
 import kivy
 from kivy.app import App
+from kivy.clock import Clock
+from kivy.graphics import Color, Line
 from kivy.lang import Builder
-from kivy.uix.widget import Widget
+from kivy.properties import ListProperty, NumericProperty, ObjectProperty
+from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
-from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.relativelayout import RelativeLayout
-from kivy.graphics import Color, Line
-from kivy.clock import Clock
-from kivy.properties import (
-    ListProperty,
-    ObjectProperty,
-    NumericProperty,
-)
 from kivy.uix.screenmanager import Screen
+from kivy.uix.widget import Widget
 
-from trapdata import logger
-from trapdata import constants
-from trapdata.common.utils import format_timedelta_hours
+from trapdata import constants, logger
+from trapdata.common.utils import format_timedelta_hours, get_sequential_sample
 from trapdata.db.base import get_session_class
-from trapdata.db.models.events import (
-    get_monitoring_session_image_ids,
-    MonitoringSession,
-)
-from trapdata.db.models.images import TrapImage, get_image_with_objects
 from trapdata.db.models.detections import (
     DetectedObject,
-    get_object_counts_for_image,
     delete_objects_for_image,
+    get_object_counts_for_image,
     get_unique_objects_for_image,
 )
+from trapdata.db.models.events import (
+    MonitoringSession,
+    get_monitoring_session_image_ids,
+)
+from trapdata.db.models.images import TrapImage, get_image_with_objects
 from trapdata.db.models.queue import add_image_to_queue, clear_all_queues
-from trapdata.common.utils import get_sequential_sample
-
 
 kivy.require("2.1.0")
 

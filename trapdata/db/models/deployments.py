@@ -10,8 +10,8 @@ import pathlib
 import sqlalchemy as sa
 from sqlalchemy import orm
 
-from trapdata.db import models
 from trapdata.common.types import FilePath
+from trapdata.db import models
 
 
 def deployment_name(image_base_path: FilePath) -> str:
