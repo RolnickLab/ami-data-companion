@@ -17,6 +17,7 @@ cli = typer.Typer()
 
 @cli.callback(invoke_without_command=True)
 def pytest_tests():
+    # return_code = pytest.main(["--doctest-modules", "-v", "."])
     return_code = pytest.main(["-v", "."])
     sys.exit(return_code)
 
