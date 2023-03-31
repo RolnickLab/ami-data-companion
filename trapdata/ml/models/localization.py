@@ -1,17 +1,13 @@
 import pathlib
 
+import PIL.Image
 import torch
 import torchvision
-import PIL.Image
-
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
-from trapdata import db
-from trapdata.db.models.queue import ImageQueue
-from trapdata import TrapImage
-from trapdata import logger
-
+from trapdata import TrapImage, db, logger
 from trapdata.db.models.detections import save_detected_objects
+from trapdata.db.models.queue import ImageQueue
 from trapdata.ml.models.base import InferenceBaseClass
 
 

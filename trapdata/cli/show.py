@@ -1,23 +1,23 @@
 import typer
 from rich import print
-from rich.live import Live
 from rich.console import Console
+from rich.live import Live
 from rich.table import Table
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
-from trapdata.db.base import get_session_class
+from trapdata import logger
 from trapdata.cli import settings
 from trapdata.db import models
-from trapdata.db.models.queue import all_queues
-from trapdata.db.models.events import (
-    update_all_aggregates,
-    get_monitoring_sessions_from_db,
-)
+from trapdata.db.base import get_session_class
 from trapdata.db.models.detections import (
     num_occurrences_for_event,
     num_species_for_event,
 )
-from trapdata import logger
+from trapdata.db.models.events import (
+    get_monitoring_sessions_from_db,
+    update_all_aggregates,
+)
+from trapdata.db.models.queue import all_queues
 
 cli = typer.Typer(no_args_is_help=True)
 
@@ -57,6 +57,14 @@ def deployments():
         table.add_row(*row_values)
 
     console.print(table)
+
+
+@cli.command()
+def captures(deployment: str):
+    """
+    Summarize the raw images captured by a deployment.
+    """
+    raise NotImplementedError
 
 
 @cli.command()

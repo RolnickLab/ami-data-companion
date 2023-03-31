@@ -1,14 +1,21 @@
-from ..utils import TEST_IMAGES_BASE_PATH
+import datetime
+import pathlib
 
-from .base import *
-from .models import *
+from sqlalchemy import orm
+
+from ..db.models import DetectedObject, MonitoringSession, TrapImage
+
+TEST_IMAGES = pathlib.Path(__file__).parent / "images"
 
 
-def test_db():
-    db = get_db(directory=None, create=True, update=True)
+def create_test_data():
+    """
+    This method may be irrelevant, but it may be helpful for reference.
+    """
+    db = None
     with orm.Session(db) as session:
         new_ms = MonitoringSession(
-            base_directory=TEST_IMAGES_BASE_PATH,
+            base_directory=TEST_IMAGES,
         )
 
         start_date = datetime.datetime.now()
@@ -36,7 +43,7 @@ def test_db():
 
         monitoring_sessions = (
             session.query(MonitoringSession)
-            .filter(MonitoringSession.base_directory == TEST_IMAGES_BASE_PATH)
+            .filter(MonitoringSession.base_directory == TEST_IMAGES)
             .all()
         )
 
@@ -49,4 +56,4 @@ def test_db():
 
 
 if __name__ == "__main__":
-    test_db()
+    create_test_data()

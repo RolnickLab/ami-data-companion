@@ -1,11 +1,12 @@
-import statistics
 import random
-from collections import Counter
+import statistics
+
 import sqlalchemy as sa
 
-from .base import get_session
 from trapdata import constants
 from trapdata.db import models
+
+from .base import get_session
 
 
 def count_species(db_path, monitoring_session=None):

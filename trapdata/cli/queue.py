@@ -19,7 +19,7 @@ console = Console()
 
 
 @cli.command()
-def queue_sample(sample_size: int = 4):
+def add_sample_to_queue_sample(sample_size: int = 4):
     """
     Placeholder method to scan image_base_path for monitoring sessions
     and add a sample of images to the pipeline processing queue.

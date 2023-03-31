@@ -3,6 +3,7 @@ import pathlib
 import tempfile
 
 import PIL.Image
+
 from trapdata import logger
 from trapdata.common.filemanagement import (
     EXIF_DATETIME_STR_FORMAT,

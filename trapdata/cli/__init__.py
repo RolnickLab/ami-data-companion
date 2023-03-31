@@ -1,6 +1,5 @@
-from trapdata.settings import read_settings
 from trapdata.db import check_db
-
+from trapdata.settings import read_settings
 
 settings = read_settings()
 check_db(settings.database_url, create=True, update=True, quiet=True)
