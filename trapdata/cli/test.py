@@ -1,5 +1,7 @@
 import datetime
+import sys
 
+import pytest
 import typer
 from rich import print
 from sqlalchemy import select
@@ -10,7 +12,13 @@ from trapdata.db.models import MonitoringSession
 from trapdata.db.models.occurrences import get_unique_species_by_track
 from trapdata.tests.test_pipeline import process_deployments
 
-cli = typer.Typer(no_args_is_help=True)
+cli = typer.Typer()
+
+
+@cli.callback(invoke_without_command=True)
+def pytest_tests():
+    return_code = pytest.main(["-v", "."])
+    sys.exit(return_code)
 
 
 @cli.command()
