@@ -181,7 +181,7 @@ def check_db(db_path, create=True, update=True, quiet=False):
                 )
     except (sqlalchemy.exc.OperationalError, alembic.util.exc.CommandError) as e:
         msg = f"Error opening database session: {e}"
-        logger.error(msg)
+        logger.warning(msg)
         if db_dsn.get_dialect().name == "sqlite":
             # @TODO standardize the way we check for a local environment and sqlite
             print(
