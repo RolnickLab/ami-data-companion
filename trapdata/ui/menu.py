@@ -11,6 +11,7 @@ from kivy.properties import (
     ObjectProperty,
     StringProperty,
 )
+from kivy.config import ConfigParser
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
@@ -200,6 +201,7 @@ class MonitoringSessionListView(RecycleView):
 
 
 class DataMenuScreen(Screen):
+    app: ConfigParser = ObjectProperty()
     image_base_path = ObjectProperty(allownone=True)
     sessions = ObjectProperty()
     status_popup = ObjectProperty()
@@ -235,7 +237,8 @@ class DataMenuScreen(Screen):
     def db_ready(self):
         # Try to open a database session.
         # # @TODO add GUI indicator asking to recreate DB if it fails to open?
-        if not db.check_db(self.app.db_path, create=True, update=True, quiet=True):
+
+        if not db.check_db(self.app.db_path, create=True, quiet=True):
             db_dsn = db.base.get_safe_db_path(self.app.db_path)
             Popup(
                 title="Error reading or creating database",
