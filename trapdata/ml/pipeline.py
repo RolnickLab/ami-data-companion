@@ -65,6 +65,7 @@ def start_pipeline(
         num_workers=settings.num_workers,
         single=single,
     )
+    feature_extractor.queue.add_unprocessed()
     if feature_extractor.queue.queue_count() > 0:
         feature_extractor.run()
         logger.info("Feature extraction complete")
