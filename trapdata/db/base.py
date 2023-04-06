@@ -232,3 +232,19 @@ def get_or_create(session, model, defaults=None, **kwargs):
             return instance, False
         else:
             return instance, True
+
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+
+def get_async_session_class(db_path: str) -> async_sessionmaker[AsyncSession]:
+    async_engine = create_async_engine(db_path, pool_pre_ping=True)
+
+    async_session_maker = async_sessionmaker(
+        async_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+    return async_session_maker
