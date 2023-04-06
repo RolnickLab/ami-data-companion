@@ -40,7 +40,7 @@ def get_settings(db_path: str, image_base_path: FilePath) -> PipelineSettings:
         # user_data_path=pathlib.Path(tempfile.TemporaryDirectory(prefix="AMI-").name),
         localization_model=ObjectDetectorChoice.fasterrcnn_for_ami_moth_traps,
         binary_classification_model=BinaryClassifierChoice.moth_nonmoth_classifier,
-        species_classification_model=SpeciesClassifierChoice.quebec_vermont_species_classifier_mixed_resolution,
+        species_classification_model=SpeciesClassifierChoice.quebec_vermont_species_classifier,
         feature_extractor=FeatureExtractorChoice.features_from_quebecvermont_species_model,
         classification_threshold=0.6,
         localization_batch_size=1,
