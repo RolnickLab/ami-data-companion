@@ -266,7 +266,7 @@ class UKDenmarkMothSpeciesClassifierMixedResolution(
     )
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "01--moths-ukdenmark_v2_category_map.json"
+        "01-moths-ukdenmark_v2_category_map_species_names.json"
     )
 
 
