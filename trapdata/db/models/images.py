@@ -27,7 +27,6 @@ class CaptureListItem(BaseModel):
 
 
 class CaptureDetail(CaptureListItem):
-    id: int
     event: object
     notes: Optional[str]
     detections: list
