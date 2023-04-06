@@ -231,25 +231,12 @@ class SpeciesClassifier(InferenceBaseClass):
 
 
 class QuebecVermontMothSpeciesClassifierMixedResolution(
-    SpeciesClassifier, Resnet50Classifier
-):
-    name = "Quebec & Vermont Species Classifier - Mixed Resolution"
-    description = "Trained on December 22, 2022 using lower resolution images"
-    weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "quebec-vermont-moth-model_v07_resnet50_2022-12-22-07-54.pt"
-    )
-    labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "quebec-vermont_moth-category-map_19Jan2023.json"
-    )
-
-
-class QuebecVermontMothSpeciesClassifierLowResolution(
     SpeciesClassifier, Resnet50ClassifierLowRes
 ):
-    name = "Quebec & Vermont Species Classifier - Low Resolution"
-    description = "Trained on February 24, 2022 using lower resolution images"
+    name = "Quebec & Vermont Species Classifier"
+    description = (
+        "Trained on February 24, 2022 using mix of low & med resolution images"
+    )
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "moths_quebecvermont_resnet50_randaug_mixres_128_fev24.pth"
@@ -260,9 +247,34 @@ class QuebecVermontMothSpeciesClassifierLowResolution(
     )
 
 
+class UKDenmarkMothSpeciesClassifierMixedResolution(
+    SpeciesClassifier, Resnet50ClassifierLowRes
+):
+    """
+    Training log and weights can be found here:
+    https://wandb.ai/moth-ai/uk-denmark/artifacts/model/model/v0/overview
+
+    Species checklist used for training:
+    https://github.com/adityajain07/mothAI/blob/main/species_lists/UK-Denmark-Moth-List_11July2022.csv
+    """
+
+    name = "UK & Denmark Species Classifier"
+    description = "Trained on April 3, 2023 using mix of low & med resolution images."
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "uk-denmark-moths-mixedres-20230403_140131_30.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "01--moths-ukdenmark_v2_category_map.json"
+    )
+
+
 class PanamaMothSpeciesClassifierMixedResolution(SpeciesClassifier, Resnet50Classifier):
-    name = "Panama Species Classifier - Mixed Resolution"
-    description = "Trained on December 22, 2022 using lower resolution images"
+    name = "Panama Species Classifier"
+    description = (
+        "Trained on December 22, 2022 using a mix of low & med resolution images"
+    )
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "panama_moth-model_v01_resnet50_2023-01-24-09-51.pt"
@@ -270,32 +282,4 @@ class PanamaMothSpeciesClassifierMixedResolution(SpeciesClassifier, Resnet50Clas
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "panama_moth-category-map_24Jan2023.json"
-    )
-
-
-class QuebecVermontMothSpeciesClassifier(SpeciesClassifier, EfficientNetClassifier):
-    name = "Quebec & Vermont Species Classifier"
-    description = "Trained on September 8, 2022 using local species checklist from GBIF"
-    weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "quebec-vermont-moth-model_v02_efficientnetv2-b3_2022-09-08-15-44.pt"
-    )
-    labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "quebec-vermont-moth_category-map_4Aug2022.json"
-    )
-
-
-class UKDenmarkMothSpeciesClassifier(SpeciesClassifier, EfficientNetClassifier):
-    name = "UK & Denmark Species Classifier"
-    description = (
-        "Trained on September 8, 2022 using local species checklist from GBIF."
-    )
-    weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "uk-denmark-moth-model_v01_efficientnetv2-b3_2022-09-08-12-54.pt"
-    )
-    labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "uk-denmark-moth_category-map_13Sep2022.json"
     )
