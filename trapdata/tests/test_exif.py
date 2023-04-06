@@ -15,7 +15,7 @@ from trapdata.common.filemanagement import (
 TEST_IMAGES = pathlib.Path(__file__).parent / "images"
 
 
-def run():
+def test_exif():
     logger.info(f"Using test images from: {TEST_IMAGES}")
     saved_images = []
     timestamp = datetime.datetime.now() - datetime.timedelta(days=365 * 100)
@@ -47,4 +47,4 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    test_exif()

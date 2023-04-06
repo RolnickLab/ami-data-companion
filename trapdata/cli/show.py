@@ -60,6 +60,14 @@ def deployments():
 
 
 @cli.command()
+def captures(deployment: str):
+    """
+    Summarize the raw images captured by a deployment.
+    """
+    raise NotImplementedError
+
+
+@cli.command()
 def events():
     """
     Show all monitoring events that have been interpreted from image timestamps.

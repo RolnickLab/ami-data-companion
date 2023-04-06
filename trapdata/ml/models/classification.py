@@ -1,6 +1,5 @@
 import timm
 import torch
-import torch.utils.data
 import torchvision
 
 from trapdata import constants, logger
