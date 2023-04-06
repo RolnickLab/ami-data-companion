@@ -55,7 +55,6 @@ def setup_db(settings: PipelineSettings):
 
 
 def add_images(settings: PipelineSettings):
-
     # db_path = ":memory:"
 
     events = get_or_create_monitoring_sessions(
