@@ -1,5 +1,5 @@
 import json
-from typing import Union
+from typing import Optional, Union
 
 import sqlalchemy
 import torch
@@ -54,6 +54,7 @@ class InferenceBaseClass:
     weights = None
     labels_path = None
     category_map = {}
+    species_list_path: Optional[str]
     model: torch.nn.Module
     transforms: torchvision.transforms.Compose
     batch_size = 4
