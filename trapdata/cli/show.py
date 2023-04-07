@@ -17,7 +17,6 @@ from trapdata.db.models.events import (
     get_monitoring_sessions_from_db,
     update_all_aggregates,
 )
-from trapdata.db.models.queue import all_queues
 
 cli = typer.Typer(no_args_is_help=True)
 
@@ -68,7 +67,7 @@ def captures(deployment: str):
 
 
 @cli.command()
-def events():
+def sessions():
     """
     Show all monitoring events that have been interpreted from image timestamps.
     """
@@ -128,34 +127,6 @@ def occurrences():
             str(occurrence.duration),
         )
     console.print(table)
-
-
-def get_queue_table():
-    table = Table("Queue", "Unprocessed", "Queued", "Done")
-    for name, queue in all_queues(
-        db_path=settings.database_url, base_directory=settings.image_base_path
-    ).items():
-        row_values = [
-            queue.name,
-            queue.unprocessed_count(),
-            queue.queue_count(),
-            queue.done_count(),
-        ]
-        table.add_row(*[str(val) for val in row_values])
-    return table
-
-
-@cli.command()
-def queue():
-    """
-    Show counts waiting in each queue.
-    """
-
-    with Live(get_queue_table(), refresh_per_second=1) as live:
-        while True:
-            live.update(get_queue_table())
-
-    # console.print(table)
 
 
 @cli.command()
