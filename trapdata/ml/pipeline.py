@@ -63,9 +63,10 @@ def start_pipeline(
         image_base_path=image_base_path,
         user_data_path=settings.user_data_path,
         batch_size=settings.classification_batch_size,
-        num_workers=settings.classification_batch_size,
+        num_workers=settings.num_workers,
         single=single,
     )
+    feature_extractor.queue.add_unprocessed()
     if feature_extractor.queue.queue_count() > 0:
         feature_extractor.run()
         logger.info("Feature extraction complete")
