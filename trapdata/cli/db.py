@@ -1,5 +1,4 @@
 import typer
-
 from trapdata import db
 from trapdata.cli import settings
 
@@ -17,12 +16,24 @@ def create():
 
 
 @cli.command()
-def migrate():
+def update():
     """
-    Run database migrations.
+    Run database migrations to update the database schema.
     """
     db.migrate(settings.database_url)
     db.check_db(settings.database_url, quiet=False)
+
+
+@cli.command()
+def reset():
+    """
+    Backup and recreate database tables.
+    """
+    reset = typer.confirm("Are you sure you want to reset the database?")
+    if reset:
+        db.reset_db(settings.database_url)
+    else:
+        typer.Abort()
 
 
 @cli.command()
