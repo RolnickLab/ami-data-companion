@@ -8,7 +8,6 @@ from typing import Optional, Union
 import pandas as pd
 import typer
 from rich import print
-
 from trapdata import logger
 from trapdata.cli import settings
 from trapdata.db import get_session_class
@@ -123,7 +122,7 @@ def detections(
 
 
 @cli.command()
-def events(
+def sessions(
     format: ExportFormat = ExportFormat.json,
     outfile: Optional[pathlib.Path] = None,
 ) -> Optional[str]:
@@ -162,7 +161,9 @@ def captures(
     outfile: Optional[pathlib.Path] = None,
 ) -> Optional[str]:
     """
-    List of source images for a deployment
+    List of source images for a given monitoring session.
+
+    Date should be in the format YYYY-MM-DD
     """
     Session = get_session_class(settings.database_url)
     session = Session()
@@ -179,40 +180,6 @@ def captures(
     [session.add(img) for img in captures]
 
     df = pd.DataFrame([img.report_detail().dict() for img in captures])
-    return export(df=df, format=format, outfile=outfile)
-
-
-@cli.command()
-def event_detail(
-    date: datetime.datetime,
-    format: ExportFormat = ExportFormat.json,
-    outfile: Optional[pathlib.Path] = None,
-) -> Optional[str]:
-    """
-    Export a summary of monitoring sessions from database in the specified format.
-    """
-    event = get_monitoring_session_by_date(
-        db_path=settings.database_url,
-        base_directory=settings.image_base_path,
-        event_dates=[date],
-    )[0]
-    event_data = event.report_data()
-    num_occurrences = num_occurrences_for_event(
-        db_path=settings.database_url, monitoring_session=event
-    )
-    num_species = num_species_for_event(
-        db_path=settings.database_url, monitoring_session=event
-    )
-    example_captures = get_monitoring_session_images(
-        settings.database_url, event, limit=5, offset=int(event.num_images / 2)
-    )
-    event_data["example_captures"] = [
-        img.report_data().dict() for img in example_captures
-    ]
-    event_data["num_occurrences"] = num_occurrences
-    event_data["num_species"] = num_species
-
-    df = pd.DataFrame([event_data]).iloc[0]
     return export(df=df, format=format, outfile=outfile)
 
 
