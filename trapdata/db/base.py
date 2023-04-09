@@ -1,6 +1,6 @@
 import contextlib
 import pathlib
-from typing import Generator
+from typing import Generator, Literal
 
 import sqlalchemy as sa
 import sqlalchemy.exc
@@ -10,76 +10,97 @@ from rich import print
 from sqlalchemy import orm
 
 from trapdata import logger
+from trapdata.common.types import DatabaseURL
 
 
-def get_safe_db_path(db_path: str):
-    # Return filepath or URL of database without credentials
-    return sa.engine.url.make_url(db_path)
+DIALECT_CONNECTION_ARGS = {
+    "sqlite": {
+        "timeout": 10,  # A longer timeout is necessary for SQLite and multiple PyTorch workers
+        "check_same_thread": False,
+    },
+    "postgresql": {},
+}
+
+SUPPORTED_DIALECTS = list(DIALECT_CONNECTION_ARGS.keys())
 
 
-def get_alembic_config(db_path: str) -> Config:
-    alembic_cfg = Config()
-    alembic_cfg.set_main_option("script_location", "trapdata.db:migrations")
-    alembic_cfg.set_main_option("sqlalchemy.url", str(db_path))
-    return alembic_cfg
-
-
-def get_db(db_path, create=False, update=False):
+def get_safe_db_path(db_path: DatabaseURL) -> sa.engine.url.URL:
     """
-    db_path supports any database URL format supported by sqlalchemy
+    Return filepath or URL of database without credentials
+
+    `db_path` supports any database connection string format supported by SQLAlchemy.
+
     sqlite_filepath = "~/trapdata.db"
     db_path = f"sqlite+pysqlite:///{file_path}",
     db_path = ":memory:"
     db_path = "postgresql://[user[:password]@][netloc][:port][/dbname][?param1=value1&...]"
     """
-    if not db_path:
-        Exception("No database URL specified")
-    else:
-        pass
-        # logger.debug(f"Using DB from path: {db_path}")
-        # logger.debug(f"Using DB from path: {get_safe_db_path()}")
 
+    return sa.engine.url.make_url(db_path)
+
+
+def get_alembic_config(db_path: DatabaseURL) -> Config:
+    connection_string = get_safe_db_path(db_path).render_as_string(hide_password=False)
+    alembic_cfg = Config()
+    alembic_cfg.set_main_option("script_location", "trapdata.db:migrations")
+    alembic_cfg.set_main_option("sqlalchemy.url", connection_string)
+    return alembic_cfg
+
+
+def get_dialect(db_path: DatabaseURL) -> str:
+    """
+    Return the SQL dialect of the database (sqlite, postgresql, etc.)
+    """
+    return get_safe_db_path(db_path).get_dialect().name
+
+
+def create_db(db_path: DatabaseURL) -> None:
+    """
+    Create database tables and sqlite file if neccessary.
+    """
     db_path = get_safe_db_path(db_path)
-    dialect = db_path.get_dialect().name
 
-    dialect_opts = {
-        "sqlite": {
-            "timeout": 10,  # A longer timeout is necessary for SQLite and multiple PyTorch workers
-            "check_same_thread": False,
-        },
-        "postgresql": {},
-    }
+    logger.info(f"Creating database tables for {db_path}")
+
+    if get_dialect(db_path) == "sqlite":
+        # Create parent directory if it doesn't exist
+        assert db_path.database, "No filepath specified for sqlite database."
+        logger.info(f"Creating {db_path.database} and parent directories if necessary")
+        pathlib.Path(db_path.database).parent.mkdir(parents=True, exist_ok=True)
+
+    db = get_db(db_path)
+
+    from . import Base
+
+    Base.metadata.create_all(db, checkfirst=True)
+    alembic_cfg = get_alembic_config(db_path)
+    alembic.stamp(alembic_cfg, "head")
+
+
+def migrate(db_path: DatabaseURL) -> None:
+    """
+    Run database migrations.
+
+    # @TODO See this post for a more complete implementation
+    # https://pawamoy.github.io/posts/testing-fastapi-ormar-alembic-apps/
+    """
+    logger.debug("Running any database migrations if necessary")
+    alembic_cfg = get_alembic_config(db_path)
+    alembic.upgrade(alembic_cfg, "head")
+
+
+def get_db(db_path, create=False, update=False):
+    """ """
+    db_path = get_safe_db_path(db_path)
+
+    dialect = get_dialect(db_path)
 
     db = sa.create_engine(
         db_path,
         echo=False,
         future=True,
-        connect_args=dialect_opts.get(dialect, {}),
+        connect_args=DIALECT_CONNECTION_ARGS.get(dialect, {}),
     )
-
-    alembic_cfg = get_alembic_config(db_path.render_as_string(hide_password=False))
-
-    # @TODO this is basically checking if the environment is the local app install
-    # let's make a way to set & check the environment.
-    if dialect != "sqlite" and (create or update):
-        logger.warn(
-            "Database is something other that sqlite, you must create & update it with the CLI tools."
-        )
-    elif create:
-        from . import Base
-
-        db_filepath = pathlib.Path(db.url.database)
-        logger.info(f"Creating {db_filepath} and parent directories if necessary")
-        db_filepath.parent.mkdir(parents=True, exist_ok=True)
-        Base.metadata.create_all(db, checkfirst=True)
-        alembic.stamp(alembic_cfg, "head")
-
-    if update:
-        # @TODO See this post for a more complete implementation
-        # https://pawamoy.github.io/posts/testing-fastapi-ormar-alembic-apps/
-        logger.debug("Running any database migrations if necessary")
-        alembic.upgrade(alembic_cfg, "head")
-
     return db
 
 
@@ -125,14 +146,30 @@ def get_session(db_path: str, **kwargs) -> Generator[orm.Session, None, None]:
 
 def check_db(db_path, create=True, update=True, quiet=False):
     """
-    Try opening a database session.
+    Convenience method to check if a database is accessible and create it if it doesn't exist,
+
+    Allows the interface calling this method to handle any errors gracefully.
+
+    @TODO rethink this and which interfaces are using it.
     """
     from trapdata.db.models import __models__
 
     db_dsn = get_safe_db_path(db_path)
     try:
         logger.info(f"Checking DB {db_dsn}")
-        get_db(db_path, create=create, update=update)
+
+        if create:
+            create_db(db_path)
+
+        if update:
+            dialect = get_dialect(db_path)
+            if get_dialect(db_path) == "sqlite":
+                migrate(db_path)
+            else:
+                logger.warning(
+                    "Skipping database migrations for non-sqlite database. Run them manually."
+                )
+
         with get_session(db_path) as sesh:
             # May have to check each model to detect schema changes
             # @TODO probably a better way to do this!
@@ -144,7 +181,7 @@ def check_db(db_path, create=True, update=True, quiet=False):
                 )
     except (sqlalchemy.exc.OperationalError, alembic.util.exc.CommandError) as e:
         msg = f"Error opening database session: {e}"
-        logger.error(msg)
+        logger.warning(msg)
         if db_dsn.get_dialect().name == "sqlite":
             # @TODO standardize the way we check for a local environment and sqlite
             print(

@@ -9,7 +9,11 @@
     },
     "editor.codeActionsOnSave": {
         "source.organizeImports": true,
+        "source.sortImports": true,
+        "source.fixAll.markdownlint": true,
+        "source.fixAll": true
     },
+    "files.trimTrailingWhitespace": true,
     "cSpell.words": [
         "argmax",
         "astype",
@@ -24,5 +28,4 @@
         "torchvision",
         "trapdata"
     ],
-    "files.trimTrailingWhitespace": true,
 }

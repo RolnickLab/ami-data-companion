@@ -20,7 +20,7 @@ from trapdata.db.models.queue import ObjectsWithoutFeaturesQueue, UntrackedObjec
 from trapdata.ml.models.classification import (
     ClassificationIterableDatabaseDataset,
     MothNonMothClassifier,
-    QuebecVermontMothSpeciesClassifierLowResolution,
+    QuebecVermontMothSpeciesClassifierMixedResolution,
 )
 from trapdata.ml.utils import get_device
 
@@ -479,9 +479,15 @@ class FeatureExtractor(InferenceBaseClass):
 
 
 class QuebecVermontFeatureExtractor(
-    FeatureExtractor, QuebecVermontMothSpeciesClassifierLowResolution
+    FeatureExtractor, QuebecVermontMothSpeciesClassifierMixedResolution
 ):
     name = "Features from Quebec/Vermont species model"
+
+
+class UKDenmarkFeatureExtractor(
+    FeatureExtractor, QuebecVermontMothSpeciesClassifierMixedResolution
+):
+    name = "Features from UK/Denmark species model"
 
 
 class MothNonMothFeatureExtractor(FeatureExtractor, MothNonMothClassifier):
