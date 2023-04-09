@@ -21,14 +21,12 @@ Desktop app for analyzing images from autonomous insect monitoring stations usin
 
 
 - Requires Python 3.10. Use [Anaconda](https://www.anaconda.com/) (or [miniconda](https://docs.conda.io/en/latest/miniconda.html)) if you need to maintain multiple versions of Python or are unfamiliar with using Python and scientific packages, it is especially helpful on Windows. [PyEnv](https://github.com/pyenv/pyenv) is also a popular tool for managing multiple versions of python if you are familiar with the command line.
-- Requires Git to clone the source code and stay up-to-date with the latest changes. Anaconda comes with Git, but the [GitHub Desktop](https://desktop.github.com/) application works well if you are less familiar with Git. 
-
 ### Installation (for non-developers)
 
 Install (or upgrade) the package with the following command
 
 ```sh
-pip install --editable "git+https://github.com/RolnickLab/ami-data-manager.git#egg=trapdata"
+pip install https://github.com/RolnickLab/ami-data-manager/archive/main.zip
 ```
 
 Optionally test the installation with the following command
@@ -39,7 +37,7 @@ trapdata-test
 
 ### Installation (for developers)
 
-Create an environment just for AMI and the trapdata manager using conda (or virtualenv) 
+Create an environment just for AMI and the trapdata manager using conda (or virtualenv)
 
 ```sh
 conda create -n ami python=3.10 anaconda
@@ -54,7 +52,7 @@ git clone git@github.com:RolnickLab/ami-data-manager.git
 Install as an editable package. This will install the dependencies and install the `trapdata` console command
 
 ```sh
-cd ami-data-manager 
+cd ami-data-manager
 pip install -e .
 ```
 
@@ -78,9 +76,9 @@ python trapdata/tests/test_pipeline.py
 
 - All progress and intermediate results are saved to a local database, so if you close the program or it crashes, the status will not be lost and you can pick up where it left off.
 
-- The cropped images, reports, cached models & local database are stored in the "user data" directory which can be changed in the Settings panel. By default, the user data directory is in one of the locations below, You 
+- The cropped images, reports, cached models & local database are stored in the "user data" directory which can be changed in the Settings panel. By default, the user data directory is in one of the locations below, You
 
-    macOS: 
+    macOS:
     ```/Library/Application Support/trapdata/```
 
     Linux:

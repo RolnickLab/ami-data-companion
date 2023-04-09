@@ -1,5 +1,5 @@
 import json
-from typing import Union
+from typing import Optional, Union
 
 import sqlalchemy
 import torch
