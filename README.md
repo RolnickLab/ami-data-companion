@@ -17,11 +17,11 @@ Desktop app for analyzing images from autonomous insect monitoring stations usin
 </table>
 
 
-### Dependencies
+## Dependencies
 
 
 - Requires Python 3.10. Use [Anaconda](https://www.anaconda.com/) (or [miniconda](https://docs.conda.io/en/latest/miniconda.html)) if you need to maintain multiple versions of Python or are unfamiliar with using Python and scientific packages, it is especially helpful on Windows. [PyEnv](https://github.com/pyenv/pyenv) is also a popular tool for managing multiple versions of python if you are familiar with the command line.
-### Installation (for non-developers)
+## Installation (for non-developers)
 
 Install (or upgrade) the package with the following command
 
@@ -35,7 +35,7 @@ Optionally test the installation with the following command
 trapdata-test
 ```
 
-### Installation (for developers)
+## Installation (for developers)
 
 Create an environment just for AMI and the trapdata manager using conda (or virtualenv)
 
@@ -62,7 +62,7 @@ Test the whole backend pipeline without the GUI using this command
 python trapdata/tests/test_pipeline.py
 ```
 
-### Usage
+## GUI Usage
 
 - Make a directory of sample images to test & learn the whole workflow more quickly.
 
@@ -90,3 +90,59 @@ python trapdata/tests/test_pipeline.py
 A short video of the application in use can be seen here: https://www.youtube.com/watch?v=DCPkxM_PvdQ
 
 
+## CLI Usage
+
+Configure models and the image_base_path for the deployment images you want to process, then see the example workflow below. Help can be viewed for any of the subcommands with `ami export --help`.
+
+### Settings
+There are two ways to configure settings
+1. Using the graphic interface:
+    - Run `ami gui` and click Settings. This will write settings to the file `trapdata.ini`
+2. Using environment variables
+    - Copy `.env.example` to `.env` and edit the values, or
+    - Export the env variables to your shell environment
+
+The CLI will read settings from either source, but will prioritize environment variables. The GUI only reads from `trapdata.ini`.
+
+### Example workflow
+```sh
+ami --help
+ami test pipeline
+ami show settings
+ami import --no-queue
+ami show sessions
+ami queue sample --sample-size 10
+ami show queue
+ami run
+ami show occurrences
+ami queue all
+ami run
+ami show queue --watch  # Run in a 2nd shell or on another server connected to the same DB
+ami show occurrences
+ami export occurrences --format csv
+```
+
+
+
+## Database
+
+By default both the GUI and CLI will automatically create a local sqlite database by default. It is recommended to use a PostgreSQL database to increase performance for large datasets and
+to process data from multiple server nodes.
+
+You can test using PostgreSQL using Docker:
+
+```sh
+docker run -d -i --name ami-db -p 5432:5432 -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=ami postgres:14
+docker logs ami-db --tail 100
+```
+
+Change the database connection string in the GUI Settings to `postgresql://postgres@localhost:5432/ami`
+(or set it in the environment settings if only using the CLI)
+
+Stop and remove the database container:
+```sh
+docker stop ami-db && docker remove ami-db
+```
+
+A script is available in the repo source to run the commands above.
+`./scrips/start_db_container.sh`
