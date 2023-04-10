@@ -1,11 +1,9 @@
 import typer
 from rich import print
 from rich.console import Console
-from rich.live import Live
 from rich.table import Table
-from sqlalchemy import func, select
-
-from trapdata import logger
+from sqlalchemy import select
+from trapdata import logger, ml
 from trapdata.cli import settings
 from trapdata.db import models
 from trapdata.db.base import get_session_class
@@ -32,6 +30,33 @@ def show_settings():
     print(settings)
 
 
+@cli.command(name="models")
+def ml_models():
+    """
+    List all available models that have been registered.
+    """
+    for model_type, model_list in [
+        ("Object Detectors", ml.models.object_detectors),
+        ("Binary Classifiers", ml.models.binary_classifiers),
+        ("Species Classifiers", ml.models.species_classifiers),
+        ("Feature Extractors", ml.models.feature_extractors),
+    ]:
+        table = Table(
+            "[green]Name[/green] / [yellow]Key[/yellow]",
+            "Description",
+            title=model_type,
+            title_style="bold",
+            title_justify="left",
+        )
+        table.columns[0].overflow = "fold"
+
+        for model in model_list.values():
+            name = f"[green]{model.name}[/green] \n[yellow]{model.get_key()}[/yellow]\n"
+            table.add_row(name, model.description)
+
+        console.print(table)
+
+
 @cli.command()
 def deployments():
     """
@@ -42,7 +67,12 @@ def deployments():
     session = Session()
     update_all_aggregates(session, settings.image_base_path)
     deployments = list_deployments(session)
-    table = Table("Image Base Path", "Events", "Images", "Detections")
+    table = Table(
+        "Image Base Path",
+        "Events",
+        "Images",
+        "Detections",
+    )
     table.columns[0].overflow = "fold"
     for deployment in deployments:
         row_values = [str(field) for field in deployment.dict().values()]
