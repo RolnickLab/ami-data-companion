@@ -28,9 +28,6 @@ repos:
     hooks:
       - id: isort
         name: isort (python)
-        files: .
-        types: [file, python]
-        args: [-o, alembic, --src, "backend"]
       - id: isort
         files: .
         name: isort (cython)

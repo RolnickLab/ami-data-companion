@@ -3,6 +3,7 @@ from rich import print
 from rich.console import Console
 from rich.table import Table
 from sqlalchemy import select
+
 from trapdata import logger, ml
 from trapdata.cli import settings
 from trapdata.db import models
