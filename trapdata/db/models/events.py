@@ -3,6 +3,7 @@ import pathlib
 from typing import Any, Iterable, Optional, Union
 
 import sqlalchemy as sa
+from pydantic import BaseModel
 from sqlalchemy import orm
 from sqlalchemy_utils import aggregated
 
@@ -13,11 +14,7 @@ from trapdata.common.utils import export_report
 from trapdata.db import Base, get_session, models
 
 
-# Rename to TrapEvent? CapturePeriod? less confusing with other types of Sessions. CaptureSession? Or SurveyEvent or Survey?
-
-from pydantic import BaseModel
-
-
+# @TODO Rename to TrapEvent? CapturePeriod? less confusing with other types of Sessions. CaptureSession? Or SurveyEvent or Survey?
 class Event(BaseModel):
     id: str
     frames: list[dict]

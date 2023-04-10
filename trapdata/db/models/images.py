@@ -3,6 +3,7 @@ import pathlib
 from typing import Optional
 
 import sqlalchemy as sa
+from pydantic import BaseModel
 from sqlalchemy import orm
 from sqlalchemy_utils import aggregated
 
@@ -13,9 +14,6 @@ from trapdata.common.filemanagement import (
     get_image_timestamp,
 )
 from trapdata.db import Base, get_session
-
-
-from pydantic import BaseModel
 
 
 class CaptureListItem(BaseModel):

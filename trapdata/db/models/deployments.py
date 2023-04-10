@@ -8,12 +8,11 @@ is used as the deployment name.
 import pathlib
 
 import sqlalchemy as sa
+from pydantic import BaseModel
 from sqlalchemy import orm
 
 from trapdata.common.types import FilePath
 from trapdata.db import models
-
-from pydantic import BaseModel
 
 
 class DeploymentListItem(BaseModel):
