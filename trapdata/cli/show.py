@@ -1,3 +1,5 @@
+from typing import Optional
+
 import typer
 from rich import print
 from rich.console import Console
@@ -134,19 +136,27 @@ def sessions():
 
 
 @cli.command()
-def occurrences():
+def occurrences(limit: Optional[int] = 100, offset: int = 0):
     events = get_monitoring_sessions_from_db(
         db_path=settings.database_url, base_directory=settings.image_base_path
     )
     occurrences: list[models.occurrences.Occurrence] = []
     for event in events:
-        occurrences += models.occurrences.list_occurrences(settings.database_url, event)
+        occurrences += models.occurrences.list_occurrences(
+            settings.database_url,
+            event,
+            classification_threshold=settings.classification_threshold,
+            limit=limit,
+            offset=offset,
+        )
 
-    table = Table("Event", "Label", "Appearance", "Duration")
+    table = Table("Event", "Label", "Detections", "Score", "Appearance", "Duration")
     for occurrence in occurrences:
         table.add_row(
             occurrence.event,
             occurrence.label,
+            str(occurrence.num_frames),
+            str(round(occurrence.best_score, 2)),
             str(occurrence.start_time),
             str(occurrence.duration),
         )
