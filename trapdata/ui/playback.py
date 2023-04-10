@@ -21,11 +21,9 @@ from trapdata.db.models.detections import (
     DetectedObject,
     delete_objects_for_image,
     get_object_counts_for_image,
-    get_unique_objects_for_image,
+    get_unique_detections_for_image,
 )
-from trapdata.db.models.events import (
-    get_monitoring_session_image_ids,
-)
+from trapdata.db.models.events import get_monitoring_session_image_ids
 from trapdata.db.models.images import TrapImage, get_image_with_objects
 from trapdata.db.models.queue import add_image_to_queue, clear_all_queues
 
@@ -337,7 +335,7 @@ class PreviewWindow(RelativeLayout):
 
         image_widget = AnnotatedImage(
             image_path=image.absolute_path,
-            annotations=get_unique_objects_for_image(
+            annotations=get_unique_detections_for_image(
                 db_path=app.db_path, image_id=image_id
             ),
             size=self.size,

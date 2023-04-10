@@ -393,12 +393,17 @@ def get_objects_for_image(db_path, image_id):
         return sesh.query(DetectedObject.binary_label).filter_by(image_id=image_id)
 
 
-def get_unique_objects_for_image(db_path, image_id) -> Sequence[DetectedObject]:
+def get_unique_detections_for_image(db_path, image_id) -> Sequence[DetectedObject]:
+    """
+    Return unique positive detections for an image, based on the object's bounding box.
+    """
+
     with db.get_session(db_path) as sesh:
         objects = (
             sesh.execute(
                 sa.select(DetectedObject)
                 .where(DetectedObject.image_id == image_id)
+                .where(DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
                 .order_by(DetectedObject.last_detected.desc())
             )
             .unique(lambda d: str(d.bbox))
