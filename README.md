@@ -119,7 +119,7 @@ ami queue all
 ami run
 ami show queue --watch  # Run in a 2nd shell or on another server connected to the same DB
 ami show occurrences
-ami export occurrences --format csv
+ami export occurrences --format json --outfile denmark_sample.json --collect-images
 ```
 
 
