@@ -6,6 +6,7 @@ The name of the directory that contains the raw images from a deployment
 is used as the deployment name.
 """
 import pathlib
+from typing import Optional
 
 import sqlalchemy as sa
 from pydantic import BaseModel
@@ -16,7 +17,7 @@ from trapdata.db import models
 
 
 class DeploymentListItem(BaseModel):
-    # id: int
+    id: Optional[int] = None
     name: str
     num_events: int
     num_source_images: int
