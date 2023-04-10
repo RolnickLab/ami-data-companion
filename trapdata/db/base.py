@@ -1,6 +1,7 @@
 import contextlib
 import pathlib
-from typing import Generator, Literal
+import time
+from typing import Generator
 
 import sqlalchemy as sa
 import sqlalchemy.exc
@@ -8,10 +9,8 @@ from alembic import command as alembic
 from alembic.config import Config
 from rich import print
 from sqlalchemy import orm
-
 from trapdata import logger
 from trapdata.common.types import DatabaseURL
-
 
 DIALECT_CONNECTION_ARGS = {
     "sqlite": {
@@ -56,16 +55,16 @@ def get_dialect(db_path: DatabaseURL) -> str:
 
 def create_db(db_path: DatabaseURL) -> None:
     """
-    Create database tables and sqlite file if neccessary.
+    Create database tables and sqlite file if necessary.
     """
     db_path = get_safe_db_path(db_path)
 
-    logger.info(f"Creating database tables for {db_path}")
+    logger.debug(f"Creating database tables for {db_path} if necessary")
 
     if get_dialect(db_path) == "sqlite":
         # Create parent directory if it doesn't exist
         assert db_path.database, "No filepath specified for sqlite database."
-        logger.info(f"Creating {db_path.database} and parent directories if necessary")
+        logger.debug("Creating parent directories for database file if necessary")
         pathlib.Path(db_path.database).parent.mkdir(parents=True, exist_ok=True)
 
     db = get_db(db_path)
@@ -162,7 +161,6 @@ def check_db(db_path, create=True, update=True, quiet=False):
             create_db(db_path)
 
         if update:
-            dialect = get_dialect(db_path)
             if get_dialect(db_path) == "sqlite":
                 migrate(db_path)
             else:
@@ -193,6 +191,20 @@ def check_db(db_path, create=True, update=True, quiet=False):
             raise
     else:
         return True
+
+
+def reset_db(db_path: DatabaseURL) -> None:
+    db_path = get_safe_db_path(db_path)
+    if get_dialect(db_path) == "sqlite" and db_path.database:
+        path = pathlib.Path(db_path.database)
+        timestamp = int(time.time())
+        backup_path = path.with_stem(f"{path.stem}-{timestamp}")
+        path.rename(backup_path)
+        logger.info(f"Backup of {path.name} saved to {backup_path}")
+    else:
+        raise NotImplementedError("Only implemented for sqlite databases")
+    logger.info("Recreating database and tables")
+    create_db(db_path)
 
 
 def query(db_path, q, **kwargs):

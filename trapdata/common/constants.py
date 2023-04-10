@@ -13,3 +13,5 @@ NEUTRAL_COLOR = [0, 100 / 255, 1, 0.4]  # Blue
 NEGATIVE_COLOR = [1, 1, 1, 0]  # Transparent
 
 SUMMARY_REFRESH_SECONDS = 5
+
+IMAGE_BASE_URL = "https://object-arbutus.cloud.computecanada.ca/ami-trapdata/"

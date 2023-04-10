@@ -1,6 +1,9 @@
 import csv
+import datetime
 import enum
 import pathlib
+import shutil
+import time
 from typing import Optional, Union
 
 import pandas as pd
@@ -16,7 +19,11 @@ from trapdata.db.models.detections import (
     num_occurrences_for_event,
     num_species_for_event,
 )
-from trapdata.db.models.events import get_monitoring_sessions_from_db
+from trapdata.db.models.events import (
+    get_monitoring_session_by_date,
+    get_monitoring_session_images,
+    get_monitoring_sessions_from_db,
+)
 from trapdata.db.models.occurrences import list_occurrences
 
 cli = typer.Typer(no_args_is_help=True)
@@ -52,33 +59,74 @@ def export(
         export_method = getattr(df, f"to_{format}")
         output = export_method(path_or_buf=outfile, index=False)
     if outfile:
+        logger.info(f'Exported {len(df)} records to "{outfile}"')
         return str(outfile.absolute())
-    else:
-        if output:
-            # @TODO write the output to stdout without other log messages
-            # sys.stdin.write(str(output))
-            print(output)
-        return output
+    if output:
+        # @TODO write the output to stdout without other log messages
+        # sys.stdin.write(str(output))
+        print(output)
+    return output
 
 
 @cli.command()
 def occurrences(
     # deployment: Optional[str] = None,
     format: ExportFormat = ExportFormat.json,
-    limit: Optional[int] = 10,
+    num_examples: int = 3,
+    limit: Optional[int] = None,
     offset: int = 0,
     outfile: Optional[pathlib.Path] = None,
+    collect_images: bool = False,
+    absolute_paths: bool = False,
+    # create_zip: bool = False,  # @TODO write a zip file of the exported images with extended EXIF data
 ) -> Optional[str]:
     """
-    Export grouped occurrences from database in the specified format.
+    Export detected occurrences from the active deployment / image_base_dir.
+
+    @TODO nested examples in output do not work well with CSV format. Set num_examples to 1 as a workaround.
     """
     events = get_monitoring_sessions_from_db(
         db_path=settings.database_url, base_directory=settings.image_base_path
     )
     occurrences = []
     for event in events:
-        occurrences += list_occurrences(settings.database_url, event)
+        occurrences += list_occurrences(
+            settings.database_url,
+            monitoring_session=event,
+            classification_threshold=settings.classification_threshold,
+            num_examples=num_examples,
+            limit=limit,
+            offset=offset,
+        )
     logger.info(f"Preparing to export {len(occurrences)} records as {format}")
+
+    if collect_images:
+        # Collect images for exported occurrences into a subdirectory
+        subdir = "exports"
+        if outfile:
+            name = outfile.stem
+        else:
+            name = f"occurrences_{int(time.time())}"
+        destination_dir = settings.user_data_path / subdir / f"{name}_images"
+        logger.info(f'Collecting images into "{destination_dir}"')
+        destination_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        destination_dir = None
+
+    for occurrence in occurrences:
+        for example in occurrence.examples:
+            path = pathlib.Path(example["cropped_image_path"]).resolve()
+            if destination_dir:
+                destination = destination_dir / f"{occurrence.id}-{path.name}"
+                if not destination.exists():
+                    shutil.copy(path, destination)
+                path = destination
+            if absolute_paths:
+                final_path = path.absolute()
+            else:
+                final_path = path.relative_to(settings.user_data_path)
+            example["cropped_image_path"] = final_path
+
     df = pd.DataFrame([obj.dict() for obj in occurrences])
     return export(df=df, format=format, outfile=outfile)
 
@@ -106,7 +154,7 @@ def detections(
 
 
 @cli.command()
-def events(
+def sessions(
     format: ExportFormat = ExportFormat.json,
     outfile: Optional[pathlib.Path] = None,
 ) -> Optional[str]:
@@ -125,10 +173,45 @@ def events(
         num_species = num_species_for_event(
             db_path=settings.database_url, monitoring_session=event
         )
+        example_captures = get_monitoring_session_images(
+            settings.database_url, event, limit=5, offset=int(event.num_images / 2)
+        )
+        event_data["example_captures"] = [
+            img.report_data().dict() for img in example_captures
+        ]
         event_data["num_occurrences"] = num_occurrences
         event_data["num_species"] = num_species
         items.append(event_data)
     df = pd.DataFrame(items)
+    return export(df=df, format=format, outfile=outfile)
+
+
+@cli.command()
+def captures(
+    date: datetime.datetime,
+    format: ExportFormat = ExportFormat.json,
+    outfile: Optional[pathlib.Path] = None,
+) -> Optional[str]:
+    """
+    List of source images for a given monitoring session.
+
+    Date should be in the format YYYY-MM-DD
+    """
+    Session = get_session_class(settings.database_url)
+    session = Session()
+    events = get_monitoring_session_by_date(
+        db_path=settings.database_url,
+        base_directory=settings.image_base_path,
+        event_dates=[str(date.date())],
+    )
+    if not len(events):
+        raise Exception(f"No Monitoring Event with date: {date.date()}")
+
+    event = events[0]
+    captures = get_monitoring_session_images(settings.database_url, event, limit=100)
+    [session.add(img) for img in captures]
+
+    df = pd.DataFrame([img.report_detail().dict() for img in captures])
     return export(df=df, format=format, outfile=outfile)
 
 
@@ -144,5 +227,5 @@ def deployments(
     session = Session()
     deployments = list_deployments(session)
 
-    df = pd.DataFrame(deployments)
+    df = pd.DataFrame([d.dict() for d in deployments])
     return export(df=df, format=format, outfile=outfile)

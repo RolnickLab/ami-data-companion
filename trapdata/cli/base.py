@@ -1,12 +1,12 @@
+import pathlib
+from typing import Optional
+
 import typer
 
 from trapdata.cli import db, export, queue, settings, shell, show, test
 from trapdata.db.base import get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
-from trapdata.db.models.queue import (
-    add_monitoring_session_to_queue,
-    add_sample_to_queue,
-)
+from trapdata.db.models.queue import add_monitoring_session_to_queue
 from trapdata.ml.pipeline import start_pipeline
 
 cli = typer.Typer(no_args_is_help=True)
@@ -31,13 +31,15 @@ def gui():
 
 
 @cli.command("import")
-def import_data(queue=True):
+def import_data(image_base_path: Optional[pathlib.Path] = None, queue: bool = True):
     """
-    Import images from the currently configured image_base_path ("deployment")
+    Import images from a deployment into the database.
+
+    Defaults to the `image_base_path` configured in .env or trapdata.ini
+    The image_base_path is a proxy for a unique trap deployment.
     """
-    events = get_or_create_monitoring_sessions(
-        settings.database_url, settings.image_base_path
-    )
+    image_base_path = image_base_path or settings.image_base_path
+    events = get_or_create_monitoring_sessions(settings.database_url, image_base_path)
     if queue:
         for event in events:
             add_monitoring_session_to_queue(

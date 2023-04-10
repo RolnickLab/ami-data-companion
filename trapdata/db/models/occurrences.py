@@ -7,6 +7,7 @@ the same individual, tracked over multiple frames in the original images
 from a monitoring session.
 """
 import datetime
+from typing import Optional
 
 import sqlalchemy as sa
 from pydantic import BaseModel
@@ -24,6 +25,7 @@ class Occurrence(BaseModel):
     duration: datetime.timedelta
     deployment: str
     event: str
+    num_frames: int
     # cropped_image_path: pathlib.Path
     # source_image_id: int
     examples: list[dict]
@@ -37,10 +39,17 @@ def list_occurrences(
     monitoring_session: models.MonitoringSession,
     classification_threshold: float = -1,
     num_examples: int = 3,
+    limit: Optional[int] = None,
+    offset: int = 0,
 ) -> list[Occurrence]:
     occurrences = []
     for item in get_unique_species_by_track(
-        db_path, monitoring_session, classification_threshold, num_examples
+        db_path,
+        monitoring_session,
+        classification_threshold=classification_threshold,
+        num_examples=num_examples,
+        limit=limit,
+        offset=offset,
     ):
         prepped = {k.split("sequence_", 1)[-1]: v for k, v in item.items()}
         if prepped["id"]:
@@ -56,6 +65,8 @@ def get_unique_species_by_track(
     monitoring_session=None,
     classification_threshold: float = -1,
     num_examples: int = 3,
+    limit: Optional[int] = None,
+    offset: int = 0,
 ) -> list[dict]:
     Session = db.get_session_class(db_path)
     session = Session()
@@ -79,7 +90,9 @@ def get_unique_species_by_track(
             sa.func.max(models.DetectedObject.specific_label_score)
             >= classification_threshold,
         )
-        .order_by(models.DetectedObject.specific_label)
+        .order_by(models.DetectedObject.timestamp.asc())
+        .limit(limit)
+        .offset(offset)
     ).all()
 
     rows = []
@@ -88,6 +101,7 @@ def get_unique_species_by_track(
             sa.select(
                 models.DetectedObject.id,
                 models.DetectedObject.image_id.label("source_image_id"),
+                models.TrapImage.path.label("source_image_path"),
                 models.DetectedObject.specific_label.label("label"),
                 models.DetectedObject.specific_label_score.label("score"),
                 models.DetectedObject.path.label("cropped_image_path"),
@@ -98,6 +112,9 @@ def get_unique_species_by_track(
                 (models.DetectedObject.monitoring_session_id == monitoring_session.id)
                 & (models.DetectedObject.sequence_id == sequence.sequence_id)
             )
+            .join(
+                models.TrapImage, models.TrapImage.id == models.DetectedObject.image_id
+            )
             # .order_by(sa.func.random())
             .order_by(sa.desc("score"))
             .limit(num_examples)
@@ -106,6 +123,7 @@ def get_unique_species_by_track(
         if frames:
             best_example = frames[0]
             row["label"] = best_example.label
+            row["num_frames"] = sequence.sequence_frame_count
             row["examples"] = [example._mapping for example in frames[:num_examples]]
             row["sequence_duration"] = (
                 sequence.sequence_end_time - sequence.sequence_start_time
