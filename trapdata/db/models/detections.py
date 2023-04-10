@@ -1,24 +1,19 @@
 import datetime
 import pathlib
-from typing import Any, Iterable, Sequence, Union
+from typing import Any, Iterable, Optional, Sequence, Union
 
 import PIL.Image
 import sqlalchemy as sa
+from pydantic import BaseModel
 from sqlalchemy import orm
 
 from trapdata import constants, db
-from trapdata.common.filemanagement import (
-    absolute_path,
-    construct_exif,
-    save_image,
-)
+from trapdata.common.filemanagement import absolute_path, construct_exif, save_image
 from trapdata.common.logs import logger
 from trapdata.common.types import FilePath
 from trapdata.common.utils import bbox_area, bbox_center, export_report
 from trapdata.db import models
 from trapdata.db.models.images import completely_classified
-
-from pydantic import BaseModel
 
 
 class DetectionListItem(BaseModel):
@@ -192,16 +187,16 @@ class DetectedObject(db.Base):
         def get_minutes(timedelta):
             return int(round(timedelta.seconds / 60, 0))
 
-        return dict(
-            start_time=start_time,
-            end_time=end_time,
-            current_time=get_minutes(
+        return {
+            "start_time": start_time,
+            "end_time": end_time,
+            "current_time": get_minutes(
                 self.timestamp - start_time
             ),  # @TODO This is the incorrect time
-            total_time=get_minutes(end_time - start_time),
-            current_frame=self.sequence_frame,
-            total_frames=num_frames,
-        )
+            "total_time": get_minutes(end_time - start_time),
+            "current_frame": self.sequence_frame,
+            "total_frames": num_frames,
+        }
 
         # stmt = (
         #     sa.select(DetectedObject.image.timestamp)
