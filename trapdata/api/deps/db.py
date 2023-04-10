@@ -8,8 +8,8 @@ from trapdata.db.base import get_session_class
 settings = read_settings()
 
 
-def get_session() -> Generator[orm.Session, None]:
-    Session = get_session_class(settings.database_url)
+def get_session() -> Generator[orm.Session, None, None]:
+    Session = get_session_class(db_path=settings.database_url)
     with Session() as session:
         yield session
         session.close()

@@ -30,6 +30,16 @@ def gui():
     run()
 
 
+@cli.command()
+def api():
+    """
+    Launch API server
+    """
+    from trapdata.api.main import run as start_api
+
+    start_api()
+
+
 @cli.command("import")
 def import_data(image_base_path: Optional[pathlib.Path] = None, queue: bool = True):
     """

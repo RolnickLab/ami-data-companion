@@ -6,6 +6,7 @@ from typing import Optional, Union
 
 import sqlalchemy
 from pydantic import BaseSettings, Field, ValidationError, validator
+from pydantic.main import ModelMetaclass
 from rich import print as rprint
 
 from trapdata import ml
@@ -199,9 +200,11 @@ cli_help_message = f"""
 
 
 @lru_cache
-def read_settings(*args, **kwargs):
+def read_settings(
+    settings_class: ModelMetaclass = Settings, *args, **kwargs
+) -> ModelMetaclass:
     try:
-        return Settings(*args, **kwargs)
+        return settings_class(*args, **kwargs)
     except ValidationError as e:
         # @TODO the validation errors could be printed in a more helpful way:
         rprint(cli_help_message)
