@@ -112,12 +112,12 @@ ami show settings
 ami import --no-queue
 ami show sessions
 ami queue sample --sample-size 10
-ami show queue
+ami queue status
 ami run
 ami show occurrences
 ami queue all
 ami run
-ami show queue --watch  # Run in a 2nd shell or on another server connected to the same DB
+ami queue status --watch  # Run in a 2nd shell or on another server connected to the same DB
 ami show occurrences
 ami export occurrences --format json --outfile denmark_sample.json --collect-images
 ```
