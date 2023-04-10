@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from trapdata import logger, ml
 from trapdata.cli import settings
+from trapdata.cli.queue import status as queue_status
 from trapdata.db import models
 from trapdata.db.base import get_session_class
 from trapdata.db.models.deployments import list_deployments
@@ -184,6 +185,16 @@ def missing_tracks():
     )
     print(items)
     print(len(items))
+
+
+@cli.command()
+def queue(watch: bool = False):
+    """
+    Show the status of the processing queue.
+
+    This is an alias for `ami queue status`.
+    """
+    queue_status(watch)
 
 
 if __name__ == "__main__":
