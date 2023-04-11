@@ -43,7 +43,7 @@ class SpeciesSummaryListItem(BaseModel):
 
 def list_occurrences(
     db_path: str,
-    monitoring_session: models.MonitoringSession,
+    monitoring_session: Optional[models.MonitoringSession] = None,
     classification_threshold: float = -1,
     num_examples: int = 3,
     limit: Optional[int] = None,
@@ -60,8 +60,10 @@ def list_occurrences(
     ):
         prepped = {k.split("sequence_", 1)[-1]: v for k, v in item.items()}
         if prepped["id"]:
-            prepped["event"] = monitoring_session.day.isoformat()
-            prepped["deployment"] = monitoring_session.deployment
+            prepped["event"] = item["monitoring_session_day"].isoformat()
+            prepped["deployment"] = models.deployments.deployment_name(
+                item["monitoring_session_base_directory"]
+            )
             occur = Occurrence(**prepped)
             occurrences.append(occur)
     return occurrences
@@ -115,10 +117,18 @@ def get_unique_species_by_track(
     Session = db.get_session_class(db_path)
     session = Session()
 
+    filter_args = {}
+    if monitoring_session:
+        filter_args["monitoring_session_id"] = monitoring_session.id
+
     # Select all sequences where at least one example is above the score threshold
     sequences = session.execute(
         sa.select(
             models.DetectedObject.sequence_id,
+            models.MonitoringSession.day.label("monitoring_session_day"),
+            models.MonitoringSession.base_directory.label(
+                "monitoring_session_base_directory"
+            ),
             sa.func.count(models.DetectedObject.id).label(
                 "sequence_frame_count"
             ),  # frames in track
@@ -128,8 +138,12 @@ def get_unique_species_by_track(
             sa.func.min(models.DetectedObject.timestamp).label("sequence_start_time"),
             sa.func.max(models.DetectedObject.timestamp).label("sequence_end_time"),
         )
+        .join(
+            models.MonitoringSession,
+            models.DetectedObject.monitoring_session_id == models.MonitoringSession.id,
+        )
         .group_by("sequence_id")
-        .where((models.DetectedObject.monitoring_session_id == monitoring_session.id))
+        .filter_by(**filter_args)
         .having(
             sa.func.max(models.DetectedObject.specific_label_score)
             >= classification_threshold,
@@ -141,6 +155,7 @@ def get_unique_species_by_track(
 
     rows = []
     for sequence in sequences:
+        print(sequence)
         frames = session.execute(
             sa.select(
                 models.DetectedObject.id,
@@ -152,10 +167,8 @@ def get_unique_species_by_track(
                 models.DetectedObject.sequence_id,
                 models.DetectedObject.timestamp,
             )
-            .where(
-                (models.DetectedObject.monitoring_session_id == monitoring_session.id)
-                & (models.DetectedObject.sequence_id == sequence.sequence_id)
-            )
+            .where(models.DetectedObject.sequence_id == sequence.sequence_id)
+            .filter_by(**filter_args)
             .join(
                 models.TrapImage, models.TrapImage.id == models.DetectedObject.image_id
             )

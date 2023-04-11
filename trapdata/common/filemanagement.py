@@ -408,7 +408,7 @@ def get_app_dir(app_name: Optional[str] = None) -> pathlib.Path:
         data_dir = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", "~/.config"))
     data_dir = data_dir.expanduser().resolve() / app_name
     if not data_dir.exists():
-        data_dir.mkdir()
+        data_dir.mkdir(parents=True)
     return data_dir
 
 

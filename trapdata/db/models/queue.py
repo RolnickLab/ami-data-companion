@@ -1,10 +1,12 @@
+import pathlib
 from collections import OrderedDict
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+from pydantic import BaseModel
 
 from trapdata import constants, logger
-from trapdata.common.types import FilePath
+from trapdata.common.types import DatabaseURL, FilePath
 from trapdata.db import get_session
 from trapdata.db.models.detections import DetectedObject
 from trapdata.db.models.events import MonitoringSession
@@ -653,6 +655,28 @@ def all_queues(db_path, base_directory) -> OrderedDict[str, QueueManager]:
             ]
         }
     )
+
+
+class QueueListItem(BaseModel):
+    name: str
+    unprocessed_count: int
+    queue_count: int
+    done_count: int
+
+
+def list_queues(
+    db_path: DatabaseURL, image_base_path: pathlib.Path
+) -> Sequence[QueueListItem]:
+    queues = all_queues(db_path, image_base_path)
+    return [
+        QueueListItem(
+            name=q.name,
+            unprocessed_count=q.unprocessed_count(),
+            queue_count=q.queue_count(),
+            done_count=q.done_count(),
+        )
+        for q in queues.values()
+    ]
 
 
 def add_image_to_queue(db_path, image_id):
