@@ -15,14 +15,12 @@ from trapdata.common.utils import bbox_area, bbox_center, export_report
 from trapdata.db import models
 from trapdata.db.models.images import completely_classified
 
-from pydantic import BaseModel
-
 
 class DetectionListItem(BaseModel):
     id: int
-    cropped_image_path: Optional[str]
-    bbox: Optional[list[int]]
-    area_pixels: Optional[int]
+    cropped_image_path: Optional[pathlib.Path]
+    bbox: Optional[tuple[float, float, float, float]]
+    area_pixels: Optional[float]
     last_detected: Optional[datetime.datetime]
     label: Optional[str]
     score: Optional[int]
@@ -31,17 +29,17 @@ class DetectionListItem(BaseModel):
     notes: Optional[str]
 
 
-class DetectionListItem(BaseModel):
-    id: int
-    cropped_image_path: Optional[str]
-    bbox: Optional[list[int]]
+class DetectionDetail(DetectionListItem):
+    deployment: Optional[str]
+    session: Optional[str]
+    session_id: Optional[int]
+    sequence: Optional[str]
+    sequence_frame: Optional[int]
+    sequence_cost: Optional[float]
+    source_image_path: Optional[pathlib.Path]
+    timestamp: Optional[str]
+    bbox_center: Optional[tuple[int, int]]
     area_pixels: Optional[int]
-    last_detected: Optional[datetime.datetime]
-    label: Optional[str]
-    score: Optional[int]
-    model_name: Optional[str]
-    in_queue: bool
-    notes: Optional[str]
 
 
 class DetectedObject(db.Base):
@@ -259,7 +257,7 @@ class DetectedObject(db.Base):
             session.flush()
             session.commit()
 
-    def report_data(self) -> dict[str, Any]:
+    def report_data(self) -> DetectionDetail:
         if self.specific_label:
             label = self.specific_label
             score = self.specific_label_score
@@ -267,36 +265,32 @@ class DetectedObject(db.Base):
             label = self.binary_label
             score = self.binary_label_score
 
-        return {
-            "deployment": self.monitoring_session.deployment,
-            "event": self.monitoring_session.day.isoformat(),
-            "event_id": self.monitoring_session_id,
-            "sequence": self.sequence_id,
-            "sequence_frame": self.sequence_frame,
-            "sequence_cost": self.sequence_previous_cost,
-            "source_image": self.image.absolute_path,
-            "cropped_image": self.path,
-            "timestamp": self.image.timestamp.isoformat(),
-            "bbox": self.bbox,
-            "bbox_center": bbox_center(self.bbox) if self.bbox else None,
-            "area_pixels": self.area_pixels,
-            "model_name": self.model_name,
-            "category_label": label,
-            "category_score": score,
-        }
+        return DetectionDetail(
+            id=self.id,
+            deployment=self.monitoring_session.deployment,
+            session=self.monitoring_session.day.isoformat(),
+            session_id=self.monitoring_session_id,
+            sequence=self.sequence_id,
+            sequence_frame=self.sequence_frame,
+            sequence_cost=self.sequence_previous_cost,
+            source_image_path=pathlib.Path(self.image.absolute_path),
+            cropped_image_path=pathlib.Path(self.path),
+            timestamp=self.image.timestamp.isoformat(),
+            bbox=self.bbox,
+            bbox_center=bbox_center(self.bbox) if self.bbox else None,
+            area_pixels=self.area_pixels,
+            model_name=self.model_name,
+            label=label,
+            score=score,
+            last_detected=self.last_detected,
+            notes=self.notes,
+            in_queue=self.in_queue,
+        )
 
-    def to_json(self):
-        path = pathlib.Path(self.path)
-        destination = pathlib.Path("crops") / path.name
-        import shutil
-
-        if not destination.exists():
-            shutil.copy(path, destination)
-        # public_url
-        public_url = f"https://object-arbutus.cloud.computecanada.ca/ami-trapdata/{str(destination)}"
+    def report_data_simple(self):
         return DetectionListItem(
             id=self.id,
-            cropped_image_path=public_url,
+            cropped_image_path=self.path,
             bbox=self.bbox,
             area_pixels=self.area_pixels,
             last_detected=self.last_detected,
@@ -411,7 +405,12 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
 
 
 def get_detected_objects(
-    db_path, image_base_path: FilePath, monitoring_session=None, limit=None, offset=0
+    db_path,
+    image_base_path: FilePath,
+    monitoring_session=None,
+    limit=None,
+    offset=0,
+    classification_threshold: float = 0,
 ):
     query_kwargs = {}
 
@@ -423,6 +422,17 @@ def get_detected_objects(
             sesh.query(DetectedObject)
             .filter_by(**query_kwargs)
             .filter(models.MonitoringSession.base_directory == str(image_base_path))
+            .where(
+                sa.func.coalesce(
+                    models.DetectedObject.specific_label_score,
+                    models.DetectedObject.binary_label_score,
+                    0,
+                ).cast(sa.Float)
+                >= classification_threshold
+            )
+            .where(
+                models.DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL
+            )
             .join(
                 models.MonitoringSession,
                 models.MonitoringSession.id == DetectedObject.monitoring_session_id,
@@ -592,5 +602,5 @@ def export_detected_objects(
     directory: Union[pathlib.Path, str],
     report_name: str = "detections",
 ):
-    records = [item.report_data() for item in items]
+    records = [item.report_data().dict() for item in items]
     return export_report(records, report_name, directory)

@@ -1,3 +1,6 @@
+import datetime
+from typing import Optional
+
 import typer
 from rich import print
 from rich.console import Console
@@ -6,17 +9,21 @@ from sqlalchemy import select
 
 from trapdata import logger, ml
 from trapdata.cli import settings
+from trapdata.cli.queue import status as queue_status
 from trapdata.db import models
 from trapdata.db.base import get_session_class
 from trapdata.db.models.deployments import list_deployments
 from trapdata.db.models.detections import (
+    get_detected_objects,
     num_occurrences_for_event,
     num_species_for_event,
 )
 from trapdata.db.models.events import (
+    get_monitoring_session_by_date,
     get_monitoring_sessions_from_db,
     update_all_aggregates,
 )
+from trapdata.db.models.occurrences import list_occurrences, list_species
 
 cli = typer.Typer(no_args_is_help=True)
 
@@ -134,22 +141,81 @@ def sessions():
 
 
 @cli.command()
-def occurrences():
+def detections(
+    session_day: Optional[datetime.datetime] = None,
+    limit: Optional[int] = 100,
+    offset: int = 0,
+):
+    """
+    Show all detections for a given event.
+    """
+    if session_day:
+        sessions = get_monitoring_session_by_date(
+            db_path=settings.database_url,
+            base_directory=settings.image_base_path,
+            event_dates=[session_day],
+        )
+        session = sessions[0] if sessions else None
+    else:
+        session = None
+    detections = get_detected_objects(
+        db_path=settings.database_url,
+        image_base_path=settings.image_base_path,
+        monitoring_session=session,
+        limit=limit,
+        offset=offset,
+        classification_threshold=settings.classification_threshold,
+    )
+    table = Table("Session", "Label", "Score", "Timestamp", "Sequence", "Frame")
+    for detection in detections:
+        table.add_row(
+            str(detection.monitoring_session.day),
+            detection.specific_label,
+            str(
+                round(detection.specific_label_score, 2)
+                if detection.specific_label_score
+                else ""
+            ),
+            str(detection.timestamp),
+            detection.sequence_id,
+            str(detection.sequence_frame),
+        )
+    console.print(table)
+
+
+@cli.command()
+def occurrences(limit: Optional[int] = 100, offset: int = 0):
     events = get_monitoring_sessions_from_db(
         db_path=settings.database_url, base_directory=settings.image_base_path
     )
     occurrences: list[models.occurrences.Occurrence] = []
     for event in events:
-        occurrences += models.occurrences.list_occurrences(settings.database_url, event)
+        occurrences += list_occurrences(
+            settings.database_url,
+            event,
+            classification_threshold=settings.classification_threshold,
+            limit=limit,
+            offset=offset,
+        )
 
-    table = Table("Event", "Label", "Appearance", "Duration")
+    table = Table("Event", "Label", "Detections", "Score", "Appearance", "Duration")
     for occurrence in occurrences:
         table.add_row(
             occurrence.event,
             occurrence.label,
+            str(occurrence.num_frames),
+            str(round(occurrence.best_score, 2)),
             str(occurrence.start_time),
             str(occurrence.duration),
         )
+    console.print(table)
+
+
+@cli.command()
+def species():
+    table = Table("Name", "Count")
+    for taxon in list_species(settings.database_url, settings.image_base_path):
+        table.add_row(taxon.name, str(taxon.count))
     console.print(table)
 
 
@@ -174,6 +240,16 @@ def missing_tracks():
     )
     print(items)
     print(len(items))
+
+
+@cli.command()
+def queue(watch: bool = False):
+    """
+    Show the status of the processing queue.
+
+    This is an alias for `ami queue status`.
+    """
+    queue_status(watch)
 
 
 if __name__ == "__main__":

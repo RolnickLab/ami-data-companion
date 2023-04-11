@@ -149,7 +149,7 @@ def detections(
         image_base_path=settings.image_base_path,
     )
     logger.info(f"Preparing to export {len(objects)} records as {format}")
-    df = pd.DataFrame([obj.report_data() for obj in objects])
+    df = pd.DataFrame([obj.report_data().dict() for obj in objects])
     return export(df=df, format=format, outfile=outfile)
 
 
