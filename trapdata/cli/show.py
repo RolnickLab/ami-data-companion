@@ -23,6 +23,7 @@ from trapdata.db.models.events import (
     get_monitoring_sessions_from_db,
     update_all_aggregates,
 )
+from trapdata.db.models.occurrences import list_occurrences, list_species
 
 cli = typer.Typer(no_args_is_help=True)
 
@@ -189,7 +190,7 @@ def occurrences(limit: Optional[int] = 100, offset: int = 0):
     )
     occurrences: list[models.occurrences.Occurrence] = []
     for event in events:
-        occurrences += models.occurrences.list_occurrences(
+        occurrences += list_occurrences(
             settings.database_url,
             event,
             classification_threshold=settings.classification_threshold,
@@ -207,6 +208,14 @@ def occurrences(limit: Optional[int] = 100, offset: int = 0):
             str(occurrence.start_time),
             str(occurrence.duration),
         )
+    console.print(table)
+
+
+@cli.command()
+def species():
+    table = Table("Name", "Count")
+    for taxon in list_species(settings.database_url, settings.image_base_path):
+        table.add_row(taxon.name, str(taxon.count))
     console.print(table)
 
 
