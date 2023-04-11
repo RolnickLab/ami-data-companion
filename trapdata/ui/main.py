@@ -177,7 +177,7 @@ class TrapDataApp(App):
         orm.close_all_sessions()
 
     @property
-    def db_path(self):
+    def db_path(self) -> str:
         return self.config.get("paths", "database_url")
 
     def build(self):
@@ -358,7 +358,11 @@ class TrapDataApp(App):
         objects = list(
             detected_objects
             or get_detected_objects(
-                db_path=app.db_path, image_base_path=app.image_base_path
+                db_path=app.db_path,
+                image_base_path=app.config.get("paths", "image_base_path"),
+                classification_threshold=app.config.get(
+                    "models", "classification_threshold"
+                ),
             )
         )
         timestamp = int(time.time())

@@ -42,7 +42,7 @@ def slugify(s):
     )
 
 
-def bbox_area(bbox):
+def bbox_area(bbox: tuple[float, float, float, float]) -> float:
     """
     Return the area of a bounding box.
 
@@ -59,7 +59,7 @@ def bbox_area(bbox):
     return area
 
 
-def bbox_center(bbox):
+def bbox_center(bbox: tuple[float, float, float, float]) -> tuple[float, float]:
     """
     Return the center coordinates of a bounding box.
     """

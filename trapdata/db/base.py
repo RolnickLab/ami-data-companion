@@ -9,6 +9,7 @@ from alembic import command as alembic
 from alembic.config import Config
 from rich import print
 from sqlalchemy import orm
+
 from trapdata import logger
 from trapdata.common.types import DatabaseURL
 

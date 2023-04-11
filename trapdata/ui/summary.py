@@ -250,15 +250,18 @@ class SpeciesSummaryScreen(Screen):
 
     def export(self):
         app = App.get_running_app()
-        if app:
-            records = list(
-                get_detected_objects(
-                    db_path=app.db_path,
-                    image_base_path=app.image_base_path,
-                    monitoring_session=self.monitoring_session,
-                )
+        assert app
+        records = list(
+            get_detected_objects(
+                db_path=app.db_path,
+                image_base_path=app.image_base_path,
+                monitoring_session=self.monitoring_session,
+                classification_threshold=app.config.get(
+                    "models", "classification_threshold"
+                ),
             )
-            timestamp = int(time.time())
-            trap = pathlib.Path(app.image_base_path).name
-            report_name = f"{trap}-detections-for-{self.monitoring_session.day.strftime('%Y-%m-%d')}-created-{timestamp}"
-            app.export_detections(detected_objects=records, report_name=report_name)
+        )
+        timestamp = int(time.time())
+        trap = pathlib.Path(app.image_base_path).name
+        report_name = f"{trap}-detections-for-{self.monitoring_session.day.strftime('%Y-%m-%d')}-created-{timestamp}"
+        app.export_detections(detected_objects=records, report_name=report_name)

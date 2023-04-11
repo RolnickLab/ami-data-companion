@@ -1,3 +1,4 @@
+import datetime
 from typing import Optional
 
 import typer
@@ -13,10 +14,12 @@ from trapdata.db import models
 from trapdata.db.base import get_session_class
 from trapdata.db.models.deployments import list_deployments
 from trapdata.db.models.detections import (
+    get_detected_objects,
     num_occurrences_for_event,
     num_species_for_event,
 )
 from trapdata.db.models.events import (
+    get_monitoring_session_by_date,
     get_monitoring_sessions_from_db,
     update_all_aggregates,
 )
@@ -133,6 +136,49 @@ def sessions():
             num_species,
         ]
         table.add_row(*[str(val) for val in row_values])
+    console.print(table)
+
+
+@cli.command()
+def detections(
+    session_day: Optional[datetime.datetime] = None,
+    limit: Optional[int] = 100,
+    offset: int = 0,
+):
+    """
+    Show all detections for a given event.
+    """
+    if session_day:
+        sessions = get_monitoring_session_by_date(
+            db_path=settings.database_url,
+            base_directory=settings.image_base_path,
+            event_dates=[session_day],
+        )
+        session = sessions[0] if sessions else None
+    else:
+        session = None
+    detections = get_detected_objects(
+        db_path=settings.database_url,
+        image_base_path=settings.image_base_path,
+        monitoring_session=session,
+        limit=limit,
+        offset=offset,
+        classification_threshold=settings.classification_threshold,
+    )
+    table = Table("Session", "Label", "Score", "Timestamp", "Sequence", "Frame")
+    for detection in detections:
+        table.add_row(
+            str(detection.monitoring_session.day),
+            detection.specific_label,
+            str(
+                round(detection.specific_label_score, 2)
+                if detection.specific_label_score
+                else ""
+            ),
+            str(detection.timestamp),
+            detection.sequence_id,
+            str(detection.sequence_frame),
+        )
     console.print(table)
 
 

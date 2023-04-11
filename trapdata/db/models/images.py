@@ -135,7 +135,9 @@ class TrapImage(Base):
             width=self.width,
             height=self.height,
             filesize=self.filesize,
-            detections=[obj.to_json() for obj in self.detected_objects],
+            detections=[
+                obj.report_data_simple().dict() for obj in self.detected_objects
+            ],
             notes=self.notes,
         )
 
