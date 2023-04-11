@@ -1,5 +1,5 @@
 import datetime
-from typing import Any, List
+from typing import Any, List, Optional
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends
@@ -23,18 +23,18 @@ async def get_queues(
     return queues
 
 
-class NavSummary(BaseModel):
-    num_deployments: int
-    num_captures: int
-    num_sessions: int
-    num_detections: int
-    num_occurrences: int
-    num_species: int
-    last_updated: datetime.datetime
+class SummaryCounts(BaseModel):
+    num_deployments: Optional[int] = 0
+    num_captures: Optional[int] = 0
+    num_sessions: Optional[int] = 0
+    num_detections: Optional[int] = 0
+    num_occurrences: Optional[int] = 0
+    num_species: Optional[int] = 0 
+    last_updated: Optional[datetime.datetime] = None
 
 
-@router.get("/nav_summary", response_model=NavSummary)
-async def get_nav_summary(
+@router.get("/summary", response_model=SummaryCounts)
+async def get_summary_counts(
     response: Response,
     session: orm.Session = Depends(get_session),
 ) -> Any:
@@ -44,8 +44,8 @@ async def get_nav_summary(
                 "num_deployments"
             ),
             sa.func.count(models.MonitoringSession.id.distinct()).label("num_sessions"),
-            sa.func.sum(models.MonitoringSession.num_images).label("num_captures"),
-            sa.func.sum(models.MonitoringSession.num_detected_objects).label(
+            sa.func.count(models.TrapImage.id.distinct()).label("num_captures"),
+            sa.func.count(models.DetectedObject.id.distinct()).label(
                 "num_detections"
             ),
             sa.func.count(models.DetectedObject.sequence_id.distinct()).label(
@@ -56,13 +56,15 @@ async def get_nav_summary(
             ),
         )
         .join(
+            models.TrapImage,
+            models.MonitoringSession.id == models.TrapImage.monitoring_session_id,
+        )
+        .join(
             models.DetectedObject,
             models.MonitoringSession.id == models.DetectedObject.monitoring_session_id,
         )
-        .group_by(models.MonitoringSession.base_directory)
     )
-    summary = session.execute(stmt).first()
-    if summary:
-        summary = NavSummary(**summary._mapping, last_updated=datetime.datetime.now())
+    summary = session.execute(stmt).one()
+    summary = SummaryCounts(**summary._mapping, last_updated=datetime.datetime.now())
 
     return summary
