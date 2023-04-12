@@ -69,6 +69,30 @@ def list_occurrences(
     return occurrences
 
 
+def get_valid_sequence_ids(
+    monitoring_session: Optional[models.MonitoringSession] = None,
+    confidence_threshold: float = 0,
+) -> sa.ScalarSelect:
+    """
+    Sequence IDs that have a detection with a score above the confidence threshold.
+
+    Intended to be used as a subquery in a larger query.
+    """
+    stmt = sa.select(
+        models.DetectedObject.sequence_id.distinct().label("id"),
+    ).where(models.DetectedObject.specific_label_score >= confidence_threshold)
+    if monitoring_session:
+        stmt = stmt.where(
+            models.DetectedObject.monitoring_session_id == monitoring_session.id
+        )
+    stmt = (
+        stmt.group_by(models.DetectedObject.sequence_id)
+        .order_by(models.DetectedObject.sequence_id)
+        .scalar_subquery()
+    )
+    return stmt
+
+
 def list_species(
     db_path: str,
     image_base_path: pathlib.Path,
@@ -108,7 +132,7 @@ def list_species(
 
 def get_unique_species_by_track(
     db_path: str,
-    monitoring_session=None,
+    monitoring_session: Optional[models.MonitoringSession] = None,
     classification_threshold: float = -1,
     num_examples: int = 3,
     limit: Optional[int] = None,
@@ -117,46 +141,45 @@ def get_unique_species_by_track(
     Session = db.get_session_class(db_path)
     session = Session()
 
-    filter_args = {}
-    if monitoring_session:
-        filter_args["monitoring_session_id"] = monitoring_session.id
-
     # Select all sequences where at least one example is above the score threshold
-    sequences = session.execute(
-        sa.select(
-            models.DetectedObject.sequence_id,
-            models.MonitoringSession.day.label("monitoring_session_day"),
-            models.MonitoringSession.base_directory.label(
-                "monitoring_session_base_directory"
-            ),
-            sa.func.count(models.DetectedObject.id).label(
-                "sequence_frame_count"
-            ),  # frames in track
-            sa.func.max(models.DetectedObject.specific_label_score).label(
-                "sequence_best_score"
-            ),
-            sa.func.min(models.DetectedObject.timestamp).label("sequence_start_time"),
-            sa.func.max(models.DetectedObject.timestamp).label("sequence_end_time"),
+    stmt = sa.select(
+        models.DetectedObject.sequence_id,
+        models.MonitoringSession.day.label("monitoring_session_day"),
+        models.MonitoringSession.base_directory.label(
+            "monitoring_session_base_directory"
+        ),
+        sa.func.count(models.DetectedObject.id).label(
+            "sequence_frame_count"
+        ),  # frames in track
+        sa.func.max(models.DetectedObject.specific_label_score).label(
+            "sequence_best_score"
+        ),
+        sa.func.min(models.DetectedObject.timestamp).label("sequence_start_time"),
+        sa.func.max(models.DetectedObject.timestamp).label("sequence_end_time"),
+    ).join(
+        models.MonitoringSession,
+        models.DetectedObject.monitoring_session_id == models.MonitoringSession.id,
+    )
+    if monitoring_session:
+        stmt = stmt.where(models.MonitoringSession.id == monitoring_session.id)
+
+    stmt = (
+        stmt.group_by(
+            "sequence_id", "monitoring_session_day", "monitoring_session_base_directory"
         )
-        .join(
-            models.MonitoringSession,
-            models.DetectedObject.monitoring_session_id == models.MonitoringSession.id,
-        )
-        .group_by("sequence_id")
-        .filter_by(**filter_args)
         .having(
             sa.func.max(models.DetectedObject.specific_label_score)
             >= classification_threshold,
         )
-        .order_by(models.DetectedObject.timestamp.asc())
+        .order_by("sequence_id")
         .limit(limit)
         .offset(offset)
-    ).all()
+    )
+    sequences = session.execute(stmt).all()
 
     rows = []
     for sequence in sequences:
-        print(sequence)
-        frames = session.execute(
+        stmt = (
             sa.select(
                 models.DetectedObject.id,
                 models.DetectedObject.image_id.label("source_image_id"),
@@ -167,15 +190,20 @@ def get_unique_species_by_track(
                 models.DetectedObject.sequence_id,
                 models.DetectedObject.timestamp,
             )
-            .where(models.DetectedObject.sequence_id == sequence.sequence_id)
-            .filter_by(**filter_args)
             .join(
                 models.TrapImage, models.TrapImage.id == models.DetectedObject.image_id
             )
-            # .order_by(sa.func.random())
-            .order_by(sa.desc("score"))
-            .limit(num_examples)
-        ).all()
+            .where(models.DetectedObject.sequence_id == sequence.sequence_id)
+        )
+
+        if monitoring_session:
+            stmt = stmt.where(
+                models.DetectedObject.monitoring_session_id == monitoring_session.id
+            )
+        stmt = stmt.order_by(sa.desc("score")).limit(num_examples)
+
+        frames = session.execute(stmt).all()
+
         row = dict(sequence._mapping)
         if frames:
             best_example = frames[0]

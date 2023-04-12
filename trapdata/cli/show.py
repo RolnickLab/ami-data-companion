@@ -20,7 +20,6 @@ from trapdata.db.models.detections import (
 )
 from trapdata.db.models.events import (
     get_monitoring_session_by_date,
-    get_monitoring_sessions_from_db,
     update_all_aggregates,
 )
 from trapdata.db.models.occurrences import list_occurrences, list_species
@@ -184,19 +183,29 @@ def detections(
 
 
 @cli.command()
-def occurrences(limit: Optional[int] = 100, offset: int = 0):
-    events = get_monitoring_sessions_from_db(
-        db_path=settings.database_url, base_directory=settings.image_base_path
-    )
-    occurrences: list[models.occurrences.Occurrence] = []
-    for event in events:
-        occurrences += list_occurrences(
-            settings.database_url,
-            event,
-            classification_threshold=settings.classification_threshold,
-            limit=limit,
-            offset=offset,
+def occurrences(
+    session_day: Optional[datetime.datetime] = None,
+    limit: Optional[int] = 100,
+    offset: int = 0,
+):
+    event = None
+    if session_day:
+        events = get_monitoring_session_by_date(
+            db_path=settings.database_url, event_dates=[session_day]
         )
+        if not events:
+            logger.info(f"No events found for {session_day}")
+            return []
+        else:
+            event = events[0]
+
+    occurrences = list_occurrences(
+        settings.database_url,
+        event,
+        classification_threshold=settings.classification_threshold,
+        limit=limit,
+        offset=offset,
+    )
 
     table = Table("Event", "Label", "Detections", "Score", "Appearance", "Duration")
     for occurrence in occurrences:
