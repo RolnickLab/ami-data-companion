@@ -22,6 +22,7 @@ async def get_occurrences(
     occurrences = list_occurrences(
         settings.database_url,
         classification_threshold=settings.classification_threshold,
+        media_url_base="/static/",
     )
     return occurrences
 
