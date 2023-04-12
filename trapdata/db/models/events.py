@@ -13,12 +13,15 @@ from trapdata.common.logs import logger
 from trapdata.common.types import FilePath
 from trapdata.common.utils import export_report
 from trapdata.db import Base, get_session, models
+from trapdata.db.models.deployments import deployment_name
 
 
 # @TODO Rename to TrapEvent? CapturePeriod? less confusing with other types of Sessions. CaptureSession? Or SurveyEvent or Survey?
 class MonitoringSessionListItem(BaseModel):
     id: str
     day: datetime.date
+    image_base_path: str
+    deployment: str
     num_captures: int
     num_detections: int
     num_occurrences: int
@@ -413,6 +416,8 @@ def list_monitoring_sessions(
             MonitoringSessionListItem(
                 id=event.id,
                 day=event.day,
+                image_base_path=str(event.base_directory),
+                deployment=deployment_name(str(event.base_directory)),
                 start_time=event.start_time,
                 end_time=event.end_time,
                 num_captures=event.num_images,

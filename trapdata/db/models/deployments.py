@@ -19,6 +19,7 @@ from trapdata.db import models
 class DeploymentListItem(BaseModel):
     id: Optional[int] = None
     name: str
+    image_base_path: FilePath
     num_events: int
     num_source_images: int
     num_detections: int
@@ -43,17 +44,20 @@ def list_deployments(session: orm.Session) -> list[DeploymentListItem]:
     A proxy for "registered trap deployments".
     """
     stmt = sa.select(
-        models.MonitoringSession.base_directory.label("name"),
+        models.MonitoringSession.base_directory.label("image_base_path"),
         sa.func.count(models.MonitoringSession.id).label("num_events"),
         sa.func.sum(models.MonitoringSession.num_images).label("num_source_images"),
         sa.func.sum(models.MonitoringSession.num_detected_objects).label(
             "num_detections"
         ),
     ).group_by(models.MonitoringSession.base_directory)
-    deployments = [
-        DeploymentListItem(**d._mapping) for d in session.execute(stmt).all()
-    ]
-    for deployment in deployments:
-        deployment.name = deployment_name(deployment.name)
+    deployments = []
+    for deployment in session.execute(stmt).all():
+        deployments.append(
+            DeploymentListItem(
+                **deployment._mapping,
+                name=deployment_name(deployment.image_base_path),
+            )
+        )
 
     return deployments

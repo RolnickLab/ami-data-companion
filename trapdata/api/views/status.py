@@ -1,7 +1,6 @@
 import datetime
 from typing import Any, List, Optional
 
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import orm
@@ -9,7 +8,8 @@ from starlette.responses import Response
 
 from trapdata.api.config import settings
 from trapdata.api.deps.db import get_session
-from trapdata.db import models
+from trapdata.db.models.deployments import list_deployments
+from trapdata.db.models.events import list_monitoring_sessions
 from trapdata.db.models.queue import QueueListItem, list_queues
 
 router = APIRouter(prefix="/status")
@@ -29,7 +29,7 @@ class SummaryCounts(BaseModel):
     num_sessions: Optional[int] = 0
     num_detections: Optional[int] = 0
     num_occurrences: Optional[int] = 0
-    num_species: Optional[int] = 0 
+    num_species: Optional[int] = 0
     last_updated: Optional[datetime.datetime] = None
 
 
@@ -38,33 +38,19 @@ async def get_summary_counts(
     response: Response,
     session: orm.Session = Depends(get_session),
 ) -> Any:
-    stmt = (
-        sa.select(
-            sa.func.count(models.MonitoringSession.base_directory.distinct()).label(
-                "num_deployments"
-            ),
-            sa.func.count(models.MonitoringSession.id.distinct()).label("num_sessions"),
-            sa.func.count(models.TrapImage.id.distinct()).label("num_captures"),
-            sa.func.count(models.DetectedObject.id.distinct()).label(
-                "num_detections"
-            ),
-            sa.func.count(models.DetectedObject.sequence_id.distinct()).label(
-                "num_occurrences"
-            ),  # @TODO does not filter based on classification threshold, among other things!
-            sa.func.count(models.DetectedObject.specific_label.distinct()).label(
-                "num_species"
-            ),
-        )
-        .join(
-            models.TrapImage,
-            models.MonitoringSession.id == models.TrapImage.monitoring_session_id,
-        )
-        .join(
-            models.DetectedObject,
-            models.MonitoringSession.id == models.DetectedObject.monitoring_session_id,
-        )
+    deployments = list_deployments(session)
+    events = []
+    for deployment in deployments:
+        events += list_monitoring_sessions(session, deployment.image_base_path)
+
+    summary = SummaryCounts(
+        num_deployments=len({e.deployment for e in events}),
+        num_sessions=len(events),
+        num_captures=sum(e.num_captures for e in events),
+        num_detections=sum(e.num_detections for e in events),
+        num_occurrences=sum(e.num_occurrences for e in events),
+        num_species=sum(e.num_species for e in events),
+        last_updated=datetime.datetime.now(),
     )
-    summary = session.execute(stmt).one()
-    summary = SummaryCounts(**summary._mapping, last_updated=datetime.datetime.now())
 
     return summary
