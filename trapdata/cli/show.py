@@ -198,10 +198,13 @@ def occurrences(limit: Optional[int] = 100, offset: int = 0):
             offset=offset,
         )
 
-    table = Table("Event", "Label", "Detections", "Score", "Appearance", "Duration")
+    table = Table(
+        "Session", "ID", "Label", "Detections", "Score", "Appearance", "Duration"
+    )
     for occurrence in occurrences:
         table.add_row(
             occurrence.event,
+            occurrence.id,
             occurrence.label,
             str(occurrence.num_frames),
             str(round(occurrence.best_score, 2)),

@@ -60,6 +60,7 @@ def list_occurrences(
     ):
         prepped = {k.split("sequence_", 1)[-1]: v for k, v in item.items()}
         if prepped["id"]:
+            prepped["id"] = sequence_display_name(prepped["id"])
             prepped["event"] = monitoring_session.day.isoformat()
             prepped["deployment"] = monitoring_session.deployment
             occur = Occurrence(**prepped)
@@ -134,7 +135,7 @@ def get_unique_species_by_track(
             sa.func.max(models.DetectedObject.specific_label_score)
             >= classification_threshold,
         )
-        .order_by(models.DetectedObject.timestamp.asc())
+        .order_by("sequence_id")
         .limit(limit)
         .offset(offset)
     ).all()
