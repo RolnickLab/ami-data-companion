@@ -72,6 +72,9 @@ def list_occurrences(
                     example["cropped_image_path"] = media_url(
                         example["cropped_image_path"], "crops", media_url_base
                     )
+                    example["source_image_path"] = media_url(
+                        example["source_image_path"], "captures/", media_url_base
+                    )
                 prepped["examples"] = examples
             occur = Occurrence(**prepped)
             occurrences.append(occur)

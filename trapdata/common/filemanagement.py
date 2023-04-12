@@ -430,6 +430,9 @@ def initial_directory_choice():
 
 
 def media_url(local_path: str, delim: str, media_url_base: Optional[str] = None) -> str:
+    """
+    Given a local path to a file, return a URL to that file. @TODO rework this and handle slashes better.
+    """
     relative_path = f"{delim}{local_path.split(delim)[-1]}"
     if media_url_base:
         return f"{media_url_base}{relative_path}"
