@@ -427,3 +427,11 @@ def initial_directory_choice():
     than "." which is the directory of this python package.
     """
     return pathlib.Path("~/")
+
+
+def media_url(local_path: str, delim: str, media_url_base: Optional[str] = None) -> str:
+    relative_path = f"{delim}{local_path.split(delim)[-1]}"
+    if media_url_base:
+        return f"{media_url_base}{relative_path}"
+    else:
+        return relative_path

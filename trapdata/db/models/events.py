@@ -391,6 +391,7 @@ def list_monitoring_sessions(
     image_base_path: FilePath,
     limit: Optional[int] = None,
     offset: int = 0,
+    media_url_base: Optional[str] = None,
 ) -> list[MonitoringSessionListItem]:
     """ """
 

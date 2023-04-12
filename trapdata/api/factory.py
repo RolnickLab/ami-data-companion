@@ -37,6 +37,11 @@ def serve_static_app(app):
         name="crops",
     )
     app.mount(
+        "/static/captures",
+        StaticFiles(directory=settings.image_base_path),
+        name="captures",
+    )
+    app.mount(
         "/",
         StaticFiles(directory="trapdata/webui/public"),
         name="static",

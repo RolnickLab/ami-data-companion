@@ -14,6 +14,7 @@ import sqlalchemy as sa
 from pydantic import BaseModel
 
 from trapdata import db
+from trapdata.common.filemanagement import media_url
 from trapdata.db import models
 
 
@@ -48,6 +49,7 @@ def list_occurrences(
     num_examples: int = 3,
     limit: Optional[int] = None,
     offset: int = 0,
+    media_url_base: Optional[str] = None,
 ) -> list[Occurrence]:
     occurrences = []
     for item in get_unique_species_by_track(
@@ -64,6 +66,13 @@ def list_occurrences(
             prepped["deployment"] = models.deployments.deployment_name(
                 item["monitoring_session_base_directory"]
             )
+            if media_url_base:
+                examples = [dict(example) for example in prepped["examples"]]
+                for example in examples:
+                    example["cropped_image_path"] = media_url(
+                        example["cropped_image_path"], "crops", media_url_base
+                    )
+                prepped["examples"] = examples
             occur = Occurrence(**prepped)
             occurrences.append(occur)
     return occurrences
