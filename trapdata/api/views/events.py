@@ -1,27 +1,27 @@
-from typing import Any, List, Optional
+from typing import Any, List
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, orm, select
+from fastapi import APIRouter, Depends
+from sqlalchemy import orm
 from starlette.responses import Response
 
 from trapdata.api.config import settings
 from trapdata.api.deps.db import get_session
-from trapdata.api.deps.request_params import parse_react_admin_params
-from trapdata.api.request_params import RequestParams
-from trapdata.db import Base
-from trapdata.db.models.deployments import DeploymentListItem, list_deployments
+from trapdata.db.models.events import (
+    MonitoringSessionListItem,
+    list_monitoring_sessions,
+)
 
-router = APIRouter(prefix="/deployments")
+router = APIRouter(prefix="/events")
 
 
-@router.get("", response_model=List[DeploymentListItem])
-async def get_deployments(
+@router.get("", response_model=List[MonitoringSessionListItem])
+async def get_monitoring_sessions(
     response: Response,
     session: orm.Session = Depends(get_session),
     # request_params: RequestParams = Depends(parse_react_admin_params(Base)),
 ) -> Any:
-    deployments = list_deployments(session)
-    return deployments
+    items = list_monitoring_sessions(session, settings.image_base_path)
+    return items
 
 
 # @router.post("/process", response_model=List[DeploymentListItem])

@@ -13,11 +13,7 @@ from trapdata.cli.queue import status as queue_status
 from trapdata.db import models
 from trapdata.db.base import get_session_class
 from trapdata.db.models.deployments import list_deployments
-from trapdata.db.models.detections import (
-    get_detected_objects,
-    num_occurrences_for_event,
-    num_species_for_event,
-)
+from trapdata.db.models.detections import get_detected_objects
 from trapdata.db.models.events import (
     get_monitoring_session_by_date,
     update_all_aggregates,
@@ -101,39 +97,26 @@ def sessions():
     """
     Show all monitoring events that have been interpreted from image timestamps.
     """
+    from trapdata.db.models.events import list_monitoring_sessions
+
     Session = get_session_class(settings.database_url)
     session = Session()
     # image_base_path = str(settings.image_base_path.resolve())
 
-    update_all_aggregates(session, settings.image_base_path)
-    logger.info(f"Show monitoring events for images in {settings.image_base_path}")
-    events = (
-        session.execute(
-            select(models.MonitoringSession).where(
-                models.MonitoringSession.base_directory == str(settings.image_base_path)
-            )
-        )
-        .unique()
-        .scalars()
-        .all()
-    )
+    events = list_monitoring_sessions(session, settings.image_base_path)
 
-    table = Table("ID", "Day", "Images", "Detections", "Occurrences", "Species")
+    table = Table(
+        "ID", "Day", "Duration", "Captures", "Detections", "Occurrences", "Species"
+    )
     for event in events:
-        event.update_aggregates(session)
-        num_occurrences = num_occurrences_for_event(
-            db_path=settings.database_url, monitoring_session=event
-        )
-        num_species = num_species_for_event(
-            db_path=settings.database_url, monitoring_session=event
-        )
         row_values = [
             event.id,
             event.day,
-            event.num_images,
-            event.num_detected_objects,
-            num_occurrences,
-            num_species,
+            event.duration_label,
+            event.num_captures,
+            event.num_detections,
+            event.num_occurrences,
+            event.num_species,
         ]
         table.add_row(*[str(val) for val in row_values])
     console.print(table)

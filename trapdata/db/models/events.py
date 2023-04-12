@@ -5,6 +5,7 @@ from typing import Any, Iterable, Optional, Union
 import sqlalchemy as sa
 from pydantic import BaseModel
 from sqlalchemy import orm
+from sqlalchemy.ext.hybrid import hybrid_method
 from sqlalchemy_utils import aggregated
 
 from trapdata.common.filemanagement import find_images, group_images_by_day
@@ -15,10 +16,25 @@ from trapdata.db import Base, get_session, models
 
 
 # @TODO Rename to TrapEvent? CapturePeriod? less confusing with other types of Sessions. CaptureSession? Or SurveyEvent or Survey?
-class Event(BaseModel):
+class MonitoringSessionListItem(BaseModel):
     id: str
-    frames: list[dict]
-    example_frames: list[dict]
+    day: datetime.date
+    num_captures: int
+    num_detections: int
+    num_occurrences: int
+    num_species: int
+    example_captures: list[dict]
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+    duration: datetime.timedelta
+    duration_label: str
+
+
+class MonitoringSessionDetail(MonitoringSessionListItem):
+    notes: Optional[str]
+    detections: list
+    # @TODO add more info about the session, like the number of images, the number of detected objects, etc
+    # @TODO add the number of species detected in this session
 
 
 class MonitoringSession(Base):
@@ -40,6 +56,26 @@ class MonitoringSession(Base):
     @aggregated("detected_objects", sa.Column(sa.Integer))
     def num_detected_objects(self):
         return sa.func.count("1")
+
+    def num_occurrences(self, session: orm.Session) -> int:
+        return (
+            session.execute(
+                sa.select(
+                    sa.func.count(models.DetectedObject.sequence_id.distinct())
+                ).where(models.DetectedObject.monitoring_session_id == self.id)
+            ).scalar()
+            or 0
+        )
+
+    def num_species(self, session: orm.Session) -> int:
+        return (
+            session.execute(
+                sa.select(
+                    sa.func.count(models.DetectedObject.specific_label.distinct())
+                ).where(models.DetectedObject.monitoring_session_id == self.id)
+            ).scalar()
+            or 0
+        )
 
     # This runs an expensive/slow query every time an image is updated
     # @observes("images")
@@ -101,11 +137,12 @@ class MonitoringSession(Base):
         if commit:
             session.commit()
 
-    def duration(self) -> Optional[datetime.timedelta]:
+    @hybrid_method
+    def duration(self) -> datetime.timedelta:
         if self.start_time and self.end_time:
             return self.end_time - self.start_time
         else:
-            return None
+            return datetime.timedelta(0)
 
     @property
     def duration_label(self):
@@ -344,3 +381,47 @@ def export_monitoring_sessions(
 ):
     records = [item.report_data() for item in items]
     return export_report(records, report_name, directory)
+
+
+def list_monitoring_sessions(
+    session: orm.Session,
+    image_base_path: FilePath,
+    limit: Optional[int] = None,
+    offset: int = 0,
+) -> list[MonitoringSessionListItem]:
+    """ """
+
+    update_all_aggregates(session, image_base_path)
+    logger.info(f"Fetching monitoring events for images in {image_base_path}")
+    events = (
+        session.execute(
+            sa.select(models.MonitoringSession)
+            .where(models.MonitoringSession.base_directory == str(image_base_path))
+            .order_by(models.MonitoringSession.day)
+            .limit(limit)
+            .offset(offset)
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+
+    list_items = []
+    for event in events:
+        event.update_aggregates(session)
+        list_items.append(
+            MonitoringSessionListItem(
+                id=event.id,
+                day=event.day,
+                start_time=event.start_time,
+                end_time=event.end_time,
+                num_captures=event.num_images,
+                num_detections=event.num_detected_objects,
+                num_occurrences=event.num_occurrences(session),
+                num_species=event.num_species(session),
+                example_captures=[],  # @TODO
+                duration=event.duration(),
+                duration_label=event.duration_label,
+            )
+        )
+    return list_items
