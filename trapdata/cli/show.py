@@ -71,6 +71,8 @@ def deployments():
     update_all_aggregates(session, settings.image_base_path)
     deployments = list_deployments(session)
     table = Table(
+        "ID",
+        "Name",
         "Image Base Path",
         "Sessions",
         "Images",
