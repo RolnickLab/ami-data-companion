@@ -22,6 +22,7 @@ class CaptureListItem(BaseModel):
     path: pathlib.Path
     num_detections: Optional[int]
     in_queue: bool
+    url: Optional[str] = None
 
 
 class CaptureDetail(CaptureListItem):
