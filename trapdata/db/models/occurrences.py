@@ -18,7 +18,18 @@ from trapdata.common.filemanagement import media_url
 from trapdata.db import models
 
 
-class Occurrence(BaseModel):
+class OccurrenceNestedEvent(BaseModel):
+    id: int
+    day: datetime.date
+    url: Optional[str] = None
+
+
+class OccurrenceNestedDetection(BaseModel):
+    id: int
+    cropped_image_path: str
+
+
+class OccurrenceListItem(BaseModel):
     id: str
     label: str
     best_score: float
@@ -26,14 +37,15 @@ class Occurrence(BaseModel):
     end_time: datetime.datetime
     duration: datetime.timedelta
     deployment: str
-    event: str
+    event: OccurrenceNestedEvent
     num_frames: int
     # cropped_image_path: pathlib.Path
     # source_image_id: int
     examples: list[dict]
     # detections: list[object]
     # deployment: object
-    # captures: list[object]
+    # captures: list[object] =
+    url: Optional[str] = None
 
 
 class SpeciesSummaryListItem(BaseModel):
@@ -50,7 +62,7 @@ def list_occurrences(
     limit: Optional[int] = None,
     offset: int = 0,
     media_url_base: Optional[str] = None,
-) -> list[Occurrence]:
+) -> list[OccurrenceListItem]:
     occurrences = []
     for item in get_unique_species_by_track(
         db_path,
@@ -62,12 +74,12 @@ def list_occurrences(
     ):
         prepped = {k.split("sequence_", 1)[-1]: v for k, v in item.items()}
         if prepped["id"]:
-            prepped["event"] = item["monitoring_session_day"].isoformat()
             prepped["deployment"] = models.deployments.deployment_name(
                 item["monitoring_session_base_directory"]
             )
             if media_url_base:
                 examples = [dict(example) for example in prepped["examples"]]
+                # @TODO use OccurrenceNestedDetection
                 for example in examples:
                     example["cropped_image_path"] = media_url(
                         example["cropped_image_path"], "crops", media_url_base
@@ -76,7 +88,11 @@ def list_occurrences(
                         example["source_image_path"], "captures/", media_url_base
                     )
                 prepped["examples"] = examples
-            occur = Occurrence(**prepped)
+
+            prepped["event"] = OccurrenceNestedEvent(
+                id=item["monitoring_session_id"], day=item["monitoring_session_day"]
+            )
+            occur = OccurrenceListItem(**prepped)
             occurrences.append(occur)
     return occurrences
 
@@ -156,6 +172,7 @@ def get_unique_species_by_track(
     # Select all sequences where at least one example is above the score threshold
     stmt = sa.select(
         models.DetectedObject.sequence_id,
+        models.MonitoringSession.id.label("monitoring_session_id"),
         models.MonitoringSession.day.label("monitoring_session_day"),
         models.MonitoringSession.base_directory.label(
             "monitoring_session_base_directory"
@@ -177,7 +194,10 @@ def get_unique_species_by_track(
 
     stmt = (
         stmt.group_by(
-            "sequence_id", "monitoring_session_day", "monitoring_session_base_directory"
+            "sequence_id",
+            "monitoring_session_id",
+            "monitoring_session_day",
+            "monitoring_session_base_directory",
         )
         .having(
             sa.func.max(models.DetectedObject.specific_label_score)
