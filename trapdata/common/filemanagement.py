@@ -17,6 +17,7 @@ import PIL.Image
 
 from . import constants
 from .logs import logger
+from .types import FilePath
 
 APP_NAME_SLUG = "AMI"
 EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"
@@ -429,7 +430,9 @@ def initial_directory_choice():
     return pathlib.Path("~/")
 
 
-def media_url(local_path: str, delim: str, media_url_base: Optional[str] = None) -> str:
+def media_url(
+    local_path: FilePath, delim: str, media_url_base: Optional[str] = None
+) -> str:
     """
     Given a local path to a file, return a URL to that file. @TODO rework this and handle slashes better.
     """

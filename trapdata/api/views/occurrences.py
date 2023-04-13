@@ -9,12 +9,12 @@ from trapdata.api.deps.db import get_session
 from trapdata.api.deps.request_params import parse_react_admin_params
 from trapdata.api.request_params import RequestParams
 from trapdata.db import Base
-from trapdata.db.models.occurrences import Occurrence, list_occurrences
+from trapdata.db.models.occurrences import OccurrenceListItem, list_occurrences
 
 router = APIRouter(prefix="/occurrences")
 
 
-@router.get("", response_model=List[Occurrence])
+@router.get("", response_model=List[OccurrenceListItem])
 async def get_occurrences(
     response: Response,
     # request_params: RequestParams = Depends(parse_react_admin_params(Base)),

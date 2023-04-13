@@ -8,25 +8,35 @@ from sqlalchemy import orm
 from sqlalchemy.ext.hybrid import hybrid_method
 from sqlalchemy_utils import aggregated
 
-from trapdata.common.filemanagement import find_images, group_images_by_day
+from trapdata.common.filemanagement import find_images, group_images_by_day, media_url
 from trapdata.common.logs import logger
 from trapdata.common.types import FilePath
 from trapdata.common.utils import export_report
 from trapdata.db import Base, get_session, models
 from trapdata.db.models.deployments import deployment_name
 
-
 # @TODO Rename to TrapEvent? CapturePeriod? less confusing with other types of Sessions. CaptureSession? Or SurveyEvent or Survey?
+
+
+class MonitoringSessionNestedCapture(BaseModel):
+    id: str
+    path: pathlib.Path
+    timestamp: datetime.datetime
+    # example["source_image_path"] = media_url(
+    #    example["source_image_path"], "captures/", media_url_base
+    # )
+
+
 class MonitoringSessionListItem(BaseModel):
     id: str
     day: datetime.date
-    image_base_path: str
+    # image_base_path: str
     deployment: str
     num_captures: int
     num_detections: int
     num_occurrences: int
     num_species: int
-    example_captures: list[dict]
+    example_captures: list[MonitoringSessionNestedCapture]
     start_time: datetime.datetime
     end_time: datetime.datetime
     duration: datetime.timedelta
@@ -391,6 +401,7 @@ def list_monitoring_sessions(
     image_base_path: FilePath,
     limit: Optional[int] = None,
     offset: int = 0,
+    num_examples: int = 5,
     media_url_base: Optional[str] = None,
 ) -> list[MonitoringSessionListItem]:
     """ """
@@ -413,6 +424,22 @@ def list_monitoring_sessions(
     list_items = []
     for event in events:
         event.update_aggregates(session)
+        rows = session.execute(
+            sa.select(
+                models.TrapImage.id, models.TrapImage.path, models.TrapImage.timestamp
+            )
+            .where(models.TrapImage.monitoring_session_id == event.id)
+            .order_by(models.TrapImage.filesize.desc())
+            .limit(num_examples)
+        ).all()
+        example_captures = [
+            MonitoringSessionNestedCapture(
+                id=row.id,
+                path=media_url(row.path, "captures/", media_url_base),
+                timestamp=row.timestamp,
+            )
+            for row in rows
+        ]
         list_items.append(
             MonitoringSessionListItem(
                 id=event.id,
@@ -425,7 +452,7 @@ def list_monitoring_sessions(
                 num_detections=event.num_detected_objects,
                 num_occurrences=event.num_occurrences(session),
                 num_species=event.num_species(session),
-                example_captures=[],  # @TODO
+                example_captures=example_captures,
                 duration=event.duration(),
                 duration_label=event.duration_label,
             )
