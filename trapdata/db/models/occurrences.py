@@ -172,7 +172,7 @@ def get_unique_species_by_track(
     # Select all sequences where at least one example is above the score threshold
     stmt = sa.select(
         models.DetectedObject.sequence_id,
-        models.MonitoringSession.id.label("monitoring_session_id"),
+        models.DetectedObject.monitoring_session_id,
         models.MonitoringSession.day.label("monitoring_session_day"),
         models.MonitoringSession.base_directory.label(
             "monitoring_session_base_directory"

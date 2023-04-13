@@ -13,12 +13,16 @@ from sqlalchemy import orm
 from trapdata import logger
 from trapdata.common.types import DatabaseURL
 
+DATABASE_SCHEMA_NAMESPACE = "trapdata"
+
 DIALECT_CONNECTION_ARGS = {
     "sqlite": {
         "timeout": 10,  # A longer timeout is necessary for SQLite and multiple PyTorch workers
         "check_same_thread": False,
     },
-    "postgresql": {},
+    "postgresql": {
+        'options': f'-csearch_path={DATABASE_SCHEMA_NAMESPACE}'
+    },
 }
 
 SUPPORTED_DIALECTS = list(DIALECT_CONNECTION_ARGS.keys())
@@ -71,6 +75,7 @@ def create_db(db_path: DatabaseURL) -> None:
     db = get_db(db_path)
 
     from . import Base
+    Base.metadata.schema = DATABASE_SCHEMA_NAMESPACE
 
     Base.metadata.create_all(db, checkfirst=True)
     alembic_cfg = get_alembic_config(db_path)

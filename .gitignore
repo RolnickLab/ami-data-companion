@@ -136,3 +136,5 @@ trapdata.ini
 # macOS
 
 .DS_Store
+
+db_data

@@ -19,7 +19,7 @@ from trapdata.db import models
 class DeploymentListItem(BaseModel):
     id: Optional[int] = None
     name: str
-    # image_base_path: FilePath
+    image_base_path: FilePath
     num_events: int
     num_source_images: int
     num_detections: int
