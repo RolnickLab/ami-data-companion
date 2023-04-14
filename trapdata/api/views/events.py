@@ -1,13 +1,15 @@
 from typing import Any, List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import orm
 from starlette.responses import Response
 
 from trapdata.api.config import settings
 from trapdata.api.deps.db import get_session
 from trapdata.db.models.events import (
+    MonitoringSessionDetail,
     MonitoringSessionListItem,
+    get_monitoring_session_by_id,
     list_monitoring_sessions,
 )
 
@@ -24,6 +26,19 @@ async def get_monitoring_sessions(
         session, settings.image_base_path, media_url_base="/static/"
     )
     return items
+
+
+@router.get("/{event_id}", response_model=MonitoringSessionDetail)
+async def get_monitoring_session(
+    event_id: int,
+    response: Response,
+    session: orm.Session = Depends(get_session),
+    # request_params: RequestParams = Depends(parse_react_admin_params(Base)),
+) -> Any:
+    event = get_monitoring_session_by_id(session, event_id, media_url_base="/static/")
+    if not event:
+        raise HTTPException(404)
+    return event
 
 
 # @router.post("/process", response_model=List[DeploymentListItem])

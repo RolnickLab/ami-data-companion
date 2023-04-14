@@ -45,7 +45,9 @@ class MonitoringSessionListItem(BaseModel):
 
 class MonitoringSessionDetail(MonitoringSessionListItem):
     notes: Optional[str]
-    detections: list
+    captures: list[
+        MonitoringSessionNestedCapture
+    ]  # Too many! @TODO include summary data to generate the timeline instead
     # @TODO add more info about the session, like the number of images, the number of detected objects, etc
     # @TODO add the number of species detected in this session
 
@@ -396,6 +398,79 @@ def export_monitoring_sessions(
     return export_report(records, report_name, directory)
 
 
+def event_response(
+    session: orm.Session,
+    event: MonitoringSession,
+) -> MonitoringSessionListItem:
+    """
+    Reusable method to create a MonitoringSession Schema from a MonitoringSession model.
+
+    @TODO decide if this is helpful or not to reuse in get_monitoring_sessions and get_monitoring_session_by_id
+    """
+
+    event.update_aggregates(session)
+    event_response = MonitoringSessionListItem(
+        id=event.id,
+        day=event.day,
+        deployment=deployment_name(str(event.base_directory)),
+        start_time=event.start_time,
+        end_time=event.end_time,
+        num_captures=event.num_images,
+        num_detections=event.num_detected_objects,
+        num_occurrences=event.num_occurrences(session),
+        num_species=event.num_species(session),
+        example_captures=[],
+        duration=event.duration(),
+        duration_label=event.duration_label,
+    )
+
+    return event_response
+
+
+def get_monitoring_session_by_id(
+    session: orm.Session,
+    event_id: int,
+    media_url_base: str,
+) -> Optional[MonitoringSessionDetail]:
+    event: Optional[MonitoringSession] = session.get(MonitoringSession, event_id)
+    if event:
+        event.update_aggregates(session)
+        captures = session.execute(
+            sa.select(
+                models.TrapImage.id, models.TrapImage.path, models.TrapImage.timestamp
+            )
+            .where(models.TrapImage.monitoring_session_id == event.id)
+            .order_by(models.TrapImage.timestamp)
+        ).all()
+        nested_captures = [
+            MonitoringSessionNestedCapture(
+                id=row.id,
+                path=media_url(row.path, "captures/", media_url_base),
+                timestamp=row.timestamp,
+            )
+            for row in captures
+        ]
+        event_detail = MonitoringSessionDetail(
+            id=event.id,
+            day=event.day,
+            deployment=deployment_name(str(event.base_directory)),
+            start_time=event.start_time,
+            end_time=event.end_time,
+            num_captures=event.num_images,
+            num_detections=event.num_detected_objects,
+            num_occurrences=event.num_occurrences(session),
+            num_species=event.num_species(session),
+            example_captures=[],
+            duration=event.duration(),
+            duration_label=event.duration_label,
+            notes=event.notes,
+            captures=[],
+        )
+        return event_detail
+    else:
+        return None
+
+
 def list_monitoring_sessions(
     session: orm.Session,
     image_base_path: FilePath,
@@ -444,7 +519,6 @@ def list_monitoring_sessions(
             MonitoringSessionListItem(
                 id=event.id,
                 day=event.day,
-                image_base_path=str(event.base_directory),
                 deployment=deployment_name(str(event.base_directory)),
                 start_time=event.start_time,
                 end_time=event.end_time,
