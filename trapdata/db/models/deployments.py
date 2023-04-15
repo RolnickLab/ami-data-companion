@@ -45,7 +45,6 @@ def list_deployments(session: orm.Session) -> list[DeploymentListItem]:
     """
     stmt = sa.select(
         models.MonitoringSession.base_directory.label("image_base_path"),
-        sa.func.count(models.MonitoringSession.id).label("num_events"),
         sa.func.sum(models.MonitoringSession.num_images).label("num_source_images"),
         sa.func.sum(models.MonitoringSession.num_detected_objects).label(
             "num_detections"
@@ -53,9 +52,19 @@ def list_deployments(session: orm.Session) -> list[DeploymentListItem]:
     ).group_by(models.MonitoringSession.base_directory)
     deployments = []
     for deployment in session.execute(stmt).all():
+        num_events = (
+            session.scalar(
+                sa.select(sa.func.count(models.MonitoringSession.id)).where(
+                    models.MonitoringSession.base_directory
+                    == str(deployment.image_base_path)
+                )
+            )
+            or 0
+        )
         deployments.append(
             DeploymentListItem(
                 **deployment._mapping,
+                num_events=num_events,
                 name=deployment_name(deployment.image_base_path),
             )
         )
