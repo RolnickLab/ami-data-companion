@@ -567,9 +567,7 @@ def list_species(
     species = session.execute(
         sa.select(
             DetectedObject.specific_label.label("name"),
-            sa.func.count(DetectedObject.specific_label.distinct()).label(
-                "num_detections"
-            ),
+            sa.func.count(DetectedObject.id).label("num_detections"),
             sa.func.count(DetectedObject.sequence_id.distinct()).label(
                 "num_occurrences"
             ),  # @TODO handle sequences with None
