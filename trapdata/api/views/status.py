@@ -38,14 +38,14 @@ async def get_summary_counts(
     response: Response,
     session: orm.Session = Depends(get_session),
 ) -> Any:
-    # deployments = list_deployments(session)
+    deployments = list_deployments(session)
     # events = []
     # for deployment in deployments:
     #     events += list_monitoring_sessions(session, deployment.image_base_path)
     events = list_monitoring_sessions(session, settings.image_base_path)
 
     summary = SummaryCounts(
-        num_deployments=len({e.deployment for e in events}),
+        num_deployments=len(deployments),
         num_sessions=len(events),
         num_captures=sum(e.num_captures for e in events),
         num_detections=sum(e.num_detections for e in events),
