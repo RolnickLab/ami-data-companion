@@ -8,7 +8,12 @@ from pydantic import BaseModel
 from sqlalchemy import orm
 
 from trapdata import constants, db
-from trapdata.common.filemanagement import absolute_path, construct_exif, save_image
+from trapdata.common.filemanagement import (
+    absolute_path,
+    construct_exif,
+    media_url,
+    save_image,
+)
 from trapdata.common.logs import logger
 from trapdata.common.types import FilePath
 from trapdata.common.utils import bbox_area, bbox_center, export_report
@@ -18,15 +23,17 @@ from trapdata.db.models.images import completely_classified
 
 class DetectionListItem(BaseModel):
     id: int
-    cropped_image_path: Optional[pathlib.Path]
-    bbox: Optional[tuple[float, float, float, float]]
-    area_pixels: Optional[float]
-    last_detected: Optional[datetime.datetime]
-    label: Optional[str]
-    score: Optional[int]
-    model_name: Optional[str]
-    in_queue: bool
-    notes: Optional[str]
+    cropped_image_path: Optional[FilePath] = None
+    bbox: Optional[tuple[float, float, float, float]] = None
+    area_pixels: Optional[float] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    last_detected: Optional[datetime.datetime] = None
+    label: Optional[str] = None
+    score: Optional[int] = None
+    model_name: Optional[str] = None
+    in_queue: bool = False
+    notes: Optional[str] = ""
 
 
 class DetectionDetail(DetectionListItem):
@@ -530,6 +537,87 @@ def num_occurrences_for_event(
 
     with db.get_session(db_path) as sesh:
         return sesh.execute(query).scalar_one()
+
+
+class TaxonListItem(BaseModel):
+    name: str
+    genus: Optional[str] = None
+    family: Optional[str] = None
+    num_occurrences: Optional[int] = None
+    num_detections: Optional[int] = None
+    examples: list[DetectionListItem] = list()
+    score_stats: Optional[dict[str, float]] = None
+    training_examples: Optional[int] = None
+
+
+def list_species(
+    session: orm.Session,
+    classification_threshold: int = 0,
+    num_examples: int = 3,
+    media_url_base: Optional[str] = None,
+) -> list[TaxonListItem]:
+    """
+    Return a list of unique species and example detections.
+    """
+    species = session.execute(
+        sa.select(
+            DetectedObject.specific_label.label("name"),
+            sa.func.count(DetectedObject.specific_label.distinct()).label(
+                "num_detections"
+            ),
+            sa.func.count(DetectedObject.sequence_id.distinct()).label(
+                "num_occurrences"
+            ),  # @TODO handle sequences with None
+            sa.func.max(DetectedObject.specific_label_score).label("score_max"),
+            sa.func.min(DetectedObject.specific_label_score).label("score_min"),
+            sa.func.avg(DetectedObject.specific_label_score).label("score_mean"),
+        )
+        .where(
+            DetectedObject.specific_label_score >= classification_threshold,
+        )
+        .group_by(DetectedObject.specific_label)
+    ).all()
+
+    examples = (
+        sa.select(DetectedObject)
+        .where(DetectedObject.specific_label.in_([sp.name for sp in species]))
+        .limit(num_examples)
+        .order_by(DetectedObject.specific_label_score.desc())
+    )
+
+    examples_by_name = {}
+    for detection in session.execute(examples).unique().scalars().all():
+        examples_by_name.setdefault(detection.specific_label, []).append(detection)
+
+    metadata_by_name = {sp.name: sp for sp in species}
+
+    taxa = [
+        TaxonListItem(
+            name=name,
+            num_occurrences=metadata_by_name[name].num_occurrences,
+            num_detections=metadata_by_name[name].num_detections,
+            score_stats={
+                "max": metadata_by_name[name].score_max,
+                "min": metadata_by_name[name].score_min,
+                "mean": metadata_by_name[name].score_mean,
+            },
+            examples=[
+                DetectionListItem(
+                    id=detection.id,
+                    cropped_image_path=media_url(
+                        detection.path,
+                        "crops",
+                        media_url_base=media_url_base,
+                    ),
+                    height=detection.height(),
+                    width=detection.width(),
+                )
+                for detection in examples
+            ],
+        )
+        for name, examples in examples_by_name.items()
+    ]
+    return taxa
 
 
 def get_unique_species(

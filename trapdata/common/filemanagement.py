@@ -438,6 +438,6 @@ def media_url(
     """
     relative_path = f"{delim}{local_path.split(delim)[-1]}"
     if media_url_base:
-        return f"{media_url_base}{relative_path}"
+        return os.path.join(media_url_base, relative_path)
     else:
         return relative_path
