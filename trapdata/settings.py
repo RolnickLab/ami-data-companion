@@ -206,11 +206,9 @@ cli_help_message = f"""
 
 
 @lru_cache
-def read_settings(
-    settings_class: ModelMetaclass = Settings, *args, **kwargs
-) -> ModelMetaclass:
+def read_settings(*args, **kwargs) -> Settings:
     try:
-        return settings_class(*args, **kwargs)
+        return Settings(*args, **kwargs)
     except ValidationError as e:
         # @TODO the validation errors could be printed in a more helpful way:
         rprint(cli_help_message)
