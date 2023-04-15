@@ -22,6 +22,7 @@ async def get_species(
 ) -> Any:
     species = list_species(
         session=session,
+        image_base_path=settings.image_base_path,
         classification_threshold=settings.classification_threshold,
         media_url_base="/static/",
     )

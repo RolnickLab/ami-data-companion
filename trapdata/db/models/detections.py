@@ -552,12 +552,15 @@ class TaxonListItem(BaseModel):
 
 def list_species(
     session: orm.Session,
+    image_base_path: FilePath,
     classification_threshold: int = 0,
     num_examples: int = 3,
     media_url_base: Optional[str] = None,
 ) -> list[TaxonListItem]:
     """
     Return a list of unique species and example detections.
+
+    @TODO compare this with list_species in occurrences.py
     """
     species = session.execute(
         sa.select(
@@ -572,9 +575,14 @@ def list_species(
             sa.func.min(DetectedObject.specific_label_score).label("score_min"),
             sa.func.avg(DetectedObject.specific_label_score).label("score_mean"),
         )
+        .join(
+            models.MonitoringSession,
+            models.MonitoringSession.id == DetectedObject.monitoring_session_id,
+        )
         .where(
             DetectedObject.specific_label_score >= classification_threshold,
         )
+        .where(DetectedObject.monitoring_session.base_directory == str(image_base_path))
         .group_by(DetectedObject.specific_label)
     ).all()
 
