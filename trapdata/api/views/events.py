@@ -21,6 +21,8 @@ async def get_monitoring_sessions(
     response: Response,
     session: orm.Session = Depends(get_session),
     # request_params: RequestParams = Depends(parse_react_admin_params(Base)),
+    limit: int = 100,
+    offset: int = 100,
 ) -> Any:
     items = list_monitoring_sessions(
         session, settings.image_base_path, media_url_base="/static/"

@@ -17,6 +17,8 @@ router = APIRouter(prefix="/occurrences")
 @router.get("", response_model=List[OccurrenceListItem])
 async def get_occurrences(
     response: Response,
+    limit: int = 100,
+    offset: int = 0,
     # request_params: RequestParams = Depends(parse_react_admin_params(Base)),
 ) -> Any:
     occurrences = list_occurrences(
@@ -24,6 +26,8 @@ async def get_occurrences(
         settings.image_base_path,
         classification_threshold=settings.classification_threshold,
         media_url_base="/static/",
+        limit=limit,
+        offset=offset,
     )
     return occurrences
 

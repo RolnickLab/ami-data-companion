@@ -19,11 +19,15 @@ async def get_species(
     response: Response,
     session: orm.Session = Depends(get_session),
     # request_params: RequestParams = Depends(parse_react_admin_params(Base)),
+    limit: int = 100,
+    offset: int = 0,
 ) -> Any:
     species = list_species(
         session=session,
         image_base_path=settings.image_base_path,
         classification_threshold=settings.classification_threshold,
         media_url_base="/static/",
+        limit=limit,
+        offset=offset,
     )
     return species

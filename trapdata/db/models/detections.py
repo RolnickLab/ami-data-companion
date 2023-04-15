@@ -556,6 +556,8 @@ def list_species(
     classification_threshold: int = 0,
     num_examples: int = 3,
     media_url_base: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
 ) -> list[TaxonListItem]:
     """
     Return a list of unique species and example detections.
@@ -584,6 +586,8 @@ def list_species(
         )
         .where(models.MonitoringSession.base_directory == str(image_base_path))
         .group_by(DetectedObject.specific_label)
+        .limit(limit)
+        .offset(offset)
     ).all()
 
     examples = (
