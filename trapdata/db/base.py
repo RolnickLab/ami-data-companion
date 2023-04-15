@@ -20,9 +20,7 @@ DIALECT_CONNECTION_ARGS = {
         "timeout": 10,  # A longer timeout is necessary for SQLite and multiple PyTorch workers
         "check_same_thread": False,
     },
-    "postgresql": {
-        'options': f'-csearch_path={DATABASE_SCHEMA_NAMESPACE}'
-    },
+    "postgresql": {"options": f"-csearch_path={DATABASE_SCHEMA_NAMESPACE}"},
 }
 
 SUPPORTED_DIALECTS = list(DIALECT_CONNECTION_ARGS.keys())
@@ -75,8 +73,12 @@ def create_db(db_path: DatabaseURL) -> None:
     db = get_db(db_path)
 
     from . import Base
-    Base.metadata.schema = DATABASE_SCHEMA_NAMESPACE
 
+    with db.connect() as con:
+        if not db.dialect.has_schema(con, DATABASE_SCHEMA_NAMESPACE):
+            print("CREATING SCHEMS")
+            con.execute(sqlalchemy.schema.CreateSchema(DATABASE_SCHEMA_NAMESPACE))
+    Base.metadata.schema = DATABASE_SCHEMA_NAMESPACE
     Base.metadata.create_all(db, checkfirst=True)
     alembic_cfg = get_alembic_config(db_path)
     alembic.stamp(alembic_cfg, "head")
