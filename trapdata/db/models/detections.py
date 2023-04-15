@@ -582,7 +582,7 @@ def list_species(
         .where(
             DetectedObject.specific_label_score >= classification_threshold,
         )
-        .where(DetectedObject.monitoring_session.base_directory == str(image_base_path))
+        .where(models.MonitoringSession.base_directory == str(image_base_path))
         .group_by(DetectedObject.specific_label)
     ).all()
 
