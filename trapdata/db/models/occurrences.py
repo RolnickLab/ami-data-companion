@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from trapdata import db
 from trapdata.common.filemanagement import media_url
+from trapdata.common.types import FilePath
 from trapdata.db import models
 
 
@@ -56,6 +57,7 @@ class SpeciesSummaryListItem(BaseModel):
 
 def list_occurrences(
     db_path: str,
+    image_base_path: FilePath,
     monitoring_session: Optional[models.MonitoringSession] = None,
     classification_threshold: float = -1,
     num_examples: int = 3,
@@ -66,7 +68,8 @@ def list_occurrences(
     occurrences = []
     for item in get_unique_species_by_track(
         db_path,
-        monitoring_session,
+        monitoring_session=monitoring_session,
+        image_base_path=image_base_path,
         classification_threshold=classification_threshold,
         num_examples=num_examples,
         limit=limit,
@@ -160,6 +163,7 @@ def list_species(
 
 def get_unique_species_by_track(
     db_path: str,
+    image_base_path: FilePath,
     monitoring_session: Optional[models.MonitoringSession] = None,
     classification_threshold: float = -1,
     num_examples: int = 3,
@@ -170,24 +174,28 @@ def get_unique_species_by_track(
     session = Session()
 
     # Select all sequences where at least one example is above the score threshold
-    stmt = sa.select(
-        models.DetectedObject.sequence_id,
-        models.DetectedObject.monitoring_session_id,
-        models.MonitoringSession.day.label("monitoring_session_day"),
-        models.MonitoringSession.base_directory.label(
-            "monitoring_session_base_directory"
-        ),
-        sa.func.count(models.DetectedObject.id).label(
-            "sequence_frame_count"
-        ),  # frames in track
-        sa.func.max(models.DetectedObject.specific_label_score).label(
-            "sequence_best_score"
-        ),
-        sa.func.min(models.DetectedObject.timestamp).label("sequence_start_time"),
-        sa.func.max(models.DetectedObject.timestamp).label("sequence_end_time"),
-    ).join(
-        models.MonitoringSession,
-        models.DetectedObject.monitoring_session_id == models.MonitoringSession.id,
+    stmt = (
+        sa.select(
+            models.DetectedObject.sequence_id,
+            models.DetectedObject.monitoring_session_id,
+            models.MonitoringSession.day.label("monitoring_session_day"),
+            models.MonitoringSession.base_directory.label(
+                "monitoring_session_base_directory"
+            ),
+            sa.func.count(models.DetectedObject.id).label(
+                "sequence_frame_count"
+            ),  # frames in track
+            sa.func.max(models.DetectedObject.specific_label_score).label(
+                "sequence_best_score"
+            ),
+            sa.func.min(models.DetectedObject.timestamp).label("sequence_start_time"),
+            sa.func.max(models.DetectedObject.timestamp).label("sequence_end_time"),
+        )
+        .join(
+            models.MonitoringSession,
+            models.DetectedObject.monitoring_session_id == models.MonitoringSession.id,
+        )
+        .where(models.MonitoringSession.base_directory == image_base_path)
     )
     if monitoring_session:
         stmt = stmt.where(models.MonitoringSession.id == monitoring_session.id)

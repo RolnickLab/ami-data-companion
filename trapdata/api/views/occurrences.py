@@ -21,8 +21,29 @@ async def get_occurrences(
 ) -> Any:
     occurrences = list_occurrences(
         settings.database_url,
+        settings.image_base_path,
         classification_threshold=settings.classification_threshold,
         media_url_base="/static/",
+    )
+    return occurrences
+
+
+@router.get("", response_model=List[OccurrenceListItem])
+async def get_occurrence(
+    item_id: int,
+    response: Response,
+    # request_params: RequestParams = Depends(parse_react_admin_params(Base)),
+) -> Any:
+    """
+    @TODO placeholder! replace this with an actual get single occurrence method.
+    """
+    occurrences = list_occurrences(
+        settings.database_url,
+        settings.image_base_path,
+        classification_threshold=settings.classification_threshold,
+        media_url_base="/static/",
+        limit=1,
+        offset=item_id,
     )
     return occurrences
 

@@ -186,6 +186,7 @@ def occurrences(
 
     occurrences = list_occurrences(
         settings.database_url,
+        settings.image_base_path,
         event,
         classification_threshold=settings.classification_threshold,
         limit=limit,

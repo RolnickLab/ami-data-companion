@@ -5,6 +5,7 @@ import pytest
 import typer
 from rich import print
 from sqlalchemy import select
+
 from trapdata.cli import settings
 from trapdata.db.base import check_db, get_session_class
 from trapdata.db.models import MonitoringSession
@@ -54,6 +55,7 @@ def species_by_track(event_day: datetime.datetime):
     print(f"Matched of event: {event}")
     get_unique_species_by_track(
         settings.database_url,
+        image_base_path=event.base_directory,
         monitoring_session=event,
         classification_threshold=0.1,
     )

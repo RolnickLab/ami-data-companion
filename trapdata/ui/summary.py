@@ -180,7 +180,8 @@ class SpeciesListLayout(RecycleView):
         # )
         classification_summary = get_unique_species_by_track(
             app.db_path,
-            ms,
+            image_base_path=ms.base_directory,
+            monitoring_session=ms,
             classification_threshold=classification_threshold,
             num_examples=NUM_EXAMPLES_PER_ROW,
         )

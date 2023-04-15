@@ -14,12 +14,15 @@ from trapdata import logger
 from trapdata.cli import settings
 from trapdata.db import get_session_class
 from trapdata.db.models.deployments import list_deployments
-from trapdata.db.models.detections import get_detected_objects
+from trapdata.db.models.detections import (
+    get_detected_objects,
+    num_occurrences_for_event,
+    num_species_for_event,
+)
 from trapdata.db.models.events import (
     get_monitoring_session_by_date,
     get_monitoring_session_images,
     get_monitoring_sessions_from_db,
-    list_monitoring_sessions,
 )
 from trapdata.db.models.occurrences import list_occurrences
 
@@ -89,6 +92,7 @@ def occurrences(
     for event in events:
         occurrences += list_occurrences(
             settings.database_url,
+            settings.image_base_path,
             monitoring_session=event,
             classification_threshold=settings.classification_threshold,
             num_examples=num_examples,
@@ -158,11 +162,28 @@ def sessions(
     """
     Export a summary of monitoring sessions from database in the specified format.
     """
-    Session = get_session_class(settings.database_url)
-    session = Session()
-
-    items = list_monitoring_sessions(session, settings.image_base_path)
-    df = pd.DataFrame([item.dict() for item in items])
+    monitoring_events = get_monitoring_sessions_from_db(
+        db_path=settings.database_url, base_directory=settings.image_base_path
+    )
+    items = []
+    for event in monitoring_events:
+        event_data = event.report_data()
+        num_occurrences = num_occurrences_for_event(
+            db_path=settings.database_url, monitoring_session=event
+        )
+        num_species = num_species_for_event(
+            db_path=settings.database_url, monitoring_session=event
+        )
+        example_captures = get_monitoring_session_images(
+            settings.database_url, event, limit=5, offset=int(event.num_images / 2)
+        )
+        event_data["example_captures"] = [
+            img.report_data().dict() for img in example_captures
+        ]
+        event_data["num_occurrences"] = num_occurrences
+        event_data["num_species"] = num_species
+        items.append(event_data)
+    df = pd.DataFrame(items)
     return export(df=df, format=format, outfile=outfile)
 
 
