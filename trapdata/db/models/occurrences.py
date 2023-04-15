@@ -195,7 +195,7 @@ def get_unique_species_by_track(
             models.MonitoringSession,
             models.DetectedObject.monitoring_session_id == models.MonitoringSession.id,
         )
-        .where(models.MonitoringSession.base_directory == image_base_path)
+        .where(models.MonitoringSession.base_directory == str(image_base_path))
     )
     if monitoring_session:
         stmt = stmt.where(models.MonitoringSession.id == monitoring_session.id)

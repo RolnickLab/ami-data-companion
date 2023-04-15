@@ -198,7 +198,7 @@ def occurrences(
     )
     for occurrence in occurrences:
         table.add_row(
-            occurrence.event,
+            str(occurrence.event.day),
             occurrence.id,
             occurrence.label,
             str(occurrence.num_frames),
