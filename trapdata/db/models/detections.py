@@ -632,6 +632,21 @@ def list_species(
     return taxa
 
 
+def num_species_for_deployment(session: orm.Session, image_base_path: FilePath) -> int:
+    return (
+        session.execute(
+            sa.select(sa.func.count(models.DetectedObject.specific_label.distinct()))
+            .join(
+                models.MonitoringSession,
+                models.MonitoringSession.id
+                == models.DetectedObject.monitoring_session_id,
+            )
+            .where(models.MonitoringSession.base_directory == str(image_base_path))
+        ).scalar()
+        or 0
+    )
+
+
 def get_unique_species(
     db_path, monitoring_session=None, classification_threshold: float = -1
 ):

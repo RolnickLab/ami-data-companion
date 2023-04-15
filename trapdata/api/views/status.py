@@ -9,6 +9,7 @@ from starlette.responses import Response
 from trapdata.api.config import settings
 from trapdata.api.deps.db import get_session
 from trapdata.db.models.deployments import list_deployments
+from trapdata.db.models.detections import num_species_for_deployment
 from trapdata.db.models.events import list_monitoring_sessions
 from trapdata.db.models.queue import QueueListItem, list_queues
 
@@ -50,7 +51,9 @@ async def get_summary_counts(
         num_captures=sum(e.num_captures for e in events),
         num_detections=sum(e.num_detections for e in events),
         num_occurrences=sum(e.num_occurrences for e in events),
-        num_species=sum(e.num_species for e in events),
+        num_species=num_species_for_deployment(
+            session, image_base_path=settings.image_base_path
+        ),
         last_updated=datetime.datetime.now(),
     )
 
