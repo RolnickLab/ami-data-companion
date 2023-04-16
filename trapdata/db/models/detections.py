@@ -6,6 +6,7 @@ import PIL.Image
 import sqlalchemy as sa
 from pydantic import BaseModel
 from sqlalchemy import orm
+from sqlalchemy.ext.hybrid import hybrid_property
 
 from trapdata import constants, db
 from trapdata.common.filemanagement import (
@@ -160,11 +161,15 @@ class DetectedObject(db.Base):
         self.path = str(fpath)
         return fpath
 
-    def width(self):
-        pass  # Use bbox
+    @hybrid_property
+    def width(self) -> int:
+        x1, y1, x2, y2 = self.bbox
+        return x2 - x1
 
-    def height(self):
-        pass  # Use bbox
+    @hybrid_property
+    def height(self) -> int:
+        x1, y1, x2, y2 = self.bbox
+        return y2 - y1
 
     def previous_frame_detections(
         self, session: orm.Session
@@ -619,8 +624,8 @@ def list_species(
                         "crops",
                         media_url_base=media_url_base,
                     ),
-                    height=detection.height(),
-                    width=detection.width(),
+                    height=detection.height,
+                    width=detection.width,
                 )
                 for detection in examples
             ],
