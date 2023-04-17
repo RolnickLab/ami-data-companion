@@ -23,7 +23,7 @@ from trapdata.db.models.images import completely_classified
 
 
 class DetectionListItem(BaseModel):
-    id: int
+    id: Optional[int] = None
     cropped_image_path: Optional[FilePath] = None
     bbox: Optional[tuple[float, float, float, float]] = None
     area_pixels: Optional[float] = None
@@ -544,13 +544,18 @@ def num_occurrences_for_event(
         return sesh.execute(query).scalar_one()
 
 
+class TaxonOccurrenceListItem(BaseModel):
+    id: str
+    cropped_image_path: Optional[FilePath] = None
+
+
 class TaxonListItem(BaseModel):
     name: str
     genus: Optional[str] = None
     family: Optional[str] = None
     num_occurrences: Optional[int] = None
     num_detections: Optional[int] = None
-    examples: list[DetectionListItem] = list()
+    examples: list[TaxonOccurrenceListItem] = list()
     score_stats: Optional[dict[str, float]] = None
     training_examples: Optional[int] = None
 
@@ -614,24 +619,20 @@ def list_species(
     for sp in species:
         metadata_by_name[sp.name] = sp
         # matching_examples = [ex for ex in examples if ex.specific_label == sp.name]
-        matching_examples = (
-            session.execute(
-                sa.select(DetectedObject)
-                .where(DetectedObject.specific_label == sp.name)
-                .where(models.TrapImage.base_path == str(image_base_path))
-                .where(DetectedObject.specific_label_score >= classification_threshold)
-                .join(
-                    models.TrapImage,
-                    models.DetectedObject.image_id == models.TrapImage.id,
-                )
-                .limit(num_examples)
-                .order_by(DetectedObject.specific_label_score.desc())
-                .limit(num_examples)
+        matching_examples = session.execute(
+            sa.select(DetectedObject.sequence_id, DetectedObject.path)
+            .where(DetectedObject.specific_label == sp.name)
+            .where(models.TrapImage.base_path == str(image_base_path))
+            .where(DetectedObject.specific_label_score >= classification_threshold)
+            .join(
+                models.TrapImage,
+                models.DetectedObject.image_id == models.TrapImage.id,
             )
-            .unique()
-            .scalars()
-            .all()
-        )
+            .group_by(DetectedObject.sequence_id)
+            .limit(num_examples)
+            .order_by(DetectedObject.specific_label_score.desc())
+            .limit(num_examples)
+        ).all()
         examples_by_name[sp.name] = matching_examples
         print(sp.name, len(matching_examples))
 
@@ -646,15 +647,13 @@ def list_species(
                 "mean": metadata_by_name[name].score_mean,
             },
             examples=[
-                DetectionListItem(
-                    id=detection.id,
+                TaxonOccurrenceListItem(
+                    id=detection.sequence_id,
                     cropped_image_path=media_url(
                         detection.path,
                         "crops",
                         media_url_base=media_url_base,
                     ),
-                    height=detection.height,
-                    width=detection.width,
                 )
                 for detection in examples
             ],
