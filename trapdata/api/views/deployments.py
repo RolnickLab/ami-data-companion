@@ -10,6 +10,7 @@ from trapdata.api.deps.request_params import parse_react_admin_params
 from trapdata.api.request_params import RequestParams
 from trapdata.db import Base
 from trapdata.db.models.deployments import DeploymentListItem, list_deployments
+from trapdata.db.models.events import update_all_aggregates
 
 router = APIRouter(prefix="/deployments")
 
@@ -20,6 +21,7 @@ async def get_deployments(
     session: orm.Session = Depends(get_session),
     # request_params: RequestParams = Depends(parse_react_admin_params(Base)),
 ) -> Any:
+    update_all_aggregates(session, settings.image_base_path)
     deployments = list_deployments(session)
     return deployments
 
