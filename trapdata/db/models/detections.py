@@ -559,7 +559,7 @@ def list_species(
     session: orm.Session,
     image_base_path: FilePath,
     classification_threshold: int = 0,
-    num_examples: int = 5,
+    num_examples: int = 10,
     media_url_base: Optional[str] = None,
     limit: Optional[int] = None,
     offset: int = 0,

@@ -60,7 +60,7 @@ def list_occurrences(
     image_base_path: FilePath,
     monitoring_session: Optional[models.MonitoringSession] = None,
     classification_threshold: float = -1,
-    num_examples: int = 5,
+    num_examples: int = 10,
     limit: Optional[int] = None,
     offset: int = 0,
     media_url_base: Optional[str] = None,
