@@ -561,7 +561,7 @@ def list_species(
     classification_threshold: int = 0,
     num_examples: int = 5,
     media_url_base: Optional[str] = None,
-    limit: int = 100,
+    limit: Optional[int] = None,
     offset: int = 0,
 ) -> list[TaxonListItem]:
     """
