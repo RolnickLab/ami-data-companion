@@ -568,6 +568,7 @@ def list_species(
     Return a list of unique species and example detections.
 
     @TODO compare this with list_species in occurrences.py
+    @TODO prefetch related and speed this up
     """
     species = session.execute(
         sa.select(
