@@ -559,7 +559,7 @@ def list_species(
     session: orm.Session,
     image_base_path: FilePath,
     classification_threshold: int = 0,
-    num_examples: int = 3,
+    num_examples: int = 5,
     media_url_base: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
@@ -580,14 +580,11 @@ def list_species(
             sa.func.min(DetectedObject.specific_label_score).label("score_min"),
             sa.func.avg(DetectedObject.specific_label_score).label("score_mean"),
         )
-        .join(
-            models.MonitoringSession,
-            models.MonitoringSession.id == DetectedObject.monitoring_session_id,
-        )
         .where(
-            DetectedObject.specific_label_score >= classification_threshold,
+            (models.TrapImage.base_path == str(image_base_path))
+            & (models.DetectedObject.specific_label_score >= classification_threshold)
         )
-        .where(models.MonitoringSession.base_directory == str(image_base_path))
+        .join(models.TrapImage, models.DetectedObject.image_id == models.TrapImage.id)
         .group_by(DetectedObject.specific_label)
         .limit(limit)
         .offset(offset)
