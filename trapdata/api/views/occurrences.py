@@ -32,7 +32,7 @@ async def get_occurrences(
     return occurrences
 
 
-@router.get("", response_model=List[OccurrenceListItem])
+@router.get("/{item_id}", response_model=List[OccurrenceListItem])
 async def get_occurrence(
     item_id: int,
     response: Response,
