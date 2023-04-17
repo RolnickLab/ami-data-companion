@@ -1,4 +1,5 @@
 import datetime
+import pathlib
 from typing import Optional
 
 import typer
@@ -10,6 +11,7 @@ from sqlalchemy import select
 from trapdata import logger, ml
 from trapdata.cli import settings
 from trapdata.cli.queue import status as queue_status
+from trapdata.common.filemanagement import construct_exif, find_images, get_exif
 from trapdata.db import models
 from trapdata.db.base import get_session_class
 from trapdata.db.models.deployments import list_deployments
@@ -24,6 +26,7 @@ from trapdata.db.models.events import (
     update_all_aggregates,
 )
 from trapdata.db.models.occurrences import list_occurrences, list_species
+from trapdata.ml.utils import StopWatch
 
 cli = typer.Typer(no_args_is_help=True)
 
@@ -253,6 +256,46 @@ def queue(watch: bool = False):
     This is an alias for `ami queue status`.
     """
     queue_status(watch)
+
+
+@cli.command()
+def images(path: Optional[pathlib.Path] = None, max_num=None):
+    if not path:
+        path = settings.image_base_path
+    images = []
+    i = 0
+    with StopWatch() as t:
+        for i, f in enumerate(find_images(path)):
+            # logger.debug(f'Found {f["path"].name} from {f["timestamp"].strftime("%c")}')
+            images.append(f)
+            if max_num and i + 1 >= max_num:
+                break
+
+    print(f"Total images: {i+1}")
+    print(t)
+    print(images)
+
+
+@cli.command()
+def image_counts(path: Optional[pathlib.Path] = None):
+    if not path:
+        path = settings.image_base_path
+    with StopWatch() as t:
+        count = sum(1 for _ in find_images(path, include_timestamps=False))
+    print(f"Total images: {count}")
+    print(t)
+    print(0)
+
+
+@cli.command()
+def exif(path: Optional[pathlib.Path]):
+    print(get_exif(path))
+
+
+@cli.command()
+def write_exif(path: Optional[pathlib.Path], timestamp: datetime.datetime):
+    # @TODO write exif data to the image file
+    print(construct_exif(timestamp))
 
 
 if __name__ == "__main__":
