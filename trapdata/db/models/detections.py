@@ -591,25 +591,48 @@ def list_species(
         .offset(offset)
     ).all()
 
-    examples = (
-        session.execute(
-            sa.select(DetectedObject)
-            .where(DetectedObject.specific_label.in_([sp.name for sp in species]))
-            .limit(num_examples)
-            .order_by(DetectedObject.specific_label_score.desc())
-        )
-        .unique()
-        .scalars()
-        .all()
-    )
+    # examples = (
+    #     session.execute(
+    #         sa.select(DetectedObject)
+    #         .where(DetectedObject.specific_label.in_(sp.name for sp in species])) # @TODO not working!
+    #         .where(models.TrapImage.base_path == str(image_base_path))
+    #         .where(DetectedObject.specific_label_score >= classification_threshold)
+    #         .join(
+    #             models.TrapImage, models.DetectedObject.image_id == models.TrapImage.id
+    #         )
+    #         .limit(num_examples)
+    #         .order_by(DetectedObject.specific_label_score.desc())
+    #     )
+    #     .unique()
+    #     .scalars()
+    #     .all()
+    # )
 
     metadata_by_name = {}
     examples_by_name = {}
     for sp in species:
         metadata_by_name[sp.name] = sp
-        examples_by_name[sp.name] = [
-            ex for ex in examples if ex.sequence_id == sp.sequence_id
-        ]
+        # matching_examples = [ex for ex in examples if ex.specific_label == sp.name]
+        matching_examples = (
+            session.execute(
+                sa.select(DetectedObject)
+                .where(DetectedObject.specific_label == sp.name)
+                .where(models.TrapImage.base_path == str(image_base_path))
+                .where(DetectedObject.specific_label_score >= classification_threshold)
+                .join(
+                    models.TrapImage,
+                    models.DetectedObject.image_id == models.TrapImage.id,
+                )
+                .limit(num_examples)
+                .order_by(DetectedObject.specific_label_score.desc())
+                .limit(num_examples)
+            )
+            .unique()
+            .scalars()
+            .all()
+        )
+        examples_by_name[sp.name] = matching_examples
+        print(sp.name, len(matching_examples))
 
     taxa = [
         TaxonListItem(
