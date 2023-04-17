@@ -572,6 +572,7 @@ def list_species(
     species = session.execute(
         sa.select(
             DetectedObject.specific_label.label("name"),
+            sa.func.min(DetectedObject.sequence_id).label("sequence_id"),
             sa.func.count(DetectedObject.id).label("num_detections"),
             sa.func.count(DetectedObject.sequence_id.distinct()).label(
                 "num_occurrences"
@@ -591,17 +592,24 @@ def list_species(
     ).all()
 
     examples = (
-        sa.select(DetectedObject)
-        .where(DetectedObject.specific_label.in_([sp.name for sp in species]))
-        .limit(num_examples)
-        .order_by(DetectedObject.specific_label_score.desc())
+        session.execute(
+            sa.select(DetectedObject)
+            .where(DetectedObject.specific_label.in_([sp.name for sp in species]))
+            .limit(num_examples)
+            .order_by(DetectedObject.specific_label_score.desc())
+        )
+        .unique()
+        .scalars()
+        .all()
     )
 
+    metadata_by_name = {}
     examples_by_name = {}
-    for detection in session.execute(examples).unique().scalars().all():
-        examples_by_name.setdefault(detection.specific_label, []).append(detection)
-
-    metadata_by_name = {sp.name: sp for sp in species}
+    for sp in species:
+        metadata_by_name[sp.name] = sp
+        examples_by_name[sp.name] = [
+            ex for ex in examples if ex.sequence_id == sp.sequence_id
+        ]
 
     taxa = [
         TaxonListItem(
