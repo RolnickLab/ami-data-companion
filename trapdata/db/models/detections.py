@@ -628,7 +628,7 @@ def list_species(
                 models.TrapImage,
                 models.DetectedObject.image_id == models.TrapImage.id,
             )
-            .group_by(DetectedObject.sequence_id)
+            .group_by(DetectedObject.sequence_id, DetectedObject.path)
             .limit(num_examples)
             .order_by(DetectedObject.specific_label_score.desc())
             .limit(num_examples)
