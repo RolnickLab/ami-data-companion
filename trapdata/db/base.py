@@ -74,10 +74,10 @@ def create_db(db_path: DatabaseURL) -> None:
 
     from . import Base
 
-    with db.connect() as con:
-        if not db.dialect.has_schema(con, DATABASE_SCHEMA_NAMESPACE):
-            print("CREATING SCHEMS")
-            con.execute(sqlalchemy.schema.CreateSchema(DATABASE_SCHEMA_NAMESPACE))
+    if db.dialect.name != "sqlite":
+        with db.connect() as con:
+            if not db.dialect.has_schema(con, DATABASE_SCHEMA_NAMESPACE):
+                con.execute(sqlalchemy.schema.CreateSchema(DATABASE_SCHEMA_NAMESPACE))
     Base.metadata.schema = DATABASE_SCHEMA_NAMESPACE
     Base.metadata.create_all(db, checkfirst=True)
     alembic_cfg = get_alembic_config(db_path)
