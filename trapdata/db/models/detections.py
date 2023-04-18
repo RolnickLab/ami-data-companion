@@ -619,18 +619,24 @@ def list_species(
     for sp in species:
         metadata_by_name[sp.name] = sp
         # matching_examples = [ex for ex in examples if ex.specific_label == sp.name]
-        matching_examples = session.execute(
-            sa.select(DetectedObject.sequence_id, DetectedObject.path)
+        matching_example_ids = session.execute(
+            sa.select(
+                DetectedObject.sequence_id, sa.func.min(DetectedObject.id).label("id")
+            )
             .where(DetectedObject.specific_label == sp.name)
             .where(models.TrapImage.base_path == str(image_base_path))
             .where(DetectedObject.specific_label_score >= classification_threshold)
+            .group_by(DetectedObject.sequence_id)
             .join(
                 models.TrapImage,
                 models.DetectedObject.image_id == models.TrapImage.id,
             )
-            .group_by(DetectedObject.sequence_id, DetectedObject.path)
-            .limit(num_examples)
-            .order_by(DetectedObject.specific_label_score.desc())
+        ).all()
+        matching_example_ids = [row.id for row in matching_example_ids]
+        # .group_by(DetectedObject.sequence_id, DetectedObject.path, DetectedObject.specific_label_score, models.TrapImage.base_path)
+        matching_examples = session.execute(
+            sa.select(DetectedObject.sequence_id, DetectedObject.path)
+            .where(DetectedObject.id.in_(matching_example_ids))
             .limit(num_examples)
         ).all()
         examples_by_name[sp.name] = matching_examples
