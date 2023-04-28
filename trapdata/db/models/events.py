@@ -9,7 +9,7 @@ from sqlalchemy_utils import aggregated
 
 from trapdata.common.filemanagement import find_images, group_images_by_day
 from trapdata.common.logs import logger
-from trapdata.common.types import FilePath
+from trapdata.common.schemas import FilePath
 from trapdata.common.utils import export_report
 from trapdata.db import Base, get_session, models
 

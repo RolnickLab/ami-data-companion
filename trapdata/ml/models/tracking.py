@@ -12,7 +12,7 @@ from torch import nn
 from torchvision import transforms
 
 from trapdata import constants, logger
-from trapdata.common.types import BoundingBox, FilePath
+from trapdata.common.schemas import BoundingBox, FilePath
 from trapdata.db.models.detections import DetectedObject, save_classified_objects
 from trapdata.db.models.events import MonitoringSession
 from trapdata.db.models.images import TrapImage
