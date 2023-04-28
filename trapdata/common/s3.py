@@ -12,6 +12,32 @@ PUBLIC_BASE_URL = S3_ENDPOINT
 DEFAULT_BUCKET = "ami-trapdata"
 
 
+def parse_s3_url(url: str):
+    """Parse an S3 URL into its components.
+
+    Args:
+        url (str): An S3 URL.
+
+    Returns:
+        dict: A dictionary with keys: bucket, key, and url.
+    """
+    if url.startswith("s3://"):
+        url = url[5:]
+    if url.startswith(S3_ENDPOINT):
+        url = url[len(S3_ENDPOINT) :]
+    if url.startswith("/"):
+        url = url[1:]
+
+    parts = url.split("/", 1)
+    bucket = parts[0]
+    key = parts[1] if len(parts) > 1 else ""
+    return {
+        "bucket": bucket,
+        "key": key,
+        "url": f"{S3_ENDPOINT}/{bucket}/{key}",
+    }
+
+
 def with_trailing_slash(s: str):
     return s if s.endswith("/") else f"{s}/"
 
