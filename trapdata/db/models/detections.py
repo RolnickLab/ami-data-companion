@@ -10,7 +10,7 @@ from sqlalchemy import orm
 from trapdata import constants, db
 from trapdata.common.filemanagement import absolute_path, construct_exif, save_image
 from trapdata.common.logs import logger
-from trapdata.common.types import FilePath
+from trapdata.common.schemas import FilePath
 from trapdata.common.utils import bbox_area, bbox_center, export_report
 from trapdata.db import models
 from trapdata.db.models.images import completely_classified
@@ -507,7 +507,9 @@ def get_species_for_image(db_path, image_id):
 def num_species_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(sa.func.count(DetectedObject.specific_label.distinct()),).where(
+    query = sa.select(
+        sa.func.count(DetectedObject.specific_label.distinct()),
+    ).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
@@ -519,7 +521,9 @@ def num_species_for_event(
 def num_occurrences_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(sa.func.count(DetectedObject.sequence_id.distinct()),).where(
+    query = sa.select(
+        sa.func.count(DetectedObject.sequence_id.distinct()),
+    ).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )

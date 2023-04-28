@@ -10,7 +10,7 @@ from rich import print as rprint
 
 from trapdata import ml
 from trapdata.common.filemanagement import default_database_dsn, get_app_dir
-from trapdata.common.types import FilePath
+from trapdata.common.schemas import FilePath
 
 
 class Settings(BaseSettings):

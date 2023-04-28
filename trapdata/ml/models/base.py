@@ -8,7 +8,7 @@ import torchvision.transforms
 from sentry_sdk import start_transaction
 
 from trapdata import logger
-from trapdata.common.types import FilePath
+from trapdata.common.schemas import FilePath
 from trapdata.common.utils import slugify
 from trapdata.db.models.queue import QueueManager
 from trapdata.ml.utils import StopWatch, get_device, get_or_download_file
