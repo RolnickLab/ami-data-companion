@@ -165,6 +165,7 @@ files = [
 
 [package.dependencies]
 botocore-stubs = "*"
+mypy-boto3-s3 = {version = ">=1.26.0,<1.27.0", optional = true, markers = "extra == \"s3\""}
 types-s3transfer = "*"
 
 [package.extras]
@@ -1386,6 +1387,18 @@ develop = ["codecov", "pycodestyle", "pytest (>=4.6)", "pytest-cov", "wheel"]
 docs = ["sphinx"]
 gmpy = ["gmpy2 (>=2.1.0a4)"]
 tests = ["pytest (>=4.6)"]
+
+[[package]]
+name = "mypy-boto3-s3"
+version = "1.26.116"
+description = "Type annotations for boto3.S3 1.26.116 service generated with mypy-boto3-builder 7.14.5"
+category = "main"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "mypy-boto3-s3-1.26.116.tar.gz", hash = "sha256:597aac58bb2c962d166403d0bdc10cdfa62ac82c61b02faf69a461c5a5107087"},
+    {file = "mypy_boto3_s3-1.26.116-py3-none-any.whl", hash = "sha256:dcdab86eae381c15b872c020e6b0d01ecaee4092190b60e313fac180b243e66a"},
+]
 
 [[package]]
 name = "mypy-extensions"
@@ -2897,4 +2910,4 @@ test = ["pytest (>=6.0.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "941d3f5049660fd699eaff017ba1cd3952a242bdbf4688f132ec9a220af6a5b0"
+content-hash = "276a5a9a056d8dfd44752642f91647bc3223f8b401ed9ef638704f0755ae8b61"

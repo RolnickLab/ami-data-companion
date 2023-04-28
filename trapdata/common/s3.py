@@ -1,8 +1,10 @@
 import boto3
 import botocore
+import dotenv
+from mypy_boto3_s3.client import S3Client
 from rich import print
 
-from mypy_boto3_s3.client import S3Client
+dotenv.load_dotenv()
 
 S3_ENDPOINT = "https://object-arbutus.cloud.computecanada.ca"
 # https://object-arbutus.cloud.computecanada.ca/<CONTAINER>/<PREFIX>/<FILENAME>
@@ -19,7 +21,7 @@ def without_trailing_slash(s: str):
 
 
 def get_session():
-    session = boto3.Session(profile_name="ami")
+    session = boto3.Session()
     return session
 
 
@@ -85,10 +87,11 @@ def count_files(deployment: str):
 def list_files(deployment: str, limit: int = 10000):
     bucket = get_bucket()
     # bucket.objects.filter(Prefix=prefix).all()
-    objects = (
+    for item in (
         bucket.objects.filter(Prefix=with_trailing_slash(deployment)).limit(limit).all()
-    )
-    return objects
+    ):
+        if item.size > 0:  # Ignore directories
+            yield item
 
 
 def public_url(key: str):
@@ -102,11 +105,18 @@ def test():
     print("Projects:", projects)
     for project in projects:
         deployments = list_deployments(project)
-        print("\tDeployments:", deployments)
 
         for deployment in deployments:
             # print("\t\tFile Count:", count_files(deployment))
+            print("\tDeployment:", deployment)
 
-            for file in list_files(deployment, limit=1):
-                print(file)
+            for file in list_files(deployment, limit=3):
+                # print(file)
                 print("\t\t\tSample:", public_url(file.key))
+
+
+if __name__ == "__main__":
+    test()
+    import ipdb
+
+    ipdb.set_trace()
