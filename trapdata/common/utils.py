@@ -3,7 +3,7 @@ import datetime
 import pathlib
 import random
 import string
-from typing import Union, Any
+from typing import Any, Union
 
 
 def get_sequential_sample(direction, images, last_sample=None):
@@ -42,20 +42,24 @@ def slugify(s):
     )
 
 
-def bbox_area(bbox):
+def bbox_area(bbox: tuple[float, float, float, float]) -> float:
     """
     Return the area of a bounding box.
 
     Bounding boxes are assumed to be in the format:
     [(top-left-coordinate-pair), (bottom-right-coordinate-pair)]
     or: [x1, y1, x2, y2]
+
+
+    >>> bbox_area([0, 0, 1, 1])
+    1
     """
     x1, y1, x2, y2 = bbox
     area = (y2 - y1) * (x2 - x1)
     return area
 
 
-def bbox_center(bbox):
+def bbox_center(bbox: tuple[float, float, float, float]) -> tuple[float, float]:
     """
     Return the center coordinates of a bounding box.
     """

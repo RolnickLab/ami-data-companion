@@ -1,0 +1,47 @@
+exclude: "(frontend/src/generated/|.alembic/versions/)"
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.3.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  # Backend hooks
+  - repo: https://github.com/psf/black
+    rev: 22.3.0
+    hooks:
+      - id: black
+        types: [file, python]
+  - repo: https://github.com/myint/autoflake
+    rev: v1.4
+    hooks:
+      - id: autoflake
+        args:
+          - --in-place
+          - --imports=sqlalchemy,pydantic
+        files: .
+        types: [file, python]
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.11.5
+    hooks:
+      - id: isort
+        name: isort (python)
+      - id: isort
+        files: .
+        name: isort (cython)
+        types: [cython]
+      - id: isort
+        files: .
+        name: isort (pyi)
+        types: [pyi]
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 3.8.3
+    hooks:
+      - id: flake8
+        files: .
+
+        types: [file, python]
+        additional_dependencies: [flake8-comprehensions, flake8-bugbear]

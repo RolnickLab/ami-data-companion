@@ -1,7 +1,8 @@
-from typing import Union
-
 import pathlib
 from dataclasses import dataclass
+from typing import Union
+
+from sqlalchemy.engine.url import URL as SqlAlchemyURL
 
 
 @dataclass
@@ -28,3 +29,5 @@ class Location:
 BoundingBox = tuple[float, float, float, float]
 
 FilePath = Union[pathlib.Path, str]
+
+DatabaseURL = Union[str, SqlAlchemyURL]

@@ -1,25 +1,22 @@
-from typing import Union, Literal, Optional
-from sys import platform as _sys_platform
-
-import pathlib
-import datetime
-import time
 import collections
-import dateutil.parser
-import os
-import math
-import re
+import datetime
 import hashlib
+import math
+import os
+import pathlib
+import re
 import tempfile
+import time
+from sys import platform as _sys_platform
+from typing import Literal, Optional, Union
 
-import PIL.Image
-import PIL.ExifTags
-
+import dateutil.parser
 import imagesize
+import PIL.ExifTags
+import PIL.Image
 
-
-from .logs import logger
 from . import constants
+from .logs import logger
 
 APP_NAME_SLUG = "AMI"
 EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"

@@ -3,9 +3,7 @@ import argparse
 
 from trapdata import logger
 from trapdata.common.filemanagement import find_images
-
 from trapdata.ml.utils import StopWatch
-
 
 parser = argparse.ArgumentParser(description="Scan and add trap images to database")
 parser.add_argument(

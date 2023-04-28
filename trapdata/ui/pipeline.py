@@ -1,9 +1,8 @@
 import pathlib
 
-from trapdata import logger
-from trapdata import ml
-from trapdata.db.base import get_session_class
+from trapdata import logger, ml
 from trapdata.common.types import FilePath
+from trapdata.db.base import get_session_class
 
 # @TODO Replace this pipeline file with the version in ml/pipeline.py after fully
 # switching the Kivy settings to Pydantic settings in main.py

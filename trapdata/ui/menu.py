@@ -4,33 +4,31 @@ from typing import Optional
 import kivy
 from kivy.app import App
 from kivy.clock import Clock
-from kivy.uix.label import Label
-from kivy.uix.image import AsyncImage
-from kivy.uix.button import Button
-from kivy.uix.popup import Popup
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.recycleview import RecycleView
 from kivy.lang import Builder
 from kivy.properties import (
-    StringProperty,
-    ObjectProperty,
     BooleanProperty,
     ListProperty,
+    ObjectProperty,
+    StringProperty,
 )
+from kivy.config import ConfigParser
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.image import AsyncImage
+from kivy.uix.label import Label
+from kivy.uix.popup import Popup
+from kivy.uix.recycleview import RecycleView
 from kivy.uix.screenmanager import Screen
 from plyer import filechooser
 
-from trapdata import logger
-from trapdata import db
-from trapdata import TrapImage
-from trapdata.db.models.queue import add_monitoring_session_to_queue
-from trapdata.db.models.events import get_or_create_monitoring_sessions
+from trapdata import TrapImage, db, logger
 from trapdata.db.models.detections import (
     num_occurrences_for_event,
     num_species_for_event,
 )
-
+from trapdata.db.models.events import get_or_create_monitoring_sessions
+from trapdata.db.models.queue import add_monitoring_session_to_queue
 
 kivy.require("2.1.0")
 
@@ -203,6 +201,7 @@ class MonitoringSessionListView(RecycleView):
 
 
 class DataMenuScreen(Screen):
+    app: ConfigParser = ObjectProperty()
     image_base_path = ObjectProperty(allownone=True)
     sessions = ObjectProperty()
     status_popup = ObjectProperty()
@@ -238,7 +237,8 @@ class DataMenuScreen(Screen):
     def db_ready(self):
         # Try to open a database session.
         # # @TODO add GUI indicator asking to recreate DB if it fails to open?
-        if not db.check_db(self.app.db_path, create=True, update=True, quiet=True):
+
+        if not db.check_db(self.app.db_path, create=True, quiet=True):
             db_dsn = db.base.get_safe_db_path(self.app.db_path)
             Popup(
                 title="Error reading or creating database",

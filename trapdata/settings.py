@@ -1,16 +1,16 @@
-import sys
-from functools import lru_cache
-from typing import Union, Optional
 import configparser
 import pathlib
+import sys
+from functools import lru_cache
+from typing import Optional, Union
 
-from pydantic import BaseSettings, ValidationError, validator, Field
 import sqlalchemy
+from pydantic import BaseSettings, Field, ValidationError, validator
 from rich import print as rprint
 
 from trapdata import ml
+from trapdata.common.filemanagement import default_database_dsn, get_app_dir
 from trapdata.common.types import FilePath
-from trapdata.common.filemanagement import get_app_dir, default_database_dsn
 
 
 class Settings(BaseSettings):
@@ -91,7 +91,9 @@ class Settings(BaseSettings):
             },
             "species_classification_model": {
                 "title": "Species classification model",
-                "description": "Model & settings to use for fine-grained species or taxon-level classification of cropped images after moth/non-moth detection.",
+                "description": (
+                    "Model & settings to use for fine-grained species or taxon-level classification of cropped images after moth/non-moth detection."
+                ),
                 "kivy_type": "options",
                 "kivy_section": "models",
             },

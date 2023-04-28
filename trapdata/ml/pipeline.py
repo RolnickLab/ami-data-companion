@@ -1,9 +1,7 @@
 from sqlalchemy import orm
-
-from trapdata import logger
-from trapdata import ml
-from trapdata.db.base import get_session_class
+from trapdata import logger, ml
 from trapdata.common.types import FilePath
+from trapdata.db.base import get_session_class
 from trapdata.settings import Settings
 
 
@@ -64,9 +62,10 @@ def start_pipeline(
         image_base_path=image_base_path,
         user_data_path=settings.user_data_path,
         batch_size=settings.classification_batch_size,
-        num_workers=settings.classification_batch_size,
+        num_workers=settings.num_workers,
         single=single,
     )
+    feature_extractor.queue.add_unprocessed()
     if feature_extractor.queue.queue_count() > 0:
         feature_extractor.run()
         logger.info("Feature extraction complete")

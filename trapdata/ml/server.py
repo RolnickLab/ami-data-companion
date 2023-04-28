@@ -1,10 +1,10 @@
+import multiprocessing
 import os
 import sys
 import time
-import multiprocessing
 
-from trapdata.ml.models.localization import MothObjectDetector_FasterRCNN
 from trapdata.db.models.queue import ImageQueue
+from trapdata.ml.models.localization import MothObjectDetector_FasterRCNN
 
 
 def watch_queue(db_path, interval=1):
