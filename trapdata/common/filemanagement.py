@@ -14,6 +14,9 @@ import dateutil.parser
 import imagesize
 import PIL.ExifTags
 import PIL.Image
+from dateutil.parser import ParserError
+
+from trapdata.tests import TEST_IMAGES_BASE_PATH  # noqa: F401
 
 from . import constants
 from .logs import logger
@@ -111,7 +114,8 @@ def construct_exif(
     """
     Construct an EXIF class using human readable keys.
     Can be save to a Pillow image using:
-    >>> image = PIL.Image("test.jpg")
+
+    >>> image = PIL.Image.open("./trapdata/tests/images/denmark/20220811005907-00-78.jpg")
     >>> existing_exif = image.getexif()
     >>> exif_data = construct_exif(description="hi!", existing_exif=existing_exif)
     >>> image.save("test_with_exif.jpg", exif=exif_data)
@@ -161,7 +165,47 @@ def get_image_filesize(img_path):
     return pathlib.Path(img_path).stat().st_size
 
 
-def get_image_timestamp(img_path):
+def get_image_timestamp_from_filename(img_path) -> datetime.datetime:
+    """
+    Parse the date and time a photo was taken from its filename.
+
+    The timestamp must be in the format `YYYYMMDDHHMMSS` but can be
+    preceded or followed by other characters (e.g. `84-20220916202959-snapshot.jpg`).
+
+    >>> out_fmt = "%Y-%m-%d %H:%M:%S"
+    >>> # Aarhus date format
+    >>> get_image_timestamp_from_filename("20220810231507-00-07.jpg").strftime(out_fmt)
+    '2022-08-10 23:15:07'
+    >>> # Diopsis date format
+    >>> get_image_timestamp_from_filename("20230124191342.jpg").strftime(out_fmt)
+    '2023-01-24 19:13:42'
+    >>> # Snapshot date format in Vermont traps
+    >>> get_image_timestamp_from_filename("20220622000459-108-snapshot.jpg").strftime(out_fmt)
+    '2022-06-22 00:04:59'
+    >>> # Snapshot date format in Cyprus traps
+    >>> get_image_timestamp_from_filename("84-20220916202959-snapshot.jpg").strftime(out_fmt)
+    '2022-09-16 20:29:59'
+
+    """
+    name = pathlib.Path(img_path).stem
+    date = None
+
+    # Extract date from a filename using regex in the format %Y%m%d%H%M%S
+    matches = re.search(r"(\d{14})", name)
+    if matches:
+        date = datetime.datetime.strptime(matches.group(), "%Y%m%d%H%M%S")
+    else:
+        date = dateutil.parser.parse(
+            name, fuzzy=False
+        )  # Fuzzy will interpret "DSC_1974" as 1974-01-01
+
+    if date:
+        return date
+    else:
+        raise ValueError(f"Could not parse date from filename '{img_path}'")
+
+
+def get_image_timestamp_from_exif(img_path):
     """
     Parse the date and time a photo was taken from its EXIF data.
 
@@ -171,6 +215,42 @@ def get_image_timestamp(img_path):
     exif = get_exif(img_path)
     datestring = exif["DateTime"].replace(":", "-", 2)
     date = dateutil.parser.parse(datestring)
+    return date
+
+
+def get_image_timestamp(
+    img_path, check_exif=True, assert_exists=True
+) -> datetime.datetime:
+    """
+    Parse the date and time a photo was taken from its filename or EXIF data.
+
+    Reading the exif data is slow, so only do it if necessary.
+    It is set to True for backwards compatibility.
+
+    >>> images = pathlib.Path(TEST_IMAGES_BASE_PATH)
+    >>> # Use filename
+    >>> get_image_timestamp(images / "cyprus/84-20220916202959-snapshot.jpg").strftime("%Y-%m-%d %H:%M:%S")
+    '2022-09-16 20:29:59'
+    >>> # Fallback to EXIF
+    >>> get_image_timestamp(images / "DSLR/DSC_0390.JPG").strftime("%Y-%m-%d %H:%M:%S")
+    '2022-07-19 14:28:16'
+    """
+    if assert_exists:
+        assert pathlib.Path(img_path).exists(), f"Image file does not exist: {img_path}"
+    try:
+        date = get_image_timestamp_from_filename(img_path)
+    except (ValueError, ParserError) as e:
+        if check_exif:
+            logger.debug(f"Could not parse date from filename: {e}. Trying EXIF.")
+            try:
+                date = get_image_timestamp_from_exif(img_path)
+            except dateutil.parser.ParserError:
+                logger.error(
+                    f"Could not parse image timestamp from filename or EXIF tags: {e}."
+                )
+                raise
+        else:
+            raise
     return date
 
 
@@ -195,11 +275,11 @@ def get_image_timestamp_with_timezone(img_path, default_offset="+0"):
 def find_images(
     base_directory,
     absolute_paths=False,
-    include_timestamps=True,
-    skip_bad_exif=True,
+    check_exif=True,
+    skip_missing_timestamps=True,
 ):
     logger.info(f"Scanning '{base_directory}' for images")
-    base_directory = pathlib.Path(base_directory)
+    base_directory = pathlib.Path(base_directory).expanduser().resolve()
     if not base_directory.exists():
         raise Exception(f"Directory does not exist: {base_directory}")
     extensions_list = "|".join(
@@ -215,19 +295,16 @@ def find_images(
                 shape = get_image_dimensions(path)
                 filesize = get_image_filesize(path)
 
-                if include_timestamps:
-                    try:
-                        date = get_image_timestamp_with_timezone(full_path)
-                    except Exception as e:
-                        logger.error(
-                            f"Could not get EXIF date for image: {full_path}\n {e}"
-                        )
-                        if skip_bad_exif:
-                            continue
-                        else:
-                            date = None
-                else:
-                    date = None
+                try:
+                    date = get_image_timestamp(full_path, check_exif=check_exif)
+                except Exception as e:
+                    logger.error(
+                        f"Skipping image, could not determine timestamp for: {full_path}\n {e}"
+                    )
+                    if skip_missing_timestamps:
+                        continue
+                    else:
+                        date = None
 
                 yield {
                     "path": path,
@@ -247,10 +324,10 @@ def group_images_by_day(images, maximum_gap_minutes=6 * 60):
     # @TODO add other group by methods? like image size, camera model, random sample batches, etc. Add to UI settings
 
     @TODO make fake images for this test
-    >>> images = find_images(TEST_IMAGES_BASE_PATH, skip_bad_exif=True)
-    >>> sessions = group_images_by_session(images)
+    >>> images = find_images(TEST_IMAGES_BASE_PATH, skip_missing_timestamps=True)
+    >>> sessions = group_images_by_day(images)
     >>> len(sessions)
-    11
+    7
     """
     logger.info(
         f"Grouping images into date-based groups with a maximum gap of {maximum_gap_minutes} minutes"
@@ -270,7 +347,7 @@ def group_images_by_day(images, maximum_gap_minutes=6 * 60):
         else:
             delta = maximum_gap_minutes
 
-        # logger.debug(f"{timestamp}, {round(delta, 2)}")
+        logger.debug(f"{image['timestamp']}, {round(delta, 2)}")
 
         if delta >= maximum_gap_minutes:
             current_day = image["timestamp"].date()

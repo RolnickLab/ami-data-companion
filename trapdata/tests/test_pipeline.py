@@ -11,7 +11,7 @@ import torch
 from rich import print
 
 from trapdata import logger
-from trapdata.common.types import FilePath
+from trapdata.common.schemas import FilePath
 from trapdata.db import check_db, get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import (

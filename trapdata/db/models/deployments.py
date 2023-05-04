@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from pydantic import BaseModel
 from sqlalchemy import orm
 
-from trapdata.common.types import FilePath
+from trapdata.common.schemas import FilePath
 from trapdata.db import models
 
 

@@ -11,7 +11,7 @@ from rich import print
 from sqlalchemy import orm
 
 from trapdata import logger
-from trapdata.common.types import DatabaseURL
+from trapdata.common.schemas import DatabaseURL
 
 DIALECT_CONNECTION_ARGS = {
     "sqlite": {
