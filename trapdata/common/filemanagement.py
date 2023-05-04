@@ -279,7 +279,7 @@ def find_images(
     skip_missing_timestamps=True,
 ):
     logger.info(f"Scanning '{base_directory}' for images")
-    base_directory = pathlib.Path(base_directory)
+    base_directory = pathlib.Path(base_directory).expanduser().resolve()
     if not base_directory.exists():
         raise Exception(f"Directory does not exist: {base_directory}")
     extensions_list = "|".join(
