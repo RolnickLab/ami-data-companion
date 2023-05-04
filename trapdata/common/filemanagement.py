@@ -114,7 +114,8 @@ def construct_exif(
     """
     Construct an EXIF class using human readable keys.
     Can be save to a Pillow image using:
-    >>> image = PIL.Image("test.jpg")
+
+    >>> image = PIL.Image.open("./trapdata/tests/images/denmark/20220811005907-00-78.jpg")
     >>> existing_exif = image.getexif()
     >>> exif_data = construct_exif(description="hi!", existing_exif=existing_exif)
     >>> image.save("test_with_exif.jpg", exif=exif_data)
@@ -323,10 +324,10 @@ def group_images_by_day(images, maximum_gap_minutes=6 * 60):
     # @TODO add other group by methods? like image size, camera model, random sample batches, etc. Add to UI settings
 
     @TODO make fake images for this test
-    >>> images = find_images(TEST_IMAGES_BASE_PATH, skip_bad_exif=True)
-    >>> sessions = group_images_by_session(images)
+    >>> images = find_images(TEST_IMAGES_BASE_PATH, skip_missing_timestamps=True)
+    >>> sessions = group_images_by_day(images)
     >>> len(sessions)
-    11
+    7
     """
     logger.info(
         f"Grouping images into date-based groups with a maximum gap of {maximum_gap_minutes} minutes"
@@ -346,7 +347,7 @@ def group_images_by_day(images, maximum_gap_minutes=6 * 60):
         else:
             delta = maximum_gap_minutes
 
-        # logger.debug(f"{timestamp}, {round(delta, 2)}")
+        logger.debug(f"{image['timestamp']}, {round(delta, 2)}")
 
         if delta >= maximum_gap_minutes:
             current_day = image["timestamp"].date()
