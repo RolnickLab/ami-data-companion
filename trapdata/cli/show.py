@@ -1,4 +1,5 @@
 import datetime
+import pathlib
 from typing import Optional
 
 import typer
@@ -10,6 +11,7 @@ from sqlalchemy import select
 from trapdata import logger, ml
 from trapdata.cli import settings
 from trapdata.cli.queue import status as queue_status
+from trapdata.common.filemanagement import find_images
 from trapdata.db import models
 from trapdata.db.base import get_session_class
 from trapdata.db.models.deployments import list_deployments
@@ -24,6 +26,7 @@ from trapdata.db.models.events import (
     update_all_aggregates,
 )
 from trapdata.db.models.occurrences import list_occurrences, list_species
+from trapdata.ml.utils import StopWatch
 
 cli = typer.Typer(no_args_is_help=True)
 
@@ -90,11 +93,40 @@ def deployments():
 
 
 @cli.command()
-def captures(deployment: str):
+def captures(path: Optional[pathlib.Path] = None, max_num: Optional[int] = None):
     """
     Summarize the raw images captured by a deployment.
     """
-    raise NotImplementedError
+    if not path:
+        path = settings.image_base_path
+    images = []
+    i = 0
+    with StopWatch() as t:
+        for i, f in enumerate(find_images(path)):
+            # logger.debug(f'Found {f["path"].name} from {f["timestamp"].strftime("%c")}')
+            images.append(f)
+            if max_num and i + 1 >= max_num:
+                break
+
+    print(f"Total images: {i+1}")
+    print(t)
+    print(images)
+
+
+@cli.command()
+def capture_counts(path: Optional[pathlib.Path] = None, check_exif: bool = False):
+    """
+    Show number of raw images captured by a deployment as fast as possible.
+
+    By default does not read timestamps from image EXIF data.
+    """
+    if not path:
+        path = settings.image_base_path
+    with StopWatch() as t:
+        count = sum(1 for _ in find_images(path, check_exif=check_exif))
+    print(f"Total images: {count}")
+    print(t)
+    print(0)
 
 
 @cli.command()
