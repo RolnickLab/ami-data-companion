@@ -6,6 +6,7 @@ import PIL.Image
 import sqlalchemy as sa
 from pydantic import BaseModel
 from sqlalchemy import orm
+from sqlalchemy.orm import Mapped, mapped_column
 
 from trapdata import constants, db
 from trapdata.common.filemanagement import absolute_path, construct_exif, save_image
@@ -45,10 +46,12 @@ class DetectionDetail(DetectionListItem):
 class DetectedObject(db.Base):
     __tablename__ = "detections"
 
-    id = sa.Column(sa.Integer, primary_key=True)
-    image_id = sa.Column(sa.ForeignKey("images.id"))
-    monitoring_session_id = sa.Column(sa.ForeignKey("monitoring_sessions.id"))
-    bbox = sa.Column(sa.JSON)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    image_id: Mapped[Optional[int]] = mapped_column(sa.ForeignKey("images.id"))
+    monitoring_session_id: Mapped[Optional[int]] = mapped_column(
+        sa.ForeignKey("monitoring_sessions.id")
+    )
+    bbox: Mapped[tuple[float, float, float, float]] = mapped_column(sa.JSON)
     area_pixels = sa.Column(sa.Integer)
     path = sa.Column(
         sa.String(255)

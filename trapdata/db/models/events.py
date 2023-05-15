@@ -5,6 +5,7 @@ from typing import Any, Iterable, Optional, Union
 import sqlalchemy as sa
 from pydantic import BaseModel
 from sqlalchemy import orm
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy_utils import aggregated
 
 from trapdata.common.filemanagement import find_images, group_images_by_day
@@ -24,14 +25,18 @@ class Event(BaseModel):
 class MonitoringSession(Base):
     __tablename__ = "monitoring_sessions"
 
-    id = sa.Column(sa.Integer, primary_key=True)
-    day = sa.Column(sa.Date)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    day: Mapped[Optional[datetime.date]]
     # @TODO instead of base directory, we can now use a Trap object to group sessions
-    base_directory = sa.Column(sa.String(255))
-    start_time = sa.Column(sa.DateTime(timezone=True))
-    end_time = sa.Column(sa.DateTime(timezone=True))
+    base_directory: Mapped[Optional[str]] = mapped_column(sa.String(255))
+    start_time: Mapped[Optional[datetime.datetime]] = mapped_column(
+        sa.DateTime(timezone=True)
+    )
+    end_time: Mapped[Optional[datetime.datetime]] = mapped_column(
+        sa.DateTime(timezone=True)
+    )
     # num_species = sa.Column(sa.Integer)
-    notes = sa.Column(sa.JSON)
+    notes: Mapped[Optional[dict[str, Any]]] = mapped_column(sa.JSON)
 
     @aggregated("images", sa.Column(sa.Integer))
     def num_images(self):
@@ -88,12 +93,12 @@ class MonitoringSession(Base):
                 models.DetectedObject.monitoring_session_id == self.id
             )
         ).scalar_one()
-        self.start_time: datetime.datetime = session.execute(
+        self.start_time = session.execute(
             sa.select(sa.func.min(models.TrapImage.timestamp)).where(
                 models.TrapImage.monitoring_session_id == self.id
             )
         ).scalar_one()
-        self.end_time: datetime.datetime = session.execute(
+        self.end_time = session.execute(
             sa.select(sa.func.max(models.TrapImage.timestamp)).where(
                 models.TrapImage.monitoring_session_id == self.id
             )
