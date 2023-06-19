@@ -1,0 +1,58 @@
+{
+  "20220623-SEQ-1": [
+    {
+      "event": "2022-06-23",
+      "sequence": "20220623-SEQ-1",
+      "frame": 0,
+      "image": 2,
+      "id": 1,
+      "path": "/tmp/trapdata/crops/5724f4f49f019f465e564b8e31f6b79f.jpg",
+      "binary_label": "moth",
+      "specific_label": "Lophocampa caryae",
+      "specific_label_score": 0.8327748775482178,
+      "cost": null
+    }
+  ],
+  "20220623-SEQ-2": [
+    {
+      "event": "2022-06-23",
+      "sequence": "20220623-SEQ-2",
+      "frame": 0,
+      "image": 2,
+      "id": 2,
+      "path": "/tmp/trapdata/crops/bdbd02572aa1a7d61150b96a66e2c5d1.jpg",
+      "binary_label": "moth",
+      "specific_label": "Lambdina fiscellaria",
+      "specific_label_score": 0.2307100147008896,
+      "cost": null
+    }
+  ],
+  "20220623-SEQ-3": [
+    {
+      "event": "2022-06-23",
+      "sequence": "20220623-SEQ-3",
+      "frame": 0,
+      "image": 2,
+      "id": 3,
+      "path": "/tmp/trapdata/crops/329e3922c961d0f3c7825449886733e6.jpg",
+      "binary_label": "moth",
+      "specific_label": "Cnephasia asseclana",
+      "specific_label_score": 0.4478735029697418,
+      "cost": null
+    }
+  ],
+  "20220623-SEQ-4": [
+    {
+      "event": "2022-06-23",
+      "sequence": "20220623-SEQ-4",
+      "frame": 0,
+      "image": 2,
+      "id": 4,
+      "path": "/tmp/trapdata/crops/46c9751585c54ca22142e7add9d748de.jpg",
+      "binary_label": "moth",
+      "specific_label": "Campaea perlata",
+      "specific_label_score": 0.2693989872932434,
+      "cost": null
+    }
+  ]
+}

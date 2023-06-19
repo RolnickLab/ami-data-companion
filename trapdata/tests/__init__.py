@@ -1,9 +1,3 @@
-from . import test_pipeline
+import os
 
-
-def run():
-    test_pipeline.run()
-
-
-if __name__ == "__main__":
-    run()
+TEST_IMAGES_BASE_PATH = os.path.join(os.path.dirname(__file__), "images")

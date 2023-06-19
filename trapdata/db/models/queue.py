@@ -1,14 +1,14 @@
-from typing import Sequence, Union, Optional
+from collections import OrderedDict
+from typing import Sequence, Union
 
 import sqlalchemy as sa
 
+from trapdata import constants, logger
+from trapdata.common.schemas import FilePath
 from trapdata.db import get_session
-from trapdata import logger
-from trapdata import constants
-from trapdata.common.types import FilePath
-from trapdata.db.models.images import TrapImage
 from trapdata.db.models.detections import DetectedObject
 from trapdata.db.models.events import MonitoringSession
+from trapdata.db.models.images import TrapImage
 
 
 class QueueManager:
@@ -53,7 +53,7 @@ class QueueManager:
 
 
 class ImageQueue(QueueManager):
-    name = "Unprocessed images"
+    name = "Source images"
     description = "Raw images from camera needing object detection"
 
     def ids(self) -> sa.ScalarSelect:
@@ -158,7 +158,7 @@ class DetectedObjectQueue(QueueManager):
                 MonitoringSession,
                 DetectedObject.monitoring_session_id == MonitoringSession.id,
             )
-            .group_by(DetectedObject.bbox)
+            .group_by(DetectedObject.bbox.cast(sa.String))
             .scalar_subquery()
         )
 
@@ -197,7 +197,7 @@ class DetectedObjectQueue(QueueManager):
             return count
 
     def add_unprocessed(self, *_) -> None:
-        logger.info(f"Adding detected objects in deployment to queue")
+        logger.info("Adding detected objects in deployment to queue")
         with get_session(self.db_path) as sesh:
             stmt = (
                 sa.update(DetectedObject)
@@ -280,7 +280,7 @@ class UnclassifiedObjectQueue(QueueManager):
                 MonitoringSession,
                 DetectedObject.monitoring_session_id == MonitoringSession.id,
             )
-            .group_by(DetectedObject.bbox)
+            .group_by(DetectedObject.bbox.cast(sa.String))
             .scalar_subquery()
         )
 
@@ -386,7 +386,7 @@ class ObjectsWithoutFeaturesQueue(QueueManager):
     name = "Detections without features"
     description = """
     Objects that have been identified as something of interest (e.g. a moth)
-    and need CNN features stored for using to generate tracks & similarity later. 
+    and need CNN features stored for using to generate tracks & similarity later.
     """
 
     def ids(self) -> sa.ScalarSelect:
@@ -403,7 +403,7 @@ class ObjectsWithoutFeaturesQueue(QueueManager):
                 MonitoringSession,
                 DetectedObject.monitoring_session_id == MonitoringSession.id,
             )
-            .group_by(DetectedObject.bbox)
+            .group_by(DetectedObject.bbox.cast(sa.String))
             .scalar_subquery()
         )
 
@@ -526,7 +526,7 @@ class UntrackedObjectsQueue(QueueManager):
                 MonitoringSession,
                 DetectedObject.monitoring_session_id == MonitoringSession.id,
             )
-            .group_by(DetectedObject.bbox)
+            .group_by(DetectedObject.bbox.cast(sa.String))
             .scalar_subquery()
         )
 
@@ -640,17 +640,19 @@ class UntrackedObjectsQueue(QueueManager):
             return objs_with_comparisons
 
 
-def all_queues(db_path, base_directory):
-    return {
-        q.name: q
-        for q in [
-            ImageQueue(db_path, base_directory),
-            DetectedObjectQueue(db_path, base_directory),
-            UnclassifiedObjectQueue(db_path, base_directory),
-            ObjectsWithoutFeaturesQueue(db_path, base_directory),
-            UntrackedObjectsQueue(db_path, base_directory),
-        ]
-    }
+def all_queues(db_path, base_directory) -> OrderedDict[str, QueueManager]:
+    return OrderedDict(
+        {
+            q.name: q
+            for q in [
+                ImageQueue(db_path, base_directory),
+                DetectedObjectQueue(db_path, base_directory),
+                UnclassifiedObjectQueue(db_path, base_directory),
+                ObjectsWithoutFeaturesQueue(db_path, base_directory),
+                UntrackedObjectsQueue(db_path, base_directory),
+            ]
+        }
+    )
 
 
 def add_image_to_queue(db_path, image_id):
@@ -662,10 +664,10 @@ def add_image_to_queue(db_path, image_id):
 
 
 def add_sample_to_queue(db_path, sample_size=10):
+    images = []
     with get_session(db_path) as sesh:
         num_in_queue = sesh.query(TrapImage).filter_by(in_queue=True).count()
         if num_in_queue < sample_size:
-            images = []
             for image in (
                 sesh.query(TrapImage)
                 .filter_by(

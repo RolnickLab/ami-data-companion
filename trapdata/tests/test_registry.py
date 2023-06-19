@@ -1,8 +1,13 @@
-from trapdata.ml.models import object_detectors, binary_classifiers, species_classifiers
+from trapdata.ml.models import binary_classifiers, object_detectors, species_classifiers
 
 
-def run():
-    for model in object_detectors + binary_classifiers + species_classifiers:
+def test_model_registry():
+    # @TODO need an assertion to test
+    for model in (
+        list(object_detectors.values())
+        + list(binary_classifiers.values())
+        + list(species_classifiers.values())
+    ):
         print(
             "\n".join(
                 str(item)
@@ -15,7 +20,8 @@ def run():
                 ]
             )
         )
+    assert True
 
 
 if __name__ == "__main__":
-    run()
+    test_model_registry()

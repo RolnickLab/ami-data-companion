@@ -2,48 +2,45 @@
 # newrelic.agent.initialize(environment="staging")
 
 import json
-import time
 import pathlib
-from functools import partial
 
 # import multiprocessing
 import threading
-from sqlalchemy import orm
-from rich import print
+import time
+from functools import partial
 
 import kivy
 from kivy.app import App
 from kivy.clock import Clock
-from kivy.uix.label import Label
-from kivy.uix.screenmanager import ScreenManager
-from kivy.uix.settings import SettingsWithSidebar
-from kivy.uix.popup import Popup
 from kivy.core.window import Window
 from kivy.properties import (
+    BooleanProperty,
+    NumericProperty,
     ObjectProperty,
     StringProperty,
-    NumericProperty,
-    BooleanProperty,
 )
+from kivy.uix.label import Label
+from kivy.uix.popup import Popup
+from kivy.uix.screenmanager import NoTransition, ScreenManager
+from kivy.uix.settings import SettingsWithSidebar
+from rich import print
+from sqlalchemy import orm
 
-from trapdata.settings import Settings, ValidationError
-from trapdata import logger
-from trapdata import ml
+from trapdata import logger, ml
+from trapdata.db.models.detections import export_detected_objects, get_detected_objects
 from trapdata.db.models.events import (
-    get_monitoring_sessions_from_db,
     export_monitoring_sessions,
+    get_monitoring_sessions_from_db,
 )
-from trapdata.db.models.detections import get_detected_objects, export_detected_objects
 from trapdata.db.models.queue import clear_all_queues
-from trapdata.pipeline import start_pipeline
+from trapdata.settings import Settings
+from trapdata.ui.pipeline import start_pipeline
 
 from .menu import DataMenuScreen
 from .playback import ImagePlaybackScreen
-
-from .summary import SpeciesSummaryScreen
-from .species_summary import SpeciesSummaryGridScreen
 from .queue import QueueScreen
-
+from .species_summary import SpeciesSummaryGridScreen
+from .summary import SpeciesSummaryScreen
 
 kivy.require("2.1.0")
 
@@ -67,6 +64,12 @@ class Queue(Label):
             self.running = False
         else:
             try:
+                new_status = self.bgtask.is_alive()
+                if self.running and new_status is False:
+                    # Pipeline went from running to stopped, reload stats on menu screen
+                    menu = self.app.screen_manager.get_screen("menu")
+                    if menu:
+                        menu.reload()
                 self.running = self.bgtask.is_alive()
             except ValueError:
                 self.running = False
@@ -174,7 +177,7 @@ class TrapDataApp(App):
         orm.close_all_sessions()
 
     @property
-    def db_path(self):
+    def db_path(self) -> str:
         return self.config.get("paths", "database_url")
 
     def build(self):
@@ -187,7 +190,7 @@ class TrapDataApp(App):
         # Window.clearcolor = (1, 1, 1, 1.0)
         # Window.size = (600, 400)
 
-        sm = ScreenManager()
+        sm = ScreenManager(transition=NoTransition())
         sm.add_widget(DataMenuScreen(name="menu"))
         sm.add_widget(ImagePlaybackScreen(name="playback"))
         sm.add_widget(SpeciesSummaryScreen(name="summary"))
@@ -246,6 +249,7 @@ class TrapDataApp(App):
             logger.warn("No queue found!")
 
     def build_config(self, config):
+        # @TODO get these defaults from settings.py
         default_db_connection_string = (
             f"sqlite+pysqlite:///{pathlib.Path(self.user_data_dir) / 'trapdata.db'}"
         )
@@ -260,14 +264,10 @@ class TrapDataApp(App):
         config.setdefaults(
             "models",
             {
-                "localization_model": list(ml.models.object_detectors.keys())[0],
-                "binary_classification_model": list(
-                    ml.models.binary_classifiers.keys()
-                )[0],
-                "species_classification_model": list(
-                    ml.models.species_classifiers.keys()
-                )[0],
-                "feature_extractor": list(ml.models.feature_extractors.keys())[0],
+                "localization_model": ml.models.DEFAULT_OBJECT_DETECTOR,
+                "binary_classification_model": ml.models.DEFAULT_BINARY_CLASSIFIER,
+                "species_classification_model": ml.models.DEFAULT_SPECIES_CLASSIFIER,
+                "feature_extractor": ml.models.DEFAULT_FEATURE_EXTRACTOR,
                 "classification_threshold": 0.6,
             },
         )
@@ -358,7 +358,11 @@ class TrapDataApp(App):
         objects = list(
             detected_objects
             or get_detected_objects(
-                db_path=app.db_path, image_base_path=app.image_base_path
+                db_path=app.db_path,
+                image_base_path=app.config.get("paths", "image_base_path"),
+                classification_threshold=app.config.get(
+                    "models", "classification_threshold"
+                ),
             )
         )
         timestamp = int(time.time())

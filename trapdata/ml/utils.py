@@ -1,10 +1,12 @@
+import datetime
 import os
-
 import pathlib
 import time
-import datetime
 import urllib.request
+from dataclasses import dataclass
+from typing import Optional
 
+import pandas as pd
 import torch
 import torchvision
 
@@ -58,7 +60,7 @@ def get_device(device_str=None) -> torch.device:
     return device
 
 
-def get_or_download_file(path, destination_dir=None, prefix=None):
+def get_or_download_file(path, destination_dir=None, prefix=None) -> pathlib.Path:
     """
     >>> filename, headers = get_weights("https://drive.google.com/file/d/1KdQc56WtnMWX9PUapy6cS0CdjC8VSdVe/view?usp=sharing")
 
@@ -91,6 +93,7 @@ def get_or_download_file(path, destination_dir=None, prefix=None):
         resulting_filepath, headers = urllib.request.urlretrieve(
             url=path, filename=local_filepath
         )
+        resulting_filepath = pathlib.Path(resulting_filepath)
         logger.info(f"Downloaded to {resulting_filepath}")
         return resulting_filepath
 
@@ -143,6 +146,47 @@ def crop_bbox(image, bbox):
     transform_to_PIL = torchvision.transforms.ToPILImage()
     cropped_image = transform_to_PIL(cropped_image)
     yield cropped_image
+
+
+@dataclass
+class Taxa:
+    gbif_id: int
+    name: Optional[str]
+    genus: Optional[str]
+    family: Optional[str]
+    source: Optional[str]
+
+
+def lookup_gbif_species(species_list_path: str, gbif_id: int) -> Taxa:
+    """
+    Look up taxa names from a Darwin Core Archive file (DwC-A).
+
+    Example:
+    https://docs.google.com/spreadsheets/d/1E3-GAB0PSKrnproAC44whigMvnAkbkwUmwXUHMKMOII/edit#gid=1916842176
+
+    @TODO Optionally look up species name from GBIF API
+    Example https://api.gbif.org/v1/species/5231190
+    """
+    local_path = get_or_download_file(species_list_path, destination_dir="taxonomy")
+    df = pd.read_csv(local_path)
+    # look up single row by gbif_id
+    try:
+        row = df.loc[df["taxon_key_gbif_id"] == gbif_id].iloc[0]
+    except IndexError:
+        logger.error(f"Could not find species with gbif_id {gbif_id}")
+        return Taxa(
+            gbif_id=gbif_id, name=str(gbif_id), genus=None, family=None, source=None
+        )
+
+    species = Taxa(
+        gbif_id=gbif_id,
+        name=row["search_species_name"],
+        genus=row["genus_name"],
+        family=row["family_name"],
+        source=row["source"],
+    )
+
+    return species
 
 
 class StopWatch:

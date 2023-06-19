@@ -1,21 +1,17 @@
-from typing import Optional
 import json
+from typing import Optional, Union
 
+import sqlalchemy
 import torch
 import torch.utils.data
+import torchvision.transforms
 from sentry_sdk import start_transaction
 
-import torchvision.transforms
-
 from trapdata import logger
-from trapdata.common.types import FilePath
-from trapdata.ml.utils import (
-    get_device,
-    get_or_download_file,
-    StopWatch,
-)
-from trapdata.db.models.queue import QueueManager
+from trapdata.common.schemas import FilePath
 from trapdata.common.utils import slugify
+from trapdata.db.models.queue import QueueManager
+from trapdata.ml.utils import StopWatch, get_device, get_or_download_file
 
 
 class BatchEmptyException(Exception):
@@ -48,7 +44,7 @@ class InferenceBaseClass:
     See examples in `classification.py` and `localization.py`
     """
 
-    db_path: str
+    db_path: Union[str, sqlalchemy.engine.URL]
     image_base_path: FilePath
     name = "Unknown Inference Model"
     description = str()
@@ -70,7 +66,12 @@ class InferenceBaseClass:
     dataset: torch.utils.data.Dataset
     dataloader: torch.utils.data.DataLoader
 
-    def __init__(self, db_path: str, image_base_path: FilePath, **kwargs):
+    def __init__(
+        self,
+        db_path: Union[str, sqlalchemy.engine.URL],
+        image_base_path: FilePath,
+        **kwargs,
+    ):
         self.db_path = db_path
         self.image_base_path = image_base_path
 

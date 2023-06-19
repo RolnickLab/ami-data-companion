@@ -1,11 +1,7 @@
 import typer
 
-import sqlalchemy as sa
-from sqlalchemy import select
-
-from trapdata.db.base import get_session_class
 from trapdata.cli import settings
-from trapdata.db.models import *
+from trapdata.db.base import get_session_class
 
 cli = typer.Typer(no_args_is_help=True)
 
@@ -16,7 +12,7 @@ def ipython():
     Open python shell with project loaded.
     """
     Session = get_session_class(settings.database_url)
-    session = Session()
+    session = Session()  # noqa: F841
     import ipdb
 
     ipdb.set_trace()

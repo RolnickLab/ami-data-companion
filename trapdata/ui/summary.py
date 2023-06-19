@@ -1,31 +1,27 @@
 import pathlib
 import time
-from functools import partial
 
 from kivy.app import App
-from kivy.uix.screenmanager import Screen
-from kivy.properties import ObjectProperty, ListProperty, NumericProperty
-from kivy.uix.label import Label
-from kivy.uix.button import ButtonBehavior, Button
-from kivy.uix.recycleview import RecycleView
+from kivy.clock import Clock
+from kivy.lang import Builder
+from kivy.properties import ListProperty, NumericProperty, ObjectProperty
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import ButtonBehavior
+from kivy.uix.image import Image
+from kivy.uix.label import Label
 
 # from kivy.uix.carousel
-from kivy.uix.popup import Popup
-from kivy.uix.image import Image
-from kivy.lang import Builder
-from kivy.clock import Clock
+from kivy.uix.recycleview import RecycleView
+from kivy.uix.screenmanager import Screen
 
 from trapdata import logger
-from trapdata import constants
-from trapdata.ui.playback import ImagePlaybackScreen
+from trapdata.db.models.detections import get_detected_objects
 from trapdata.db.models.events import MonitoringSession
-from trapdata.db.models.detections import (
-    get_detected_objects,
-    export_detected_objects,
+from trapdata.db.models.occurrences import (
     get_unique_species_by_track,
+    sequence_display_name,
 )
-
+from trapdata.ui.playback import ImagePlaybackScreen
 
 Builder.load_file(str(pathlib.Path(__file__).parent / "summary.kv"))
 
@@ -194,7 +190,7 @@ class SpeciesListLayout(RecycleView):
         species_rows = [
             {
                 "species": {
-                    "sequence": item["sequence_id"].split("-", 1)[-1],
+                    "sequence": sequence_display_name(item["sequence_id"]),
                     "name": item["label"] or "Unclassified",
                     "count": item["sequence_frame_count"],
                     "score": item["sequence_best_score"],
@@ -254,15 +250,18 @@ class SpeciesSummaryScreen(Screen):
 
     def export(self):
         app = App.get_running_app()
-        if app:
-            records = list(
-                get_detected_objects(
-                    db_path=app.db_path,
-                    image_base_path=app.image_base_path,
-                    monitoring_session=self.monitoring_session,
-                )
+        assert app
+        records = list(
+            get_detected_objects(
+                db_path=app.db_path,
+                image_base_path=app.image_base_path,
+                monitoring_session=self.monitoring_session,
+                classification_threshold=app.config.get(
+                    "models", "classification_threshold"
+                ),
             )
-            timestamp = int(time.time())
-            trap = pathlib.Path(app.image_base_path).name
-            report_name = f"{trap}-detections-for-{self.monitoring_session.day.strftime('%Y-%m-%d')}-created-{timestamp}"
-            app.export_detections(detected_objects=records, report_name=report_name)
+        )
+        timestamp = int(time.time())
+        trap = pathlib.Path(app.image_base_path).name
+        report_name = f"{trap}-detections-for-{self.monitoring_session.day.strftime('%Y-%m-%d')}-created-{timestamp}"
+        app.export_detections(detected_objects=records, report_name=report_name)

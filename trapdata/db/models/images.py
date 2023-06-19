@@ -1,18 +1,39 @@
-import pathlib
 import datetime
+import pathlib
 from typing import Optional
 
 import sqlalchemy as sa
+from pydantic import BaseModel
 from sqlalchemy import orm
 from sqlalchemy_utils import aggregated
 
-from trapdata.db import Base, get_session
 from trapdata import constants
 from trapdata.common.filemanagement import (
     get_image_dimensions,
     get_image_filesize,
     get_image_timestamp,
 )
+from trapdata.db import Base, get_session
+
+
+class CaptureListItem(BaseModel):
+    id: int
+    timestamp: datetime.datetime
+    source_image: str
+    last_read: Optional[datetime.datetime]
+    last_processed: Optional[datetime.datetime]
+    num_detections: Optional[int]
+    in_queue: bool
+
+
+class CaptureDetail(CaptureListItem):
+    id: int
+    event: object
+    notes: Optional[str]
+    detections: list
+    filesize: int
+    width: int
+    height: int
 
 
 class TrapImage(Base):
@@ -51,6 +72,7 @@ class TrapImage(Base):
         img = session.execute(
             sa.select(TrapImage)
             .filter(TrapImage.timestamp < self.timestamp)
+            .filter(TrapImage.monitoring_session_id == self.monitoring_session_id)
             .order_by(TrapImage.timestamp.desc())
             .limit(1)
         ).scalar()
@@ -60,6 +82,7 @@ class TrapImage(Base):
         img = session.execute(
             sa.select(TrapImage)
             .filter(TrapImage.timestamp > self.timestamp)
+            .filter(TrapImage.monitoring_session_id == self.monitoring_session_id)
             .order_by(TrapImage.timestamp.asc())
             .limit(1)
         ).scalar()
@@ -93,7 +116,30 @@ class TrapImage(Base):
     @property
     def classified(self):
         """Have all detected objects been classified"""
-        pass
+
+    def report_data(self) -> CaptureListItem:
+        return CaptureListItem(
+            id=self.id,
+            source_image=f"{constants.IMAGE_BASE_URL}vermont/snapshots/{self.path}",
+            timestamp=self.timestamp,
+            last_read=self.last_read,
+            last_processed=self.last_processed,
+            in_queue=self.in_queue,
+            num_detections=self.num_detected_objects,
+        )
+
+    def report_detail(self) -> CaptureDetail:
+        return CaptureDetail(
+            **self.report_data().dict(),
+            event=self.monitoring_session.day,
+            width=self.width,
+            height=self.height,
+            filesize=self.filesize,
+            detections=[
+                obj.report_data_simple().dict() for obj in self.detected_objects
+            ],
+            notes=self.notes,
+        )
 
     def __repr__(self):
         return (

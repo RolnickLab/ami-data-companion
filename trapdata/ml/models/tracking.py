@@ -1,31 +1,28 @@
-from typing import Generator, Sequence, Any, Optional, Union, Iterable
-from collections import namedtuple
 import datetime
-
-import torch
-from torch import nn
-import torchvision
-import numpy as np
 import math
-import PIL.Image
-from torchvision import transforms
-import torch.utils.data
-from sqlalchemy import orm, select, update, func
-from rich.progress import track
+from collections import namedtuple
+from typing import Generator, Iterable, Optional, Sequence, Union
 
-from trapdata import logger
-from trapdata import constants
-from trapdata.common.types import BoundingBox, FilePath
-from trapdata.ml.utils import get_device
-from trapdata.ml.models.classification import (
-    MothNonMothClassifier,
-    QuebecVermontMothSpeciesClassifierLowResolution,
-    ClassificationIterableDatabaseDataset,
-)
-from trapdata.db.models.queue import UntrackedObjectsQueue, ObjectsWithoutFeaturesQueue
+import numpy as np
+import PIL.Image
+import torch
+import torch.utils.data
+from sqlalchemy import func, orm, select, update
+from torch import nn
+from torchvision import transforms
+
+from trapdata import constants, logger
+from trapdata.common.schemas import BoundingBox, FilePath
+from trapdata.db.models.detections import DetectedObject, save_classified_objects
 from trapdata.db.models.events import MonitoringSession
 from trapdata.db.models.images import TrapImage
-from trapdata.db.models.detections import DetectedObject, save_classified_objects
+from trapdata.db.models.queue import ObjectsWithoutFeaturesQueue, UntrackedObjectsQueue
+from trapdata.ml.models.classification import (
+    ClassificationIterableDatabaseDataset,
+    MothNonMothClassifier,
+    QuebecVermontMothSpeciesClassifierMixedResolution,
+)
+from trapdata.ml.utils import get_device
 
 # from trapdata.db.models.detections import save_untracked_detection
 from .base import InferenceBaseClass
@@ -482,9 +479,15 @@ class FeatureExtractor(InferenceBaseClass):
 
 
 class QuebecVermontFeatureExtractor(
-    FeatureExtractor, QuebecVermontMothSpeciesClassifierLowResolution
+    FeatureExtractor, QuebecVermontMothSpeciesClassifierMixedResolution
 ):
     name = "Features from Quebec/Vermont species model"
+
+
+class UKDenmarkFeatureExtractor(
+    FeatureExtractor, QuebecVermontMothSpeciesClassifierMixedResolution
+):
+    name = "Features from UK/Denmark species model"
 
 
 class MothNonMothFeatureExtractor(FeatureExtractor, MothNonMothClassifier):
@@ -563,6 +566,18 @@ def assign_solo_sequence(
     return sequence_id
 
 
+def assign_solo_sequences(
+    detected_objects: Sequence[DetectedObject], session: orm.Session, commit=True
+):
+    # Check list of objects and assign a solo-sequence if they are missing one.
+    for obj in detected_objects:
+        if not obj.sequence_id:
+            assign_solo_sequence(obj, session=session)
+
+    if commit:
+        session.commit()
+
+
 def assign_sequence(
     obj_current: DetectedObject,
     obj_previous: DetectedObject,
@@ -605,11 +620,8 @@ def compare_objects(
     """
     if not image_previous:
         image_previous = image_current.previous_image(session)
-        assert image_previous, f"No image found before image {image_current.id}"
 
-    logger.debug(
-        f"Calculating tracking costs in image {image_current.id} vs. {image_previous.id}"
-    )
+    logger.debug(f"Calculating tracking costs for objects in image {image_current.id}")
     objects_current = (
         session.execute(
             select(DetectedObject)
@@ -621,16 +633,23 @@ def compare_objects(
         .all()
     )
 
-    objects_previous = (
-        session.execute(
-            select(DetectedObject)
-            .filter(DetectedObject.image == image_previous)
-            .where(DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
+    if image_previous:
+        objects_previous = (
+            session.execute(
+                select(DetectedObject)
+                .filter(DetectedObject.image == image_previous)
+                .where(DetectedObject.binary_label == constants.POSITIVE_BINARY_LABEL)
+            )
+            .unique()
+            .scalars()
+            .all()
         )
-        .unique()
-        .scalars()
-        .all()
-    )
+    else:
+        logger.debug(
+            "No previous frame found for image, assigning all current objects a solo-sequence"
+        )
+        objects_previous = list()
+
     logger.debug(
         f"Objects in current frame: {len(objects_current)}, objects in previous: {len(objects_previous)}"
     )
@@ -697,11 +716,8 @@ def compare_objects(
                     f"Assigned {obj_current.id} to sequence {sequence_id} as frame #{frame_num}. Tracking cost: {round(lowest_cost, 2)}"
                 )
 
-    # Check all objects
-    # If current object was not assigned to a sequence, create one for it by itself
-    for obj_current in objects_current:
-        if obj_current.cnn_features and not obj_current.sequence_id:
-            sequence_id = assign_solo_sequence(obj_current, session=session)
+    # Assign a sequence ID for any objects that still don't have one
+    assign_solo_sequences(objects_current, session=session, commit=False)
 
     if commit:
         session.flush()
@@ -740,7 +756,7 @@ def find_all_tracks(
         update(DetectedObject)
         .where(
             (DetectedObject.monitoring_session == monitoring_session)
-            & (DetectedObject.in_queue == True)
+            & (DetectedObject.in_queue.is_(True))
             & (DetectedObject.cnn_features.is_not(None))
         )
         .values({"in_queue": False})
@@ -762,19 +778,24 @@ def find_all_tracks(
         n_previous = max(n_current - 1, 0)
         image_current = images[n_current]
         image_previous = images[n_previous]
-        if image_current != image_previous:
-            compare_objects(
-                image_current=image_current,
-                image_previous=image_previous,
-                session=session,
-                commit=False,
-            )
+        if image_current == image_previous:
+            image_previous = None
+
+        compare_objects(
+            image_current=image_current,
+            image_previous=image_previous,
+            session=session,
+            commit=False,
+        )
     logger.info("Saving tracks to database")
     session.flush()
     session.commit()
 
 
-def summarize_tracks(session: orm.Session, event: Optional[MonitoringSession] = None):
+def summarize_tracks(
+    session: orm.Session,
+    event: Optional[MonitoringSession] = None,
+) -> dict[Union[str, None], list[dict]]:
     query_args = {}
     if event:
         query_args = {"monitoring_session": event}
@@ -785,6 +806,7 @@ def summarize_tracks(session: orm.Session, event: Optional[MonitoringSession] = 
             DetectedObject.sequence_id,
             func.count(DetectedObject.id),
         )
+        .where(DetectedObject.sequence_id.is_not(None))
         .group_by(DetectedObject.monitoring_session_id, DetectedObject.sequence_id)
         .filter_by(**query_args)
     ).all()
@@ -809,6 +831,7 @@ def summarize_tracks(session: orm.Session, event: Optional[MonitoringSession] = 
                 image=obj.image_id,
                 id=obj.id,
                 path=obj.path,
+                binary_label=obj.binary_label,
                 specific_label=obj.specific_label,
                 specific_label_score=obj.specific_label_score,
                 cost=obj.sequence_previous_cost,

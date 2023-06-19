@@ -134,5 +134,7 @@ trapdata.ini
 <tempfile.*
 
 # macOS
-
 .DS_Store
+
+# Docker volumes
+db_data/

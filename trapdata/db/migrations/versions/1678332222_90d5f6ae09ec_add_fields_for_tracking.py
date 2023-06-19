@@ -5,9 +5,8 @@ Revises: 3665528a445c
 Create Date: 2023-03-08 16:53:32.671117
 
 """
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "90d5f6ae09ec"
@@ -49,9 +48,7 @@ def upgrade() -> None:
         "detections",
         sa.Column("sequence_previous_cost", sa.Float(), nullable=True),
     )
-    op.add_column(
-        "detections", sa.Column("cnn_features", sa.JSON(), nullable=True)
-    )
+    op.add_column("detections", sa.Column("cnn_features", sa.JSON(), nullable=True))
     op.add_column("images", sa.Column("width", sa.Integer(), nullable=True))
     op.add_column("images", sa.Column("height", sa.Integer(), nullable=True))
     # ### end Alembic commands ###

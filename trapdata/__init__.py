@@ -1,5 +1,3 @@
-import sys
-import sqlalchemy
 import sentry_sdk
 
 sentry_sdk.init(
@@ -9,13 +7,11 @@ sentry_sdk.init(
 #
 # import multiprocessing
 
+from .common import constants, utils
 from .common.logs import logger
-from .common import utils
-from .common import constants
-from .db.models.images import TrapImage
 from .db.models.detections import DetectedObject
 from .db.models.events import MonitoringSession
-
+from .db.models.images import TrapImage
 
 __all__ = [
     logger,

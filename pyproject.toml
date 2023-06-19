@@ -1,0 +1,62 @@
+[tool.poetry]
+name = "trapdata"
+version = "0.6.0"
+description = "Companion software for automated insect monitoring stations"
+authors = ["Michael Bunsen <notbot@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/RolnickLab/ami-data-manager"
+repository = "https://github.com/RolnickLab/ami-data-manager"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pillow = "^9.5.0"
+python-dateutil = "^2.8.2"
+python-dotenv = "^1.0.0"
+pydantic = "^1.10.7"
+typer = "^0.7.0"
+rich = "^13.3.3"
+pandas = "^1.5.3"
+sqlalchemy = ">2.0"
+sqlalchemy-utils = "^0.40.0"
+alembic = "^1.10.2"
+psycopg2-binary = { version = "^2.9.5", optional = true }
+sentry-sdk = "^1.18.0"
+imagesize = "^1.4.1"
+torch = "^2.0.0"
+torchvision = "^0.15.1"
+timm = "^0.6.13"
+structlog = "^22.3.0"
+kivy = { extras = ["base"], version = "^2.1.0" }
+plyer = "^2.1.0"
+pyobjus = [
+    { version = "^1.2.1", platform = "darwin" },
+    { version = "^1.2.1", platform = "linux" },
+]
+
+# [tool.poetry.group.dev.dependencies] # Can't install these dev deps with pip, so they're in the main deps
+black = "^23.3.0"
+flake8 = "^6.0.0"
+ipython = "^8.11.0"
+pytest-cov = "^4.0.0"
+pytest-asyncio = "^0.21.0"
+pytest = "*"
+
+
+[tool.pytest.ini_options]
+asyncio_mode = 'auto'
+
+[tool.isort]
+profile = "black"
+
+[tool.poetry.scripts]
+trapdata = 'trapdata.ui.main:run'
+trapdata-test = 'trapdata.tests.test_pipeline:process_deployments'
+ami = 'trapdata.cli.base:cli'
+
+# [tool.setuptools.package_data]
+# trapdata = ["*.kv", "*.txt", "*.json", "*.ini", "*.md"]

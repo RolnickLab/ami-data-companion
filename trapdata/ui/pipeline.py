@@ -1,9 +1,11 @@
 import pathlib
 
-from trapdata import logger
-from trapdata import ml
+from trapdata import logger, ml
+from trapdata.common.schemas import FilePath
 from trapdata.db.base import get_session_class
-from trapdata.common.types import FilePath
+
+# @TODO Replace this pipeline file with the version in ml/pipeline.py after fully
+# switching the Kivy settings to Pydantic settings in main.py
 
 
 def start_pipeline(
@@ -75,6 +77,7 @@ def start_pipeline(
     # @TODO this should only generate tracks with cnn_features for all detections
     # in a monitoring session. Consider creating or updating a QueueManager
     # instead of the code below.
+    # @TODO standardize and clean up this method for find all tracks
     Session = get_session_class(db_path)
     with Session() as session:
         events = ml.models.tracking.get_events_that_need_tracks(

@@ -1,19 +1,26 @@
-import pathlib
 import datetime
-from typing import Optional, Union, Iterable, Any
+import pathlib
+from typing import Any, Iterable, Optional, Union
 
 import sqlalchemy as sa
+from pydantic import BaseModel
 from sqlalchemy import orm
-from sqlalchemy_utils import aggregated, observes
+from sqlalchemy_utils import aggregated
 
-from trapdata.db import Base, get_session
-from trapdata.common.logs import logger
-from trapdata.common.utils import export_report
-from trapdata.db import models
 from trapdata.common.filemanagement import find_images, group_images_by_day
+from trapdata.common.logs import logger
+from trapdata.common.schemas import FilePath
+from trapdata.common.utils import export_report
+from trapdata.db import Base, get_session, models
 
 
-# Rename to TrapEvent? CapturePeriod? less confusing with other types of Sessions. CaptureSession? Or SurveyEvent or Survey?
+# @TODO Rename to TrapEvent? CapturePeriod? less confusing with other types of Sessions. CaptureSession? Or SurveyEvent or Survey?
+class Event(BaseModel):
+    id: str
+    frames: list[dict]
+    example_frames: list[dict]
+
+
 class MonitoringSession(Base):
     __tablename__ = "monitoring_sessions"
 
@@ -68,7 +75,7 @@ class MonitoringSession(Base):
             f"\tnum_detected_objects={self.num_detected_objects!r})"
         )
 
-    def update_aggregates(self, session: orm.Session):
+    def update_aggregates(self, session: orm.Session, commit=True):
         # Requires and active session
         logger.info(f"Updating cached values for event {self.day}")
         self.num_images = session.execute(
@@ -91,6 +98,8 @@ class MonitoringSession(Base):
                 models.TrapImage.monitoring_session_id == self.id
             )
         ).scalar_one()
+        if commit:
+            session.commit()
 
     def duration(self) -> Optional[datetime.timedelta]:
         if self.start_time and self.end_time:
@@ -109,16 +118,21 @@ class MonitoringSession(Base):
             duration = "Unknown duration"
         return duration
 
+    @property
+    def deployment(self) -> str:
+        return models.deployments.deployment_name(str(self.base_directory))
+
     def report_data(self) -> dict[str, Any]:
         duration = self.duration()
 
         return {
-            "trap": pathlib.Path(str(self.base_directory)).name,
+            "id": self.id,
+            "deployment": self.deployment,
             "event": self.day.isoformat(),
             "duration_minutes": int(round(duration.seconds / 60, 0)) if duration else 0,
             "duration_label": self.duration_label,
-            "num_images": self.num_images,
-            "num_detected_objects": self.num_detected_objects,
+            "num_source_images": self.num_images,
+            "num_detections": self.num_detected_objects,
             "start_time": self.start_time.isoformat(),
             "end_time": self.end_time.isoformat(),
         }
@@ -230,6 +244,7 @@ def get_monitoring_sessions_from_db(
             .filter_by(
                 **query_kwargs,
             )
+            .order_by(MonitoringSession.start_time)
             .all()
         )
         if update_aggregates:
@@ -277,11 +292,16 @@ def get_or_create_monitoring_sessions(db_path, base_directory):
     return get_monitoring_sessions_from_db(db_path, base_directory)
 
 
-def get_monitoring_session_images(db_path, ms):
+def get_monitoring_session_images(db_path, ms, limit=None, offset=None):
     # @TODO this is likely to slow things down. Some monitoring sessions have thousands of images.
     with get_session(db_path) as sesh:
         images = list(
-            sesh.query(models.TrapImage).filter_by(monitoring_session_id=ms.id).all()
+            sesh.query(models.TrapImage)
+            .filter_by(monitoring_session_id=ms.id)
+            .order_by(models.TrapImage.timestamp)
+            .limit(limit)
+            .offset(offset)
+            .all()
         )
     logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")
     return images
@@ -300,6 +320,21 @@ def get_monitoring_session_image_ids(db_path, ms):
         )
     logger.info(f"Found {len(images)} images in Monitoring Session: {ms}")
     return images
+
+
+def update_all_aggregates(session: orm.Session, image_base_path: FilePath):
+    for event in (
+        session.execute(
+            sa.select(MonitoringSession).where(
+                MonitoringSession.base_directory == str(image_base_path)
+            )
+        )
+        .unique()
+        .scalars()
+        .all()
+    ):
+        event.update_aggregates(session, commit=False)
+    session.commit()
 
 
 def export_monitoring_sessions(

@@ -4,29 +4,31 @@ from typing import Optional
 import kivy
 from kivy.app import App
 from kivy.clock import Clock
-from kivy.uix.label import Label
-from kivy.uix.image import AsyncImage
-from kivy.uix.button import Button
-from kivy.uix.popup import Popup
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.recycleview import RecycleView
 from kivy.lang import Builder
 from kivy.properties import (
-    StringProperty,
-    ObjectProperty,
     BooleanProperty,
     ListProperty,
+    ObjectProperty,
+    StringProperty,
 )
+from kivy.config import ConfigParser
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.image import AsyncImage
+from kivy.uix.label import Label
+from kivy.uix.popup import Popup
+from kivy.uix.recycleview import RecycleView
 from kivy.uix.screenmanager import Screen
 from plyer import filechooser
 
-from trapdata import logger
-from trapdata import db
-from trapdata import TrapImage
-from trapdata.db.models.queue import add_monitoring_session_to_queue
+from trapdata import TrapImage, db, logger
+from trapdata.db.models.detections import (
+    num_occurrences_for_event,
+    num_species_for_event,
+)
 from trapdata.db.models.events import get_or_create_monitoring_sessions
-
+from trapdata.db.models.queue import add_monitoring_session_to_queue
 
 kivy.require("2.1.0")
 
@@ -125,9 +127,17 @@ class MonitoringSessionRow(BoxLayout):
             logger.error(f"No images found for Monitoring Session: {ms}")
             return
 
+        num_occurrences = num_occurrences_for_event(
+            db_path=self.app.db_path, monitoring_session=ms
+        )
+        num_species = num_species_for_event(
+            db_path=self.app.db_path, monitoring_session=ms
+        )
         labels = [
             f"{ms.day.strftime('%a, %b %e')} \n{ms.duration_label} \n{ms.start_time.strftime('%H:%M')} - {ms.end_time.strftime('%H:%M')}",
             f"{ms.num_images or '0'} images\n",
+            f"{num_occurrences} moths\n" if num_occurrences else "\n",
+            f"{num_species} species\n" if num_species else "\n",
         ]
 
         # btn_disabled = True
@@ -141,7 +151,7 @@ class MonitoringSessionRow(BoxLayout):
         )
 
         add_to_queue_btn = AddToQueueButton(
-            text="Add Session to Queue",
+            text="Add to Queue",
             monitoring_session=ms,
             disabled=btn_disabled,
         )
@@ -191,6 +201,7 @@ class MonitoringSessionListView(RecycleView):
 
 
 class DataMenuScreen(Screen):
+    app: ConfigParser = ObjectProperty()
     image_base_path = ObjectProperty(allownone=True)
     sessions = ObjectProperty()
     status_popup = ObjectProperty()
@@ -226,7 +237,8 @@ class DataMenuScreen(Screen):
     def db_ready(self):
         # Try to open a database session.
         # # @TODO add GUI indicator asking to recreate DB if it fails to open?
-        if not db.check_db(self.app.db_path, create=True, update=True, quiet=True):
+
+        if not db.check_db(self.app.db_path, create=True, quiet=True):
             db_dsn = db.base.get_safe_db_path(self.app.db_path)
             Popup(
                 title="Error reading or creating database",
