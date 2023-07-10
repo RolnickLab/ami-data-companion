@@ -75,6 +75,10 @@ def get_device(device_str=None) -> torch.device:
         device = torch.device("cuda")
     elif mps_available():
         device = torch.device("mps")
+        # Allow fallback to CPU if Metal does not support a certain feature (e.g. half-precision)
+        # https://pytorch.org/docs/stable/notes/mps.html#enabling-mps
+        # @TODO this does not stick, need to set env var in shell
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
     else:
         device = torch.device("cpu")
     logger.info(f"Using device '{device}' for inference")
