@@ -6,6 +6,7 @@ import PIL.Image
 import sqlalchemy as sa
 from pydantic import BaseModel
 from sqlalchemy import orm
+from sqlalchemy.ext.hybrid import hybrid_method
 
 from trapdata import constants, db
 from trapdata.common.filemanagement import absolute_path, construct_exif, save_image
@@ -154,10 +155,12 @@ class DetectedObject(db.Base):
         return fpath
 
     def width(self):
-        pass  # Use bbox
+        # x2 - x1 from bbox
+        return self.bbox[2] - self.bbox[0]
 
     def height(self):
-        pass  # Use bbox
+        # y2 - y1 from bbox
+        return self.bbox[3] - self.bbox[1]
 
     def previous_frame_detections(
         self, session: orm.Session
@@ -257,8 +260,12 @@ class DetectedObject(db.Base):
             session.flush()
             session.commit()
 
+    @hybrid_method
+    def labelstudio_data(self) -> dict[str, Any]:
+        raise NotImplementedError
+
     def report_data(self) -> DetectionDetail:
-        if self.specific_label:
+        if self.specific_label_score:
             label = self.specific_label
             score = self.specific_label_score
         else:

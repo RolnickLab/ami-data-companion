@@ -1,6 +1,7 @@
 import csv
 import datetime
 import enum
+import json
 import pathlib
 import shutil
 import time
@@ -16,6 +17,7 @@ from trapdata.db import get_session_class
 from trapdata.db.models.deployments import list_deployments
 from trapdata.db.models.detections import (
     get_detected_objects,
+    get_unique_detections_for_image,
     num_occurrences_for_event,
     num_species_for_event,
 )
@@ -33,6 +35,7 @@ class ExportFormat(str, enum.Enum):
     json = "json"
     html = "html"
     csv = "csv"
+    labelstudio = "labelstudio"
 
 
 def export(
@@ -148,6 +151,7 @@ def detections(
         offset=offset,
         image_base_path=settings.image_base_path,
     )
+
     logger.info(f"Preparing to export {len(objects)} records as {format}")
     df = pd.DataFrame([obj.report_data().dict() for obj in objects])
     return export(df=df, format=format, outfile=outfile)
@@ -191,6 +195,7 @@ def captures(
     date: datetime.datetime,
     format: ExportFormat = ExportFormat.json,
     outfile: Optional[pathlib.Path] = None,
+    labelstudio: bool = False,
 ) -> Optional[str]:
     """
     List of source images for a given monitoring session.
@@ -210,6 +215,67 @@ def captures(
     event = events[0]
     captures = get_monitoring_session_images(settings.database_url, event, limit=100)
     [session.add(img) for img in captures]
+
+    if labelstudio:
+        # url_base = settings.labelstudio_url_base
+        # url_base = "https://static.meridian.cs.dal.ca/labelstudio/"
+        url_base = "https://static.dev.insectai.org/ami-trapdata/vermont/Vermont-Snapshots-Sample/"
+        all_data = []
+
+        for img in captures:
+            data = {"data": {}, "predictions": []}
+            data["data"]["image"] = url_base + img.path
+            data["data"]["id"] = img.id
+            data["data"]["deployment"] = img.monitoring_session.deployment
+            data["data"]["timestamp"] = str(img.timestamp.isoformat())
+            data["data"]["event"] = str(img.monitoring_session.day.isoformat())
+            detections = get_unique_detections_for_image(settings.database_url, img.id)
+            if len(detections):
+                # @TODO group by model name
+                predictions = [
+                    {
+                        "model_version": detections[0].model_name,
+                        "score": detections[0].binary_label_score,
+                        "result": [
+                            {
+                                "id": detection.id,
+                                "type": "rectanglelabels",
+                                "from_name": "label",
+                                "to_name": "image",
+                                "original_width": detection.image.width,
+                                "original_height": detection.image.height,
+                                "image_rotation": 0,
+                                "score": detection.specific_label_score,
+                                "value": {
+                                    "rotation": 0,
+                                    "x": (detection.bbox[0] / detection.image.width)
+                                    * 100,
+                                    "y": (detection.bbox[1] / detection.image.height)
+                                    * 100,
+                                    "width": (
+                                        (detection.bbox[2] - detection.bbox[0])
+                                        / detection.image.width
+                                    )
+                                    * 100,
+                                    "height": (
+                                        (detection.bbox[3] - detection.bbox[1])
+                                        / detection.image.height
+                                    )
+                                    * 100,
+                                    "rectanglelabels": [detection.binary_label],
+                                },
+                            }
+                            for detection in detections
+                        ],
+                    }
+                ]
+                data["predictions"] = predictions
+            all_data.append(data)
+        outfile_path = outfile or f"labelstudio_{event.id}.json"
+        print(json.dumps(all_data, indent=2))
+        json.dump(all_data, open(outfile_path, "w"), indent=2)
+        print(f"Exported Label Studio data to {outfile_path}")
+        return str(outfile_path)
 
     df = pd.DataFrame([img.report_detail().dict() for img in captures])
     return export(df=df, format=format, outfile=outfile)
