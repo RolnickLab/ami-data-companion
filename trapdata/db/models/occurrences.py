@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from trapdata import db
 from trapdata.common.filemanagement import media_url
-from trapdata.common.types import FilePath
+from trapdata.common.schemas import FilePath
 from trapdata.db import models
 
 
@@ -225,7 +225,7 @@ def get_unique_species_by_track(
                 models.DetectedObject.image_id.label("source_image_id"),
                 models.TrapImage.path.label("source_image_path"),
                 models.TrapImage.width.label("source_image_width"),
-                models.TrapImage.height.label("source_image_height"),
+                models.TrapImage.height.label("source_imge_height"),
                 models.TrapImage.filesize.label("source_image_filesize"),
                 models.DetectedObject.specific_label.label("label"),
                 models.DetectedObject.specific_label_score.label("score"),
