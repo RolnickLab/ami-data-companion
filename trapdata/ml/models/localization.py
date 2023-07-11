@@ -150,7 +150,50 @@ class ObjectDetector(InferenceBaseClass):
         )
 
 
-class MothObjectDetector_FasterRCNN(ObjectDetector):
+class MothObjectDetector_FasterRCNN_2021(ObjectDetector):
+    name = "FasterRCNN for AMI Moth Traps 2021"
+    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/localization/v1_localizmodel_2021-08-17-12-06.pt"
+    description = (
+        "Model trained on moth trap data in 2021. "
+        "Accurate but can be slow on a machine without GPU."
+    )
+    bbox_score_threshold = 0.99
+
+    def get_model(self):
+        model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=None)
+        num_classes = 2  # 1 class (object) + background
+        in_features = model.roi_heads.box_predictor.cls_score.in_features
+        model.roi_heads.box_predictor = (
+            torchvision.models.detection.faster_rcnn.FastRCNNPredictor(
+                in_features, num_classes
+            )
+        )
+        logger.debug(f"Loading weights: {self.weights}")
+        checkpoint = torch.load(self.weights, map_location=self.device)
+        state_dict = checkpoint.get("model_state_dict") or checkpoint
+        model.load_state_dict(state_dict)
+        model = model.to(self.device)
+        model.eval()
+        self.model = model
+        return self.model
+
+    def post_process_single(self, output):
+        # This model does not use the labels from the object detection model
+        _ = output["labels"]
+        assert all([label == 1 for label in output["labels"]])
+
+        # Filter out objects if their score is under score threshold
+        bboxes = output["boxes"][output["scores"] > self.bbox_score_threshold]
+
+        logger.debug(
+            f"Keeping {len(bboxes)} out of {len(output['boxes'])} objects found (threshold: {self.bbox_score_threshold})"
+        )
+
+        bboxes = bboxes.cpu().numpy().astype(int).tolist()
+        return bboxes
+
+
+class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
     name = "FasterRCNN for AMI Moth Traps 2023"
     weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/localization/fasterrcnn_resnet50_fpn_tz53qv9v.pt"
     description = (
