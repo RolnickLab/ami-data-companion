@@ -159,11 +159,15 @@ def get_unique_species_by_track(
                 models.DetectedObject.id,
                 models.DetectedObject.image_id.label("source_image_id"),
                 models.TrapImage.path.label("source_image_path"),
+                models.TrapImage.width.label("source_image_width"),
+                models.TrapImage.height.label("source_image_height"),
+                models.TrapImage.filesize.label("source_image_filesize"),
                 models.DetectedObject.specific_label.label("label"),
                 models.DetectedObject.specific_label_score.label("score"),
                 models.DetectedObject.path.label("cropped_image_path"),
                 models.DetectedObject.sequence_id,
                 models.DetectedObject.timestamp,
+                models.DetectedObject.bbox,
             )
             .where(
                 (models.DetectedObject.monitoring_session_id == monitoring_session.id)
