@@ -1,3 +1,5 @@
+from typing import Any
+
 import sqlalchemy as sa
 from sqlalchemy import orm
 
@@ -16,4 +18,4 @@ __all__ = [
 
 
 class Base(orm.DeclarativeBase):
-    pass
+    id: Any

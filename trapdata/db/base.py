@@ -13,12 +13,14 @@ from sqlalchemy import orm
 from trapdata import logger
 from trapdata.common.schemas import DatabaseURL
 
+DATABASE_SCHEMA_NAMESPACE = "trapdata"
+
 DIALECT_CONNECTION_ARGS = {
     "sqlite": {
         "timeout": 10,  # A longer timeout is necessary for SQLite and multiple PyTorch workers
         "check_same_thread": False,
     },
-    "postgresql": {},
+    "postgresql": {"options": f"-csearch_path={DATABASE_SCHEMA_NAMESPACE}"},
 }
 
 SUPPORTED_DIALECTS = list(DIALECT_CONNECTION_ARGS.keys())
@@ -72,6 +74,11 @@ def create_db(db_path: DatabaseURL) -> None:
 
     from . import Base
 
+    if db.dialect.name != "sqlite":
+        with db.connect() as con:
+            if not db.dialect.has_schema(con, DATABASE_SCHEMA_NAMESPACE):
+                con.execute(sqlalchemy.schema.CreateSchema(DATABASE_SCHEMA_NAMESPACE))
+    Base.metadata.schema = DATABASE_SCHEMA_NAMESPACE
     Base.metadata.create_all(db, checkfirst=True)
     alembic_cfg = get_alembic_config(db_path)
     alembic.stamp(alembic_cfg, "head")
@@ -232,3 +239,19 @@ def get_or_create(session, model, defaults=None, **kwargs):
             return instance, False
         else:
             return instance, True
+
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+
+def get_async_session_class(db_path: str) -> async_sessionmaker[AsyncSession]:
+    async_engine = create_async_engine(db_path, pool_pre_ping=True)
+
+    async_session_maker = async_sessionmaker(
+        async_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+    return async_session_maker

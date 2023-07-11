@@ -15,14 +15,9 @@ from trapdata.common.filemanagement import find_images
 from trapdata.db import models
 from trapdata.db.base import get_session_class
 from trapdata.db.models.deployments import list_deployments
-from trapdata.db.models.detections import (
-    get_detected_objects,
-    num_occurrences_for_event,
-    num_species_for_event,
-)
+from trapdata.db.models.detections import get_detected_objects
 from trapdata.db.models.events import (
     get_monitoring_session_by_date,
-    get_monitoring_sessions_from_db,
     update_all_aggregates,
 )
 from trapdata.db.models.occurrences import list_occurrences, list_species
@@ -79,6 +74,8 @@ def deployments():
     update_all_aggregates(session, settings.image_base_path)
     deployments = list_deployments(session)
     table = Table(
+        "ID",
+        "Name",
         "Image Base Path",
         "Sessions",
         "Images",
@@ -134,39 +131,26 @@ def sessions():
     """
     Show all monitoring events that have been interpreted from image timestamps.
     """
+    from trapdata.db.models.events import list_monitoring_sessions
+
     Session = get_session_class(settings.database_url)
     session = Session()
     # image_base_path = str(settings.image_base_path.resolve())
 
-    update_all_aggregates(session, settings.image_base_path)
-    logger.info(f"Show monitoring events for images in {settings.image_base_path}")
-    events = (
-        session.execute(
-            select(models.MonitoringSession).where(
-                models.MonitoringSession.base_directory == str(settings.image_base_path)
-            )
-        )
-        .unique()
-        .scalars()
-        .all()
-    )
+    events = list_monitoring_sessions(session, settings.image_base_path)
 
-    table = Table("ID", "Day", "Images", "Detections", "Occurrences", "Species")
+    table = Table(
+        "ID", "Day", "Duration", "Captures", "Detections", "Occurrences", "Species"
+    )
     for event in events:
-        event.update_aggregates(session)
-        num_occurrences = num_occurrences_for_event(
-            db_path=settings.database_url, monitoring_session=event
-        )
-        num_species = num_species_for_event(
-            db_path=settings.database_url, monitoring_session=event
-        )
         row_values = [
             event.id,
             event.day,
-            event.num_images,
-            event.num_detected_objects,
-            num_occurrences,
-            num_species,
+            event.duration_label,
+            event.num_captures,
+            event.num_detections,
+            event.num_occurrences,
+            event.num_species,
         ]
         table.add_row(*[str(val) for val in row_values])
     console.print(table)
@@ -216,26 +200,37 @@ def detections(
 
 
 @cli.command()
-def occurrences(limit: Optional[int] = 100, offset: int = 0):
-    events = get_monitoring_sessions_from_db(
-        db_path=settings.database_url, base_directory=settings.image_base_path
-    )
-    occurrences: list[models.occurrences.Occurrence] = []
-    for event in events:
-        occurrences += list_occurrences(
-            settings.database_url,
-            event,
-            classification_threshold=settings.classification_threshold,
-            limit=limit,
-            offset=offset,
+def occurrences(
+    session_day: Optional[datetime.datetime] = None,
+    limit: Optional[int] = 100,
+    offset: int = 0,
+):
+    event = None
+    if session_day:
+        events = get_monitoring_session_by_date(
+            db_path=settings.database_url, event_dates=[session_day]
         )
+        if not events:
+            logger.info(f"No events found for {session_day}")
+            return []
+        else:
+            event = events[0]
+
+    occurrences = list_occurrences(
+        settings.database_url,
+        settings.image_base_path,
+        event,
+        classification_threshold=settings.classification_threshold,
+        limit=limit,
+        offset=offset,
+    )
 
     table = Table(
         "Session", "ID", "Label", "Detections", "Score", "Appearance", "Duration"
     )
     for occurrence in occurrences:
         table.add_row(
-            occurrence.event,
+            str(occurrence.event.day),
             occurrence.id,
             occurrence.label,
             str(occurrence.num_frames),

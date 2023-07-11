@@ -6,6 +6,7 @@ from typing import Optional, Union
 
 import sqlalchemy
 from pydantic import BaseSettings, Field, ValidationError, validator
+from pydantic.main import ModelMetaclass
 from rich import print as rprint
 
 from trapdata import ml
@@ -13,10 +14,7 @@ from trapdata.common.filemanagement import default_database_dsn, get_app_dir
 from trapdata.common.schemas import FilePath
 
 
-class Settings(BaseSettings):
-    # Can't use PyDantic DSN validator for database_url if sqlite filepath has spaces, see custom validator below
-    database_url: Union[str, sqlalchemy.engine.URL] = default_database_dsn()
-    user_data_path: pathlib.Path = get_app_dir()
+class UserSettings(BaseSettings):
     image_base_path: Optional[pathlib.Path]
     localization_model: ml.models.ObjectDetectorChoice = Field(
         default=ml.models.DEFAULT_OBJECT_DETECTOR
@@ -31,6 +29,15 @@ class Settings(BaseSettings):
         default=ml.models.DEFAULT_FEATURE_EXTRACTOR
     )
     classification_threshold: float = 0.6
+
+    class Config:
+        extra = "ignore"
+
+
+class Settings(UserSettings):
+    # Can't use PyDantic DSN validator for database_url if sqlite filepath has spaces, see custom validator below
+    database_url: Union[str, sqlalchemy.engine.URL] = default_database_dsn()
+    user_data_path: pathlib.Path = get_app_dir()
     localization_batch_size: int = 2
     classification_batch_size: int = 20
     num_workers: int = 1
@@ -199,7 +206,7 @@ cli_help_message = f"""
 
 
 @lru_cache
-def read_settings(*args, **kwargs):
+def read_settings(*args, **kwargs) -> Settings:
     try:
         return Settings(*args, **kwargs)
     except ValidationError as e:

@@ -6,9 +6,15 @@ import PIL.Image
 import sqlalchemy as sa
 from pydantic import BaseModel
 from sqlalchemy import orm
+from sqlalchemy.ext.hybrid import hybrid_property
 
 from trapdata import constants, db
-from trapdata.common.filemanagement import absolute_path, construct_exif, save_image
+from trapdata.common.filemanagement import (
+    absolute_path,
+    construct_exif,
+    media_url,
+    save_image,
+)
 from trapdata.common.logs import logger
 from trapdata.common.schemas import FilePath
 from trapdata.common.utils import bbox_area, bbox_center, export_report
@@ -17,16 +23,18 @@ from trapdata.db.models.images import completely_classified
 
 
 class DetectionListItem(BaseModel):
-    id: int
-    cropped_image_path: Optional[pathlib.Path]
-    bbox: Optional[tuple[float, float, float, float]]
-    area_pixels: Optional[float]
-    last_detected: Optional[datetime.datetime]
-    label: Optional[str]
-    score: Optional[int]
-    model_name: Optional[str]
-    in_queue: bool
-    notes: Optional[str]
+    id: Optional[int] = None
+    cropped_image_path: Optional[FilePath] = None
+    bbox: Optional[tuple[float, float, float, float]] = None
+    area_pixels: Optional[float] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    last_detected: Optional[datetime.datetime] = None
+    label: Optional[str] = None
+    score: Optional[int] = None
+    model_name: Optional[str] = None
+    in_queue: bool = False
+    notes: Optional[str] = ""
 
 
 class DetectionDetail(DetectionListItem):
@@ -153,11 +161,15 @@ class DetectedObject(db.Base):
         self.path = str(fpath)
         return fpath
 
-    def width(self):
-        pass  # Use bbox
+    @hybrid_property
+    def width(self) -> int:
+        x1, y1, x2, y2 = self.bbox
+        return x2 - x1
 
-    def height(self):
-        pass  # Use bbox
+    @hybrid_property
+    def height(self) -> int:
+        x1, y1, x2, y2 = self.bbox
+        return y2 - y1
 
     def previous_frame_detections(
         self, session: orm.Session
@@ -530,6 +542,146 @@ def num_occurrences_for_event(
 
     with db.get_session(db_path) as sesh:
         return sesh.execute(query).scalar_one()
+
+
+class TaxonOccurrenceListItem(BaseModel):
+    id: str
+    cropped_image_path: Optional[FilePath] = None
+
+
+class TaxonListItem(BaseModel):
+    name: str
+    genus: Optional[str] = None
+    family: Optional[str] = None
+    num_occurrences: Optional[int] = None
+    num_detections: Optional[int] = None
+    examples: list[TaxonOccurrenceListItem] = list()
+    score_stats: Optional[dict[str, float]] = None
+    training_examples: Optional[int] = None
+
+
+def list_species(
+    session: orm.Session,
+    image_base_path: FilePath,
+    classification_threshold: int = 0,
+    num_examples: int = 10,
+    media_url_base: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: int = 0,
+) -> list[TaxonListItem]:
+    """
+    Return a list of unique species and example detections.
+
+    @TODO compare this with list_species in occurrences.py
+    @TODO prefetch related and speed this up
+    """
+    species = session.execute(
+        sa.select(
+            DetectedObject.specific_label.label("name"),
+            sa.func.min(DetectedObject.sequence_id).label("sequence_id"),
+            sa.func.count(DetectedObject.id).label("num_detections"),
+            sa.func.count(DetectedObject.sequence_id.distinct()).label(
+                "num_occurrences"
+            ),  # @TODO handle sequences with None
+            sa.func.max(DetectedObject.specific_label_score).label("score_max"),
+            sa.func.min(DetectedObject.specific_label_score).label("score_min"),
+            sa.func.avg(DetectedObject.specific_label_score).label("score_mean"),
+        )
+        .where(
+            (models.TrapImage.base_path == str(image_base_path))
+            & (models.DetectedObject.specific_label_score >= classification_threshold)
+        )
+        .join(models.TrapImage, models.DetectedObject.image_id == models.TrapImage.id)
+        .group_by(DetectedObject.specific_label)
+        .limit(limit)
+        .offset(offset)
+    ).all()
+
+    # examples = (
+    #     session.execute(
+    #         sa.select(DetectedObject)
+    #         .where(DetectedObject.specific_label.in_(sp.name for sp in species])) # @TODO not working!
+    #         .where(models.TrapImage.base_path == str(image_base_path))
+    #         .where(DetectedObject.specific_label_score >= classification_threshold)
+    #         .join(
+    #             models.TrapImage, models.DetectedObject.image_id == models.TrapImage.id
+    #         )
+    #         .limit(num_examples)
+    #         .order_by(DetectedObject.specific_label_score.desc())
+    #     )
+    #     .unique()
+    #     .scalars()
+    #     .all()
+    # )
+
+    metadata_by_name = {}
+    examples_by_name = {}
+    for sp in species:
+        metadata_by_name[sp.name] = sp
+        # matching_examples = [ex for ex in examples if ex.specific_label == sp.name]
+        matching_example_ids = session.execute(
+            sa.select(
+                DetectedObject.sequence_id, sa.func.min(DetectedObject.id).label("id")
+            )
+            .where(DetectedObject.specific_label == sp.name)
+            .where(models.TrapImage.base_path == str(image_base_path))
+            .where(DetectedObject.specific_label_score >= classification_threshold)
+            .group_by(DetectedObject.sequence_id)
+            .join(
+                models.TrapImage,
+                models.DetectedObject.image_id == models.TrapImage.id,
+            )
+        ).all()
+        matching_example_ids = [row.id for row in matching_example_ids]
+        # .group_by(DetectedObject.sequence_id, DetectedObject.path, DetectedObject.specific_label_score, models.TrapImage.base_path)
+        matching_examples = session.execute(
+            sa.select(DetectedObject.sequence_id, DetectedObject.path)
+            .where(DetectedObject.id.in_(matching_example_ids))
+            .limit(num_examples)
+        ).all()
+        examples_by_name[sp.name] = matching_examples
+        print(sp.name, len(matching_examples))
+
+    taxa = [
+        TaxonListItem(
+            name=name,
+            num_occurrences=metadata_by_name[name].num_occurrences,
+            num_detections=metadata_by_name[name].num_detections,
+            score_stats={
+                "max": metadata_by_name[name].score_max,
+                "min": metadata_by_name[name].score_min,
+                "mean": metadata_by_name[name].score_mean,
+            },
+            examples=[
+                TaxonOccurrenceListItem(
+                    id=detection.sequence_id,
+                    cropped_image_path=media_url(
+                        detection.path,
+                        "crops",
+                        media_url_base=media_url_base,
+                    ),
+                )
+                for detection in examples
+            ],
+        )
+        for name, examples in examples_by_name.items()
+    ]
+    return taxa
+
+
+def num_species_for_deployment(session: orm.Session, image_base_path: FilePath) -> int:
+    return (
+        session.execute(
+            sa.select(sa.func.count(models.DetectedObject.specific_label.distinct()))
+            .join(
+                models.MonitoringSession,
+                models.MonitoringSession.id
+                == models.DetectedObject.monitoring_session_id,
+            )
+            .where(models.MonitoringSession.base_directory == str(image_base_path))
+        ).scalar()
+        or 0
+    )
 
 
 def get_unique_species(

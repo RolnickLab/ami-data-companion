@@ -5,20 +5,51 @@ from typing import Any, Iterable, Optional, Union
 import sqlalchemy as sa
 from pydantic import BaseModel
 from sqlalchemy import orm
+from sqlalchemy.ext.hybrid import hybrid_method
 from sqlalchemy_utils import aggregated
 
-from trapdata.common.filemanagement import find_images, group_images_by_day
+from trapdata.common.filemanagement import find_images, group_images_by_day, media_url
 from trapdata.common.logs import logger
 from trapdata.common.schemas import FilePath
 from trapdata.common.utils import export_report
 from trapdata.db import Base, get_session, models
-
+from trapdata.db.models.deployments import deployment_name
 
 # @TODO Rename to TrapEvent? CapturePeriod? less confusing with other types of Sessions. CaptureSession? Or SurveyEvent or Survey?
-class Event(BaseModel):
+
+
+class MonitoringSessionNestedCapture(BaseModel):
     id: str
-    frames: list[dict]
-    example_frames: list[dict]
+    path: pathlib.Path
+    timestamp: datetime.datetime
+    # example["source_image_path"] = media_url(
+    #    example["source_image_path"], "captures/", media_url_base
+    # )
+
+
+class MonitoringSessionListItem(BaseModel):
+    id: str
+    day: datetime.date
+    # image_base_path: str
+    deployment: str
+    num_captures: int
+    num_detections: int
+    num_occurrences: int
+    num_species: int
+    example_captures: list[MonitoringSessionNestedCapture]
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+    duration: datetime.timedelta
+    duration_label: str
+
+
+class MonitoringSessionDetail(MonitoringSessionListItem):
+    notes: Optional[str]
+    captures: list[
+        MonitoringSessionNestedCapture
+    ]  # Too many! @TODO include summary data to generate the timeline instead
+    # @TODO add more info about the session, like the number of images, the number of detected objects, etc
+    # @TODO add the number of species detected in this session
 
 
 class MonitoringSession(Base):
@@ -40,6 +71,26 @@ class MonitoringSession(Base):
     @aggregated("detected_objects", sa.Column(sa.Integer))
     def num_detected_objects(self):
         return sa.func.count("1")
+
+    def num_occurrences(self, session: orm.Session) -> int:
+        return (
+            session.execute(
+                sa.select(
+                    sa.func.count(models.DetectedObject.sequence_id.distinct())
+                ).where(models.DetectedObject.monitoring_session_id == self.id)
+            ).scalar()
+            or 0
+        )
+
+    def num_species(self, session: orm.Session) -> int:
+        return (
+            session.execute(
+                sa.select(
+                    sa.func.count(models.DetectedObject.specific_label.distinct())
+                ).where(models.DetectedObject.monitoring_session_id == self.id)
+            ).scalar()
+            or 0
+        )
 
     # This runs an expensive/slow query every time an image is updated
     # @observes("images")
@@ -101,11 +152,12 @@ class MonitoringSession(Base):
         if commit:
             session.commit()
 
-    def duration(self) -> Optional[datetime.timedelta]:
+    @hybrid_method
+    def duration(self) -> datetime.timedelta:
         if self.start_time and self.end_time:
             return self.end_time - self.start_time
         else:
-            return None
+            return datetime.timedelta(0)
 
     @property
     def duration_label(self):
@@ -344,3 +396,139 @@ def export_monitoring_sessions(
 ):
     records = [item.report_data() for item in items]
     return export_report(records, report_name, directory)
+
+
+def event_response(
+    session: orm.Session,
+    event: MonitoringSession,
+) -> MonitoringSessionListItem:
+    """
+    Reusable method to create a MonitoringSession Schema from a MonitoringSession model.
+
+    @TODO decide if this is helpful or not to reuse in get_monitoring_sessions and get_monitoring_session_by_id
+    """
+
+    event.update_aggregates(session)
+    event_response = MonitoringSessionListItem(
+        id=event.id,
+        day=event.day,
+        deployment=deployment_name(str(event.base_directory)),
+        start_time=event.start_time,
+        end_time=event.end_time,
+        num_captures=event.num_images,
+        num_detections=event.num_detected_objects,
+        num_occurrences=event.num_occurrences(session),
+        num_species=event.num_species(session),
+        example_captures=[],
+        duration=event.duration(),
+        duration_label=event.duration_label,
+    )
+
+    return event_response
+
+
+def get_monitoring_session_by_id(
+    session: orm.Session,
+    event_id: int,
+    media_url_base: str,
+) -> Optional[MonitoringSessionDetail]:
+    event: Optional[MonitoringSession] = session.get(MonitoringSession, event_id)
+    if event:
+        event.update_aggregates(session)
+        captures = session.execute(
+            sa.select(
+                models.TrapImage.id, models.TrapImage.path, models.TrapImage.timestamp
+            )
+            .where(models.TrapImage.monitoring_session_id == event.id)
+            .order_by(models.TrapImage.timestamp)
+        ).all()
+        nested_captures = [
+            MonitoringSessionNestedCapture(
+                id=row.id,
+                path=media_url(row.path, "captures/", media_url_base),
+                timestamp=row.timestamp,
+            )
+            for row in captures
+        ]
+        event_detail = MonitoringSessionDetail(
+            id=event.id,
+            day=event.day,
+            deployment=deployment_name(str(event.base_directory)),
+            start_time=event.start_time,
+            end_time=event.end_time,
+            num_captures=event.num_images,
+            num_detections=event.num_detected_objects,
+            num_occurrences=event.num_occurrences(session),
+            num_species=event.num_species(session),
+            example_captures=[],
+            duration=event.duration(),
+            duration_label=event.duration_label,
+            notes=event.notes,
+            captures=[],
+        )
+        return event_detail
+    else:
+        return None
+
+
+def list_monitoring_sessions(
+    session: orm.Session,
+    image_base_path: FilePath,
+    limit: Optional[int] = None,
+    offset: int = 0,
+    num_examples: int = 5,
+    media_url_base: Optional[str] = None,
+) -> list[MonitoringSessionListItem]:
+    """ """
+
+    update_all_aggregates(session, image_base_path)
+    logger.info(f"Fetching monitoring events for images in {image_base_path}")
+    events = (
+        session.execute(
+            sa.select(models.MonitoringSession)
+            .where(models.MonitoringSession.base_directory == str(image_base_path))
+            .order_by(models.MonitoringSession.day)
+            .limit(limit)
+            .offset(offset)
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+
+    list_items = []
+    for event in events:
+        event.update_aggregates(session)
+        rows = session.execute(
+            sa.select(
+                models.TrapImage.id, models.TrapImage.path, models.TrapImage.timestamp
+            )
+            .where(models.TrapImage.monitoring_session_id == event.id)
+            .order_by(models.TrapImage.filesize.desc())
+            .limit(num_examples)
+        ).all()
+        example_captures = [
+            MonitoringSessionNestedCapture(
+                id=row.id,
+                path=media_url(row.path, "captures/", media_url_base),
+                timestamp=row.timestamp,
+            )
+            for row in rows
+        ]
+        list_items.append(
+            MonitoringSessionListItem(
+                id=event.id,
+                day=event.day,
+                deployment=deployment_name(str(event.base_directory)),
+                start_time=event.start_time,
+                end_time=event.end_time,
+                num_captures=event.num_images,
+                num_detections=event.num_detected_objects,
+                num_occurrences=event.num_occurrences(session),
+                num_species=event.num_species(session),
+                example_captures=example_captures,
+                duration=event.duration(),
+                duration_label=event.duration_label,
+            )
+        )
+    return list_items

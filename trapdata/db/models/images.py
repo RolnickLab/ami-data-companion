@@ -19,15 +19,13 @@ from trapdata.db import Base, get_session
 class CaptureListItem(BaseModel):
     id: int
     timestamp: datetime.datetime
-    source_image: str
-    last_read: Optional[datetime.datetime]
-    last_processed: Optional[datetime.datetime]
+    path: pathlib.Path
     num_detections: Optional[int]
     in_queue: bool
+    url: Optional[str] = None
 
 
 class CaptureDetail(CaptureListItem):
-    id: int
     event: object
     url: Optional[str] = None
     event: object
@@ -37,6 +35,10 @@ class CaptureDetail(CaptureListItem):
     filesize: int
     width: int
     height: int
+    last_read: Optional[datetime.datetime]
+    last_processed: Optional[datetime.datetime]
+    next_capture: Optional[CaptureListItem]
+    prev_capture: Optional[CaptureListItem]
 
 
 class TrapImage(Base):
