@@ -72,6 +72,30 @@ def get_resource():
     return s3
 
 
+def download_file(key: str, filename: str):
+    s3 = get_resource()
+    resp = s3.meta.client.download_file(DEFAULT_BUCKET, key, filename)
+    return resp
+
+
+def read_file(key: str):
+    s3 = get_resource()
+    obj = s3.Object(DEFAULT_BUCKET, key)
+    return obj.get()["Body"].read().decode("utf-8")
+
+
+def upload_file(key: str, filename: str):
+    s3 = get_resource()
+    resp = s3.meta.client.upload_file(filename, DEFAULT_BUCKET, key)
+    return resp
+
+
+def put_file(key: str, data: str):
+    s3 = get_resource()
+    resp = s3.Object(DEFAULT_BUCKET, key).put(Body=data)
+    return resp
+
+
 def list_buckets():
     s3 = get_client()
     return s3.list_buckets().get("Buckets", [])
