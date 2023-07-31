@@ -243,7 +243,7 @@ class MothObjectDetector_FasterRCNN_MobileNet(ObjectDetector):
     )
     bbox_score_threshold = 0.50
     trainable_backbone_layers = 6  # all layers are trained
-    anchor_sizes = (32, 64, 128, 256, 512)
+    anchor_sizes = (64, 128, 256, 512)
     num_classes = 2
 
     def get_model(self):
