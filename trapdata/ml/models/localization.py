@@ -234,12 +234,12 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
         return bboxes
 
 
-class MothObjectDetector_FasterRCNN_MobileNet(ObjectDetector):
+class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
     name = "FasterRCNN - MobileNet for AMI Moth Traps 2023"
     weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/localization/fasterrcnn_mobilenet_v3_large_fpn_uqfh7u9w.pt"
     description = (
         "Model trained on GBIF images and synthetic data in 2023. "
-        "Accurate but can be slow on a machine without GPU."
+        "Slightly less accurate but much faster than other models."
     )
     bbox_score_threshold = 0.50
     trainable_backbone_layers = 6  # all layers are trained
@@ -279,43 +279,6 @@ class MothObjectDetector_FasterRCNN_MobileNet(ObjectDetector):
 
         # Filter out objects if their score is under score threshold
         bboxes = output["boxes"][output["scores"] > self.bbox_score_threshold]
-
-        logger.debug(
-            f"Keeping {len(bboxes)} out of {len(output['boxes'])} objects found (threshold: {self.bbox_score_threshold})"
-        )
-
-        bboxes = bboxes.cpu().numpy().astype(int).tolist()
-        return bboxes
-
-
-class GenericObjectDetector_FasterRCNN_MobileNet(ObjectDetector):
-    name = "Pre-trained FasterRCNN with MobileNet backend"
-    description = (
-        "Faster version of FasterRCNN but not trained on moth trap data. "
-        "Produces multiple overlapping bounding boxes. But helpful for testing on CPU machines."
-    )
-    bbox_score_threshold = 0.01
-
-    def get_model(self):
-        model = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn(
-            weights="DEFAULT"
-        )
-        # @TODO can I use load_state_dict here with weights="DEFAULT"?
-        model = model.to(self.device)
-        model.eval()
-        return model
-
-    def post_process_single(self, output):
-        # This model does not use the labels from the object detection model
-        _ = output["labels"]
-
-        # Filter out objects if their score is under score threshold
-        bboxes = output["boxes"][
-            (output["scores"] > self.bbox_score_threshold) & (output["labels"] > 1)
-        ]
-
-        # Filter out background label, if using pretrained model only!
-        bboxes = output["boxes"][output["labels"] > 1]
 
         logger.debug(
             f"Keeping {len(bboxes)} out of {len(output['boxes'])} objects found (threshold: {self.bbox_score_threshold})"
