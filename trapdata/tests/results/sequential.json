@@ -6,113 +6,213 @@
       "frame": 0,
       "image": 1,
       "id": 1,
-      "path": "/tmp/trapdata/crops/ba4ea915d4bd7753f7e1e151836af833.jpg",
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/1e1a6bc537bdbaf5c4491936614ca1b9.jpg",
       "binary_label": "moth",
-      "specific_label": "Alcis porcelaria",
-      "specific_label_score": 0.8238721489906311,
+      "specific_label": "Herminia jacchusalis",
+      "specific_label_score": 0.3590092957019806,
+      "cost": null
+    }
+  ],
+  "20220728-SEQ-10": [
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-10",
+      "frame": 0,
+      "image": 1,
+      "id": 10,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/9c3c030cbdad6426503329007c220d01.jpg",
+      "binary_label": "moth",
+      "specific_label": "Cenopis pettitana",
+      "specific_label_score": 0.48101720213890076,
       "cost": null
     },
     {
       "event": "2022-07-28",
-      "sequence": "20220728-SEQ-1",
+      "sequence": "20220728-SEQ-10",
       "frame": 1,
       "image": 2,
-      "id": 9,
-      "path": "/tmp/trapdata/crops/21220063a87be0ffde363fe6816a56b0.jpg",
+      "id": 23,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/06e3e85bd3121bb32d353d504720c7e0.jpg",
       "binary_label": "moth",
-      "specific_label": "Alcis porcelaria",
-      "specific_label_score": 0.8177103996276855,
-      "cost": 0.08915674654883132
+      "specific_label": "Lomographa vestaliata",
+      "specific_label_score": 0.1082422137260437,
+      "cost": 0.33694157610858744
     },
     {
       "event": "2022-07-28",
-      "sequence": "20220728-SEQ-1",
+      "sequence": "20220728-SEQ-10",
       "frame": 2,
       "image": 3,
-      "id": 17,
-      "path": "/tmp/trapdata/crops/c1997e7410823d7275cd161f40ac2ae5.jpg",
+      "id": 36,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/5a04ecbab826991f438e7ca4847f2d79.jpg",
       "binary_label": "moth",
-      "specific_label": "Alcis porcelaria",
-      "specific_label_score": 0.815759003162384,
-      "cost": 0.10438674769216293
+      "specific_label": "Paleacrita vernata",
+      "specific_label_score": 0.11166275292634964,
+      "cost": 0.3060874110661605
     },
     {
       "event": "2022-07-28",
-      "sequence": "20220728-SEQ-1",
+      "sequence": "20220728-SEQ-10",
       "frame": 3,
       "image": 4,
-      "id": 25,
-      "path": "/tmp/trapdata/crops/f2323c67fa302e3c961a0cbfa7b1c46b.jpg",
+      "id": 48,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/6fb9055b640ed29efeca88fe6dba9026.jpg",
       "binary_label": "moth",
-      "specific_label": "Alcis porcelaria",
-      "specific_label_score": 0.874474287033081,
-      "cost": 0.061645746559505464
+      "specific_label": "Cenopis pettitana",
+      "specific_label_score": 0.3255586326122284,
+      "cost": 0.1531350902213409
     },
     {
       "event": "2022-07-28",
-      "sequence": "20220728-SEQ-1",
+      "sequence": "20220728-SEQ-10",
       "frame": 4,
       "image": 5,
-      "id": 33,
-      "path": "/tmp/trapdata/crops/980905c2e15eecb3f2d432ccb08cde6b.jpg",
+      "id": 63,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/612e4ffefd65401b8e8b4bc8864d3393.jpg",
       "binary_label": "moth",
-      "specific_label": "Alcis porcelaria",
-      "specific_label_score": 0.7961531281471252,
-      "cost": 0.7173170795343237
+      "specific_label": "Acleris forbesana",
+      "specific_label_score": 0.30045822262763977,
+      "cost": 0.5540414948529558
     }
   ],
-  "20220728-SEQ-14": [
+  "20220728-SEQ-12": [
     {
       "event": "2022-07-28",
-      "sequence": "20220728-SEQ-14",
+      "sequence": "20220728-SEQ-12",
       "frame": 0,
-      "image": 2,
-      "id": 14,
-      "path": "/tmp/trapdata/crops/ab75ed67673fa57b7404c5824958af34.jpg",
+      "image": 1,
+      "id": 12,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/94a04729c28297efc26797dd8f960bf4.jpg",
       "binary_label": "moth",
-      "specific_label": "Herminia jacchusalis",
-      "specific_label_score": 0.8468271493911743,
+      "specific_label": "Sciota virgatella",
+      "specific_label_score": 0.16646118462085724,
       "cost": null
     },
     {
       "event": "2022-07-28",
-      "sequence": "20220728-SEQ-14",
+      "sequence": "20220728-SEQ-12",
       "frame": 1,
-      "image": 3,
-      "id": 22,
-      "path": "/tmp/trapdata/crops/b640979f6b04e6e2abde28c11d0821cc.jpg",
+      "image": 2,
+      "id": 25,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/2adf5e391835830bc5c3b168b2a14ae7.jpg",
       "binary_label": "moth",
-      "specific_label": "Herminia jacchusalis",
-      "specific_label_score": 0.8679683804512024,
-      "cost": 0.9869129708968941
+      "specific_label": "Blastobasis glandulella",
+      "specific_label_score": 0.3292843997478485,
+      "cost": 0.139929701806197
     }
   ],
-  "20220728-SEQ-16": [
+  "20220728-SEQ-13": [
     {
       "event": "2022-07-28",
-      "sequence": "20220728-SEQ-16",
+      "sequence": "20220728-SEQ-13",
       "frame": 0,
       "image": 2,
-      "id": 16,
-      "path": "/tmp/trapdata/crops/290fc4d7d8c911dc7be05646ed36779b.jpg",
-      "binary_label": "moth",
-      "specific_label": "Parapediasia decorellus",
-      "specific_label_score": 0.06314703822135925,
-      "cost": null
-    }
-  ],
-  "20220728-SEQ-29": [
-    {
-      "event": "2022-07-28",
-      "sequence": "20220728-SEQ-29",
-      "frame": 0,
-      "image": 4,
-      "id": 29,
-      "path": "/tmp/trapdata/crops/34494b3e1b7332d96020bbdc289b8f03.jpg",
+      "id": 13,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/8f8a83bef8cddff01421ab2b5b7fe43f.jpg",
       "binary_label": "moth",
       "specific_label": "Herminia jacchusalis",
-      "specific_label_score": 0.7549377083778381,
+      "specific_label_score": 0.8296645283699036,
       "cost": null
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-13",
+      "frame": 1,
+      "image": 3,
+      "id": 26,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/04466e5cb9fb971e09d5d7929666a2fb.jpg",
+      "binary_label": "moth",
+      "specific_label": "Herminia jacchusalis",
+      "specific_label_score": 0.8486447334289551,
+      "cost": 0.9821406052135898
+    }
+  ],
+  "20220728-SEQ-19": [
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-19",
+      "frame": 0,
+      "image": 2,
+      "id": 19,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/56720869aeef9a7b7c65636690c3a1c4.jpg",
+      "binary_label": "moth",
+      "specific_label": "Epiblema otiosana",
+      "specific_label_score": 0.10388875752687454,
+      "cost": null
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-19",
+      "frame": 1,
+      "image": 3,
+      "id": 32,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/27f383b75d560abd4d2248173375ce45.jpg",
+      "binary_label": "moth",
+      "specific_label": "Epiblema otiosana",
+      "specific_label_score": 0.4118242859840393,
+      "cost": 0.47746568310855875
+    }
+  ],
+  "20220728-SEQ-2": [
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-2",
+      "frame": 0,
+      "image": 1,
+      "id": 2,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/050d2f2270b273a1fded55bc48017e41.jpg",
+      "binary_label": "moth",
+      "specific_label": "Renia discoloralis",
+      "specific_label_score": 0.1003936380147934,
+      "cost": null
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-2",
+      "frame": 1,
+      "image": 2,
+      "id": 14,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/b4574a59c5fe4885bbb53bbc88e73717.jpg",
+      "binary_label": "moth",
+      "specific_label": "Renia discoloralis",
+      "specific_label_score": 0.18321821093559265,
+      "cost": 0.15039522868278563
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-2",
+      "frame": 2,
+      "image": 3,
+      "id": 27,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/caaed63d0f43489f133f3f2c055e9ac5.jpg",
+      "binary_label": "moth",
+      "specific_label": "Phalaenophana pyramusalis",
+      "specific_label_score": 0.16425232589244843,
+      "cost": 0.1416141777643564
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-2",
+      "frame": 3,
+      "image": 4,
+      "id": 40,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/25dc045b46478da77bce17f067c84ade.jpg",
+      "binary_label": "moth",
+      "specific_label": "Phalaenophana pyramusalis",
+      "specific_label_score": 0.180535227060318,
+      "cost": 0.050937856300308317
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-2",
+      "frame": 4,
+      "image": 5,
+      "id": 55,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/ffaed774c235e53d1a88f71b46815a79.jpg",
+      "binary_label": "moth",
+      "specific_label": "Phalaenophana pyramusalis",
+      "specific_label_score": 0.10901834815740585,
+      "cost": 0.14004164301990088
     }
   ],
   "20220728-SEQ-3": [
@@ -122,10 +222,10 @@
       "frame": 0,
       "image": 1,
       "id": 3,
-      "path": "/tmp/trapdata/crops/ac3270aa576f32b437d842626cce5b2d.jpg",
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/a397b241b1e6f0f4c021a71191c4bcc8.jpg",
       "binary_label": "moth",
-      "specific_label": "Ephestiodes infimella",
-      "specific_label_score": 0.055871423333883286,
+      "specific_label": "Alcis porcelaria",
+      "specific_label_score": 0.7772248387336731,
       "cost": null
     },
     {
@@ -133,75 +233,61 @@
       "sequence": "20220728-SEQ-3",
       "frame": 1,
       "image": 2,
-      "id": 10,
-      "path": "/tmp/trapdata/crops/f8b183bc3c0298521189d617f174abbd.jpg",
+      "id": 15,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/d31b94d05b70c2536a3aab333b85fd1a.jpg",
       "binary_label": "moth",
-      "specific_label": "Sciota virgatella",
-      "specific_label_score": 0.04512359946966171,
-      "cost": 0.11393030241096866
+      "specific_label": "Alcis porcelaria",
+      "specific_label_score": 0.7708656787872314,
+      "cost": 0.10908107763303553
     },
     {
       "event": "2022-07-28",
       "sequence": "20220728-SEQ-3",
       "frame": 2,
       "image": 3,
-      "id": 19,
-      "path": "/tmp/trapdata/crops/c88fa6675ec4754b365f28d88d3c225d.jpg",
+      "id": 28,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/fd59758e8bec3f212aab405114e4b677.jpg",
       "binary_label": "moth",
-      "specific_label": "Oreana unicolorella",
-      "specific_label_score": 0.02331147901713848,
-      "cost": 0.19260679622239157
+      "specific_label": "Alcis porcelaria",
+      "specific_label_score": 0.7444019317626953,
+      "cost": 0.11793770704262882
     },
     {
       "event": "2022-07-28",
       "sequence": "20220728-SEQ-3",
       "frame": 3,
       "image": 4,
-      "id": 26,
-      "path": "/tmp/trapdata/crops/768e7438db92f82d585c9b40874f98fb.jpg",
+      "id": 41,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/06daa50d5a8dc37087147f17aef241e6.jpg",
       "binary_label": "moth",
-      "specific_label": "Ephestiodes infimella",
-      "specific_label_score": 0.0422513522207737,
-      "cost": 0.12432314693274285
+      "specific_label": "Alcis porcelaria",
+      "specific_label_score": 0.8606120944023132,
+      "cost": 0.0201224386349128
     },
     {
       "event": "2022-07-28",
       "sequence": "20220728-SEQ-3",
       "frame": 4,
       "image": 5,
-      "id": 37,
-      "path": "/tmp/trapdata/crops/0669f8052e4f7bb5dfa8eb42a72c42c9.jpg",
+      "id": 54,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/48fd0a9a60b779184ecbb152276532ba.jpg",
       "binary_label": "moth",
-      "specific_label": "Acrobasis indigenella",
-      "specific_label_score": 0.04169068858027458,
-      "cost": 0.4151557156366321
+      "specific_label": "Alcis porcelaria",
+      "specific_label_score": 0.7540773153305054,
+      "cost": 0.7950070255293996
     }
   ],
-  "20220728-SEQ-31": [
+  "20220728-SEQ-34": [
     {
       "event": "2022-07-28",
-      "sequence": "20220728-SEQ-31",
+      "sequence": "20220728-SEQ-34",
       "frame": 0,
-      "image": 4,
-      "id": 31,
-      "path": "/tmp/trapdata/crops/ddbd12794fc2398936ec1a984ec6e6fd.jpg",
+      "image": 3,
+      "id": 34,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/06103a98c8c1bcfe11567891de35ba73.jpg",
       "binary_label": "moth",
-      "specific_label": "Thyridopteryx ephemeraeformis",
-      "specific_label_score": 0.07200850546360016,
-      "cost": null
-    }
-  ],
-  "20220728-SEQ-32": [
-    {
-      "event": "2022-07-28",
-      "sequence": "20220728-SEQ-32",
-      "frame": 0,
-      "image": 5,
-      "id": 32,
-      "path": "/tmp/trapdata/crops/5fe382111de712e9b44b9881cdab2e5e.jpg",
-      "binary_label": "moth",
-      "specific_label": "Herminia jacchusalis",
-      "specific_label_score": 0.7590870261192322,
+      "specific_label": "Platytes vobisne",
+      "specific_label_score": 0.21381868422031403,
       "cost": null
     }
   ],
@@ -210,75 +296,41 @@
       "event": "2022-07-28",
       "sequence": "20220728-SEQ-39",
       "frame": 0,
-      "image": 5,
+      "image": 4,
       "id": 39,
-      "path": "/tmp/trapdata/crops/42062002eb9d1486aab2c74546373c07.jpg",
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/0b872ceead5109a3d3ef3afbb0f2e2bf.jpg",
       "binary_label": "moth",
-      "specific_label": "Eucosma olivaceana",
-      "specific_label_score": 0.05791257694363594,
+      "specific_label": "Herminia jacchusalis",
+      "specific_label_score": 0.7112213969230652,
       "cost": null
     }
   ],
-  "20220728-SEQ-4": [
+  "20220728-SEQ-45": [
     {
       "event": "2022-07-28",
-      "sequence": "20220728-SEQ-4",
+      "sequence": "20220728-SEQ-45",
       "frame": 0,
-      "image": 1,
-      "id": 4,
-      "path": "/tmp/trapdata/crops/966764b5a1058cbf7e4edf9a2d25ac41.jpg",
-      "binary_label": "moth",
-      "specific_label": "Renia discoloralis",
-      "specific_label_score": 0.1175013855099678,
-      "cost": null
-    },
-    {
-      "event": "2022-07-28",
-      "sequence": "20220728-SEQ-4",
-      "frame": 1,
-      "image": 2,
-      "id": 11,
-      "path": "/tmp/trapdata/crops/0a5a50954c4cd59155964b0c5434f3ad.jpg",
-      "binary_label": "moth",
-      "specific_label": "Phalaenophana pyramusalis",
-      "specific_label_score": 0.18977738916873932,
-      "cost": 0.16849384545045368
-    },
-    {
-      "event": "2022-07-28",
-      "sequence": "20220728-SEQ-4",
-      "frame": 2,
-      "image": 3,
-      "id": 20,
-      "path": "/tmp/trapdata/crops/e36d621cec36a0275fd7e7b416799e5e.jpg",
-      "binary_label": "moth",
-      "specific_label": "Renia discoloralis",
-      "specific_label_score": 0.14471754431724548,
-      "cost": 0.15646352317444762
-    },
-    {
-      "event": "2022-07-28",
-      "sequence": "20220728-SEQ-4",
-      "frame": 3,
       "image": 4,
-      "id": 27,
-      "path": "/tmp/trapdata/crops/bebf3b032e403234a127bdab817e44f7.jpg",
+      "id": 45,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/6d79d24740c4f43fde169d9762216b07.jpg",
       "binary_label": "moth",
-      "specific_label": "Renia discoloralis",
-      "specific_label_score": 0.23778404295444489,
-      "cost": 0.0718765751564555
-    },
+      "specific_label": "Psychomorpha epimenis",
+      "specific_label_score": 0.2151375710964203,
+      "cost": null
+    }
+  ],
+  "20220728-SEQ-47": [
     {
       "event": "2022-07-28",
-      "sequence": "20220728-SEQ-4",
-      "frame": 4,
-      "image": 5,
-      "id": 34,
-      "path": "/tmp/trapdata/crops/ee64afe74574f6f9378f316e78f4b95f.jpg",
+      "sequence": "20220728-SEQ-47",
+      "frame": 0,
+      "image": 4,
+      "id": 47,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/24188d60b41752cf5f456e20f1e8071b.jpg",
       "binary_label": "moth",
-      "specific_label": "Phalaenophana pyramusalis",
-      "specific_label_score": 0.20770351588726044,
-      "cost": 0.12041855883360054
+      "specific_label": "Phigalia titea",
+      "specific_label_score": 0.11463999003171921,
+      "cost": null
     }
   ],
   "20220728-SEQ-5": [
@@ -288,10 +340,126 @@
       "frame": 0,
       "image": 1,
       "id": 5,
-      "path": "/tmp/trapdata/crops/ba9d3095ed7bcc67a0722df3d3428e21.jpg",
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/6ab8a9dc4dc1532c5af19df01461b2f2.jpg",
+      "binary_label": "moth",
+      "specific_label": "Scoparia biplagialis",
+      "specific_label_score": 0.048303935676813126,
+      "cost": null
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-5",
+      "frame": 1,
+      "image": 2,
+      "id": 16,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/79a4aa5da1e2a02470bb3ec7c282aba6.jpg",
+      "binary_label": "moth",
+      "specific_label": "Sciota virgatella",
+      "specific_label_score": 0.040570326149463654,
+      "cost": 0.09378082078715587
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-5",
+      "frame": 2,
+      "image": 3,
+      "id": 29,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/c261ec825f40ba9208d7267c2d5698b0.jpg",
+      "binary_label": "moth",
+      "specific_label": "Endothenia hebesana",
+      "specific_label_score": 0.132541224360466,
+      "cost": 0.17138480259372366
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-5",
+      "frame": 3,
+      "image": 4,
+      "id": 43,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/3edc2d2288d6b582bb02339a2fefebad.jpg",
+      "binary_label": "moth",
+      "specific_label": "Sciota virgatella",
+      "specific_label_score": 0.024115437641739845,
+      "cost": 0.10420992078244451
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-5",
+      "frame": 4,
+      "image": 5,
+      "id": 56,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/97e5b560e72068184825655157ca1e01.jpg",
+      "binary_label": "moth",
+      "specific_label": "Acrobasis indigenella",
+      "specific_label_score": 0.025976473465561867,
+      "cost": 0.28677334510811137
+    }
+  ],
+  "20220728-SEQ-51": [
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-51",
+      "frame": 0,
+      "image": 4,
+      "id": 51,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/64229628766e2d9faa16419db0ec58b5.jpg",
+      "binary_label": "moth",
+      "specific_label": "Blastobasis glandulella",
+      "specific_label_score": 0.44940221309661865,
+      "cost": null
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-51",
+      "frame": 1,
+      "image": 5,
+      "id": 64,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/4a83f2400b4fcfc9725dcf0c8dfa9aa1.jpg",
+      "binary_label": "moth",
+      "specific_label": "Ephestiodes infimella",
+      "specific_label_score": 0.2463548630475998,
+      "cost": 0.20962423038802197
+    }
+  ],
+  "20220728-SEQ-52": [
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-52",
+      "frame": 0,
+      "image": 4,
+      "id": 52,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/6668ea366a978a829e207c46b54569f2.jpg",
+      "binary_label": "moth",
+      "specific_label": "Alsophila pometaria",
+      "specific_label_score": 0.044359490275382996,
+      "cost": null
+    }
+  ],
+  "20220728-SEQ-53": [
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-53",
+      "frame": 0,
+      "image": 5,
+      "id": 53,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/617998a4e8778a82c4fff4e2a734badc.jpg",
       "binary_label": "moth",
       "specific_label": "Herminia jacchusalis",
-      "specific_label_score": 0.28698861598968506,
+      "specific_label_score": 0.7014172673225403,
+      "cost": null
+    }
+  ],
+  "20220728-SEQ-59": [
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-59",
+      "frame": 0,
+      "image": 5,
+      "id": 59,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/f8cf34b4222265f4f5cf600e3343791d.jpg",
+      "binary_label": "moth",
+      "specific_label": "Exaeretia ciniflonella",
+      "specific_label_score": 0.04361367225646973,
       "cost": null
     }
   ],
@@ -302,10 +470,10 @@
       "frame": 0,
       "image": 1,
       "id": 6,
-      "path": "/tmp/trapdata/crops/3edd37a33482bb1a4238bd22622e1123.jpg",
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/42d7083f6f607254c4413471af0cb318.jpg",
       "binary_label": "moth",
-      "specific_label": "Argyrotaenia juglandana",
-      "specific_label_score": 0.25931671261787415,
+      "specific_label": "Pandemis lamprosana",
+      "specific_label_score": 0.18402302265167236,
       "cost": null
     },
     {
@@ -313,48 +481,62 @@
       "sequence": "20220728-SEQ-6",
       "frame": 1,
       "image": 2,
-      "id": 13,
-      "path": "/tmp/trapdata/crops/df830a60dac22c8ed5c1dd540538e1cf.jpg",
+      "id": 17,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/aeb2787c663b0fba62424469364c550c.jpg",
       "binary_label": "moth",
       "specific_label": "Pandemis lamprosana",
-      "specific_label_score": 0.3869152367115021,
-      "cost": 0.16498318870343
+      "specific_label_score": 0.18639925122261047,
+      "cost": 0.16316379318943114
     },
     {
       "event": "2022-07-28",
       "sequence": "20220728-SEQ-6",
       "frame": 2,
       "image": 3,
-      "id": 21,
-      "path": "/tmp/trapdata/crops/ae45cc781dd9c8eb9e5d5c289219367c.jpg",
+      "id": 31,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/e7cf2aecf178331d12d7c8e3d21609d2.jpg",
       "binary_label": "moth",
       "specific_label": "Pandemis lamprosana",
-      "specific_label_score": 0.32203730940818787,
-      "cost": 0.2554969229253681
+      "specific_label_score": 0.22766618430614471,
+      "cost": 0.11152822333897693
     },
     {
       "event": "2022-07-28",
       "sequence": "20220728-SEQ-6",
       "frame": 3,
       "image": 4,
-      "id": 28,
-      "path": "/tmp/trapdata/crops/99359badc65e5de9badbca3811292839.jpg",
+      "id": 44,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/383f0b8d4c51ad7cf46020b8a69d8231.jpg",
       "binary_label": "moth",
       "specific_label": "Pandemis lamprosana",
-      "specific_label_score": 0.3732436001300812,
-      "cost": 0.07996697964827555
+      "specific_label_score": 0.10905972868204117,
+      "cost": 0.1307117404503841
     },
     {
       "event": "2022-07-28",
       "sequence": "20220728-SEQ-6",
       "frame": 4,
       "image": 5,
-      "id": 36,
-      "path": "/tmp/trapdata/crops/328e5c71ddff3fe0537b86c929be4b23.jpg",
+      "id": 57,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/6dcba1cdd72bf84b73dc9c76a87ed2eb.jpg",
       "binary_label": "moth",
       "specific_label": "Pandemis lamprosana",
-      "specific_label_score": 0.3016993999481201,
-      "cost": 0.25315768453755905
+      "specific_label_score": 0.2105257660150528,
+      "cost": 0.0887736799534202
+    }
+  ],
+  "20220728-SEQ-60": [
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-60",
+      "frame": 0,
+      "image": 5,
+      "id": 60,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/f2d13d975e93631dde15c47f9a0212bc.jpg",
+      "binary_label": "moth",
+      "specific_label": "Psychomorpha epimenis",
+      "specific_label_score": 0.29859471321105957,
+      "cost": null
     }
   ],
   "20220728-SEQ-7": [
@@ -364,10 +546,10 @@
       "frame": 0,
       "image": 1,
       "id": 7,
-      "path": "/tmp/trapdata/crops/4d801f6ee3e9e533ebf31d48c234bcfe.jpg",
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/3db72a01163c2c2bbfa8bfddd13ee28b.jpg",
       "binary_label": "moth",
-      "specific_label": "Cenopis pettitana",
-      "specific_label_score": 0.36731672286987305,
+      "specific_label": "Parapediasia decorellus",
+      "specific_label_score": 0.059002503752708435,
       "cost": null
     },
     {
@@ -375,48 +557,112 @@
       "sequence": "20220728-SEQ-7",
       "frame": 1,
       "image": 2,
-      "id": 15,
-      "path": "/tmp/trapdata/crops/6bf4c825f7b72cf2a3447566aa90534a.jpg",
+      "id": 21,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/31786116724214f10a16e1d52cdad7f1.jpg",
       "binary_label": "moth",
-      "specific_label": "Antaeotricha leucillana",
-      "specific_label_score": 0.36701127886772156,
-      "cost": 0.4000689696019632
+      "specific_label": "Acleris flavivittana",
+      "specific_label_score": 0.0627722442150116,
+      "cost": 0.30495344614216496
     },
     {
       "event": "2022-07-28",
       "sequence": "20220728-SEQ-7",
       "frame": 2,
       "image": 3,
-      "id": 23,
-      "path": "/tmp/trapdata/crops/1b6196f9a8dd93fe13b27fac1eb9da93.jpg",
+      "id": 33,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/d14dc92620227e704f3246a4ebbf6406.jpg",
       "binary_label": "moth",
-      "specific_label": "Cenopis pettitana",
-      "specific_label_score": 0.29317861795425415,
-      "cost": 0.37015916498566237
+      "specific_label": "Platytes vobisne",
+      "specific_label_score": 0.12406660616397858,
+      "cost": 0.2630428577920178
     },
     {
       "event": "2022-07-28",
       "sequence": "20220728-SEQ-7",
       "frame": 3,
       "image": 4,
-      "id": 30,
-      "path": "/tmp/trapdata/crops/b109d01ebfe74208ade4916dca82b073.jpg",
+      "id": 46,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/bc570c303fe214f42b1aecdae0cba390.jpg",
       "binary_label": "moth",
-      "specific_label": "Cenopis pettitana",
-      "specific_label_score": 0.22661246359348297,
-      "cost": 0.1310145137586791
+      "specific_label": "Platytes vobisne",
+      "specific_label_score": 0.06495240330696106,
+      "cost": 0.10871116996741088
     },
     {
       "event": "2022-07-28",
       "sequence": "20220728-SEQ-7",
       "frame": 4,
       "image": 5,
-      "id": 38,
-      "path": "/tmp/trapdata/crops/20d7a2b3bde095e107c379f514da8e1b.jpg",
+      "id": 61,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/24bd1df99cf61e2214e0618916acbd8a.jpg",
       "binary_label": "moth",
-      "specific_label": "Cenopis pettitana",
-      "specific_label_score": 0.4784243404865265,
-      "cost": 0.48165198320354735
+      "specific_label": "Platytes vobisne",
+      "specific_label_score": 0.04522542282938957,
+      "cost": 0.24548752153884454
+    }
+  ],
+  "20220728-SEQ-8": [
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-8",
+      "frame": 0,
+      "image": 1,
+      "id": 8,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/57ba9fe508130cba788cff516e8d69e3.jpg",
+      "binary_label": "moth",
+      "specific_label": "Microcrambus minor",
+      "specific_label_score": 0.1657266765832901,
+      "cost": null
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-8",
+      "frame": 1,
+      "image": 2,
+      "id": 22,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/64c722d2a3c5ce02e39a7e08a2845a10.jpg",
+      "binary_label": "moth",
+      "specific_label": "Antaeotricha schlaegeri",
+      "specific_label_score": 0.14964184165000916,
+      "cost": 0.46193150285828655
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-8",
+      "frame": 2,
+      "image": 3,
+      "id": 38,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/0bb4c3e7e4a9b26fb6ecd984126c026d.jpg",
+      "binary_label": "moth",
+      "specific_label": "Crambus albellus",
+      "specific_label_score": 0.5847471356391907,
+      "cost": 0.8770945889496965
+    },
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-8",
+      "frame": 3,
+      "image": 4,
+      "id": 50,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/e84d0da41ac73067cc92173bd122e051.jpg",
+      "binary_label": "moth",
+      "specific_label": "Crambus albellus",
+      "specific_label_score": 0.942969560623169,
+      "cost": 0.1925447533484664
+    }
+  ],
+  "20220728-SEQ-9": [
+    {
+      "event": "2022-07-28",
+      "sequence": "20220728-SEQ-9",
+      "frame": 0,
+      "image": 1,
+      "id": 9,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/7f9d3ed01b92984b7c470bb79bf16dae.jpg",
+      "binary_label": "moth",
+      "specific_label": "Plodia interpunctella",
+      "specific_label_score": 0.13182422518730164,
+      "cost": null
     }
   ]
 }
