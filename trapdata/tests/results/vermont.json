@@ -6,10 +6,10 @@
       "frame": 0,
       "image": 2,
       "id": 1,
-      "path": "/tmp/trapdata/crops/5724f4f49f019f465e564b8e31f6b79f.jpg",
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/c770465b18caac250fe1e18281bce99a.jpg",
       "binary_label": "moth",
-      "specific_label": "Lophocampa caryae",
-      "specific_label_score": 0.8327748775482178,
+      "specific_label": "Lambdina fiscellaria",
+      "specific_label_score": 0.25860387086868286,
       "cost": null
     }
   ],
@@ -20,10 +20,10 @@
       "frame": 0,
       "image": 2,
       "id": 2,
-      "path": "/tmp/trapdata/crops/bdbd02572aa1a7d61150b96a66e2c5d1.jpg",
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/cbaf562563b6430939f11c3e48c01b0c.jpg",
       "binary_label": "moth",
-      "specific_label": "Lambdina fiscellaria",
-      "specific_label_score": 0.2307100147008896,
+      "specific_label": "Campaea perlata",
+      "specific_label_score": 0.2461177408695221,
       "cost": null
     }
   ],
@@ -34,10 +34,10 @@
       "frame": 0,
       "image": 2,
       "id": 3,
-      "path": "/tmp/trapdata/crops/329e3922c961d0f3c7825449886733e6.jpg",
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/4333c822b450400a5d03e880bfde16cc.jpg",
       "binary_label": "moth",
       "specific_label": "Cnephasia asseclana",
-      "specific_label_score": 0.4478735029697418,
+      "specific_label_score": 0.3257419168949127,
       "cost": null
     }
   ],
@@ -48,10 +48,66 @@
       "frame": 0,
       "image": 2,
       "id": 4,
-      "path": "/tmp/trapdata/crops/46c9751585c54ca22142e7add9d748de.jpg",
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/9d1603576e38431c8739e9c414b1297f.jpg",
+      "binary_label": "moth",
+      "specific_label": "Lophocampa caryae",
+      "specific_label_score": 0.7309626340866089,
+      "cost": null
+    }
+  ],
+  "20220623-SEQ-5": [
+    {
+      "event": "2022-06-23",
+      "sequence": "20220623-SEQ-5",
+      "frame": 0,
+      "image": 2,
+      "id": 5,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/5de9d9afbbbc24fb7253ab95884cad91.jpg",
+      "binary_label": "moth",
+      "specific_label": "Scoparia basalis",
+      "specific_label_score": 0.11617226898670197,
+      "cost": null
+    }
+  ],
+  "20220623-SEQ-6": [
+    {
+      "event": "2022-06-23",
+      "sequence": "20220623-SEQ-6",
+      "frame": 0,
+      "image": 2,
+      "id": 6,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/b8cce6c49a1a63635a00d7374cca4986.jpg",
+      "binary_label": "moth",
+      "specific_label": "Archips packardiana",
+      "specific_label_score": 0.8169540166854858,
+      "cost": null
+    }
+  ],
+  "20220623-SEQ-7": [
+    {
+      "event": "2022-06-23",
+      "sequence": "20220623-SEQ-7",
+      "frame": 0,
+      "image": 2,
+      "id": 7,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/505f353352c5efc6f32aee7a838b9ff0.jpg",
+      "binary_label": "moth",
+      "specific_label": "Lithacodia carneola",
+      "specific_label_score": 0.0930459126830101,
+      "cost": null
+    }
+  ],
+  "20220623-SEQ-8": [
+    {
+      "event": "2022-06-23",
+      "sequence": "20220623-SEQ-8",
+      "frame": 0,
+      "image": 2,
+      "id": 8,
+      "path": "/Users/michael/Projects/AMI/USERDATA/crops/e891687374ad5f78e16b8fa893c9b058.jpg",
       "binary_label": "moth",
       "specific_label": "Campaea perlata",
-      "specific_label_score": 0.2693989872932434,
+      "specific_label_score": 0.8783769607543945,
       "cost": null
     }
   ]
