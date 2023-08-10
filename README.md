@@ -1,4 +1,4 @@
-# AMI Data Manager
+# AMI Data Companion
 
 Desktop app for analyzing images from autonomous insect monitoring stations using deep learning models
 
@@ -26,7 +26,7 @@ Desktop app for analyzing images from autonomous insect monitoring stations usin
 Install (or upgrade) the package with the following command
 
 ```sh
-pip install https://github.com/RolnickLab/ami-data-manager/archive/main.zip
+pip install https://github.com/RolnickLab/ami-data-companion/archive/main.zip
 ```
 
 Optionally test the installation with the following command
@@ -37,7 +37,7 @@ trapdata-test
 
 ## Installation (for developers)
 
-Create an environment just for AMI and the trapdata manager using conda (or virtualenv)
+Create an environment just for AMI and the data companion using conda (or virtualenv)
 
 ```sh
 conda create -n ami python=3.10 anaconda
@@ -46,13 +46,13 @@ conda create -n ami python=3.10 anaconda
 Clone the repository using the command line or the GitHub desktop app.
 
 ```sh
-git clone git@github.com:RolnickLab/ami-data-manager.git
+git clone git@github.com:RolnickLab/ami-data-companion.git
 ```
 
 Install as an editable package. This will install the dependencies and install the `trapdata` console command
 
 ```sh
-cd ami-data-manager
+cd ami-data-companion
 pip install -e .
 ```
 

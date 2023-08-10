@@ -6,12 +6,11 @@ from typing import Optional, Union
 
 import sqlalchemy
 from pydantic import BaseSettings, Field, ValidationError, validator
-from pydantic.main import ModelMetaclass
 from rich import print as rprint
 
 from trapdata import ml
 from trapdata.common.filemanagement import default_database_dsn, get_app_dir
-from trapdata.common.types import FilePath
+from trapdata.common.schemas import FilePath
 
 
 class UserSettings(BaseSettings):

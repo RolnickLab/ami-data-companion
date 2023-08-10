@@ -6,7 +6,7 @@ import sqlalchemy as sa
 from pydantic import BaseModel
 
 from trapdata import constants, logger
-from trapdata.common.types import DatabaseURL, FilePath
+from trapdata.common.schemas import DatabaseURL, FilePath
 from trapdata.db import get_session
 from trapdata.db.models.detections import DetectedObject
 from trapdata.db.models.events import MonitoringSession

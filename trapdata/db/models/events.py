@@ -10,7 +10,7 @@ from sqlalchemy_utils import aggregated
 
 from trapdata.common.filemanagement import find_images, group_images_by_day, media_url
 from trapdata.common.logs import logger
-from trapdata.common.types import FilePath
+from trapdata.common.schemas import FilePath
 from trapdata.common.utils import export_report
 from trapdata.db import Base, get_session, models
 from trapdata.db.models.deployments import deployment_name
@@ -464,7 +464,7 @@ def get_monitoring_session_by_id(
             duration=event.duration(),
             duration_label=event.duration_label,
             notes=event.notes,
-            captures=[],
+            captures=nested_captures,
         )
         return event_detail
     else:

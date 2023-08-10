@@ -11,7 +11,7 @@ import torch
 from rich import print
 
 from trapdata import logger
-from trapdata.common.types import FilePath
+from trapdata.common.schemas import FilePath
 from trapdata.db import check_db, get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import (
@@ -38,7 +38,7 @@ def get_settings(db_path: str, image_base_path: FilePath) -> PipelineSettings:
         database_url=db_path,
         image_base_path=image_base_path,
         # user_data_path=pathlib.Path(tempfile.TemporaryDirectory(prefix="AMI-").name),
-        localization_model=ObjectDetectorChoice.fasterrcnn_for_ami_moth_traps,
+        localization_model=ObjectDetectorChoice.fasterrcnn_mobilenet_for_ami_moth_traps_2023,
         binary_classification_model=BinaryClassifierChoice.moth_nonmoth_classifier,
         species_classification_model=SpeciesClassifierChoice.quebec_vermont_species_classifier,
         feature_extractor=FeatureExtractorChoice.features_from_quebecvermont_species_model,

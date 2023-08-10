@@ -28,7 +28,7 @@ def slugify(s):
     # Quick method to make an acceptable attribute name or url part from a title
     # install python-slugify for handling unicode chars, numbers at the beginning, etc.
     separator = "_"
-    acceptable_chars = list(string.ascii_letters) + [separator]
+    acceptable_chars = list(string.ascii_letters) + list(string.digits) + [separator]
     return (
         "".join(
             [
