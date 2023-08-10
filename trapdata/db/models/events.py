@@ -464,7 +464,7 @@ def get_monitoring_session_by_id(
             duration=event.duration(),
             duration_label=event.duration_label,
             notes=event.notes,
-            captures=[],
+            captures=nested_captures,
         )
         return event_detail
     else:

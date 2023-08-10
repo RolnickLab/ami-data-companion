@@ -73,7 +73,7 @@ def find_timestamped_folders(path):
     def _preprocess(name):
         return name.replace("_", "-")
 
-    dirs = sorted(list(pathlib.Path(path).iterdir()))
+    dirs = sorted(pathlib.Path(path).iterdir())
     for d in dirs:
         # @TODO use yield?
         try:
@@ -287,7 +287,7 @@ def find_images(
         [f.lstrip(".") for f in constants.SUPPORTED_IMAGE_EXTENSIONS]
     )
     pattern = rf"\.({extensions_list})$"
-    for walk_path, dirs, files in os.walk(base_directory):
+    for walk_path, _dirs, files in os.walk(base_directory):
         for name in files:
             if re.search(pattern, name, re.IGNORECASE):
                 relative_path = pathlib.Path(walk_path) / name

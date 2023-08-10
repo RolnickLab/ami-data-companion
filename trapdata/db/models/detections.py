@@ -519,9 +519,7 @@ def get_species_for_image(db_path, image_id):
 def num_species_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(
-        sa.func.count(DetectedObject.specific_label.distinct()),
-    ).where(
+    query = sa.select(sa.func.count(DetectedObject.specific_label.distinct()),).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
@@ -533,9 +531,7 @@ def num_species_for_event(
 def num_occurrences_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(
-        sa.func.count(DetectedObject.sequence_id.distinct()),
-    ).where(
+    query = sa.select(sa.func.count(DetectedObject.sequence_id.distinct()),).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
@@ -555,7 +551,7 @@ class TaxonListItem(BaseModel):
     family: Optional[str] = None
     num_occurrences: Optional[int] = None
     num_detections: Optional[int] = None
-    examples: list[TaxonOccurrenceListItem] = list()
+    examples: list[TaxonOccurrenceListItem] = []
     score_stats: Optional[dict[str, float]] = None
     training_examples: Optional[int] = None
 

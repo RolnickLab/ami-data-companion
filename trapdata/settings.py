@@ -6,7 +6,6 @@ from typing import Optional, Union
 
 import sqlalchemy
 from pydantic import BaseSettings, Field, ValidationError, validator
-from pydantic.main import ModelMetaclass
 from rich import print as rprint
 
 from trapdata import ml
