@@ -20,7 +20,7 @@ from trapdata.tests import TEST_IMAGES_BASE_PATH  # noqa: F401
 
 from . import constants
 from .logs import logger
-from .types import FilePath
+from .schemas import FilePath
 
 APP_NAME_SLUG = "AMI"
 EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"
