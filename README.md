@@ -32,7 +32,7 @@ pip install https://github.com/RolnickLab/ami-data-companion/archive/main.zip
 Optionally test the installation with the following command
 
 ```sh
-trapdata-test
+ami test pipeline
 ```
 
 ## Installation (for developers)
@@ -66,7 +66,7 @@ python trapdata/tests/test_pipeline.py
 
 - Make a directory of sample images to test & learn the whole workflow more quickly.
 
-- Launch the app by opening a terminal and then typing the command ```trapdata```. You may need to activate your Python 3.10 environment first (`conda activate ami`).
+- Launch the app by opening a terminal and then typing the command ```ami gui```. You may need to activate your Python 3.10 environment first (`conda activate ami`).
 
 - When the app GUI window opens, it will prompt you to select the root directory with your trapdata. Choose the directory with your sample images.
 
