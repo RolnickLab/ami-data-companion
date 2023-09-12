@@ -1,6 +1,6 @@
 import datetime
 import pathlib
-from typing import Optional
+from typing import Generator, Optional
 
 import sqlalchemy as sa
 from pydantic import BaseModel
@@ -34,6 +34,148 @@ class CaptureDetail(CaptureListItem):
     filesize: int
     width: int
     height: int
+
+
+"""
+label_studio_task = {
+  "data": {
+    "image": "/static/samples/sample.jpg"
+  },
+
+  "predictions": [{
+    "model_version": "one",
+    "score": 0.5,
+    "result": [
+      {
+        "id": "result1",
+        "type": "rectanglelabels",
+        "from_name": "label", "to_name": "image",
+        "original_width": 600, "original_height": 403,
+        "image_rotation": 0,
+        "value": {
+          "rotation": 0,
+          "x": 4.98, "y": 12.82,
+          "width": 32.52, "height": 44.91,
+          "rectanglelabels": ["Airplane"]
+        }
+      },
+      {
+        "id": "result2",
+        "type": "rectanglelabels",
+        "from_name": "label", "to_name": "image",
+        "original_width": 600, "original_height": 403,
+        "image_rotation": 0,
+        "value": {
+          "rotation": 0,
+          "x": 75.47, "y": 82.33,
+          "width": 5.74, "height": 7.40,
+          "rectanglelabels": ["Car"]
+        }
+      },
+      {
+        "id": "result3",
+        "type": "choices",
+        "from_name": "choice", "to_name": "image",
+        "value": {
+          "choices": ["Airbus"]
+      }
+    }]
+  }]
+}
+"""
+
+
+class LabelStudioTaskData(BaseModel):
+    image: str
+    timestamp: datetime.datetime
+    deployment: str
+
+
+class LabelStudioTaskPredictionResultValue(BaseModel):
+    rotation: int
+    x: float
+    y: float
+    width: float
+    height: float
+    rectanglelabels: list[str]
+
+
+class LabelStudioTaskPredictionResult(BaseModel):
+    id: str
+    type: str
+    from_name: str
+    to_name: str
+    original_width: int
+    original_height: int
+    image_rotation: int
+    value: LabelStudioTaskPredictionResultValue
+
+
+class LabelStudioTaskPrediction(BaseModel):
+    model_version: str
+    score: float
+    result: list[LabelStudioTaskPredictionResult]
+
+
+class LabelStudioTask(BaseModel):
+    data: LabelStudioTaskData
+    predictions: list[LabelStudioTaskPrediction]
+
+
+def _as_label_studio_task(image: "TrapImage", db_path: str) -> LabelStudioTask:
+    # @TODO this is a hack to get the deployment name
+    deployment = image.absolute_path.parent.parent.parent.name
+
+    data = LabelStudioTaskData(
+        image=f"{constants.IMAGE_BASE_URL}/{image.path}",
+        timestamp=image.timestamp,
+        deployment=deployment,
+    )
+
+    label_map = {
+        constants.POSITIVE_BINARY_LABEL: "Moth",
+        constants.NEGATIVE_BINARY_LABEL: "Non-Moth",
+    }
+
+    results = []
+
+    from trapdata.db.models.detections import get_detections_for_image
+
+    model_name = "unknown"
+    for obj in get_detections_for_image(db_path, image.id):
+        model_name = str(obj.model_name)
+        if not obj.binary_label:
+            print(f"Skipping {obj} because it has no binary label")
+            continue
+        label = label_map[obj.binary_label]
+        result = LabelStudioTaskPredictionResult(
+            id=str(obj.id),
+            type="rectanglelabels",
+            from_name="label",
+            to_name="image",
+            original_width=image.width,
+            original_height=image.height,
+            image_rotation=0,
+            value=LabelStudioTaskPredictionResultValue(
+                rotation=0,
+                x=(obj.bbox[0] / image.width) * 100,
+                y=(obj.bbox[1] / image.height) * 100,
+                width=(obj.width() / image.width) * 100,
+                height=(obj.height() / image.height) * 100,
+                rectanglelabels=[label],
+            ),
+        )
+        results.append(result)
+
+    predictions = [
+        LabelStudioTaskPrediction(
+            model_version=model_name,
+            score=0,
+            result=results,
+        )
+    ]
+
+    return LabelStudioTask(data=data, predictions=predictions)
 
 
 class TrapImage(Base):
@@ -120,7 +262,7 @@ class TrapImage(Base):
     def report_data(self) -> CaptureListItem:
         return CaptureListItem(
             id=self.id,
-            source_image=f"{constants.IMAGE_BASE_URL}vermont/snapshots/{self.path}",
+            source_image=f"{constants.IMAGE_BASE_URL}/{self.path}",
             timestamp=self.timestamp,
             last_read=self.last_read,
             last_processed=self.last_processed,
@@ -140,6 +282,9 @@ class TrapImage(Base):
             ],
             notes=self.notes,
         )
+
+    def to_label_studio_task(self, db_path) -> LabelStudioTask:
+        return _as_label_studio_task(self, db_path)
 
     def __repr__(self):
         return (
@@ -198,3 +343,55 @@ def completely_classified(db_path, image_id):
                 return True
             else:
                 return False
+
+
+def get_images_for_labeling(
+    db_path, deployment, limit=100, sampling_interval_minutes=5
+) -> Generator[TrapImage, None, None]:
+    with get_session(db_path) as sesh:
+        images = (
+            sesh.query(TrapImage)
+            # .filter(TrapImage.monitoring_session(deployment=deployment))
+            .filter(TrapImage.num_detected_objects > 0)
+            .filter(TrapImage.in_queue.is_(False))
+            .order_by(TrapImage.timestamp.asc())
+            .limit(limit)
+            .all()
+        )
+
+        # Filter images with python, only select images that have timestamps
+        # at least 5 minutes apart (sampling_interval_minutes)
+        # Do not consider last_processed time
+        # Compare the time diff between the last image and the current image
+        # If the time diff is greater than the sampling interval, then select
+        # the image.
+        last_image = None
+        for image in images:
+            if not last_image:
+                # selected_images.append(image)
+                yield image
+                last_image = image
+            else:
+                time_diff = image.timestamp - last_image.timestamp
+                if time_diff.total_seconds() / 60 >= sampling_interval_minutes:
+                    # selected_images.append(image)
+                    yield image
+                    last_image = image
+
+        # Same query using select and where clauses (sqlalchemy 1.4 syntax)
+        # images = sa.select(TrapImage).where(
+        #     TrapImage.monitoring_session.has(deployment=deployment),
+        #     TrapImage.num_detected_objects > 0,
+        #     TrapImage.in_queue == False,
+        #     sa.or_(
+        #         TrapImage.last_processed.is_(None),
+        #         sa.func.timestampdiff(
+        #             sa.text("MINUTE"),
+        #             TrapImage.last_processed,
+        #             sa.func.now(),
+        #         )
+        #         > sampling_interval_minutes,
+        #     ),
+        # )
+
+        return images

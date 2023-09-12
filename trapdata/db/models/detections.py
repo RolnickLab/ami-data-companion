@@ -154,10 +154,16 @@ class DetectedObject(db.Base):
         return fpath
 
     def width(self):
-        pass  # Use bbox
+        return self.bbox[2] - self.bbox[0]
 
     def height(self):
-        pass  # Use bbox
+        return self.bbox[3] - self.bbox[1]
+
+    def top_left(self):
+        return (self.bbox[0], self.bbox[1])
+
+    def bottom_right(self):
+        return (self.bbox[2], self.bbox[3])
 
     def previous_frame_detections(
         self, session: orm.Session
@@ -475,9 +481,7 @@ def delete_objects_for_image(db_path, image_id):
 
 def get_detections_for_image(db_path, image_id):
     with db.get_session(db_path) as sesh:
-        return sesh.query(DetectedObject.binary_label).filter_by(
-            image_id=image_id, binary_label=constants.POSITIVE_BINARY_LABEL
-        )
+        return sesh.query(DetectedObject).filter_by(image_id=image_id)
 
 
 def get_classifications_for_image(db_path, image_id):
@@ -507,9 +511,7 @@ def get_species_for_image(db_path, image_id):
 def num_species_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(
-        sa.func.count(DetectedObject.specific_label.distinct()),
-    ).where(
+    query = sa.select(sa.func.count(DetectedObject.specific_label.distinct()),).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
@@ -521,9 +523,7 @@ def num_species_for_event(
 def num_occurrences_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(
-        sa.func.count(DetectedObject.sequence_id.distinct()),
-    ).where(
+    query = sa.select(sa.func.count(DetectedObject.sequence_id.distinct()),).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )

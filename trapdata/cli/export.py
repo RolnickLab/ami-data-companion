@@ -229,3 +229,41 @@ def deployments(
 
     df = pd.DataFrame([d.dict() for d in deployments])
     return export(df=df, format=format, outfile=outfile)
+
+
+@cli.command()
+def labelstudio_tasks(
+    sampling_interval_minutes: int = 20,
+    limit: int = 10,
+):
+    """
+    Export individiual JSON tasks for use in Label Studio.
+
+    """
+    from trapdata.db.models.images import get_images_for_labeling
+
+    images = get_images_for_labeling(
+        db_path=settings.database_url,
+        deployment=settings.image_base_path,
+        limit=limit,
+        sampling_interval_minutes=sampling_interval_minutes,
+    )
+
+    output_dir = settings.user_data_path / "label_studio_tasks"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    count = 0
+    for img in images:
+        task = img.to_label_studio_task(db_path=settings.database_url)
+        print(task)
+        fname = f"{img.path.replace('/', '-').replace('.jpg', '.json')}"
+        with open(output_dir / fname, "w") as f:
+            f.write(task.json(indent=2))
+        count += 1
+
+    print(f"Exported {count} tasks to {output_dir}")
+
+    # df = pd.DataFrame([img.report_data().dict() for img in images])
+    # outfile = settings.user_data_path / "label_studio_tasks.csv"
+    # export(df=df, format=ExportFormat.csv, outfile=outfile)
+    # logger.info(f"Exported {len(df)} records to {outfile}")

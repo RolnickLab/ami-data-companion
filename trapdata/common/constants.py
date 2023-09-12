@@ -14,4 +14,5 @@ NEGATIVE_COLOR = [1, 1, 1, 0]  # Transparent
 
 SUMMARY_REFRESH_SECONDS = 5
 
-IMAGE_BASE_URL = "https://object-arbutus.cloud.computecanada.ca/ami-trapdata/"
+# IMAGE_BASE_URL = "https://object-arbutus.cloud.computecanada.ca/ami-trapdata/"
+IMAGE_BASE_URL = "https://static.dev.insectai.org/ami-trapdata/vermont/snapshots"
