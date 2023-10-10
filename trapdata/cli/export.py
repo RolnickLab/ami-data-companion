@@ -89,6 +89,12 @@ def occurrences(
         db_path=settings.database_url, base_directory=settings.image_base_path
     )
     occurrences = []
+
+    tabular_formats = [ExportFormat.csv]
+    plain_text_formats = [ExportFormat.csv, ExportFormat.html]
+    if format in tabular_formats:
+        num_examples = 1
+
     for event in events:
         occurrences += list_occurrences(
             settings.database_url,
@@ -127,7 +133,21 @@ def occurrences(
                 final_path = path.relative_to(settings.user_data_path)
             example["cropped_image_path"] = final_path
 
+    if format in tabular_formats:
+        for occurrence in occurrences:
+            if occurrence.examples:
+                example = occurrence.examples[0]
+                occurrence.example_crop = example["cropped_image_path"]
+                occurrence.examples = []
+
     df = pd.DataFrame([obj.dict() for obj in occurrences])
+    if format in tabular_formats:
+        df = df.drop(columns=["examples"])
+    if format in plain_text_formats:
+        # df["cropped_image_path"] = df["cropped_image_path"].astype(str)
+        # df["timestamp"] = df["timestamp"].astype(str)
+        print(df.columns)
+
     return export(df=df, format=format, outfile=outfile)
 
 

@@ -30,6 +30,7 @@ class Occurrence(BaseModel):
     # cropped_image_path: pathlib.Path
     # source_image_id: int
     examples: list[dict]
+    example_crop: Optional[pathlib.Path] = None
     # detections: list[object]
     # deployment: object
     # captures: list[object]
