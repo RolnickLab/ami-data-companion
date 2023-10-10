@@ -9,9 +9,8 @@ import torchvision.models.detection.faster_rcnn
 import torchvision.models.mobilenetv3
 
 from trapdata import TrapImage, db, logger
-from trapdata.db.models.detections import save_detected_objects
-from trapdata.db.models.queue import ImageQueue
 from trapdata.ml.models.base import InferenceBaseClass
+from trapdata.ml.utils import get_or_download_file
 
 
 class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
@@ -22,25 +21,30 @@ class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
         self.batch_size = batch_size
 
     def __len__(self):
-        return self.queue.queue_count()
+        return 0
 
     def __iter__(self):
         while len(self):
             worker_info = torch.utils.data.get_worker_info()
             logger.info(f"Using worker: {worker_info}")
+            from ...api.queries import get_next_source_images
 
-            records = self.queue.pull_n_from_queue(self.batch_size)
+            records = get_next_source_images(self.batch_size)
             if records:
                 item_ids = torch.utils.data.default_collate(
                     [record.id for record in records]
                 )
                 batch_data = torch.utils.data.default_collate(
-                    [self.transform(record.absolute_path) for record in records]
+                    [self.transform(record.url) for record in records]
                 )
 
                 yield (item_ids, batch_data)
 
-    def transform(self, img_path):
+    def transform(self, url):
+        logger.info(f"Fetching and transforming: {url}")
+        img_path = get_or_download_file(
+            url + "?width=5000&redirect=False", destination_dir="/tmp/today/"
+        )
         return self.image_transforms(PIL.Image.open(img_path))
 
 
@@ -120,12 +124,9 @@ class ObjectDetector(InferenceBaseClass):
             ]
         )
 
-    def get_queue(self) -> ImageQueue:
-        return ImageQueue(self.db_path, self.image_base_path)
-
     def get_dataset(self):
         dataset = LocalizationIterableDatabaseDataset(
-            queue=self.queue,
+            queue=None,
             image_transforms=self.get_transforms(),
             batch_size=self.batch_size,
         )
@@ -144,6 +145,8 @@ class ObjectDetector(InferenceBaseClass):
                 for bbox in image_output
             ]
             detected_objects_data.append(detected_objects)
+
+        from ...api.queries import save_detected_objects
 
         save_detected_objects(
             self.db_path, item_ids, detected_objects_data, self.user_data_path
@@ -180,7 +183,7 @@ class MothObjectDetector_FasterRCNN_2021(ObjectDetector):
     def post_process_single(self, output):
         # This model does not use the labels from the object detection model
         _ = output["labels"]
-        assert all([label == 1 for label in output["labels"]])
+        assert all(label == 1 for label in output["labels"])
 
         # Filter out objects if their score is under score threshold
         bboxes = output["boxes"][output["scores"] > self.bbox_score_threshold]
@@ -221,7 +224,7 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
     def post_process_single(self, output):
         # This model does not use the labels from the object detection model
         _ = output["labels"]
-        assert all([label == 1 for label in output["labels"]])
+        assert all(label == 1 for label in output["labels"])
 
         # Filter out objects if their score is under score threshold
         bboxes = output["boxes"][output["scores"] > self.bbox_score_threshold]
@@ -275,7 +278,7 @@ class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
     def post_process_single(self, output):
         # This model does not use the labels from the object detection model
         _ = output["labels"]
-        assert all([label == 1 for label in output["labels"]])
+        assert all(label == 1 for label in output["labels"])
 
         # Filter out objects if their score is under score threshold
         bboxes = output["boxes"][output["scores"] > self.bbox_score_threshold]
