@@ -1,5 +1,5 @@
 import json
-from typing import Optional, Union
+from typing import Union
 
 import sqlalchemy
 import torch
@@ -25,7 +25,7 @@ def zero_okay_collate(batch):
 
     @TODO switch to streaming IterableDataset type.
     """
-    if any([not item for item in batch]):
+    if any(not item for item in batch):
         logger.debug(f"There's a None in the batch of len {len(batch)}")
         return None
     else:
@@ -91,6 +91,7 @@ class InferenceBaseClass:
             f"Loading {self.type} model (stage: {self.stage}) for {self.name} with {len(self.category_map or [])} categories"
         )
         self.model = self.get_model()
+        logger.info(f"Model loaded: {self.model._get_name()}")
 
     @classmethod
     def get_key(cls):
@@ -163,7 +164,7 @@ class InferenceBaseClass:
         def get_queue(self):
             return DetectedObjectQueue(self.db_path, self.image_base_path)
         """
-        raise NotImplementedError
+        return QueueManager(self.db_path, self.image_base_path)
 
     def get_dataset(self) -> torch.utils.data.Dataset:
         """
@@ -200,6 +201,7 @@ class InferenceBaseClass:
         return self.dataloader
 
     def predict_batch(self, batch):
+        logger.info(f"Predicting batch of {len(batch)} items")
         batch_input = batch.to(
             self.device,
             non_blocking=True,  # Block while in development, are we already in a background process?
@@ -223,8 +225,10 @@ class InferenceBaseClass:
     @torch.no_grad()
     def run(self):
         torch.cuda.empty_cache()
+        logger.info(f"{self.name} -- Starting")
 
         for i, batch in enumerate(self.dataloader):
+            logger.info(f"{self.name} Batch -- Starting")
             if not batch:
                 # @TODO review this once we switch to streaming IterableDataset
                 logger.info(f"Batch {i+1} is empty, skipping")

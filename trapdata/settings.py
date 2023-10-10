@@ -33,6 +33,16 @@ class Settings(BaseSettings):
     localization_batch_size: int = 2
     classification_batch_size: int = 20
     num_workers: int = 1
+    api_base_url: str = "http://localhost:8000/api/v2/"
+    api_username: str
+    api_password: str
+
+    @validator("api_base_url")
+    def validate_base_url(cls, v):
+        if not v.endswith("/"):
+            return v + "/"
+        else:
+            return v
 
     @validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
