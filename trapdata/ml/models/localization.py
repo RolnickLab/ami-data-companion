@@ -21,7 +21,9 @@ class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
         self.batch_size = batch_size
 
     def __len__(self):
-        return 0
+        from ...api.queries import get_source_image_count
+
+        return get_source_image_count()
 
     def __iter__(self):
         while len(self):
@@ -30,6 +32,7 @@ class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
             from ...api.queries import get_next_source_images
 
             records = get_next_source_images(self.batch_size)
+            logger.debug(f"Pulling records: {records}")
             if records:
                 item_ids = torch.utils.data.default_collate(
                     [record.id for record in records]
@@ -41,10 +44,9 @@ class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
                 yield (item_ids, batch_data)
 
     def transform(self, url):
+        url = url + "?width=5000&redirect=False"
         logger.info(f"Fetching and transforming: {url}")
-        img_path = get_or_download_file(
-            url + "?width=5000&redirect=False", destination_dir="/tmp/today/"
-        )
+        img_path = get_or_download_file(url, destination_dir="/tmp/today/")
         return self.image_transforms(PIL.Image.open(img_path))
 
 
@@ -148,9 +150,7 @@ class ObjectDetector(InferenceBaseClass):
 
         from ...api.queries import save_detected_objects
 
-        save_detected_objects(
-            self.db_path, item_ids, detected_objects_data, self.user_data_path
-        )
+        save_detected_objects(item_ids, detected_objects_data)
 
 
 class MothObjectDetector_FasterRCNN_2021(ObjectDetector):

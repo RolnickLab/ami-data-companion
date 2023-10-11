@@ -72,8 +72,8 @@ class TestLocalization(TestCase):
             db_path="",  # deprecated
             image_base_path="",  # deprecated
             user_data_path=settings.user_data_path,
-            batch_size=1,
-            num_workers=1,
+            batch_size=2,
+            num_workers=2,
         )
         object_detector.run()
         logger.info("Localization complete")

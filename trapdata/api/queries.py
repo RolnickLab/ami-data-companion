@@ -38,8 +38,9 @@ def get_next_source_images(num: int, *args, **kwargs) -> list[IncomingSourceImag
     path = "captures/"
     args = {
         "limit": num,
-        "deployment__project": 2,
-        "offset": 100,
+        "deployment": 9,
+        "event": 34,
+        "has_detections": False,
     }  # last_processed__isnull=True
     url = settings.api_base_url + path
     resp = get_session().get(url, params=args)
@@ -47,6 +48,24 @@ def get_next_source_images(num: int, *args, **kwargs) -> list[IncomingSourceImag
     data = resp.json()
     source_images = [IncomingSourceImage(**item) for item in data["results"]]
     return source_images
+
+
+def get_source_image_count(*args, **kwargs) -> int:
+    path = "captures/"
+    args = {
+        "deployment": 9,
+        "event": 34,
+        "limit": 1,
+        "has_detections": False,
+    }
+    url = settings.api_base_url + path
+    resp = get_session().get(url, params=args)
+    print(resp.url)
+    resp.raise_for_status()
+    data = resp.json()
+    count = data["count"]
+    logger.info(f"Images remaining to process: {count}")
+    return count
 
 
 def get_totals(project_id: int, *args, **kwargs):
