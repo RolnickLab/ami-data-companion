@@ -1,0 +1,21 @@
+[Unit]
+
+Description=AMI Data Manager API
+
+After=network.target
+
+
+[Service]
+
+User=debian
+
+Group=www-data
+
+WorkingDirectory=/home/debian/ami-data-manager
+
+ExecStart=/home/debian/miniconda3/bin/gunicorn trapdata.api.main:app --bind 0.0.0.0:8000 --worker-class "uvicorn.workers.UvicornWorker" --log-syslog
+
+
+[Install]
+
+WantedBy=multi-user.target

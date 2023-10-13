@@ -20,6 +20,7 @@ from trapdata.tests import TEST_IMAGES_BASE_PATH  # noqa: F401
 
 from . import constants
 from .logs import logger
+from .schemas import FilePath
 
 APP_NAME_SLUG = "AMI"
 EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"
@@ -72,7 +73,7 @@ def find_timestamped_folders(path):
     def _preprocess(name):
         return name.replace("_", "-")
 
-    dirs = sorted(list(pathlib.Path(path).iterdir()))
+    dirs = sorted(pathlib.Path(path).iterdir())
     for d in dirs:
         # @TODO use yield?
         try:
@@ -286,7 +287,7 @@ def find_images(
         [f.lstrip(".") for f in constants.SUPPORTED_IMAGE_EXTENSIONS]
     )
     pattern = rf"\.({extensions_list})$"
-    for walk_path, dirs, files in os.walk(base_directory):
+    for walk_path, _dirs, files in os.walk(base_directory):
         for name in files:
             if re.search(pattern, name, re.IGNORECASE):
                 relative_path = pathlib.Path(walk_path) / name
@@ -485,7 +486,7 @@ def get_app_dir(app_name: Optional[str] = None) -> pathlib.Path:
         data_dir = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", "~/.config"))
     data_dir = data_dir.expanduser().resolve() / app_name
     if not data_dir.exists():
-        data_dir.mkdir()
+        data_dir.mkdir(parents=True)
     return data_dir
 
 
@@ -504,3 +505,16 @@ def initial_directory_choice():
     than "." which is the directory of this python package.
     """
     return pathlib.Path("~/")
+
+
+def media_url(
+    local_path: FilePath, delim: str, media_url_base: Optional[str] = None
+) -> str:
+    """
+    Given a local path to a file, return a URL to that file. @TODO rework this and handle slashes better.
+    """
+    relative_path = f"{delim}{local_path.split(delim)[-1]}"
+    if media_url_base:
+        return os.path.join(media_url_base, relative_path)
+    else:
+        return relative_path

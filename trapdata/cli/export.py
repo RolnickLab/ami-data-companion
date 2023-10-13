@@ -98,6 +98,7 @@ def occurrences(
     for event in events:
         occurrences += list_occurrences(
             settings.database_url,
+            settings.image_base_path,
             monitoring_session=event,
             classification_threshold=settings.classification_threshold,
             num_examples=num_examples,
@@ -208,7 +209,7 @@ def sessions(
 
 @cli.command()
 def captures(
-    date: datetime.datetime,
+    date: Optional[datetime.datetime] = None,
     format: ExportFormat = ExportFormat.json,
     outfile: Optional[pathlib.Path] = None,
 ) -> Optional[str]:
@@ -219,16 +220,28 @@ def captures(
     """
     Session = get_session_class(settings.database_url)
     session = Session()
+    if date is not None:
+        event_dates = [date.date()]
+    else:
+        event_dates = [
+            event.day
+            for event in get_monitoring_sessions_from_db(
+                db_path=settings.database_url, base_directory=settings.image_base_path
+            )
+        ]
     events = get_monitoring_session_by_date(
         db_path=settings.database_url,
         base_directory=settings.image_base_path,
-        event_dates=[str(date.date())],
+        event_dates=event_dates,
     )
-    if not len(events):
+    if date and not len(events):
         raise Exception(f"No Monitoring Event with date: {date.date()}")
 
-    event = events[0]
-    captures = get_monitoring_session_images(settings.database_url, event, limit=100)
+    captures = []
+    for event in events:
+        captures += get_monitoring_session_images(
+            settings.database_url, event, limit=100
+        )
     [session.add(img) for img in captures]
 
     df = pd.DataFrame([img.report_detail().dict() for img in captures])
