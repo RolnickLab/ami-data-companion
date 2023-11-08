@@ -7,10 +7,13 @@ import torchvision.models.detection.anchor_utils
 import torchvision.models.detection.backbone_utils
 import torchvision.models.detection.faster_rcnn
 import torchvision.models.mobilenetv3
+from PIL import ImageFile
 
 from trapdata import TrapImage, db, logger
 from trapdata.ml.models.base import InferenceBaseClass
 from trapdata.ml.utils import get_or_download_file
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
@@ -34,20 +37,29 @@ class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
             records = get_next_source_images(self.batch_size)
             logger.debug(f"Pulling records: {records}")
             if records:
-                item_ids = torch.utils.data.default_collate(
-                    [record.id for record in records]
-                )
-                batch_data = torch.utils.data.default_collate(
-                    [self.transform(record.url) for record in records]
-                )
+                items = [(record.id, self.transform(record.url)) for record in records]
+                items = [(item_id, item) for item_id, item in items if item is not None]
+                item_ids, item_objs = zip(*items)
+                logger.info(f"Procesing items: {item_ids}")
 
+                item_ids = torch.utils.data.default_collate(item_ids)
+                batch_data = torch.utils.data.default_collate(item_objs)
                 yield (item_ids, batch_data)
 
     def transform(self, url):
         url = url + "?width=5000&redirect=False"
         logger.info(f"Fetching and transforming: {url}")
         img_path = get_or_download_file(url, destination_dir="/tmp/today/")
-        return self.image_transforms(PIL.Image.open(img_path))
+        try:
+            return self.image_transforms(PIL.Image.open(img_path))
+        except PIL.UnidentifiedImageError:
+            logger.error(f"Unidentified image: {img_path}")
+            print(f"Unidentified image: {img_path}")
+            return None
+        except OSError:
+            logger.error(f"OSError: {img_path}")
+            print(f"OSError: {img_path}")
+            return None
 
 
 class LocalizationDatabaseDataset(torch.utils.data.Dataset):
@@ -86,8 +98,16 @@ class LocalizationDatabaseDataset(torch.utils.data.Dataset):
             sesh.commit()
 
         img_path = img_path
-        pil_image = PIL.Image.open(img_path)
-        item = (item_id, self.transform(pil_image))
+        try:
+            pil_image = PIL.Image.open(img_path)
+        except FileNotFoundError:
+            logger.error(f"File not found: {img_path}")
+            item = (item_id, None)
+        except PIL.UnidentifiedImageError:
+            logger.error(f"Unidentified image: {img_path}")
+            item = (item_id, None)
+        else:
+            item = (item_id, self.transform(pil_image))
 
         return item
 

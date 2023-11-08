@@ -6,11 +6,16 @@ from .schemas import IncomingSourceImage
 
 logger = logging.getLogger(__name__)
 
+TEMPORARY_DEPLOYMENT_ID = 9
+TEMPORARY_EVENT_ID = 34
+TEMPORARY_COLLECTION_ID = 4
+
 
 def save_detected_objects(
     source_image_ids: list[int], detected_objects_data: list[dict], *args, **kwargs
 ):
     logger.info(f"Saving {len(source_image_ids)} detected objects via API")
+    print(f"Saving {len(source_image_ids)} detected objects via API")
     responses = {}
     path = "detections/"
     for source_image_id, detected_objects in zip(
@@ -38,9 +43,11 @@ def get_next_source_images(num: int, *args, **kwargs) -> list[IncomingSourceImag
     path = "captures/"
     args = {
         "limit": num,
-        "deployment": 9,
-        "event": 34,
+        # "deployment": TEMPORARY_DEPLOYMENT_ID,
+        # "event": TEMPORARY_EVENT_ID,
+        "collections": TEMPORARY_COLLECTION_ID,
         "has_detections": False,
+        "order": "?",
     }  # last_processed__isnull=True
     url = settings.api_base_url + path
     resp = get_session().get(url, params=args)
@@ -53,8 +60,9 @@ def get_next_source_images(num: int, *args, **kwargs) -> list[IncomingSourceImag
 def get_source_image_count(*args, **kwargs) -> int:
     path = "captures/"
     args = {
-        "deployment": 9,
-        "event": 34,
+        # "deployment": TEMPORARY_DEPLOYMENT_ID,
+        # "event": TEMPORARY_EVENT_ID,
+        "collections": TEMPORARY_COLLECTION_ID,
         "limit": 1,
         "has_detections": False,
     }
