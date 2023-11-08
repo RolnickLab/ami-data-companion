@@ -23,9 +23,9 @@ def start_pipeline(
         num_workers=settings.num_workers,
         single=single,
     )
-    if object_detector.queue.queue_count() > 0:
-        object_detector.run()
-        logger.info("Localization complete")
+    # if object_detector.queue.queue_count() > 0:
+    object_detector.run()
+    logger.info("Localization complete")
 
     BinaryClassifier = ml.models.binary_classifiers[
         settings.binary_classification_model.value
