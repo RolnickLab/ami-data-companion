@@ -1,5 +1,5 @@
 import json
-from typing import Optional, Union
+from typing import Union
 
 import sqlalchemy
 import torch
@@ -25,7 +25,7 @@ def zero_okay_collate(batch):
 
     @TODO switch to streaming IterableDataset type.
     """
-    if any([not item for item in batch]):
+    if any(not item for item in batch):
         logger.debug(f"There's a None in the batch of len {len(batch)}")
         return None
     else:
@@ -54,6 +54,7 @@ class InferenceBaseClass:
     weights = None
     labels_path = None
     category_map = {}
+    num_classes: Union[int, None] = None  # Will use len(category_map) if None
     model: torch.nn.Module
     transforms: torchvision.transforms.Compose
     batch_size = 4
@@ -82,6 +83,7 @@ class InferenceBaseClass:
 
         self.device = self.device or get_device()
         self.category_map = self.get_labels(self.labels_path)
+        self.num_classes = self.num_classes or len(self.category_map)
         self.weights = self.get_weights(self.weights_path)
         self.transforms = self.get_transforms()
         self.queue = self.get_queue()
