@@ -97,7 +97,7 @@ class LabelStudioTaskPredictionResultValue(BaseModel):
     y: float
     width: float
     height: float
-    rectanglelabels: list[str]
+    # rectanglelabels: Optional[list[str]] = None
 
 
 class LabelStudioTaskPredictionResult(BaseModel):
@@ -122,9 +122,10 @@ class LabelStudioTask(BaseModel):
     predictions: list[LabelStudioTaskPrediction]
 
 
-def _as_label_studio_task(image: "TrapImage", db_path: str) -> LabelStudioTask:
-    # @TODO this is a hack to get the deployment name
-    deployment = image.absolute_path.parent.parent.parent.name
+def _as_label_studio_task(
+    image: "TrapImage", db_path: str, include_labels: bool = False
+) -> LabelStudioTask:
+    deployment = image.monitoring_session.deployment
 
     data = LabelStudioTaskData(
         image=f"{constants.IMAGE_BASE_URL}/{image.path}",
@@ -144,26 +145,30 @@ def _as_label_studio_task(image: "TrapImage", db_path: str) -> LabelStudioTask:
     model_name = "unknown"
     for obj in get_detections_for_image(db_path, image.id):
         model_name = str(obj.model_name)
-        if not obj.binary_label:
-            print(f"Skipping {obj} because it has no binary label")
-            continue
-        label = label_map[obj.binary_label]
+
+        value = LabelStudioTaskPredictionResultValue(
+            rotation=0,
+            x=(obj.bbox[0] / image.width) * 100,
+            y=(obj.bbox[1] / image.height) * 100,
+            width=(obj.width() / image.width) * 100,
+            height=(obj.height() / image.height) * 100,
+        )
+
+        if include_labels and obj.binary_label:
+            labels = [label_map[obj.binary_label]]
+
+            value.rectanglelabels = labels
+
         result = LabelStudioTaskPredictionResult(
             id=str(obj.id),
-            type="rectanglelabels",
-            from_name="label",
+            # type="rectanglelabels",
+            type="rectangle",
+            from_name="detected_object",
             to_name="image",
             original_width=image.width,
             original_height=image.height,
             image_rotation=0,
-            value=LabelStudioTaskPredictionResultValue(
-                rotation=0,
-                x=(obj.bbox[0] / image.width) * 100,
-                y=(obj.bbox[1] / image.height) * 100,
-                width=(obj.width() / image.width) * 100,
-                height=(obj.height() / image.height) * 100,
-                rectanglelabels=[label],
-            ),
+            value=value,
         )
         results.append(result)
 
