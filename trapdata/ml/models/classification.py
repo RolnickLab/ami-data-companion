@@ -18,7 +18,8 @@ class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
 
     def __len__(self):
         queue_count = self.queue.queue_count()
-        logger.info(f"Current queue count: {queue_count}")
+        if queue_count > 0:
+            logger.info(f"Current queue count: {queue_count}")
         return queue_count
 
     def __iter__(self):
@@ -315,5 +316,5 @@ class PanamaMothSpeciesClassifierMixedResolution2023(
     )
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "03_moths_centralAmerica_category_map.json"
+        "03_moths_centralAmerica_category_map-with-names.json"
     )
