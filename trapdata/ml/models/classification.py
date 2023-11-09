@@ -149,11 +149,27 @@ class Resnet50ClassifierLowRes(Resnet50Classifier):
     input_size = 128
 
     def get_model(self):
-        num_classes = len(self.category_map)
         model = torchvision.models.resnet50(weights=None)
         num_ftrs = model.fc.in_features
-        model.fc = torch.nn.Linear(num_ftrs, num_classes)
+        assert (
+            self.num_classes
+        ), f"Number of classes could not be determined for for {self.name}"
+        model.fc = torch.nn.Linear(num_ftrs, self.num_classes)
         model = model.to(self.device)
+        assert self.weights, f"No weights path configured for {self.name}"
+        checkpoint = torch.load(self.weights, map_location=self.device)
+        state_dict = checkpoint.get("model_state_dict") or checkpoint
+        model.load_state_dict(state_dict)
+        model.eval()
+        return model
+
+
+class Resnet50TimmClassifier(Resnet50Classifier):
+    def get_model(self):
+        model = timm.create_model(
+            "resnet50", pretrained=False, num_classes=self.num_classes
+        )
+        assert self.weights, f"No weights path configured for {self.name}"
         checkpoint = torch.load(self.weights, map_location=self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
@@ -272,9 +288,7 @@ class UKDenmarkMothSpeciesClassifierMixedResolution(
 
 class PanamaMothSpeciesClassifierMixedResolution(SpeciesClassifier, Resnet50Classifier):
     name = "Panama Species Classifier"
-    description = (
-        "Trained on December 22, 2022 using a mix of low & med resolution images"
-    )
+    description = "Trained on December 22, 2022 using a mix of low & med resolution images. 148 species."
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "panama_moth-model_v01_resnet50_2023-01-24-09-51.pt"
@@ -282,4 +296,23 @@ class PanamaMothSpeciesClassifierMixedResolution(SpeciesClassifier, Resnet50Clas
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "panama_moth-category-map_24Jan2023.json"
+    )
+
+
+class PanamaMothSpeciesClassifierMixedResolution2023(
+    SpeciesClassifier, Resnet50ClassifierLowRes
+):
+    name = "Panama Species Classifier 2023"
+    num_classes = 2849
+
+    description = (
+        "Trained on Noveber 07, 2023 using a corrected species list of 1036 classes."
+    )
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_resnet50_baseline_737f0a50.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "03_moths_centralAmerica_category_map.json"
     )
