@@ -218,6 +218,22 @@ def lookup_gbif_species(species_list_path: str, gbif_id: int) -> Taxon:
     return taxon
 
 
+def replace_gbif_id_with_name(name) -> str:
+    """
+    If the name appears to be a GBIF ID, then look up the species name from GBIF.
+    """
+    try:
+        gbif_id = int(name)
+    except ValueError:
+        return name
+    else:
+        taxon = fetch_gbif_species(gbif_id)
+        if taxon and taxon.name:
+            return taxon.name
+        else:
+            return name
+
+
 class StopWatch:
     """
     Measure inference time with GPU support.

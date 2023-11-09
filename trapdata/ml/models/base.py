@@ -55,6 +55,7 @@ class InferenceBaseClass:
     labels_path = None
     category_map = {}
     num_classes: Union[int, None] = None  # Will use len(category_map) if None
+    lookup_gbif_names: bool = False
     model: torch.nn.Module
     transforms: torchvision.transforms.Compose
     batch_size = 4
@@ -117,6 +118,25 @@ class InferenceBaseClass:
 
             with open(local_path) as f:
                 labels = json.load(f)
+
+            if self.lookup_gbif_names:
+                """
+                Use this if you want to store name strings instead of taxon IDs.
+                Taxon IDs are helpful for looking up additional information about the species
+                such as the genus and family.
+                """
+                from trapdata.ml.utils import replace_gbif_id_with_name
+
+                string_labels = {}
+                for label, index in labels.items():
+                    string_label = replace_gbif_id_with_name(label)
+                    string_labels[string_label] = index
+
+                logger.info(f"Replacing GBIF IDs with names in {local_path}")
+                # Backup the original file
+                local_path.rename(local_path.with_suffix(".bak"))
+                with open(local_path, "w") as f:
+                    json.dump(string_labels, f)
 
             # @TODO would this be faster as a list? especially when getting the labels of multiple
             # indexes in one prediction

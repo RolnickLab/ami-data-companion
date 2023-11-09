@@ -47,16 +47,9 @@ class SpeciesSummaryListItem(pydantic.BaseModel):
         If the name is an integer, then assume it's a GBIF ID and we need to fetch the
         species name from GBIF.
         """
-        try:
-            int(val)
-        except ValueError:
-            return val
-        else:
-            # Avoiding a circular import. @TODO refactor utils?
-            from trapdata.ml.utils import fetch_gbif_species
+        from trapdata.ml.utils import replace_gbif_id_with_name
 
-            taxon = fetch_gbif_species(gbif_id=val)
-            return taxon.name if taxon else str(val)
+        return replace_gbif_id_with_name(val)
 
 
 def list_occurrences(

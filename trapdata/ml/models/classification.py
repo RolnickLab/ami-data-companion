@@ -304,6 +304,7 @@ class PanamaMothSpeciesClassifierMixedResolution2023(
 ):
     name = "Panama Species Classifier 2023"
     num_classes = 2849
+    lookup_gbif_names = True
 
     description = (
         "Trained on Noveber 07, 2023 using a corrected species list of 1036 classes."
