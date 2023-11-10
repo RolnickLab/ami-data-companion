@@ -6,7 +6,7 @@ from trapdata import constants, logger
 from trapdata.db.models.detections import save_classified_objects
 from trapdata.db.models.queue import DetectedObjectQueue, UnclassifiedObjectQueue
 
-from .base import InferenceBaseClass
+from .base import InferenceBaseClass, imagenet_normalization
 
 
 class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
@@ -302,15 +302,15 @@ class PanamaMothSpeciesClassifierMixedResolution2023(
     SpeciesClassifier, Resnet50ClassifierLowRes
 ):
     name = "Panama Species Classifier 2023"
-    num_classes = 2849
     lookup_gbif_names = True
+    normalization = imagenet_normalization
 
     description = (
         "Trained on Noveber 07, 2023 using a corrected species list of 1036 classes."
     )
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "panama_resnet50_baseline_737f0a50.pth"
+        "panama_resnet50_baseline_9270f84a.pth"
     )
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
