@@ -6,7 +6,7 @@ from trapdata import constants, logger
 from trapdata.db.models.detections import save_classified_objects
 from trapdata.db.models.queue import DetectedObjectQueue, UnclassifiedObjectQueue
 
-from .base import InferenceBaseClass
+from .base import InferenceBaseClass, imagenet_normalization
 
 
 class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
@@ -18,7 +18,8 @@ class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
 
     def __len__(self):
         queue_count = self.queue.queue_count()
-        logger.info(f"Current queue count: {queue_count}")
+        if queue_count > 0:
+            logger.info(f"Current queue count: {queue_count}")
         return queue_count
 
     def __iter__(self):
@@ -60,13 +61,11 @@ class EfficientNetClassifier(InferenceBaseClass):
         return model
 
     def get_transforms(self):
-        mean, std = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
-
         return torchvision.transforms.Compose(
             [
                 torchvision.transforms.Resize((self.input_size, self.input_size)),
                 torchvision.transforms.ToTensor(),
-                torchvision.transforms.Normalize(mean, std),
+                self.normalization,
             ]
         )
 
@@ -149,11 +148,27 @@ class Resnet50ClassifierLowRes(Resnet50Classifier):
     input_size = 128
 
     def get_model(self):
-        num_classes = len(self.category_map)
         model = torchvision.models.resnet50(weights=None)
         num_ftrs = model.fc.in_features
-        model.fc = torch.nn.Linear(num_ftrs, num_classes)
+        assert (
+            self.num_classes
+        ), f"Number of classes could not be determined for for {self.name}"
+        model.fc = torch.nn.Linear(num_ftrs, self.num_classes)
         model = model.to(self.device)
+        assert self.weights, f"No weights path configured for {self.name}"
+        checkpoint = torch.load(self.weights, map_location=self.device)
+        state_dict = checkpoint.get("model_state_dict") or checkpoint
+        model.load_state_dict(state_dict)
+        model.eval()
+        return model
+
+
+class Resnet50TimmClassifier(Resnet50Classifier):
+    def get_model(self):
+        model = timm.create_model(
+            "resnet50", pretrained=False, num_classes=self.num_classes
+        )
+        assert self.weights, f"No weights path configured for {self.name}"
         checkpoint = torch.load(self.weights, map_location=self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
@@ -272,9 +287,7 @@ class UKDenmarkMothSpeciesClassifierMixedResolution(
 
 class PanamaMothSpeciesClassifierMixedResolution(SpeciesClassifier, Resnet50Classifier):
     name = "Panama Species Classifier"
-    description = (
-        "Trained on December 22, 2022 using a mix of low & med resolution images"
-    )
+    description = "Trained on December 22, 2022 using a mix of low & med resolution images. 148 species."
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "panama_moth-model_v01_resnet50_2023-01-24-09-51.pt"
@@ -282,4 +295,24 @@ class PanamaMothSpeciesClassifierMixedResolution(SpeciesClassifier, Resnet50Clas
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "panama_moth-category-map_24Jan2023.json"
+    )
+
+
+class PanamaMothSpeciesClassifierMixedResolution2023(
+    SpeciesClassifier, Resnet50ClassifierLowRes
+):
+    name = "Panama Species Classifier 2023"
+    lookup_gbif_names = True
+    normalization = imagenet_normalization
+
+    description = (
+        "Trained on Noveber 07, 2023 using a corrected species list of 1036 classes."
+    )
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_resnet50_baseline_9270f84a.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "03_moths_centralAmerica_category_map-with-names.json"
     )
