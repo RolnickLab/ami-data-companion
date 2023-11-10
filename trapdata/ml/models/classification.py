@@ -61,13 +61,11 @@ class EfficientNetClassifier(InferenceBaseClass):
         return model
 
     def get_transforms(self):
-        mean, std = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
-
         return torchvision.transforms.Compose(
             [
                 torchvision.transforms.Resize((self.input_size, self.input_size)),
                 torchvision.transforms.ToTensor(),
-                torchvision.transforms.Normalize(mean, std),
+                self.normalization,
             ]
         )
 
