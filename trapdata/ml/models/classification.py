@@ -6,7 +6,7 @@ from trapdata import constants, logger
 from trapdata.db.models.detections import save_classified_objects
 from trapdata.db.models.queue import DetectedObjectQueue, UnclassifiedObjectQueue
 
-from .base import InferenceBaseClass, imagenet_normalization
+from .base import InferenceBaseClass, SimpleInferenceBaseClass, imagenet_normalization
 
 
 class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
@@ -316,3 +316,21 @@ class PanamaMothSpeciesClassifierMixedResolution2023(
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "03_moths_centralAmerica_category_map-with-names.json"
     )
+
+
+class SimplePanamaClassifier(
+    SimpleInferenceBaseClass, PanamaMothSpeciesClassifierMixedResolution2023
+):
+    pass
+
+
+class SimpleUKDenmarkClassifier(
+    SimpleInferenceBaseClass, UKDenmarkMothSpeciesClassifierMixedResolution
+):
+    pass
+
+
+class SimpleQuebecVermontClassifier(
+    SimpleInferenceBaseClass, QuebecVermontMothSpeciesClassifierMixedResolution
+):
+    pass

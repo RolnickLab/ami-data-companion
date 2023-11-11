@@ -1,6 +1,8 @@
 import json
+import typing
 from typing import Union
 
+import PIL.Image
 import sqlalchemy
 import torch
 import torch.utils.data
@@ -301,3 +303,33 @@ class InferenceBaseClass:
             logger.info(f"{self.name} Batch -- Done")
 
         logger.info(f"{self.name} -- Done")
+
+
+class SimpleInferenceBaseClass(InferenceBaseClass):
+    """
+    Version of InferenceBaseClass that doesn't use a dataset, dataloader, or queue.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(db_path="", image_base_path="", *args, **kwargs)
+
+    def run(self):
+        raise NotImplementedError
+
+    @torch.no_grad()
+    def predict(self, images: list[PIL.Image.Image]):
+        torch.cuda.empty_cache()
+
+        logger.info(f"Processing {len(list(images))} images")
+
+        batch_input = torch.stack([self.transforms(image) for image in images])  # type: ignore
+
+        with StopWatch() as batch_time:
+            with start_transaction(op="inference_batch", name=self.name):
+                batch_output = self.predict_batch(batch_input)
+
+        inference_time = batch_time.duration
+        logger.info(f"Inference time: {inference_time}")
+
+        batch_output = list(self.post_process_batch(batch_output))
+        return batch_output

@@ -298,10 +298,10 @@ def find_images(
                 try:
                     date = get_image_timestamp(full_path, check_exif=check_exif)
                 except Exception as e:
-                    logger.error(
-                        f"Skipping image, could not determine timestamp for: {full_path}\n {e}"
-                    )
                     if skip_missing_timestamps:
+                        logger.warn(
+                            f"Skipping image, could not determine timestamp for: {full_path}\n {e}"
+                        )
                         continue
                     else:
                         date = None
