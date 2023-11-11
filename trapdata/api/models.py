@@ -39,7 +39,16 @@ class APIObjectDetector(APIInferenceBaseClass, ObjectDetector):
             ]
             detected_objects_data.append(detected_objects)
 
+        # @TODO crop and post image crops to object store
         save_detected_objects(item_ids, detected_objects_data)
+
+    def filter_objects_of_interest(self, item_ids, batch_output):
+        # @TODO run the binary classifier on the crops right here dingus
+        pass
+
+    def classifiy_results(self, item_ids, batch_output):
+        # @TODO run the species classifier on the crops right here boyyyyy
+        pass
 
     def get_dataset(self):
         return LocalizationAPIDataset(
