@@ -32,6 +32,25 @@ def zero_okay_collate(batch):
         return torch.utils.data.default_collate(batch)
 
 
+imagenet_normalization = torchvision.transforms.Normalize(
+    # "torch preprocessing"
+    mean=[0.485, 0.456, 0.406],  # RGB
+    std=[0.229, 0.224, 0.225],  # RGB
+)
+
+tensorflow_normalization = torchvision.transforms.Normalize(
+    # -1 to 1
+    mean=[0.5, 0.5, 0.5],  # RGB
+    std=[0.5, 0.5, 0.5],  # RGB
+)
+
+generic_normalization = torchvision.transforms.Normalize(
+    # 0 to 1
+    mean=[0.5, 0.5, 0.5],  # RGB
+    std=[0.5, 0.5, 0.5],  # RGB
+)
+
+
 class InferenceBaseClass:
     """
     Base class for all batch-inference models.
@@ -54,7 +73,10 @@ class InferenceBaseClass:
     weights = None
     labels_path = None
     category_map = {}
+    num_classes: Union[int, None] = None  # Will use len(category_map) if None
+    lookup_gbif_names: bool = False
     model: torch.nn.Module
+    normalization = tensorflow_normalization
     transforms: torchvision.transforms.Compose
     batch_size = 4
     num_workers = 1
@@ -82,6 +104,7 @@ class InferenceBaseClass:
 
         self.device = self.device or get_device()
         self.category_map = self.get_labels(self.labels_path)
+        self.num_classes = self.num_classes or len(self.category_map)
         self.weights = self.get_weights(self.weights_path)
         self.transforms = self.get_transforms()
         self.queue = self.get_queue()
@@ -116,6 +139,25 @@ class InferenceBaseClass:
 
             with open(local_path) as f:
                 labels = json.load(f)
+
+            if self.lookup_gbif_names:
+                """
+                Use this if you want to store name strings instead of taxon IDs.
+                Taxon IDs are helpful for looking up additional information about the species
+                such as the genus and family.
+                """
+                from trapdata.ml.utils import replace_gbif_id_with_name
+
+                string_labels = {}
+                for label, index in labels.items():
+                    string_label = replace_gbif_id_with_name(label)
+                    string_labels[string_label] = index
+
+                logger.info(f"Replacing GBIF IDs with names in {local_path}")
+                # Backup the original file
+                local_path.rename(local_path.with_suffix(".bak"))
+                with open(local_path, "w") as f:
+                    json.dump(string_labels, f)
 
             # @TODO would this be faster as a list? especially when getting the labels of multiple
             # indexes in one prediction

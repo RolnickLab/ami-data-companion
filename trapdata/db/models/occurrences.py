@@ -10,14 +10,14 @@ import datetime
 import pathlib
 from typing import Optional
 
+import pydantic
 import sqlalchemy as sa
-from pydantic import BaseModel
 
 from trapdata import db
 from trapdata.db import models
 
 
-class Occurrence(BaseModel):
+class Occurrence(pydantic.BaseModel):
     id: str
     label: str
     best_score: float
@@ -30,15 +30,26 @@ class Occurrence(BaseModel):
     # cropped_image_path: pathlib.Path
     # source_image_id: int
     examples: list[dict]
+    example_crop: Optional[pathlib.Path] = None
     # detections: list[object]
     # deployment: object
     # captures: list[object]
 
 
-class SpeciesSummaryListItem(BaseModel):
+class SpeciesSummaryListItem(pydantic.BaseModel):
     name: str
     count: int
     example: Optional[pathlib.Path] = None
+
+    @pydantic.validator("name")
+    def name_must_be_string(cls, val):
+        """
+        If the name is an integer, then assume it's a GBIF ID and we need to fetch the
+        species name from GBIF.
+        """
+        from trapdata.ml.utils import replace_gbif_id_with_name
+
+        return replace_gbif_id_with_name(val)
 
 
 def list_occurrences(
