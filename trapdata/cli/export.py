@@ -24,7 +24,7 @@ from trapdata.db.models.events import (
     get_monitoring_session_images,
     get_monitoring_sessions_from_db,
 )
-from trapdata.db.models.occurrences import list_occurrences
+from trapdata.db.models.occurrences import Occurrence, list_occurrences
 
 cli = typer.Typer(no_args_is_help=True)
 
@@ -88,7 +88,8 @@ def occurrences(
     events = get_monitoring_sessions_from_db(
         db_path=settings.database_url, base_directory=settings.image_base_path
     )
-    occurrences = []
+
+    occurrences: list[Occurrence] = []
 
     tabular_formats = [ExportFormat.csv]
     plain_text_formats = [ExportFormat.csv, ExportFormat.html]
@@ -106,32 +107,36 @@ def occurrences(
         )
     logger.info(f"Preparing to export {len(occurrences)} records as {format}")
 
+    if outfile:
+        destination_dir = outfile.parent
+    else:
+        destination_dir = settings.user_data_path / "exports"
+    destination_dir.mkdir(parents=True, exist_ok=True)
+
     if collect_images:
         # Collect images for exported occurrences into a subdirectory
-        subdir = "exports"
         if outfile:
             name = outfile.stem
         else:
             name = f"occurrences_{int(time.time())}"
-        destination_dir = settings.user_data_path / subdir / f"{name}_images"
+        destination_dir = destination_dir / f"{name}_images"
         logger.info(f'Collecting images into "{destination_dir}"')
         destination_dir.mkdir(parents=True, exist_ok=True)
-    else:
-        destination_dir = None
 
-    for occurrence in occurrences:
-        for example in occurrence.examples:
-            path = pathlib.Path(example["cropped_image_path"]).resolve()
-            if destination_dir:
-                destination = destination_dir / f"{occurrence.id}-{path.name}"
+        for occurrence in occurrences:
+            for example in occurrence.examples:
+                path = pathlib.Path(example["cropped_image_path"]).resolve()
+                destination = (
+                    destination_dir / f"{occurrence.label} {occurrence.id} {path.name}"
+                )
                 if not destination.exists():
                     shutil.copy(path, destination)
                 path = destination
-            if absolute_paths:
-                final_path = path.absolute()
-            else:
-                final_path = path.relative_to(settings.user_data_path)
-            example["cropped_image_path"] = final_path
+                if absolute_paths:
+                    final_path = path.absolute()
+                else:
+                    final_path = path.relative_to(destination_dir)
+                example["cropped_image_path"] = final_path
 
     if format in tabular_formats:
         for occurrence in occurrences:
