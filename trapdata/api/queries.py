@@ -18,6 +18,8 @@ def fetch_source_image_data(id: int):
     return IncomingSourceImage(**data)
 
 
+# @TODO If this is being initiated from a POST request with the source image info, then we can
+# return the results in the same response. At least single images.
 def save_detected_objects(
     source_image_ids: list[int], detected_objects_data: list[dict], *args, **kwargs
 ):
