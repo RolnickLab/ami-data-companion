@@ -7,6 +7,7 @@ import torch
 
 from trapdata.common.filemanagement import find_images
 from trapdata.ml.models.classification import (
+    SimpleInferenceBaseClass,
     SimplePanamaClassifier,
     SimpleQuebecVermontClassifier,
     SimpleUKDenmarkClassifier,
@@ -32,15 +33,27 @@ class TestSimpleClassifier(unittest.TestCase):
         classifier = SimpleQuebecVermontClassifier(user_data_path=LOCAL_WEIGHTS_PATH)
         for true_name, image in load_cropped_images("vermont"):
             batch_results = classifier.predict([image])
-            predicted_label, score = batch_results[0]
+            predicted_label, score = batch_results[0][0]
             self.assertEqual(true_name, predicted_label)
 
-    def test_predict_batch(self):
-        classifier = SimpleQuebecVermontClassifier(user_data_path=LOCAL_WEIGHTS_PATH)
-        true_labels, images = list(zip(*load_cropped_images("vermont")))
+    def _test_predict_batch(
+        self, Classifier: typing.Type[SimpleInferenceBaseClass], examples_dir: str
+    ):
+        classifier = Classifier(user_data_path=LOCAL_WEIGHTS_PATH)
+        true_labels, images = list(zip(*load_cropped_images(examples_dir)))
         batch_results = classifier.predict(images)
-        for true_label, (predicted_label, score) in zip(true_labels, batch_results):
+        for true_label, predictions in zip(true_labels, batch_results):
+            predicted_label, score = predictions[0]
             self.assertEqual(true_label, predicted_label)
+
+    def test_quebec_vermont(self):
+        self._test_predict_batch(SimpleQuebecVermontClassifier, "vermont")
+
+    def test_panama(self):
+        self._test_predict_batch(SimplePanamaClassifier, "panama")
+
+    def test_uk_denmark(self):
+        self._test_predict_batch(SimpleUKDenmarkClassifier, "denmark")
 
 
 if __name__ == "__main__":

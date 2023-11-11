@@ -1,7 +1,7 @@
 import json
-import typing
 from typing import Union
 
+import numpy as np
 import PIL.Image
 import sqlalchemy
 import torch
@@ -333,3 +333,20 @@ class SimpleInferenceBaseClass(InferenceBaseClass):
 
         batch_output = list(self.post_process_batch(batch_output))
         return batch_output
+
+    def post_process_batch(self, output, top_n=3):
+        predictions = torch.nn.functional.softmax(output, dim=1)
+        predictions = predictions.cpu().numpy()
+
+        categories = predictions.argsort(axis=1)[:, -top_n:][:, ::-1]
+        labels = [
+            [self.category_map[cat] for cat in cat_list] for cat_list in categories
+        ]
+        scores = predictions[np.arange(predictions.shape[0])[:, None], categories]
+
+        result = [
+            list(zip(label_list, score_list))
+            for label_list, score_list in zip(labels, scores)
+        ]
+        logger.debug(f"Post-processing result batch: {result}")
+        return result
