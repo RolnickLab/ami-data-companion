@@ -66,8 +66,12 @@ interfaces = [
 
 interfaces, names = zip(*interfaces)
 
-demo = gr.TabbedInterface(interface_list=interfaces, tab_names=names)
+demo = gr.TabbedInterface(
+    interface_list=interfaces,
+    tab_names=names,
+    theme=gr.themes.Default(),
+)
 
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(server_name="0.0.0.0", server_port=7861)
