@@ -293,6 +293,10 @@ class InferenceBaseClass:
             batch_output = list(self.post_process_batch(batch_output))
             item_ids = item_ids.tolist()
             logger.info(f"Saving {len(item_ids)} results")
+
+            # @TODO Consider passing the input to the save method so that we can
+            # create crops from the image already in memory.
+            # the dataloader would need to return the unprocessed image
             self.save_results(item_ids, batch_output)
             logger.info(f"{self.name} Batch -- Done")
 
