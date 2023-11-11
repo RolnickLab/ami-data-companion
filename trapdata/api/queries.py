@@ -1,14 +1,21 @@
-import logging
+from trapdata import logger
 
 from . import settings
 from .auth import get_session
 from .schemas import IncomingSourceImage
 
-logger = logging.getLogger(__name__)
-
 TEMPORARY_DEPLOYMENT_ID = 9
 TEMPORARY_EVENT_ID = 34
 TEMPORARY_COLLECTION_ID = 4
+
+
+def fetch_source_image_data(id: int):
+    path = f"captures/{id}/"
+    url = settings.api_base_url + path
+    resp = get_session().get(url)
+    resp.raise_for_status()
+    data = resp.json()
+    return IncomingSourceImage(**data)
 
 
 def save_detected_objects(
@@ -18,6 +25,7 @@ def save_detected_objects(
     print(f"Saving {len(source_image_ids)} detected objects via API")
     responses = {}
     path = "detections/"
+
     for source_image_id, detected_objects in zip(
         source_image_ids, detected_objects_data
     ):
@@ -28,7 +36,9 @@ def save_detected_objects(
             data["source_image"] = (
                 settings.api_base_url + f"captures/{source_image_id}/"
             )
-            data["detection_algorithm_id"] = 1  # detected_object["model_name"]
+            data[
+                "detection_algorithm_id"
+            ] = 2  # https://api.dev.insectai.org/api/v2/ml/algorithms/2/
             resp = get_session().post(settings.api_base_url + path, json=data)
             resp.raise_for_status()
             data = resp.json()
