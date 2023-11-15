@@ -1,13 +1,17 @@
 import logging
+import pathlib
 import tempfile
 import unittest
 from unittest import TestCase
 
 import PIL.Image
 
-import trapdata.ml as ml
+from trapdata.common.filemanagement import find_images
+from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 from . import auth, queries, settings
+from .models.localization import MothDetector
+from .schemas import SourceImage
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,6 +36,13 @@ def make_image():
         return f.name
 
 
+def get_test_images(subdir: str = "cyprus") -> list[SourceImage]:
+    return [
+        SourceImage(id=img["filesize"], filepath=img["path"])
+        for img in find_images(pathlib.Path(TEST_IMAGES_BASE_PATH) / subdir)
+    ]
+
+
 class TestAuth(TestCase):
     def test_login(self):
         token = auth.get_token()
@@ -50,7 +61,7 @@ class NoTestSourceImages(TestCase):
     def test_get_next_batch(self):
         batch = queries.get_next_source_images(10)
         for item in batch:
-            self.assertIsInstance(item, queries.IncomingSourceImage)
+            self.assertIsInstance(item, SourceImage)
         return batch
 
     def test_save_detections(self):
@@ -88,17 +99,22 @@ class NoTestSourceImages(TestCase):
 
 
 class TestLocalization(TestCase):
-    def test_localization(self):
-        ObjectDetector = ml.models.object_detectors[settings.localization_model.value]
-        object_detector = ObjectDetector(
-            db_path="",  # deprecated
-            image_base_path="",  # deprecated
-            user_data_path=settings.user_data_path,
-            batch_size=2,
-            num_workers=2,
+    def test_localization_zero(self):
+        detector = MothDetector(
+            source_images=[],
         )
-        object_detector.run()
-        logger.info("Localization complete")
+        detector.run()
+        results = detector.results
+        self.assertEqual(len(results), 0)
+
+    def test_localization(self):
+        test_images = get_test_images()
+        detector = MothDetector(
+            source_images=test_images,
+        )
+        detector.run()
+        results = detector.results
+        self.assertEqual(len(results), len(test_images))
 
 
 class TestSourceImageSchema(TestCase):
@@ -108,7 +124,7 @@ class TestSourceImageSchema(TestCase):
 
     def test_filepath(self):
         filepath = self.test_image
-        source_image = queries.IncomingSourceImage(id=1, filepath=filepath)
+        source_image = SourceImage(id=1, filepath=filepath)
         self.assertEqual(source_image.filepath, filepath)
         img = source_image.open()
         self.assertIsNotNone(img)
@@ -119,7 +135,7 @@ class TestSourceImageSchema(TestCase):
     def test_url(self):
         # Don't trust placeholder image services
         url = "https://upload.wikimedia.org/wikipedia/en/thumb/8/80/Wikipedia-logo-v2.svg/103px-Wikipedia-logo-v2.svg.png"
-        source_image = queries.IncomingSourceImage(id=1, url=url)
+        source_image = SourceImage(id=1, url=url)
         self.assertEqual(source_image.url, url)
         img = source_image.open()
         self.assertIsNotNone(img)
@@ -129,14 +145,14 @@ class TestSourceImageSchema(TestCase):
 
     def test_bad_base64(self):
         base64_string = "happy birthday"
-        source_image = queries.IncomingSourceImage(id=1, b64=base64_string)
+        source_image = SourceImage(id=1, b64=base64_string)
         from binascii import Error
 
         with self.assertRaises(Error):
             source_image.open(raise_exception=True)
 
     def _test_base64(self, base64_string):
-        source_image = queries.IncomingSourceImage(id=1, b64=base64_string)
+        source_image = SourceImage(id=1, b64=base64_string)
         img = source_image.open(raise_exception=True)
         self.assertIsNotNone(img)
         assert img is not None

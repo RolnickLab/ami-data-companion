@@ -2,7 +2,7 @@ import logging
 from typing import Sequence
 
 from . import queries
-from .schemas import IncomingSourceImage
+from .schemas import SourceImage
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,6 @@ class ImageAPIQueue(APIQueueManager):
     def done_count(self) -> int:
         return 999
 
-    def pull_n_from_queue(self, n: int) -> Sequence[IncomingSourceImage]:
+    def pull_n_from_queue(self, n: int) -> Sequence[SourceImage]:
         logger.debug(f"Attempting to pull {n} images from queue")
         return queries.get_next_source_images(n)
