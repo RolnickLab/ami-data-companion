@@ -4,7 +4,8 @@ from functools import lru_cache
 from typing import Optional, Union
 
 import sqlalchemy
-from pydantic import BaseSettings, Field, ValidationError, validator
+from pydantic import Field, ValidationError, validator
+from pydantic_settings import BaseSettings
 from rich import print as rprint
 
 from trapdata import ml
