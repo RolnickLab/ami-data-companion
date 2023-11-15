@@ -12,19 +12,21 @@ class BoundingBox(pydantic.BaseModel):
     y1: float
     x2: float
     y2: float
-    source_width: int | None = None
-    source_height: int | None = None
+
+    @classmethod
+    def from_coords(cls, coords: list[float]):
+        return cls(x1=coords[0], y1=coords[1], x2=coords[2], y2=coords[3])
 
 
 class SourceImage(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="ignore", arbitrary_types_allowed=True)
 
-    id: int
+    id: str
     url: str | None = None
     b64: str | None = None
     filepath: str | pathlib.Path | None = None
     pil: PIL.Image.Image | None = None
-    detections: list[BoundingBox] | None = None
+    detections: list[BoundingBox] = []
     width: int | None = None
     height: int | None = None
 
@@ -53,3 +55,11 @@ class SourceImage(pydantic.BaseModel):
 class Detection(pydantic.BaseModel):
     source_image: SourceImage
     bbox: BoundingBox
+
+
+class Classification(pydantic.BaseModel):
+    source_image_id: str
+    bbox: BoundingBox | None = None
+    classification: str
+    labels: list[str] = []
+    scores: list[float] = []

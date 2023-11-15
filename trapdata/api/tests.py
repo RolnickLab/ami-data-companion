@@ -10,8 +10,9 @@ from trapdata.common.filemanagement import find_images
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 from . import auth, queries, settings
+from .models.classification import MothClassifier
 from .models.localization import MothDetector
-from .schemas import SourceImage
+from .schemas import Detection, SourceImage
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,9 +37,9 @@ def make_image():
         return f.name
 
 
-def get_test_images(subdir: str = "cyprus") -> list[SourceImage]:
+def get_test_images(subdir: str = "vermont") -> list[SourceImage]:
     return [
-        SourceImage(id=img["filesize"], filepath=img["path"])
+        SourceImage(id=str(img["path"].name), filepath=img["path"])
         for img in find_images(pathlib.Path(TEST_IMAGES_BASE_PATH) / subdir)
     ]
 
@@ -115,6 +116,53 @@ class TestLocalization(TestCase):
         detector.run()
         results = detector.results
         self.assertEqual(len(results), len(test_images))
+        # @TODO ensure bounding boxes are correct
+
+        # Create detection objects
+        detections = []
+        for test_image, result_image in zip(test_images, results):
+            self.assertEqual(result_image.id, test_image.id)
+            for bbox in result_image.detections:
+                detection = Detection(source_image=test_image, bbox=bbox)
+                detections.append(detection)
+
+
+class TestClassification(TestCase):
+    def get_detections(self, test_images: list[SourceImage]):
+        # @TODO Reuse the results from the localization test. Or provide serialized results.
+        detector = MothDetector(
+            source_images=test_images,
+        )
+        detector.run()
+        results = detector.results
+
+        # Create detection objects
+        detections = []
+        for test_image, result_image in zip(test_images, results):
+            for bbox in result_image.detections:
+                detection = Detection(source_image=test_image, bbox=bbox)
+                detections.append(detection)
+        return detections
+
+    def test_classification_zero(self):
+        classifier = MothClassifier(
+            detections=[],
+        )
+        classifier.run()
+        results = classifier.results
+        self.assertEqual(len(results), 0)
+
+    def test_classification(self):
+        test_images = get_test_images()
+        detections = self.get_detections(test_images)
+        classifier = MothClassifier(
+            detections=detections,
+        )
+        classifier.run()
+        results = classifier.results
+        # image_lookup = {img.id: img for img in test_images}
+        self.assertEqual(len(results), len(detections))
+        # @TODO ensure classification results are correct
 
 
 class TestSourceImageSchema(TestCase):

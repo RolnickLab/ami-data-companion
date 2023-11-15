@@ -3,14 +3,13 @@ import json
 import gradio as gr
 
 from .models.localization import MothDetector
-from .schemas import IncomingSourceImage
+from .schemas import SourceImage
 
 
 def predict(*img_paths):
     # img_paths = img_paths * 4  # Test batch size
     source_images = [
-        IncomingSourceImage(id=i, filepath=img_path)
-        for i, img_path in enumerate(img_paths)
+        SourceImage(id=i, filepath=img_path) for i, img_path in enumerate(img_paths)
     ]
 
     if len(source_images) == 1:
