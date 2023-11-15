@@ -7,12 +7,17 @@ from .schemas import IncomingSourceImage
 
 
 def predict(*img_paths):
+    # img_paths = img_paths * 4  # Test batch size
     source_images = [
         IncomingSourceImage(id=i, filepath=img_path)
         for i, img_path in enumerate(img_paths)
     ]
 
-    detector = MothDetector(source_images=source_images, single=True)
+    if len(source_images) == 1:
+        detector = MothDetector(source_images=source_images, single=True)
+    else:
+        detector = MothDetector(source_images=source_images, batch_size=2, single=False)
+
     detector.run()
     results = json.dumps(detector.results, indent=2)
     return results

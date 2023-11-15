@@ -234,15 +234,27 @@ class InferenceBaseClass:
             logger.info(
                 f"Preparing dataloader with batch size of {self.batch_size} and {self.num_workers} workers."
             )
-        self.dataloader = torch.utils.data.DataLoader(
-            self.dataset,
-            num_workers=0 if self.single else self.num_workers,
-            persistent_workers=False if self.single else True,
-            shuffle=False,
-            pin_memory=False if self.single else True,  # @TODO review this
-            batch_size=None,  # Recommended setting for streaming datasets
-            batch_sampler=None,  # Recommended setting for streaming datasets
-        )
+        dataloader_args = {
+            "num_workers": 0 if self.single else self.num_workers,
+            "persistent_workers": False if self.single else True,
+            "shuffle": False,
+            "pin_memory": False if self.single else True,  # @TODO review this
+        }
+        if isinstance(self.dataset, torch.utils.data.IterableDataset):
+            # Batch size and sample should be None for streaming datasets
+            dataloader_args.update(
+                {
+                    "batch_size": None,
+                    "batch_sampler": None,
+                }
+            )
+        else:
+            dataloader_args.update(
+                {
+                    "batch_size": self.batch_size,
+                }
+            )
+        self.dataloader = torch.utils.data.DataLoader(self.dataset, **dataloader_args)
         return self.dataloader
 
     def predict_batch(self, batch):
