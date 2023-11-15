@@ -3,21 +3,10 @@ from trapdata.ml.models.localization import (
     ObjectDetector,
 )
 
-from .datasets import LocalizationAPIDataset
-from .queries import save_detected_objects
-
-
-class APIInferenceBaseClass:
-    """
-    Override methods and properties in the InferenceBaseClass that
-    are needed or not needed for the API version.
-    """
-
-    def __init__(self, *args, **kwargs):
-        # Don't need to set these for API version
-        kwargs["db_path"] = None
-        kwargs["image_base_path"] = None
-        super().__init__(*args, **kwargs)
+from ..datasets import LocalizationAPIDataset, LocalizationImageDataset
+from ..queries import save_detected_objects
+from ..schemas import IncomingSourceImage
+from .base import APIInferenceBaseClass
 
 
 class APIObjectDetector(APIInferenceBaseClass, ObjectDetector):
@@ -61,3 +50,33 @@ class APIMothObjectDetector_FasterRCNN_MobileNet_2023(
     MothObjectDetector_FasterRCNN_MobileNet_2023,
 ):
     pass
+
+
+class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNet_2023):
+    def __init__(self, source_images: list[IncomingSourceImage], *args, **kwargs):
+        self.source_images = source_images
+        self.results = []
+        super().__init__(*args, **kwargs)
+
+    def get_dataset(self):
+        return LocalizationImageDataset(
+            self.source_images, self.get_transforms(), batch_size=self.batch_size
+        )
+
+    def save_results(self, item_ids, batch_output):
+        detected_objects_data = []
+        for image_id, image_output in zip(item_ids, batch_output):
+            detected_objects = [
+                {
+                    "source_image_id": image_id,
+                    "bbox": bbox,
+                }
+                for bbox in image_output
+            ]
+            detected_objects_data.append(detected_objects)
+        self.results = detected_objects_data
+        return detected_objects_data
+
+    def run(self) -> list[dict]:
+        super().run()
+        return self.results
