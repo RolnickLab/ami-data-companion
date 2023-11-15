@@ -90,9 +90,10 @@ class LocalizationImageDataset(torch.utils.data.Dataset):
 
         image_data = self.image_transforms(image_data)
 
-        ids_batch = torch.utils.data.default_collate([source_image.id])
-        image_batch = torch.utils.data.default_collate([image_data])
+        # ids_batch = torch.utils.data.default_collate([source_image.id])
+        # image_batch = torch.utils.data.default_collate([image_data])
 
-        logger.info(f"Batch data: {ids_batch}, {image_batch}")
+        # logger.info(f"Batch data: {ids_batch}, {image_batch}")
 
-        return (ids_batch, image_batch)
+        # return (ids_batch, image_batch)
+        return idx, image_data
