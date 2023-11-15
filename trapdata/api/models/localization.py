@@ -73,9 +73,9 @@ class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNe
                     x1=coords[0], y1=coords[1], x2=coords[2], y2=coords[3]
                 )
                 source_image.detections.append(bbox)
-                logger.info(
-                    f"Found {len(source_image.detections)} detected objects for item {image_id}"
-                )
+            logger.info(
+                f"Found {len(source_image.detections)} detected objects for item {image_id}"
+            )
             source_images.append(source_image)
         logger.info(f"Saving results: {source_images}")
         self.results.extend(source_images)

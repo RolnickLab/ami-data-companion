@@ -4,6 +4,7 @@ import pathlib
 import PIL.Image
 import pydantic
 
+from trapdata.common.logs import logger
 from trapdata.ml.utils import get_image
 
 
@@ -41,12 +42,15 @@ class SourceImage(pydantic.BaseModel):
 
     def open(self, raise_exception=False) -> PIL.Image.Image | None:
         if not self.pil:
+            logger.warn(f"Opening image {self.id} for the first time")
             self.pil = get_image(
                 url=self.url,
                 b64=self.b64,
                 filepath=self.filepath,
                 raise_exception=raise_exception,
             )
+        else:
+            logger.info(f"Using already loaded image {self.id}")
         if self.pil:
             self.width, self.height = self.pil.size
         return self.pil
