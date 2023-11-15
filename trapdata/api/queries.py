@@ -2,7 +2,7 @@ from trapdata import logger
 
 from . import settings
 from .auth import get_session
-from .schemas import IncomingSourceImage
+from .schemas import SourceImage
 
 TEMPORARY_DEPLOYMENT_ID = 9
 TEMPORARY_EVENT_ID = 34
@@ -15,7 +15,7 @@ def fetch_source_image_data(id: int):
     resp = get_session().get(url)
     resp.raise_for_status()
     data = resp.json()
-    return IncomingSourceImage(**data)
+    return SourceImage(**data)
 
 
 # @TODO If this is being initiated from a POST request with the source image info, then we can
@@ -51,7 +51,7 @@ def save_detected_objects(
     return responses
 
 
-def get_next_source_images(num: int, *args, **kwargs) -> list[IncomingSourceImage]:
+def get_next_source_images(num: int, *args, **kwargs) -> list[SourceImage]:
     path = "captures/"
     args = {
         "limit": num,
@@ -65,7 +65,7 @@ def get_next_source_images(num: int, *args, **kwargs) -> list[IncomingSourceImag
     resp = get_session().get(url, params=args)
     resp.raise_for_status()
     data = resp.json()
-    source_images = [IncomingSourceImage(**item) for item in data["results"]]
+    source_images = [SourceImage(**item) for item in data["results"]]
     return source_images
 
 
