@@ -1,16 +1,27 @@
+from __future__ import annotations
+
+import base64
+import binascii
 import datetime
+import io
 import json
 import os
 import pathlib
+import re
+import tempfile
 import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
+import PIL.Image
 import torch
 import torchvision
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsRead
 
 from trapdata import logger
 
@@ -69,6 +80,76 @@ def get_or_download_file(
         resulting_filepath = pathlib.Path(resulting_filepath)
         logger.info(f"Downloaded to {resulting_filepath}")
         return resulting_filepath
+
+
+def decode_base64_string(string) -> io.BytesIO:
+    image_data = re.sub("^data:image/.+;base64,", "", string)
+    decoded = base64.b64decode(image_data)
+    buffer = io.BytesIO(decoded)
+    buffer.seek(0)
+    return buffer
+
+
+def open_image(
+    fp: str | bytes | pathlib.Path | SupportsRead[bytes], raise_exception: bool = True
+) -> PIL.Image.Image | None:
+    """
+    Wrapper from PIL.Image.open that handles errors and converts to RGB.
+    """
+    img = None
+    try:
+        img = PIL.Image.open(fp)
+    except PIL.UnidentifiedImageError:
+        logger.warn(f"Unidentified image: {str(fp)[:100]}...")
+        if raise_exception:
+            raise
+    except OSError:
+        logger.warn(f"Could not open image: {str(fp)[:100]}...")
+        if raise_exception:
+            raise
+    else:
+        # Convert to RGB if necessary
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+
+    return img
+
+
+def get_image(
+    url: str | None = None,
+    filepath: str | pathlib.Path | None = None,
+    b64: str | None = None,
+    raise_exception: bool = True,
+) -> PIL.Image.Image | None:
+    """
+    Given a URL, local file path or base64 image, return a PIL image.
+    """
+
+    if url:
+        logger.info(f"Fetching image from URL: {url}")
+        tempdir = tempfile.TemporaryDirectory(prefix="ami_images")
+        img_path = get_or_download_file(url, destination_dir=tempdir.name)
+        return open_image(img_path, raise_exception=raise_exception)
+
+    elif filepath:
+        logger.info(f"Loading image from local filesystem: {filepath}")
+        return open_image(filepath, raise_exception=raise_exception)
+
+    elif b64:
+        logger.info(f"Loading image from base64 string: {b64[:30]}...")
+        try:
+            buffer = decode_base64_string(b64)
+        except binascii.Error as e:
+            logger.warn(f"Could not decode base64 image: {e}")
+            if raise_exception:
+                raise
+            else:
+                return None
+        else:
+            return open_image(buffer, raise_exception=raise_exception)
+
+    else:
+        raise Exception("Specify a URL, path or base64 image.")
 
 
 def synchronize_clocks():

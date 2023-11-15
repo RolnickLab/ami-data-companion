@@ -1,7 +1,7 @@
 from trapdata import logger
 from trapdata.settings import Settings
 
-from .models import APIMothObjectDetector_FasterRCNN_MobileNet_2023
+from .models.localization import APIMothObjectDetector_FasterRCNN_MobileNet_2023
 
 
 def start_pipeline(

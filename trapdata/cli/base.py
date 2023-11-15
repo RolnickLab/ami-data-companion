@@ -65,5 +65,15 @@ def run_api_pipeline(source_image_ids: list[int]):
     )
 
 
+@cli.command("gradio")
+def run_gradio():
+    """
+    Run the gradio interface.
+    """
+    from trapdata.api.web import app
+
+    app.launch()
+
+
 if __name__ == "__main__":
     cli()

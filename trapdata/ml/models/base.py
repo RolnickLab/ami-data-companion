@@ -125,7 +125,9 @@ class InferenceBaseClass:
     def get_weights(self, weights_path):
         if weights_path:
             return get_or_download_file(
-                weights_path, self.user_data_path, prefix="models"
+                weights_path,
+                self.user_data_path or torch.hub.get_dir(),
+                prefix="models",
             )
         else:
             logger.warn(f"No weights specified for model {self.name}")
@@ -133,7 +135,9 @@ class InferenceBaseClass:
     def get_labels(self, labels_path):
         if labels_path:
             local_path = get_or_download_file(
-                labels_path, self.user_data_path, prefix="models"
+                labels_path,
+                self.user_data_path or torch.hub.get_dir(),
+                prefix="models",
             )
 
             with open(local_path) as f:

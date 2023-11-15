@@ -10,6 +10,7 @@ import torchvision
 from trapdata.ml.utils import get_or_download_file
 
 from .queries import fetch_source_image_data
+from .schemas import IncomingSourceImage
 
 logger = logging.getLogger(__name__)
 
@@ -61,3 +62,37 @@ class LocalizationAPIDataset(torch.utils.data.Dataset):
             logger.error(f"OSError: {img_path}")
             print(f"OSError: {img_path}")
             return None
+
+
+class LocalizationImageDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        source_images: list[IncomingSourceImage],
+        image_transforms: torchvision.transforms.Compose,
+        batch_size: int = 1,
+    ):
+        super().__init__()
+        self.source_images: list[IncomingSourceImage] = source_images
+        self.image_transforms: torchvision.transforms.Compose = image_transforms
+        self.batch_size: int = batch_size
+
+    def __len__(self):
+        return len(self.source_images)
+
+    def __getitem__(self, idx):
+        worker_info = torch.utils.data.get_worker_info()
+        logger.info(f"Using worker: {worker_info}")
+
+        source_image: IncomingSourceImage = self.source_images[idx]
+        image_data = source_image.open()
+        if not image_data:
+            return None
+
+        image_data = self.image_transforms(image_data)
+
+        ids_batch = torch.utils.data.default_collate([source_image.id])
+        image_batch = torch.utils.data.default_collate([image_data])
+
+        logger.info(f"Batch data: {ids_batch}, {image_batch}")
+
+        return (ids_batch, image_batch)
