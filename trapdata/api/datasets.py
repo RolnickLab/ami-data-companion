@@ -101,6 +101,7 @@ class LocalizationImageDataset(torch.utils.data.Dataset):
 class ClassificationImageDataset(torch.utils.data.Dataset):
     def __init__(
         self,
+        source_images: list[SourceImage],
         detections: list[Detection],
         image_transforms: torchvision.transforms.Compose,
         batch_size: int = 1,
@@ -109,6 +110,9 @@ class ClassificationImageDataset(torch.utils.data.Dataset):
         self.detections = detections
         self.image_transforms: torchvision.transforms.Compose = image_transforms
         self.batch_size: int = batch_size
+        self.source_images: dict[str, SourceImage] = {
+            img.id: img for img in source_images
+        }
 
     def __len__(self):
         # Append all detections to a single list
@@ -119,7 +123,8 @@ class ClassificationImageDataset(torch.utils.data.Dataset):
         logger.info(f"Using worker: {worker_info}")
 
         detection: Detection = self.detections[idx]
-        image_data = detection.source_image.open()
+        source_image = self.source_images[detection.source_image_id]
+        image_data = source_image.open()
         if not image_data:
             return None
         bbox = detection.bbox
@@ -134,4 +139,4 @@ class ClassificationImageDataset(torch.utils.data.Dataset):
         # logger.info(f"Batch data: {ids_batch}, {image_batch}")
 
         # return (ids_batch, image_batch)
-        return (detection.source_image.id, np.array(coords)), image_data
+        return (source_image.id, np.array(coords)), image_data

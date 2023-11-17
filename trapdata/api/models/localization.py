@@ -6,7 +6,7 @@ from trapdata.ml.models.localization import (
 
 from ..datasets import LocalizationAPIDataset, LocalizationImageDataset
 from ..queries import save_detected_objects
-from ..schemas import BoundingBox, SourceImage
+from ..schemas import BoundingBox, Detection, SourceImage
 from .base import APIInferenceBaseClass
 
 
@@ -56,7 +56,7 @@ class APIMothObjectDetector_FasterRCNN_MobileNet_2023(
 class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNet_2023):
     def __init__(self, source_images: list[SourceImage], *args, **kwargs):
         self.source_images = source_images
-        self.results: list[SourceImage] = []
+        self.results: list[Detection] = []
         super().__init__(*args, **kwargs)
 
     def get_dataset(self):
@@ -65,21 +65,21 @@ class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNe
         )
 
     def save_results(self, item_ids, batch_output):
-        source_images = []
+        detections: list[Detection] = []
         for image_id, image_output in zip(item_ids, batch_output):
-            source_image = SourceImage(id=image_id, filepath="N/A")
             for coords in image_output:
                 bbox = BoundingBox(
                     x1=coords[0], y1=coords[1], x2=coords[2], y2=coords[3]
                 )
-                source_image.detections.append(bbox)
-            logger.info(
-                f"Found {len(source_image.detections)} detected objects for item {image_id}"
-            )
-            source_images.append(source_image)
-        logger.info(f"Saving results: {source_images}")
-        self.results.extend(source_images)
+                detection = Detection(
+                    source_image_id=image_id,
+                    bbox=bbox,
+                )
+                detections.append(detection)
+            logger.info(f"Found {len(detections)} detected objects for item {image_id}")
+        logger.info(f"Saving results: {detections}")
+        self.results += detections
 
-    def run(self) -> list[SourceImage]:
+    def run(self) -> list[Detection]:
         super().run()
         return self.results

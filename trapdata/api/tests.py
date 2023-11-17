@@ -114,38 +114,27 @@ class TestLocalization(TestCase):
             source_images=test_images,
         )
         detector.run()
-        results = detector.results
-        self.assertEqual(len(results), len(test_images))
+        self.assertEqual(len(detector.results), len(test_images))
         # @TODO ensure bounding boxes are correct
 
-        # Create detection objects
-        detections = []
-        for test_image, result_image in zip(test_images, results):
-            self.assertEqual(result_image.id, test_image.id)
-            for bbox in result_image.detections:
-                detection = Detection(source_image=test_image, bbox=bbox)
-                detections.append(detection)
+        for test_image, detections in zip(test_images, detector.results):
+            for detection in detections:
+                assert isinstance(detection, Detection)
+                self.assertEqual(detection.source_image_id, test_image.id)
 
 
 class TestClassification(TestCase):
-    def get_detections(self, test_images: list[SourceImage]):
+    def get_detections(self, test_images: list[SourceImage]) -> list[Detection]:
         # @TODO Reuse the results from the localization test. Or provide serialized results.
         detector = MothDetector(
             source_images=test_images,
         )
         detector.run()
-        results = detector.results
-
-        # Create detection objects
-        detections = []
-        for test_image, result_image in zip(test_images, results):
-            for bbox in result_image.detections:
-                detection = Detection(source_image=test_image, bbox=bbox)
-                detections.append(detection)
-        return detections
+        return detector.results
 
     def test_classification_zero(self):
         classifier = MothClassifier(
+            source_images=[],
             detections=[],
         )
         classifier.run()
@@ -156,6 +145,7 @@ class TestClassification(TestCase):
         test_images = get_test_images()
         detections = self.get_detections(test_images)
         classifier = MothClassifier(
+            source_images=test_images,
             detections=detections,
         )
         classifier.run()

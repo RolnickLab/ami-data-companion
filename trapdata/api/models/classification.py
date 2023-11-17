@@ -8,7 +8,7 @@ from trapdata.ml.models.classification import (
 )
 
 from ..datasets import ClassificationImageDataset
-from ..schemas import BoundingBox, Classification, Detection
+from ..schemas import BoundingBox, Classification, Detection, SourceImage
 from .base import APIInferenceBaseClass
 
 
@@ -16,14 +16,24 @@ class MothClassifier(
     APIInferenceBaseClass,
     QuebecVermontMothSpeciesClassifierMixedResolution,
 ):
-    def __init__(self, detections: list[Detection], *args, **kwargs):
+    def __init__(
+        self,
+        source_images: list[SourceImage],
+        detections: list[Detection],
+        *args,
+        **kwargs,
+    ):
+        self.source_images = source_images
         self.detections = detections
         self.results: list[Classification] = []
         super().__init__(*args, **kwargs)
 
     def get_dataset(self):
         return ClassificationImageDataset(
-            self.detections, self.get_transforms(), batch_size=self.batch_size
+            source_images=self.source_images,
+            detections=self.detections,
+            image_transforms=self.get_transforms(),
+            batch_size=self.batch_size,
         )
 
     def post_process_batch(self, output, top_n=3):
