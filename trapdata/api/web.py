@@ -5,7 +5,7 @@ from rich import print
 
 from .models.classification import MothClassifier
 from .models.localization import MothDetector
-from .schemas import Detection, SourceImage
+from .schemas import SourceImage
 from .tests import get_test_images
 
 
@@ -29,19 +29,8 @@ def predict(*img_paths):
     print(detector.results)
     assert len(detector.results) == len(source_images)
 
-    # Update source images with detections
-    # This is only necessary if rendering before Detection objects are created
-    for source_image, result_source_image in zip(source_images, detector.results):
-        source_image.detections = result_source_image.detections
-
-    # Create detection objects
-    detections = []
-    for test_image, result_image in zip(source_images, detector.results):
-        for bbox in result_image.detections:
-            detection = Detection(source_image=test_image, bbox=bbox)
-            detections.append(detection)
-
-    classifier = MothClassifier(detections=detections)
+    detections = detector.results
+    classifier = MothClassifier(source_images=source_images, detections=detections)
     classifier.run()
 
     # ASSUME SINGLE IMAGE
@@ -73,9 +62,14 @@ def predict(*img_paths):
     print("Drawing bounding boxes on source image")
     annotated_image = source_image.pil.copy()
     canvas = PIL.ImageDraw.Draw(annotated_image)
-    for bbox in source_image.detections:
+    for detection in detections:
         # Draw rectangle on PIL Image
-        coords = (bbox.x1, bbox.y1, bbox.x2, bbox.y2)
+        coords = (
+            detection.bbox.x1,
+            detection.bbox.y1,
+            detection.bbox.x2,
+            detection.bbox.y2,
+        )
         canvas.rectangle(coords, outline="green", width=8)
 
     print("Returning results")

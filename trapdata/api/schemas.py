@@ -27,7 +27,6 @@ class SourceImage(pydantic.BaseModel):
     b64: str | None = None
     filepath: str | pathlib.Path | None = None
     pil: PIL.Image.Image | None = None
-    detections: list[BoundingBox] = []
     width: int | None = None
     height: int | None = None
 
@@ -57,7 +56,7 @@ class SourceImage(pydantic.BaseModel):
 
 
 class Detection(pydantic.BaseModel):
-    source_image: SourceImage
+    source_image_id: str
     bbox: BoundingBox
 
 
