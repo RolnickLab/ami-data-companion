@@ -6,6 +6,7 @@ from rich import print
 from .models.classification import MothClassifier
 from .models.localization import MothDetector
 from .schemas import Detection, SourceImage
+from .tests import get_test_images
 
 
 def predict(*img_paths):
@@ -85,6 +86,7 @@ app = gr.Interface(
     fn=predict,
     inputs=[gr.Image(type="filepath")],
     outputs=["image", "gallery"],
+    examples=[img.filepath for img in get_test_images(subdir="")],
 )  # json output type does not work
 
 if __name__ == "__main__":
