@@ -18,7 +18,8 @@ def predict(*img_paths):
     # Print size of each source image
     for source_image in source_images:
         source_image.open(raise_exception=True)
-        print(source_image, source_image.pil.size)
+        assert source_image._pil is not None
+        print(source_image, source_image._pil.size)
 
     if len(source_images) == 1:
         detector = MothDetector(source_images=source_images, single=True)
@@ -37,7 +38,7 @@ def predict(*img_paths):
     assert len(source_images) == 1
     source_image = source_images[0]
     source_image.open(raise_exception=True)
-    assert source_image.pil is not None
+    assert source_image._pil is not None
 
     # Create PIL Images:
     # print("Rendering crops")
@@ -54,13 +55,14 @@ def predict(*img_paths):
         bbox = detection.bbox
         assert bbox is not None
         coords = (bbox.x1, bbox.y1, bbox.x2, bbox.y2)
-        crop = source_image.pil.crop(coords)
+        assert source_image._pil is not None
+        crop = source_image._pil.crop(coords)
         top_label_with_score = f"{detection.labels[0]} ({detection.scores[0]:.2f})"
         crops.append((crop, top_label_with_score))
 
     # Draw bounding boxes on image
     print("Drawing bounding boxes on source image")
-    annotated_image = source_image.pil.copy()
+    annotated_image = source_image._pil.copy()
     canvas = PIL.ImageDraw.Draw(annotated_image)
     for detection in detections:
         # Draw rectangle on PIL Image

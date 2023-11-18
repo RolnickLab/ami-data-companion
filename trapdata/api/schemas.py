@@ -26,23 +26,23 @@ class SourceImage(pydantic.BaseModel):
     url: str | None = None
     b64: str | None = None
     filepath: str | pathlib.Path | None = None
-    pil: PIL.Image.Image | None = None
+    _pil: PIL.Image.Image | None = None
     width: int | None = None
     height: int | None = None
 
     # Validate that there is at least one of the following fields
     @pydantic.model_validator(mode="after")
     def validate_source(self):
-        if not any([self.url, self.b64, self.filepath, self.pil]):
+        if not any([self.url, self.b64, self.filepath, self._pil]):
             raise ValueError(
                 "At least one of the following fields must be provided: url, b64, filepath, pil"
             )
         return self
 
     def open(self, raise_exception=False) -> PIL.Image.Image | None:
-        if not self.pil:
+        if not self._pil:
             logger.warn(f"Opening image {self.id} for the first time")
-            self.pil = get_image(
+            self._pil = get_image(
                 url=self.url,
                 b64=self.b64,
                 filepath=self.filepath,
@@ -50,14 +50,15 @@ class SourceImage(pydantic.BaseModel):
             )
         else:
             logger.info(f"Using already loaded image {self.id}")
-        if self.pil:
-            self.width, self.height = self.pil.size
-        return self.pil
+        if self._pil:
+            self.width, self.height = self._pil.size
+        return self._pil
 
 
 class Detection(pydantic.BaseModel):
     source_image_id: str
     bbox: BoundingBox
+    inference_time: float | None = None
 
 
 class Classification(pydantic.BaseModel):
@@ -66,3 +67,4 @@ class Classification(pydantic.BaseModel):
     classification: str
     labels: list[str] = []
     scores: list[float] = []
+    inference_time: float | None = None
