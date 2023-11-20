@@ -3,13 +3,18 @@ import PIL.Image
 import PIL.ImageDraw
 from rich import print
 
-from .models.classification import MothClassifier
+from .models.classification import (
+    MothClassifier,
+    MothClassifierPanama,
+    MothClassifierQuebecVermont,
+    MothClassifierUKDenmark,
+)
 from .models.localization import MothDetector
 from .schemas import SourceImage
 from .tests import get_test_images
 
 
-def predict(*img_paths):
+def predict(*img_paths, Classifier: MothClassifier):
     # img_paths = img_paths * 4  # Test batch size
     source_images = [
         SourceImage(id=str(i), filepath=img_path)
@@ -28,10 +33,9 @@ def predict(*img_paths):
 
     detector.run()
     print(detector.results)
-    assert len(detector.results) == len(source_images)
 
     detections = detector.results
-    classifier = MothClassifier(source_images=source_images, detections=detections)
+    classifier = Classifier(source_images=source_images, detections=detections)
     classifier.run()
 
     # ASSUME SINGLE IMAGE
@@ -78,12 +82,37 @@ def predict(*img_paths):
     return annotated_image, crops
 
 
-app = gr.Interface(
-    fn=predict,
-    inputs=[gr.Image(type="filepath")],
-    outputs=["image", "gallery"],
-    examples=[img.filepath for img in get_test_images(subdir="")],
-)  # json output type does not work
+from functools import partial
+
+
+def make_interface(Classifier: MothClassifier, example_images_subdir=""):
+    return gr.Interface(
+        title=Classifier.name,
+        description=Classifier.description,
+        fn=partial(predict, Classifier=Classifier),
+        inputs=[gr.Image(type="filepath", label="Source Image")],
+        outputs=[
+            gr.Image(label="Annotated Source Image"),
+            gr.Image(label="Classified Crops"),
+        ],
+        examples=[
+            img.filepath for img in get_test_images(subdir=example_images_subdir)
+        ],
+    )
+
+
+app = gr.TabbedInterface(
+    [
+        make_interface(MothClassifierPanama, "panama"),
+        make_interface(MothClassifierUKDenmark, "denmark"),
+        make_interface(MothClassifierQuebecVermont, "vermont"),
+    ],
+    [
+        "Panama",
+        "UK/Denmark",
+        "Quebec/Vermont",
+    ],
+).launch()
 
 if __name__ == "__main__":
     app.launch()
