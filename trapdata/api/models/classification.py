@@ -4,7 +4,10 @@ from rich import print
 
 from trapdata.common.logs import logger
 from trapdata.ml.models.classification import (
+    PanamaMothSpeciesClassifierMixedResolution2023,
     QuebecVermontMothSpeciesClassifierMixedResolution,
+    SpeciesClassifier,
+    UKDenmarkMothSpeciesClassifierMixedResolution,
 )
 
 from ..datasets import ClassificationImageDataset
@@ -14,7 +17,7 @@ from .base import APIInferenceBaseClass
 
 class MothClassifier(
     APIInferenceBaseClass,
-    QuebecVermontMothSpeciesClassifierMixedResolution,
+    SpeciesClassifier,
 ):
     def __init__(
         self,
@@ -77,3 +80,21 @@ class MothClassifier(
     def run(self) -> list[Classification]:
         super().run()
         return self.results
+
+
+class MothClassifierPanama(
+    MothClassifier, PanamaMothSpeciesClassifierMixedResolution2023
+):
+    pass
+
+
+class MothClassifierUKDenmark(
+    MothClassifier, UKDenmarkMothSpeciesClassifierMixedResolution
+):
+    pass
+
+
+class MothClassifierQuebecVermont(
+    MothClassifier, QuebecVermontMothSpeciesClassifierMixedResolution
+):
+    pass
