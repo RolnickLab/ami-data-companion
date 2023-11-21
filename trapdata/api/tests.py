@@ -10,7 +10,7 @@ from trapdata.common.filemanagement import find_images
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 from . import auth, queries, settings
-from .models.classification import MothClassifier
+from .models.classification import MothClassifierBinary, MothClassifierQuebecVermont
 from .models.localization import MothDetector
 from .schemas import Detection, SourceImage
 
@@ -132,8 +132,23 @@ class TestClassification(TestCase):
         detector.run()
         return detector.results
 
+    def filter_detections(
+        self,
+        test_images: list[SourceImage],
+        detections: list[Detection],
+    ) -> list[Detection]:
+        # Filter detections based on results of the binary classifier
+        classifier = MothClassifierBinary(
+            source_images=test_images,
+            detections=detections,
+        )
+        classifier.run()
+        filtered_detections = classifier.get_filtered_detections()
+        self.assertLessEqual(len(filtered_detections), len(detections))
+        return filtered_detections
+
     def test_classification_zero(self):
-        classifier = MothClassifier(
+        classifier = MothClassifierQuebecVermont(
             source_images=[],
             detections=[],
         )
@@ -141,10 +156,31 @@ class TestClassification(TestCase):
         results = classifier.results
         self.assertEqual(len(results), 0)
 
+    def test_binary_classification(self):
+        test_images = get_test_images()
+        detections = self.get_detections(test_images)
+        classifier = MothClassifierBinary(
+            source_images=test_images,
+            detections=detections,
+        )
+        classifier.run()
+        results = classifier.results
+        self.assertEqual(len(results), len(detections))
+        for result in results:
+            self.assertIn(
+                result.classification,
+                (
+                    MothClassifierBinary.positive_binary_label,
+                    MothClassifierBinary.negative_binary_label,
+                ),
+            )
+        # @TODO ensure classification results are correct
+
     def test_classification(self):
         test_images = get_test_images()
         detections = self.get_detections(test_images)
-        classifier = MothClassifier(
+        detections = self.filter_detections(test_images, detections)
+        classifier = MothClassifierQuebecVermont(
             source_images=test_images,
             detections=detections,
         )

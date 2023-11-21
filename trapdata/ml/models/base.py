@@ -275,7 +275,9 @@ class InferenceBaseClass:
         # for item in batch_output:
         #     yield self.post_process_single(item)
 
-    def save_results(self, item_ids, batch_output):
+    def save_results(
+        self, item_ids, batch_output, seconds_per_item: float | None = None
+    ):
         logger.warn("No save method configured for model. Doing nothing with results")
         return None
 
@@ -312,7 +314,7 @@ class InferenceBaseClass:
                 item_ids = item_ids.tolist()
             logger.info(f"Saving results from {len(item_ids)} items")
 
-            self.save_results(item_ids, batch_output)
+            self.save_results(item_ids, batch_output, seconds_per_item=seconds_per_item)
             logger.info(f"{self.name} Batch -- Done")
 
         logger.info(f"{self.name} -- Done")

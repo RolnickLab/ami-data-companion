@@ -72,7 +72,8 @@ def run_gradio():
     """
     from trapdata.api.web import app
 
-    app.launch()
+    # app.launch()
+    app.launch(api_open=False, server_name="0.0.0.0", server_port=7861)
 
 
 @cli.command("api")

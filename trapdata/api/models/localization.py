@@ -1,3 +1,5 @@
+from rich import print
+
 from trapdata.common.logs import logger
 from trapdata.ml.models.localization import (
     MothObjectDetector_FasterRCNN_MobileNet_2023,
@@ -64,7 +66,7 @@ class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNe
             self.source_images, self.get_transforms(), batch_size=self.batch_size
         )
 
-    def save_results(self, item_ids, batch_output):
+    def save_results(self, item_ids, batch_output, seconds_per_item):
         detections: list[Detection] = []
         for image_id, image_output in zip(item_ids, batch_output):
             for coords in image_output:
@@ -74,10 +76,12 @@ class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNe
                 detection = Detection(
                     source_image_id=image_id,
                     bbox=bbox,
+                    inference_time=seconds_per_item,
+                    algorithm=self.name,
                 )
+                print(detection)
                 detections.append(detection)
             logger.info(f"Found {len(detections)} detected objects for item {image_id}")
-        logger.info(f"Saving results: {detections}")
         self.results += detections
 
     def run(self) -> list[Detection]:
