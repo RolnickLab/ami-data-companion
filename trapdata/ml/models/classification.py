@@ -179,8 +179,8 @@ class Resnet50TimmClassifier(Resnet50Classifier):
 class BinaryClassifier(EfficientNetClassifier):
     stage = 2
     type = "binary_classification"
-    positive_binary_label = None
-    positive_negative_label = None
+    positive_binary_label: str = constants.POSITIVE_BINARY_LABEL
+    negative_binary_label: str = constants.NEGATIVE_BINARY_LABEL
 
     def get_queue(self) -> DetectedObjectQueue:
         return DetectedObjectQueue(self.db_path, self.image_base_path)
@@ -199,7 +199,7 @@ class BinaryClassifier(EfficientNetClassifier):
             {
                 "binary_label": str(label),
                 "binary_label_score": float(score),
-                "in_queue": True if label == constants.POSITIVE_BINARY_LABEL else False,
+                "in_queue": True if label == self.positive_binary_label else False,
                 "model_name": self.name,
             }
             for label, score in batch_output
@@ -213,7 +213,7 @@ class MothNonMothClassifier(BinaryClassifier):
     weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/moth-nonmoth-effv2b3_20220506_061527_30.pth"
     labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/05-moth-nonmoth_category_map.json"
     positive_binary_label = "moth"
-    positive_negative_label = "nonmoth"
+    negative_binary_label = "nonmoth"
 
 
 class SpeciesClassifier(InferenceBaseClass):

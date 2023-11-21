@@ -59,6 +59,7 @@ class Detection(pydantic.BaseModel):
     source_image_id: str
     bbox: BoundingBox
     inference_time: float | None = None
+    algorithm: str | None = None
 
 
 class Classification(pydantic.BaseModel):
@@ -68,3 +69,4 @@ class Classification(pydantic.BaseModel):
     labels: list[str] = []
     scores: list[float] = []
     inference_time: float | None = None
+    algorithm: str | None = None

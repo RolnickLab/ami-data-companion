@@ -5,6 +5,7 @@ from rich import print
 
 from .models.classification import (
     MothClassifier,
+    MothClassifierBinary,
     MothClassifierPanama,
     MothClassifierQuebecVermont,
     MothClassifierUKDenmark,
@@ -30,12 +31,18 @@ def predict(*img_paths, Classifier: MothClassifier):
         detector = MothDetector(source_images=source_images, single=True)
     else:
         detector = MothDetector(source_images=source_images, batch_size=2, single=False)
-
     detector.run()
-    print(detector.results)
+    all_detections = detector.results
 
-    detections = detector.results
-    classifier = Classifier(source_images=source_images, detections=detections)
+    # Filter out non-moths
+    filter = MothClassifierBinary(
+        source_images=source_images, detections=all_detections
+    )
+    filter.run()
+    all_binary_classifications = filter.results
+    filtered_detections = filter.get_filtered_detections()
+
+    classifier = Classifier(source_images=source_images, detections=filtered_detections)
     classifier.run()
 
     # ASSUME SINGLE IMAGE
@@ -44,39 +51,38 @@ def predict(*img_paths, Classifier: MothClassifier):
     source_image.open(raise_exception=True)
     assert source_image._pil is not None
 
-    # Create PIL Images:
-    # print("Rendering crops")
-    # crops = []
-    # for bbox in source_image.detections:
-    #     coords = (bbox.x1, bbox.y1, bbox.x2, bbox.y2)
-    #     crop = source_image.pil.crop(coords)
-    #     crops.append((crop, "Unknown"))
-
-    # Create PIL Images:
-    print("Rendering crops")
-    crops = []
-    for detection in classifier.results:
-        bbox = detection.bbox
-        assert bbox is not None
-        coords = (bbox.x1, bbox.y1, bbox.x2, bbox.y2)
-        assert source_image._pil is not None
-        crop = source_image._pil.crop(coords)
-        top_label_with_score = f"{detection.labels[0]} ({detection.scores[0]:.2f})"
-        crops.append((crop, top_label_with_score))
-
     # Draw bounding boxes on image
     print("Drawing bounding boxes on source image")
     annotated_image = source_image._pil.copy()
     canvas = PIL.ImageDraw.Draw(annotated_image)
-    for detection in detections:
+    colors = {
+        MothClassifierBinary.positive_binary_label: "green",
+        MothClassifierBinary.negative_binary_label: "red",
+    }
+    default_color = "black"
+    for pred in all_binary_classifications:
         # Draw rectangle on PIL Image
+        assert pred.bbox is not None
         coords = (
-            detection.bbox.x1,
-            detection.bbox.y1,
-            detection.bbox.x2,
-            detection.bbox.y2,
+            pred.bbox.x1,
+            pred.bbox.y1,
+            pred.bbox.x2,
+            pred.bbox.y2,
         )
-        canvas.rectangle(coords, outline="green", width=8)
+        color = colors.get(pred.classification, default_color)
+        canvas.rectangle(coords, outline=color, width=8)
+
+    # Create PIL Images:
+    print("Rendering crops")
+    crops = []
+    for pred in classifier.results:
+        bbox = pred.bbox
+        assert bbox is not None
+        coords = (bbox.x1, bbox.y1, bbox.x2, bbox.y2)
+        assert source_image._pil is not None
+        crop = source_image._pil.crop(coords)
+        top_label_with_score = f"{pred.labels[0]} ({pred.scores[0]:.2f})"
+        crops.append((crop, top_label_with_score))
 
     print("Returning results")
     return annotated_image, crops
@@ -93,7 +99,7 @@ def make_interface(Classifier: MothClassifier, example_images_subdir=""):
         inputs=[gr.Image(type="filepath", label="Source Image")],
         outputs=[
             gr.Image(label="Annotated Source Image"),
-            gr.Image(label="Classified Crops"),
+            gr.Gallery(label="Classified Crops"),
         ],
         examples=[
             img.filepath for img in get_test_images(subdir=example_images_subdir)
@@ -115,4 +121,5 @@ app = gr.TabbedInterface(
 ).launch()
 
 if __name__ == "__main__":
-    app.launch()
+    # app.launch()
+    app.queue(api_open=False, server_name="0.0.0.0", server_port=7861)
