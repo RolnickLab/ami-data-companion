@@ -12,7 +12,7 @@ from trapdata.tests import TEST_IMAGES_BASE_PATH
 from . import auth, queries, settings
 from .models.classification import MothClassifierBinary, MothClassifierQuebecVermont
 from .models.localization import MothDetector
-from .schemas import Detection, SourceImage
+from .schemas import BoundingBox, Detection, SourceImage
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,6 +26,28 @@ TEST_BASE64_IMAGES = {
     "BLUE": "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNkYPhfz0AEYBxVSF+FAP5FDvcfRYWgAAAAAElFTkSuQmCC",
     "BROWSER_STRING": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNkYPhfz0AEYBxVSF+FAP5FDvcfRYWgAAAAAElFTkSuQmCC=",  # noqa
 }
+
+
+def get_empty_test_images(read: bool = False):
+    assert len(TEST_BASE64_IMAGES) > 0, "No empty test images found"
+    images = [SourceImage(id=name, b64=b64) for name, b64 in TEST_BASE64_IMAGES.items()]
+    if read:
+        for image in images:
+            image.open(raise_exception=True)
+    return list(images)
+
+
+def get_empty_detections():
+    # Return one large detection for each image
+    # @TODO Also test zero sized box = [0, 0, 0, 0]
+    return [
+        Detection(
+            source_image_id=img.id,
+            bbox=BoundingBox.from_coords([0, 0, img.width, img.height]),  # type: ignore
+            algorithm="Full width and height",
+        )
+        for img in get_empty_test_images(read=True)
+    ]
 
 
 def make_image():
@@ -101,9 +123,7 @@ class NoTestSourceImages(TestCase):
 
 class TestLocalization(TestCase):
     def test_localization_zero(self):
-        detector = MothDetector(
-            source_images=[],
-        )
+        detector = MothDetector(source_images=get_empty_test_images())
         detector.run()
         results = detector.results
         self.assertEqual(len(results), 0)
@@ -149,12 +169,16 @@ class TestClassification(TestCase):
 
     def test_classification_zero(self):
         classifier = MothClassifierQuebecVermont(
-            source_images=[],
-            detections=[],
+            source_images=get_empty_test_images(),
+            detections=get_empty_detections(),
         )
         classifier.run()
         results = classifier.results
-        self.assertEqual(len(results), 0)
+        print(results)
+        self.assertGreater(len(results), 0)
+        # Assert that all results have very low scores
+        for result in results:
+            self.assertLessEqual(result.scores[0], 0.4)  # @TODO lower this score
 
     def test_binary_classification(self):
         test_images = get_test_images()

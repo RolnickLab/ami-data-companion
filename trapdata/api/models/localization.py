@@ -1,3 +1,5 @@
+import typing
+
 from rich import print
 
 from trapdata.common.logs import logger
@@ -56,7 +58,7 @@ class APIMothObjectDetector_FasterRCNN_MobileNet_2023(
 
 
 class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNet_2023):
-    def __init__(self, source_images: list[SourceImage], *args, **kwargs):
+    def __init__(self, source_images: typing.Iterable[SourceImage], *args, **kwargs):
         self.source_images = source_images
         self.results: list[Detection] = []
         super().__init__(*args, **kwargs)
