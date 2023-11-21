@@ -118,8 +118,13 @@ app = gr.TabbedInterface(
         "UK/Denmark",
         "Quebec/Vermont",
     ],
-).launch()
+)
 
 if __name__ == "__main__":
-    # app.launch()
-    app.queue(api_open=False, server_name="0.0.0.0", server_port=7861)
+    app.launch(
+        debug=True,
+        show_error=True,
+        show_api=False,
+        server_name="0.0.0.0",
+        server_port=7861,
+    )

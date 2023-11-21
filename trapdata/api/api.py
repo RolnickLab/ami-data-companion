@@ -9,7 +9,7 @@ import typing
 import fastapi
 import pydantic
 
-from .models.classification import MothClassifier
+from .models.classification import MothClassifierBinary, MothClassifierQuebecVermont
 from .models.localization import MothDetector
 from .schemas import Classification, Detection, SourceImage
 
@@ -70,18 +70,27 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     detector = MothDetector(source_images=source_images)
     detector.run()
 
-    classifier = MothClassifier(
+    filter = MothClassifierBinary(
         source_images=source_images, detections=detector.results
+    )
+    filter.run()
+    all_binary_classifications = filter.results
+    filtered_detections = filter.get_filtered_detections()
+
+    classifier = MothClassifierQuebecVermont(
+        source_images=source_images, detections=filtered_detections
     )
     classifier.run()
     end_time = time.time()
     seconds_elapsed = float(end_time - start_time)
 
+    all_classifications = all_binary_classifications + classifier.results
+
     response = PipelineResponse(
         pipeline=data.pipeline,
         source_images=source_image_results,
         detections=detector.results,
-        classifications=classifier.results,
+        classifications=all_classifications,
         total_time=seconds_elapsed,
     )
     return response
