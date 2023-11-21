@@ -66,17 +66,17 @@ class LocalizationAPIDataset(torch.utils.data.Dataset):
 class LocalizationImageDataset(torch.utils.data.Dataset):
     def __init__(
         self,
-        source_images: list[SourceImage],
+        source_images: typing.Iterable[SourceImage],
         image_transforms: torchvision.transforms.Compose,
         batch_size: int = 1,
     ):
         super().__init__()
-        self.source_images: list[SourceImage] = source_images
+        self.source_images: list[SourceImage] = list(source_images)
         self.image_transforms: torchvision.transforms.Compose = image_transforms
         self.batch_size: int = batch_size
 
     def __len__(self):
-        return len(self.source_images)
+        return len(list(self.source_images))
 
     def __getitem__(self, idx):
         worker_info = torch.utils.data.get_worker_info()

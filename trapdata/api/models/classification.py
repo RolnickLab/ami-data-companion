@@ -1,3 +1,5 @@
+import typing
+
 import numpy as np
 import torch
 from rich import print
@@ -22,8 +24,8 @@ class MothClassifier(
 ):
     def __init__(
         self,
-        source_images: list[SourceImage],
-        detections: list[Detection],
+        source_images: typing.Iterable[SourceImage],
+        detections: typing.Iterable[Detection],
         *args,
         **kwargs,
     ):
