@@ -64,7 +64,7 @@ class MothClassifier(
         logger.debug(f"Post-processing result batch: {result}")
         return result
 
-    def save_results(self, metadata, batch_output, seconds_per_item):
+    def save_results(self, metadata, batch_output, seconds_per_item, *args, **kwargs):
         image_ids = metadata[0]
         bboxes = [bboxes.tolist() for bboxes in metadata[1]]
         classification_objects = []

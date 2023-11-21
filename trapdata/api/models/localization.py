@@ -17,7 +17,7 @@ class APIObjectDetector(APIInferenceBaseClass, ObjectDetector):
         self.source_image_ids = source_image_ids
         super().__init__(*args, **kwargs)
 
-    def save_results(self, item_ids, batch_output):
+    def save_results(self, item_ids, batch_output, *args, **kwargs):
         # Format data to be posted to the API
         # Here we are just saving the bboxes of detected objects
         detected_objects_data = []
@@ -66,7 +66,7 @@ class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNe
             self.source_images, self.get_transforms(), batch_size=self.batch_size
         )
 
-    def save_results(self, item_ids, batch_output, seconds_per_item):
+    def save_results(self, item_ids, batch_output, seconds_per_item, *args, **kwargs):
         detections: list[Detection] = []
         for image_id, image_output in zip(item_ids, batch_output):
             for coords in image_output:
