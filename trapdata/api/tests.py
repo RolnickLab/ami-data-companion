@@ -180,6 +180,22 @@ class TestClassification(TestCase):
         for result in results:
             self.assertLessEqual(result.scores[0], 0.4)  # @TODO lower this score
 
+    def test_binary_classification_zero(self):
+        classifier = MothClassifierBinary(
+            source_images=get_empty_test_images(),
+            detections=get_empty_detections(),
+        )
+        classifier.run()
+        results = classifier.results
+        self.assertGreater(len(results), 0)
+        # Assert that all results are predicted negative and have very high scores
+        for result in results:
+            self.assertEqual(
+                result.classification,
+                MothClassifierBinary.negative_binary_label,
+            )
+            self.assertLessEqual(result.scores[0], 0.9)
+
     def test_binary_classification(self):
         test_images = get_test_images()
         detections = self.get_detections(test_images)
