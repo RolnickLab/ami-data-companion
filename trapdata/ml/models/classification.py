@@ -193,7 +193,7 @@ class BinaryClassifier(EfficientNetClassifier):
         )
         return dataset
 
-    def save_results(self, object_ids, batch_output):
+    def save_results(self, object_ids, batch_output, *args, **kwargs):
         # Here we are saving the moth/non-moth labels
         classified_objects_data = [
             {
@@ -231,7 +231,7 @@ class SpeciesClassifier(InferenceBaseClass):
         )
         return dataset
 
-    def save_results(self, object_ids, batch_output):
+    def save_results(self, object_ids, batch_output, *args, **kwargs):
         # Here we are saving the specific taxon labels
         classified_objects_data = [
             {

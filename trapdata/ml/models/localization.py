@@ -131,7 +131,7 @@ class ObjectDetector(InferenceBaseClass):
         )
         return dataset
 
-    def save_results(self, item_ids, batch_output):
+    def save_results(self, item_ids, batch_output, *args, **kwargs):
         # Format data to be saved in DB
         # Here we are just saving the bboxes of detected objects
         detected_objects_data = []
