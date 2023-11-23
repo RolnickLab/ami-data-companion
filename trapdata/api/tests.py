@@ -134,6 +134,11 @@ class TestLocalization(TestCase):
             source_images=test_images,
         )
         detector.run()
+        results = detector.results
+        source_image_ids = {det.source_image_id for det in results}
+        source_image_ids_expected = {img.id for img in test_images}
+        self.assertEqual(source_image_ids, source_image_ids_expected)
+
         self.assertEqual(len(detector.results), len(test_images))
         # @TODO ensure bounding boxes are correct
 
@@ -238,7 +243,7 @@ class TestSourceImageSchema(TestCase):
 
     def test_filepath(self):
         filepath = self.test_image
-        source_image = SourceImage(id=1, filepath=filepath)
+        source_image = SourceImage(id="1", filepath=filepath)
         self.assertEqual(source_image.filepath, filepath)
         img = source_image.open()
         self.assertIsNotNone(img)
@@ -249,7 +254,7 @@ class TestSourceImageSchema(TestCase):
     def test_url(self):
         # Don't trust placeholder image services
         url = "https://upload.wikimedia.org/wikipedia/en/thumb/8/80/Wikipedia-logo-v2.svg/103px-Wikipedia-logo-v2.svg.png"
-        source_image = SourceImage(id=1, url=url)
+        source_image = SourceImage(id="1", url=url)
         self.assertEqual(source_image.url, url)
         img = source_image.open()
         self.assertIsNotNone(img)
@@ -259,14 +264,14 @@ class TestSourceImageSchema(TestCase):
 
     def test_bad_base64(self):
         base64_string = "happy birthday"
-        source_image = SourceImage(id=1, b64=base64_string)
+        source_image = SourceImage(id="1", b64=base64_string)
         from binascii import Error
 
         with self.assertRaises(Error):
             source_image.open(raise_exception=True)
 
     def _test_base64(self, base64_string):
-        source_image = SourceImage(id=1, b64=base64_string)
+        source_image = SourceImage(id="1", b64=base64_string)
         img = source_image.open(raise_exception=True)
         self.assertIsNotNone(img)
         assert img is not None
