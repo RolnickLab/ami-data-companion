@@ -2,14 +2,19 @@
 Fast API interface for processing images through the localization and classification pipelines.
 """
 
+import enum
 import logging
 import time
-import typing
 
 import fastapi
 import pydantic
 
-from .models.classification import MothClassifierBinary, MothClassifierQuebecVermont
+from .models.classification import (
+    MothClassifierBinary,
+    MothClassifierPanama,
+    MothClassifierQuebecVermont,
+    MothClassifierUKDenmark,
+)
 from .models.localization import MothDetector
 from .schemas import Classification, Detection, SourceImage
 
@@ -34,11 +39,15 @@ class SourceImageResponse(pydantic.BaseModel):
     url: str
 
 
-PipelineChoice = typing.Literal[
-    "panama-moths-2023",
-    "quebec-vermont-moths-2023",
-    "uk-denmark-moths-2023",
-]
+PIPELINE_CHOICES = {
+    "panama_moths_2023": MothClassifierPanama,
+    "quebec_vermont_moths_2023": MothClassifierQuebecVermont,
+    "uk_denmark_moths_2023": MothClassifierUKDenmark,
+}
+_pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys())))
+
+
+PipelineChoice = enum.Enum("PipelineChoice", _pipeline_choices)
 
 
 class PipelineRequest(pydantic.BaseModel):
