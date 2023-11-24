@@ -1,3 +1,4 @@
+import datetime
 import logging
 import pathlib
 import tempfile
@@ -45,6 +46,7 @@ def get_empty_detections():
             source_image_id=img.id,
             bbox=BoundingBox.from_coords([0, 0, img.width, img.height]),  # type: ignore
             algorithm="Full width and height",
+            timestamp=datetime.datetime.now(),
         )
         for img in get_empty_test_images(read=True)
     ]

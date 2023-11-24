@@ -1,4 +1,5 @@
 # Can these be imported from the OpenAPI spec yaml?
+import datetime
 import pathlib
 
 import PIL.Image
@@ -60,6 +61,7 @@ class Detection(pydantic.BaseModel):
     bbox: BoundingBox
     inference_time: float | None = None
     algorithm: str | None = None
+    timestamp: datetime.datetime
 
 
 class Classification(pydantic.BaseModel):
@@ -71,3 +73,4 @@ class Classification(pydantic.BaseModel):
     inference_time: float | None = None
     algorithm: str | None = None
     terminal: bool = True
+    timestamp: datetime.datetime

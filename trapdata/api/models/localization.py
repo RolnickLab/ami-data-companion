@@ -1,3 +1,4 @@
+import datetime
 import typing
 
 from rich import print
@@ -80,6 +81,7 @@ class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNe
                     bbox=bbox,
                     inference_time=seconds_per_item,
                     algorithm=self.name,
+                    timestamp=datetime.datetime.now(),
                 )
                 print(detection)
                 detections.append(detection)
