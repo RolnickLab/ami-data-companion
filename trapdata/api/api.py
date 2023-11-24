@@ -74,17 +74,17 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         source_images=source_images, detections=detector.results
     )
     filter.run()
-    all_binary_classifications = filter.results
+    # all_binary_classifications = filter.results
     filtered_detections = filter.get_filtered_detections()
 
-    classifier = MothClassifierQuebecVermont(
-        source_images=source_images, detections=filtered_detections
-    )
+    Classifier = PIPELINE_CHOICES[data.pipeline.value]
+    classifier = Classifier(source_images=source_images, detections=filtered_detections)
     classifier.run()
     end_time = time.time()
     seconds_elapsed = float(end_time - start_time)
 
-    all_classifications = all_binary_classifications + classifier.results
+    # all_classifications = all_binary_classifications + classifier.results
+    all_classifications = classifier.results
 
     response = PipelineResponse(
         pipeline=data.pipeline,

@@ -70,3 +70,4 @@ class Classification(pydantic.BaseModel):
     scores: list[float] = []
     inference_time: float | None = None
     algorithm: str | None = None
+    terminal: bool = True

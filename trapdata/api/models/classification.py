@@ -66,7 +66,9 @@ class MothClassifier(
         logger.debug(f"Post-processing result batch: {result}")
         return result
 
-    def save_results(self, metadata, batch_output, seconds_per_item, *args, **kwargs):
+    def save_results(
+        self, metadata, batch_output, seconds_per_item, *args, **kwargs
+    ) -> list[Classification]:
         image_ids = metadata[0]
         bboxes = [bboxes.tolist() for bboxes in metadata[1]]
         classification_objects = []
@@ -92,6 +94,17 @@ class MothClassifier(
 
 
 class MothClassifierBinary(MothClassifier, MothNonMothClassifier):
+    def save_results(self, *args, **kwargs) -> list[Classification]:
+        """
+        Override the base class method to save only the results that have the
+        label we are interested in.
+        """
+        super().save_results(*args, **kwargs)
+        for classification in self.results:
+            # Assume this classifier is not the last one in the pipeline
+            classification.terminal = False
+        return self.results
+
     def get_filtered_detections(
         self, results: list[Classification] | None = None
     ) -> list[Detection]:
