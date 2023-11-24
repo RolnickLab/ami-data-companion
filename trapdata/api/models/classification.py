@@ -1,3 +1,4 @@
+import datetime
 import typing
 
 import numpy as np
@@ -81,6 +82,7 @@ class MothClassifier(
                 scores=[score for (label, score) in list(predictions)],
                 inference_time=seconds_per_item,
                 algorithm=self.name,
+                timestamp=datetime.datetime.now(),
             )
             print(classification)
             classification_objects.append(classification)
@@ -122,6 +124,7 @@ class MothClassifierBinary(MothClassifier, MothNonMothClassifier):
                 or BoundingBox(
                     x1=0, y1=0, x2=0, y2=0
                 ),  # @TODO if there is really no bbox, use the whole image
+                timestamp=result.timestamp,
             )
             for result in results
             if result.classification == self.positive_binary_label
