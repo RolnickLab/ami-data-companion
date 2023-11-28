@@ -42,6 +42,9 @@ pytest = "*"
 numpy = "^1.26.2"
 pip = "^23.3.1"
 pydantic-settings = "^2.1.0"
+boto3 = "^1.33.0"
+botocore = "^1.33.0"
+mypy-boto3-s3 = "^1.29.7"
 
 
 [tool.pytest.ini_options]
