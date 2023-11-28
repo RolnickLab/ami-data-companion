@@ -8,7 +8,7 @@ import time
 import fastapi
 import pydantic
 
-from ..common.logs import logger
+from ..common.logs import logger  # noqa: F401
 from .models.classification import (
     MothClassifierBinary,
     MothClassifierPanama,
@@ -17,7 +17,6 @@ from .models.classification import (
 )
 from .models.localization import MothDetector
 from .schemas import Classification, Detection, SourceImage
-from .utils import get_crop_fname, render_crop, upload_image
 
 app = fastapi.FastAPI()
 
@@ -101,16 +100,6 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     # all_classifications = all_binary_classifications + classifier.results
     all_detections = detector.results
     all_classifications = classifier.results
-
-    for detection in all_detections:
-        source_image = _get_source_image(source_images, detection.source_image_id)
-        crop = render_crop(source_image, detection.bbox)
-        public_url = upload_image(
-            crop, name=get_crop_fname(source_image, detection.bbox)
-        )
-        logger.info(f"Uploaded crop to {public_url}")
-        print(public_url)
-        detection.crop_image_url = public_url
 
     response = PipelineResponse(
         pipeline=data.pipeline,
