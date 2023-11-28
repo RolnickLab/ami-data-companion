@@ -3,12 +3,12 @@ Fast API interface for processing images through the localization and classifica
 """
 
 import enum
-import logging
 import time
 
 import fastapi
 import pydantic
 
+from ..common.logs import logger
 from .models.classification import (
     MothClassifierBinary,
     MothClassifierPanama,
@@ -17,8 +17,7 @@ from .models.classification import (
 )
 from .models.localization import MothDetector
 from .schemas import Classification, Detection, SourceImage
-
-logger = logging.getLogger(__name__)
+from .utils import get_crop_fname, render_crop, upload_image
 
 app = fastapi.FastAPI()
 
@@ -68,6 +67,13 @@ async def root():
     return fastapi.responses.RedirectResponse("/docs")
 
 
+def _get_source_image(source_images, source_image_id):
+    for source_image in source_images:
+        if source_image.id == source_image_id:
+            return source_image
+    raise ValueError(f"Source image {source_image_id} not found")
+
+
 @app.post("/pipeline/process")
 async def process(data: PipelineRequest) -> PipelineResponse:
     source_image_results = [
@@ -93,12 +99,23 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     seconds_elapsed = float(end_time - start_time)
 
     # all_classifications = all_binary_classifications + classifier.results
+    all_detections = detector.results
     all_classifications = classifier.results
+
+    for detection in all_detections:
+        source_image = _get_source_image(source_images, detection.source_image_id)
+        crop = render_crop(source_image, detection.bbox)
+        public_url = upload_image(
+            crop, name=get_crop_fname(source_image, detection.bbox)
+        )
+        logger.info(f"Uploaded crop to {public_url}")
+        print(public_url)
+        detection.crop_image_url = public_url
 
     response = PipelineResponse(
         pipeline=data.pipeline,
         source_images=source_image_results,
-        detections=detector.results,
+        detections=all_detections,
         classifications=all_classifications,
         total_time=seconds_elapsed,
     )

@@ -19,6 +19,12 @@ class BoundingBox(pydantic.BaseModel):
     def from_coords(cls, coords: list[float]):
         return cls(x1=coords[0], y1=coords[1], x2=coords[2], y2=coords[3])
 
+    def to_string(self):
+        return f"{self.x1},{self.y1},{self.x2},{self.y2}"
+
+    def to_path(self):
+        return "-".join([str(int(x)) for x in [self.x1, self.y1, self.x2, self.y2]])
+
 
 class SourceImage(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="ignore", arbitrary_types_allowed=True)
@@ -30,6 +36,7 @@ class SourceImage(pydantic.BaseModel):
     _pil: PIL.Image.Image | None = None
     width: int | None = None
     height: int | None = None
+    timestamp: datetime.datetime | None = None
 
     # Validate that there is at least one of the following fields
     @pydantic.model_validator(mode="after")
@@ -62,6 +69,7 @@ class Detection(pydantic.BaseModel):
     inference_time: float | None = None
     algorithm: str | None = None
     timestamp: datetime.datetime
+    crop_image_url: str | None = None
 
 
 class Classification(pydantic.BaseModel):

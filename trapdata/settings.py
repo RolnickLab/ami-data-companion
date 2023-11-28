@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     api_base_url: str = "http://localhost:8000/api/v2/"
     api_username: str
     api_password: str
+    s3_access_key_id: str
+    s3_secret_access_key: str
+    s3_endpoint_url: str | None
+    s3_destination_bucket: str
 
     @validator("api_base_url")
     def validate_base_url(cls, v):
