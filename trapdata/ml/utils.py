@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Optional
 
 import pandas as pd
 import PIL.Image
+import PIL.ImageFile
 import torch
 import torchvision
 
@@ -24,6 +25,8 @@ if TYPE_CHECKING:
     from _typeshed import SupportsRead
 
 from trapdata import logger
+
+PIL.ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 def get_device(device_str=None) -> torch.device:
