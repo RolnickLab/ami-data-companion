@@ -4,7 +4,7 @@ import time
 
 import PIL.Image
 
-from ..common.s3 import S3Config, public_url, write_file
+from ..common.s3 import S3Config, file_exists, public_url, write_file
 from ..common.utils import slugify
 from . import settings
 from .schemas import BoundingBox, SourceImage
@@ -63,3 +63,14 @@ def get_crop_fname(source_image: SourceImage, bbox: BoundingBox) -> str:
     bbox_name = bbox.to_path()
     timestamp = int(time.time())  # @TODO use pipeline name/version instead
     return f"{source_name}/{bbox_name}-{timestamp}.jpg"
+
+
+def upload_crop(source_image: SourceImage, bbox: BoundingBox, overwrite=False) -> str:
+    """ """
+    crop_fname = get_crop_fname(source_image, bbox)
+    if not overwrite:
+        if file_exists(get_s3_config(), crop_fname):
+            return public_url(get_s3_config(), crop_fname)
+    crop_image = render_crop(source_image, bbox)
+    url = upload_image(crop_image, crop_fname)
+    return url

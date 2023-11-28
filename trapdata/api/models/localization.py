@@ -12,6 +12,7 @@ from trapdata.ml.models.localization import (
 from ..datasets import LocalizationAPIDataset, LocalizationImageDataset
 from ..queries import save_detected_objects
 from ..schemas import BoundingBox, Detection, SourceImage
+from ..utils import upload_crop
 from .base import APIInferenceBaseClass
 
 
@@ -69,6 +70,12 @@ class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNe
             self.source_images, self.get_transforms(), batch_size=self.batch_size
         )
 
+    def get_source_image(self, source_image_id: int) -> SourceImage:
+        for source_image in self.source_images:
+            if source_image.id == source_image_id:
+                return source_image
+        raise ValueError(f"Source image with id {source_image_id} not found")
+
     def save_results(self, item_ids, batch_output, seconds_per_item, *args, **kwargs):
         detections: list[Detection] = []
         for image_id, image_output in zip(item_ids, batch_output):
@@ -76,12 +83,20 @@ class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNe
                 bbox = BoundingBox(
                     x1=coords[0], y1=coords[1], x2=coords[2], y2=coords[3]
                 )
+                try:
+                    source_image = self.get_source_image(image_id)
+                    crop_url = upload_crop(source_image, bbox)
+                except Exception as e:
+                    logger.error(f"Failed to upload crop: {e}")
+                    raise
+                    crop_url = None
                 detection = Detection(
                     source_image_id=image_id,
                     bbox=bbox,
                     inference_time=seconds_per_item,
                     algorithm=self.name,
                     timestamp=datetime.datetime.now(),
+                    crop_image_url=crop_url,
                 )
                 print(detection)
                 detections.append(detection)
