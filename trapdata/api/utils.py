@@ -4,7 +4,7 @@ import time
 
 import PIL.Image
 
-from ..common.s3 import S3Config, public_url, read_image, write_file
+from ..common.s3 import S3Config, public_url, write_file
 from ..common.utils import slugify
 from . import settings
 from .schemas import BoundingBox, SourceImage
@@ -32,8 +32,8 @@ def upload_image(image: PIL.Image.Image, name: str):
         f.seek(0)
         key = write_file(s3_config, name, f)
         url = public_url(s3_config, key)
-        img = read_image(s3_config, key)
-        assert img.width == image.width
+        # img = read_image(s3_config, key)
+        # assert img.width == image.width
         return url
 
 
