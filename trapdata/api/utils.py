@@ -4,6 +4,7 @@ import time
 
 import PIL.Image
 
+from ..common.logs import logger
 from ..common.s3 import S3Config, file_exists, public_url, write_file
 from ..common.utils import slugify
 from . import settings
@@ -65,8 +66,17 @@ def get_crop_fname(source_image: SourceImage, bbox: BoundingBox) -> str:
     return f"{source_name}/{bbox_name}-{timestamp}.jpg"
 
 
-def upload_crop(source_image: SourceImage, bbox: BoundingBox, overwrite=False) -> str:
+def upload_crop(
+    source_image: SourceImage, bbox: BoundingBox, overwrite=False
+) -> str | None:
     """ """
+    if (
+        not settings.s3_destination_bucket
+        and not settings.s3_access_key_id
+        and not settings.s3_secret_access_key
+    ):
+        logger.debug("Skipping crop upload because S3 is not configured")
+        return None
     crop_fname = get_crop_fname(source_image, bbox)
     if not overwrite:
         if file_exists(get_s3_config(), crop_fname):
