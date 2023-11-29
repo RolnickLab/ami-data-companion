@@ -88,7 +88,6 @@ class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNe
                     crop_url = upload_crop(source_image, bbox)
                 except Exception as e:
                     logger.error(f"Failed to upload crop: {e}")
-                    raise
                     crop_url = None
                 detection = Detection(
                     source_image_id=image_id,
