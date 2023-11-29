@@ -34,17 +34,17 @@ class Settings(BaseSettings):
     localization_batch_size: int = 2
     classification_batch_size: int = 20
     num_workers: int = 1
-    api_base_url: str = "http://localhost:8000/api/v2/"
-    api_username: str
-    api_password: str
-    s3_access_key_id: str
-    s3_secret_access_key: str
-    s3_endpoint_url: str | None
-    s3_destination_bucket: str
+    api_base_url: str | None = "http://localhost:8000/api/v2/"
+    api_username: str | None = None
+    api_password: str | None = None
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    s3_endpoint_url: str | None = None
+    s3_destination_bucket: str | None = None
 
     @validator("api_base_url")
     def validate_base_url(cls, v):
-        if not v.endswith("/"):
+        if v and not v.endswith("/"):
             return v + "/"
         else:
             return v
