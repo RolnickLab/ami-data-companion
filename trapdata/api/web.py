@@ -1,3 +1,5 @@
+import typing
+
 import gradio as gr
 import PIL.Image
 import PIL.ImageDraw
@@ -15,7 +17,7 @@ from .schemas import SourceImage
 from .tests import get_test_images
 
 
-def predict(*img_paths, Classifier: MothClassifier):
+def predict(*img_paths, Classifier: typing.Type[MothClassifier]):
     # img_paths = img_paths * 4  # Test batch size
     source_images = [
         SourceImage(id=str(i), filepath=img_path)
@@ -30,7 +32,7 @@ def predict(*img_paths, Classifier: MothClassifier):
     if len(source_images) == 1:
         detector = MothDetector(source_images=source_images, single=True)
     else:
-        detector = MothDetector(source_images=source_images, batch_size=2, single=False)
+        detector = MothDetector(source_images=source_images, single=False)
     detector.run()
     all_detections = detector.results
 

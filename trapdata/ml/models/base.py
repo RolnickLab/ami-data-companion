@@ -84,7 +84,7 @@ class InferenceBaseClass:
     user_data_path = None
     type = "unknown"
     stage = 0
-    single = True
+    single = False
     queue: QueueManager
     dataset: torch.utils.data.Dataset
     dataloader: torch.utils.data.DataLoader

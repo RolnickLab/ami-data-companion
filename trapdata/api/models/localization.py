@@ -1,3 +1,4 @@
+import concurrent.futures
 import datetime
 import typing
 
@@ -78,28 +79,39 @@ class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNe
 
     def save_results(self, item_ids, batch_output, seconds_per_item, *args, **kwargs):
         detections: list[Detection] = []
-        for image_id, image_output in zip(item_ids, batch_output):
-            for coords in image_output:
-                bbox = BoundingBox(
-                    x1=coords[0], y1=coords[1], x2=coords[2], y2=coords[3]
-                )
-                try:
-                    source_image = self.get_source_image(image_id)
-                    crop_url = upload_crop(source_image, bbox)
-                except Exception as e:
-                    logger.error(f"Failed to upload crop: {e}")
-                    crop_url = None
-                detection = Detection(
-                    source_image_id=image_id,
-                    bbox=bbox,
-                    inference_time=seconds_per_item,
-                    algorithm=self.name,
-                    timestamp=datetime.datetime.now(),
-                    crop_image_url=crop_url,
-                )
-                print(detection)
+
+        def save_detection(image_id, coords):
+            bbox = BoundingBox(x1=coords[0], y1=coords[1], x2=coords[2], y2=coords[3])
+            try:
+                source_image = self.get_source_image(image_id)
+                crop_url = upload_crop(source_image, bbox)
+            except Exception as e:
+                # Remove line breaks in error message
+                e = str(e).replace("\n", " ")
+                logger.error(f"Failed to upload crop: {e}")
+                crop_url = None
+            detection = Detection(
+                source_image_id=image_id,
+                bbox=bbox,
+                inference_time=seconds_per_item,
+                algorithm=self.name,
+                timestamp=datetime.datetime.now(),
+                crop_image_url=crop_url,
+            )
+            print(detection)
+            return detection
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = []
+            for image_id, image_output in zip(item_ids, batch_output):
+                for coords in image_output:
+                    future = executor.submit(save_detection, image_id, coords)
+                    futures.append(future)
+
+            for future in concurrent.futures.as_completed(futures):
+                detection = future.result()
                 detections.append(detection)
-            logger.info(f"Found {len(detections)} detected objects for item {image_id}")
+
         self.results += detections
 
     def run(self) -> list[Detection]:
