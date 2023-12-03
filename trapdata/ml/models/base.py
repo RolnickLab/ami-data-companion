@@ -150,12 +150,24 @@ class InferenceBaseClass:
                 Taxon IDs are helpful for looking up additional information about the species
                 such as the genus and family.
                 """
+                import concurrent.futures
+
                 from trapdata.ml.utils import replace_gbif_id_with_name
 
-                string_labels = {}
-                for label, index in labels.items():
-                    string_label = replace_gbif_id_with_name(label)
-                    string_labels[string_label] = index
+                def fetch_gbif_ids(labels):
+                    string_labels = {}
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        futures = []
+                        for label, _index in labels.items():
+                            future = executor.submit(replace_gbif_id_with_name, label)
+                            futures.append(future)
+                        for future, (_label, index) in zip(futures, labels.items()):
+                            string_label = future.result()
+                            string_labels[string_label] = index
+
+                    return string_labels
+
+                string_labels = fetch_gbif_ids(labels)
 
                 logger.info(f"Replacing GBIF IDs with names in {local_path}")
                 # Backup the original file
