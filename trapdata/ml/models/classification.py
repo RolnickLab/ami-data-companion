@@ -179,8 +179,8 @@ class Resnet50TimmClassifier(Resnet50Classifier):
 class BinaryClassifier(EfficientNetClassifier):
     stage = 2
     type = "binary_classification"
-    positive_binary_label = None
-    positive_negative_label = None
+    positive_binary_label: str = constants.POSITIVE_BINARY_LABEL
+    negative_binary_label: str = constants.NEGATIVE_BINARY_LABEL
 
     def get_queue(self) -> DetectedObjectQueue:
         return DetectedObjectQueue(self.db_path, self.image_base_path)
@@ -193,13 +193,13 @@ class BinaryClassifier(EfficientNetClassifier):
         )
         return dataset
 
-    def save_results(self, object_ids, batch_output):
+    def save_results(self, object_ids, batch_output, *args, **kwargs):
         # Here we are saving the moth/non-moth labels
         classified_objects_data = [
             {
                 "binary_label": str(label),
                 "binary_label_score": float(score),
-                "in_queue": True if label == constants.POSITIVE_BINARY_LABEL else False,
+                "in_queue": True if label == self.positive_binary_label else False,
                 "model_name": self.name,
             }
             for label, score in batch_output
@@ -213,7 +213,7 @@ class MothNonMothClassifier(BinaryClassifier):
     weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/moth-nonmoth-effv2b3_20220506_061527_30.pth"
     labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/05-moth-nonmoth_category_map.json"
     positive_binary_label = "moth"
-    positive_negative_label = "nonmoth"
+    negative_binary_label = "nonmoth"
 
 
 class SpeciesClassifier(InferenceBaseClass):
@@ -231,7 +231,7 @@ class SpeciesClassifier(InferenceBaseClass):
         )
         return dataset
 
-    def save_results(self, object_ids, batch_output):
+    def save_results(self, object_ids, batch_output, *args, **kwargs):
         # Here we are saving the specific taxon labels
         classified_objects_data = [
             {
@@ -305,14 +305,12 @@ class PanamaMothSpeciesClassifierMixedResolution2023(
     lookup_gbif_names = True
     normalization = imagenet_normalization
 
-    description = (
-        "Trained on Noveber 07, 2023 using a corrected species list of 1036 classes."
-    )
+    description = "Trained on Novempber 11th, 2023 using a corrected species list of 1060 classes."
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "panama_resnet50_baseline_9270f84a.pth"
+        "panama_resetnet50_best_5aeb515a.pth"
     )
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "03_moths_centralAmerica_category_map-with-names.json"
+        "03_moths_centralAmerica_category_map-202311110-with-names.json"
     )

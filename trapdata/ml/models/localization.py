@@ -131,7 +131,7 @@ class ObjectDetector(InferenceBaseClass):
         )
         return dataset
 
-    def save_results(self, item_ids, batch_output):
+    def save_results(self, item_ids, batch_output, *args, **kwargs):
         # Format data to be saved in DB
         # Here we are just saving the bboxes of detected objects
         detected_objects_data = []
@@ -180,7 +180,7 @@ class MothObjectDetector_FasterRCNN_2021(ObjectDetector):
     def post_process_single(self, output):
         # This model does not use the labels from the object detection model
         _ = output["labels"]
-        assert all([label == 1 for label in output["labels"]])
+        assert all(label == 1 for label in output["labels"])
 
         # Filter out objects if their score is under score threshold
         bboxes = output["boxes"][output["scores"] > self.bbox_score_threshold]
@@ -221,7 +221,7 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
     def post_process_single(self, output):
         # This model does not use the labels from the object detection model
         _ = output["labels"]
-        assert all([label == 1 for label in output["labels"]])
+        assert all(label == 1 for label in output["labels"])
 
         # Filter out objects if their score is under score threshold
         bboxes = output["boxes"][output["scores"] > self.bbox_score_threshold]
@@ -275,7 +275,7 @@ class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
     def post_process_single(self, output):
         # This model does not use the labels from the object detection model
         _ = output["labels"]
-        assert all([label == 1 for label in output["labels"]])
+        assert all(label == 1 for label in output["labels"])
 
         # Filter out objects if their score is under score threshold
         bboxes = output["boxes"][output["scores"] > self.bbox_score_threshold]
