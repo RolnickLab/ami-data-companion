@@ -6,7 +6,7 @@ from rich import print
 
 from trapdata.common.logs import logger
 from trapdata.ml.models.localization import (
-    MothObjectDetector_FasterRCNN_MobileNet_2023,
+    MothObjectDetector_FasterRCNN_2023,
     ObjectDetector,
 )
 
@@ -53,14 +53,14 @@ class APIObjectDetector(APIInferenceBaseClass, ObjectDetector):
         )
 
 
-class APIMothObjectDetector_FasterRCNN_MobileNet_2023(
+class APIMothObjectDetector_FasterRCNN_2023(
     APIObjectDetector,
-    MothObjectDetector_FasterRCNN_MobileNet_2023,
+    MothObjectDetector_FasterRCNN_2023,
 ):
     pass
 
 
-class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_MobileNet_2023):
+class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_2023):
     def __init__(self, source_images: typing.Iterable[SourceImage], *args, **kwargs):
         self.source_images = source_images
         self.results: list[Detection] = []
