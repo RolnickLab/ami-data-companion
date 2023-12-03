@@ -86,7 +86,8 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         source_images=source_images,
         batch_size=settings.localization_batch_size,
         num_workers=settings.num_workers,
-        single=True if len(source_images) == 1 else False,
+        # single=True if len(source_images) == 1 else False,
+        single=True,  # @TODO solve issues with reading images in multiprocessing
     )
     detector_results = detector.run()
 
@@ -95,7 +96,8 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         detections=detector_results,
         batch_size=settings.classification_batch_size,
         num_workers=settings.num_workers,
-        single=True if len(detector_results) == 1 else False,
+        # single=True if len(detector_results) == 1 else False,
+        single=True,  # @TODO solve issues with reading images in multiprocessing
     )
     filter.run()
     # all_binary_classifications = filter.results
@@ -107,7 +109,8 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         detections=filtered_detections,
         batch_size=settings.classification_batch_size,
         num_workers=settings.num_workers,
-        single=True if len(filtered_detections) == 1 else False,
+        # single=True if len(filtered_detections) == 1 else False,
+        single=True,  # @TODO solve issues with reading images in multiprocessing
     )
     classifier.run()
     end_time = time.time()
