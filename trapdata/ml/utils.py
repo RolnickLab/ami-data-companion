@@ -235,6 +235,7 @@ def fetch_gbif_species(gbif_id: int) -> Optional[Taxon]:
     Look up taxon name from GBIF API. Cache results in user_data_path.
     """
 
+    logger.info(f"Looking up species name for GBIF id {gbif_id}")
     base_url = "https://api.gbif.org/v1/species/{gbif_id}"
     url = base_url.format(gbif_id=gbif_id)
 
