@@ -9,6 +9,7 @@ import fastapi
 import pydantic
 
 from ..common.logs import logger  # noqa: F401
+from . import settings
 from .models.classification import (
     MothClassifierBinary,
     MothClassifierPanama,
@@ -81,18 +82,33 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     source_images = [SourceImage(**image.model_dump()) for image in data.source_images]
 
     start_time = time.time()
-    detector = MothDetector(source_images=source_images)
-    detector.run()
+    detector = MothDetector(
+        source_images=source_images,
+        batch_size=settings.localization_batch_size,
+        num_workers=settings.num_workers,
+        single=True if len(source_images) == 1 else False,
+    )
+    detector_results = detector.run()
 
     filter = MothClassifierBinary(
-        source_images=source_images, detections=detector.results
+        source_images=source_images,
+        detections=detector_results,
+        batch_size=settings.classification_batch_size,
+        num_workers=settings.num_workers,
+        single=True if len(detector_results) == 1 else False,
     )
     filter.run()
     # all_binary_classifications = filter.results
     filtered_detections = filter.get_filtered_detections()
 
     Classifier = PIPELINE_CHOICES[data.pipeline.value]
-    classifier = Classifier(source_images=source_images, detections=filtered_detections)
+    classifier = Classifier(
+        source_images=source_images,
+        detections=filtered_detections,
+        batch_size=settings.classification_batch_size,
+        num_workers=settings.num_workers,
+        single=True if len(filtered_detections) == 1 else False,
+    )
     classifier.run()
     end_time = time.time()
     seconds_elapsed = float(end_time - start_time)
