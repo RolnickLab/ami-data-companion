@@ -40,7 +40,7 @@ def upload_image(image: PIL.Image.Image, name: str):
 
 def render_crop(source_image: SourceImage, bbox: BoundingBox | None) -> PIL.Image.Image:
     """ """
-    # Create PIL Image:
+    source_image.open(raise_exception=True)
     assert source_image._pil is not None
     if not bbox:
         # Use full image
