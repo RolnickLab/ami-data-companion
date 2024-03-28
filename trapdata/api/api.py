@@ -11,13 +11,14 @@ import pydantic
 from ..common.logs import logger  # noqa: F401
 from . import settings
 from .models.classification import (
+    MothClassifier,
     MothClassifierBinary,
     MothClassifierPanama,
     MothClassifierQuebecVermont,
     MothClassifierUKDenmark,
 )
 from .models.localization import MothDetector
-from .schemas import Classification, Detection, SourceImage
+from .schemas import Detection, SourceImage
 
 app = fastapi.FastAPI()
 
@@ -59,7 +60,6 @@ class PipelineResponse(pydantic.BaseModel):
     total_time: float
     source_images: list[SourceImageResponse]
     detections: list[Detection]
-    classifications: list[Classification]
 
 
 @app.get("/")
@@ -98,15 +98,15 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         num_workers=settings.num_workers,
         # single=True if len(detector_results) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
+        filter_results=True,
     )
     filter.run()
     # all_binary_classifications = filter.results
-    filtered_detections = filter.get_filtered_detections()
 
     Classifier = PIPELINE_CHOICES[data.pipeline.value]
-    classifier = Classifier(
+    classifier: MothClassifier = Classifier(
         source_images=source_images,
-        detections=filtered_detections,
+        detections=filter.results,
         batch_size=settings.classification_batch_size,
         num_workers=settings.num_workers,
         # single=True if len(filtered_detections) == 1 else False,
@@ -117,14 +117,12 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     seconds_elapsed = float(end_time - start_time)
 
     # all_classifications = all_binary_classifications + classifier.results
-    all_detections = detector.results
-    all_classifications = classifier.results
+    detections_with_classifications = classifier.results
 
     response = PipelineResponse(
         pipeline=data.pipeline,
         source_images=source_image_results,
-        detections=all_detections,
-        classifications=all_classifications,
+        detections=detections_with_classifications,
         total_time=seconds_elapsed,
     )
     return response
