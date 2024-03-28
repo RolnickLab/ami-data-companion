@@ -15,7 +15,7 @@ from trapdata.ml.models.classification import (
 )
 
 from ..datasets import ClassificationImageDataset
-from ..schemas import BoundingBox, Classification, Detection, SourceImage
+from ..schemas import Classification, Detection, SourceImage
 from .base import APIInferenceBaseClass
 
 
@@ -31,8 +31,8 @@ class MothClassifier(
         **kwargs,
     ):
         self.source_images = source_images
-        self.detections = detections
-        self.results: list[Classification] = []
+        self.detections = list(detections)
+        self.results: list[Detection] = []
         super().__init__(*args, **kwargs)
 
     def get_dataset(self):
@@ -69,67 +69,72 @@ class MothClassifier(
 
     def save_results(
         self, metadata, batch_output, seconds_per_item, *args, **kwargs
-    ) -> list[Classification]:
+    ) -> list[Detection]:
         image_ids = metadata[0]
-        bboxes = [bboxes.tolist() for bboxes in metadata[1]]
-        classification_objects = []
-        for image_id, coords, predictions in zip(image_ids, bboxes, batch_output):
+        detection_idxes = metadata[1]
+        for image_id, detection_idx, predictions in zip(
+            image_ids, detection_idxes, batch_output
+        ):
+            detection = self.detections[detection_idx]
+            assert detection.source_image_id == image_id
             classification = Classification(
-                source_image_id=image_id,
-                bbox=BoundingBox.from_coords(coords=coords),
                 classification=predictions[0][0],
-                labels=[label for (label, score) in list(predictions)],
-                scores=[score for (label, score) in list(predictions)],
+                labels=[label for (label, _) in list(predictions)],
+                scores=[score for (_, score) in list(predictions)],
                 inference_time=seconds_per_item,
                 algorithm=self.name,
                 timestamp=datetime.datetime.now(),
             )
-            print(classification)
-            classification_objects.append(classification)
-        self.results.extend(classification_objects)
-        logger.info(f"Saving {len(self.results)} classification results")
+            detection.classifications.append(classification)
+            print(detection)
+        self.results.extend(self.detections)
+        logger.info(f"Saving {len(self.results)} detections with classifications")
         return self.results
 
-    def run(self) -> list[Classification]:
+    def run(self) -> list[Detection]:
         super().run()
         return self.results
 
 
 class MothClassifierBinary(MothClassifier, MothNonMothClassifier):
-    def save_results(self, *args, **kwargs) -> list[Classification]:
+    def __init__(self, filter_results: bool = False, *args, **kwargs):
+        self.filter_results = filter_results
+        super().__init__(*args, **kwargs)
+
+    def save_results(
+        self, metadata, batch_output, seconds_per_item, *args, **kwargs
+    ) -> list[Detection]:
         """
         Override the base class method to save only the results that have the
         label we are interested in.
         """
-        super().save_results(*args, **kwargs)
-        for classification in self.results:
-            # Assume this classifier is not the last one in the pipeline
-            classification.terminal = False
-        return self.results
-
-    def get_filtered_detections(
-        self, results: list[Classification] | None = None
-    ) -> list[Detection]:
-        """
-        Return only the results that have the label we are interested in.
-
-        This is a convenience method that returns detections instead of
-        classifications, ready to be sent to the next classifier.
-        """
-        results = results or self.results
-        detections = [
-            Detection(
-                source_image_id=result.source_image_id,
-                bbox=result.bbox
-                or BoundingBox(
-                    x1=0, y1=0, x2=0, y2=0
-                ),  # @TODO if there is really no bbox, use the whole image
-                timestamp=result.timestamp,
+        image_ids = metadata[0]
+        detection_idxes = metadata[1]
+        for image_id, detection_idx, predictions in zip(
+            image_ids, detection_idxes, batch_output
+        ):
+            detection = self.detections[detection_idx]
+            assert detection.source_image_id == image_id
+            classification = Classification(
+                classification=predictions[0][0],
+                labels=[label for (label, _) in list(predictions)],
+                scores=[score for (_, score) in list(predictions)],
+                inference_time=seconds_per_item,
+                algorithm=self.name,
+                timestamp=datetime.datetime.now(),
+                # Specific to binary classification / the filter model
+                terminal=False,
             )
-            for result in results
-            if result.classification == self.positive_binary_label
-        ]
-        return detections
+            print(detection)
+            if self.filter_results:
+                if classification.classification == self.positive_binary_label:
+                    detection.classifications.append(classification)
+            else:
+                detection.classifications.append(classification)
+
+        self.results.extend(self.detections)
+        logger.info(f"Saving {len(self.results)} detections with classifications")
+        return self.results
 
 
 class MothClassifierPanama(

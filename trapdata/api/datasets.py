@@ -1,7 +1,6 @@
 import tempfile
 import typing
 
-import numpy as np
 import PIL.Image
 import torch
 import torch.utils.data
@@ -101,13 +100,13 @@ class LocalizationImageDataset(torch.utils.data.Dataset):
 class ClassificationImageDataset(torch.utils.data.Dataset):
     def __init__(
         self,
-        source_images: list[SourceImage],
-        detections: list[Detection],
+        source_images: typing.Iterable[SourceImage],
+        detections: typing.Iterable[Detection],
         image_transforms: torchvision.transforms.Compose,
         batch_size: int = 1,
     ):
         super().__init__()
-        self.detections = detections
+        self.detections = list(detections)
         self.image_transforms: torchvision.transforms.Compose = image_transforms
         self.batch_size: int = batch_size
         self.source_images: dict[str, SourceImage] = {
@@ -122,6 +121,7 @@ class ClassificationImageDataset(torch.utils.data.Dataset):
         worker_info = torch.utils.data.get_worker_info()
         logger.info(f"Using worker: {worker_info}")
 
+        detection_idx = idx
         detection: Detection = self.detections[idx]
         source_image = self.source_images[detection.source_image_id]
         image_data = source_image.open()
@@ -139,4 +139,4 @@ class ClassificationImageDataset(torch.utils.data.Dataset):
         # logger.info(f"Batch data: {ids_batch}, {image_batch}")
 
         # return (ids_batch, image_batch)
-        return (source_image.id, np.array(coords)), image_data
+        return (source_image.id, detection_idx), image_data

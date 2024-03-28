@@ -63,18 +63,7 @@ class SourceImage(pydantic.BaseModel):
         return self._pil
 
 
-class Detection(pydantic.BaseModel):
-    source_image_id: str
-    bbox: BoundingBox
-    inference_time: float | None = None
-    algorithm: str | None = None
-    timestamp: datetime.datetime
-    crop_image_url: str | None = None
-
-
 class Classification(pydantic.BaseModel):
-    source_image_id: str
-    bbox: BoundingBox | None = None
     classification: str
     labels: list[str] = []
     scores: list[float] = []
@@ -82,3 +71,13 @@ class Classification(pydantic.BaseModel):
     algorithm: str | None = None
     terminal: bool = True
     timestamp: datetime.datetime
+
+
+class Detection(pydantic.BaseModel):
+    source_image_id: str
+    bbox: BoundingBox
+    inference_time: float | None = None
+    algorithm: str | None = None
+    timestamp: datetime.datetime
+    crop_image_url: str | None = None
+    classifications: list[Classification] = []
