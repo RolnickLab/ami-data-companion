@@ -98,7 +98,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         num_workers=settings.num_workers,
         # single=True if len(detector_results) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
-        filter_results=True,
+        filter_results=True,  # Only save results with the positive_binary_label, @TODO make this configurable from request
     )
     filter.run()
     # all_binary_classifications = filter.results
@@ -118,6 +118,20 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
     # all_classifications = all_binary_classifications + classifier.results
     detections_with_classifications = classifier.results
+
+    # For each detection, only keep the classifications with terminal=True
+    for detection in detections_with_classifications:
+        detection.classifications = [
+            classification
+            for classification in detection.classifications
+            if classification.terminal
+        ]
+    # Remove any detections without classifications
+    detections_with_classifications = [
+        detection
+        for detection in detections_with_classifications
+        if detection.classifications
+    ]
 
     response = PipelineResponse(
         pipeline=data.pipeline,
