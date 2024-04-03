@@ -261,6 +261,20 @@ class QuebecVermontMothSpeciesClassifierMixedResolution(
         "quebec-vermont_moth-category-map_19Jan2023.json"
     )
 
+class CostaRicaSpeciesClassifier(
+    SpeciesClassifier, Resnet50ClassifierLowRes
+):
+    name = "Costa Rica Species Classifier"
+    description = (
+        "Trained on ___ by Turing"
+    )
+    weights_path = (
+        "/Users/kgoldmann/Downloads/turing-singapore_v02_resnet50_2023-12-19-14-04.pt"
+    )
+    labels_path = (
+        "/Users/kgoldmann/Downloads/01_singapore_species_name_indices.json"
+    )
+
 
 class UKDenmarkMothSpeciesClassifierMixedResolution(
     SpeciesClassifier, Resnet50ClassifierLowRes
