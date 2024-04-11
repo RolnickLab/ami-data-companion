@@ -146,3 +146,18 @@ docker stop ami-db && docker remove ami-db
 
 A script is available in the repo source to run the commands above.
 `./scrips/start_db_container.sh`
+
+
+
+## KG: Notes to self
+
+- To clear the cache:
+
+  ```
+  rm /Users/kgoldmann/Library/Application Support/trapdata/trapdata.db
+  ```
+
+- To add new models, save the pt and json files to: 
+```
+/Users/kgoldmann/Library/Application Support/trapdata/models
+```

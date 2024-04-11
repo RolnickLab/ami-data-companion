@@ -105,6 +105,57 @@ class Resnet50(torch.nn.Module):
 
         return x
 
+class Resnet50Classifier_KG(InferenceBaseClass):
+    # function to run the Turing models
+    logger.info("KG: Resnet50Classifier_KG")
+    input_size = 300
+
+    def get_model(self):
+        num_classes = len(self.category_map)
+        logger.info(f"KG: num_classes {num_classes}")
+
+        model = Resnet50(num_classes=num_classes)
+        model = model.to(self.device)
+
+        logger.info("KG: check A")
+        # logger.info(f"KG: check {self.weights}")
+
+        # # state_dict = torch.hub.load_state_dict_from_url(weights_url)
+        checkpoint = torch.load(self.weights, map_location=self.device)
+        logger.info("KG: check B")
+
+        # # The model state dict is nested in some checkpoints, and not in others
+        state_dict = checkpoint.get("model_state_dict") or checkpoint
+        logger.info("KG: check C")
+
+        model.load_state_dict(state_dict)
+        # model.load_state_dict(state_dict)
+        logger.info("KG: check D")
+        model.eval()
+        print("KG: model eval complete")
+        return model
+
+    def get_transforms(self):
+        mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
+        return torchvision.transforms.Compose(
+            [
+                torchvision.transforms.Resize((self.input_size, self.input_size)),
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize(mean, std),
+            ]
+        )
+
+    def post_process_batch(self, output):
+        predictions = torch.nn.functional.softmax(output, dim=1)
+        predictions = predictions.cpu().numpy()
+
+        categories = predictions.argmax(axis=1)
+        labels = [self.category_map[cat] for cat in categories]
+        scores = predictions.max(axis=1).astype(float)
+
+        result = list(zip(labels, scores))
+        logger.debug(f"Post-processing result batch: {result}")
+        return result
 
 class Resnet50Classifier(InferenceBaseClass):
     input_size = 300
@@ -262,17 +313,17 @@ class QuebecVermontMothSpeciesClassifierMixedResolution(
     )
 
 class CostaRicaSpeciesClassifier(
-    SpeciesClassifier, Resnet50ClassifierLowRes
+    SpeciesClassifier, Resnet50Classifier
 ):
     name = "Costa Rica Species Classifier"
     description = (
         "Trained on ___ by Turing"
     )
     weights_path = (
-        "/Users/kgoldmann/Downloads/turing-singapore_v02_resnet50_2023-12-19-14-04.pt"
+        "turing-costarica_v02_state_resnet50_2024-01-08-11-14.pt"
     )
     labels_path = (
-        "/Users/kgoldmann/Downloads/01_singapore_species_name_indices.json"
+        "01_costarica_species_name_indices.json"
     )
 
 
