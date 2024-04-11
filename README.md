@@ -149,15 +149,17 @@ A script is available in the repo source to run the commands above.
 
 
 
-## KG: Notes to self
+## KG Notes for adding new models
+
+- To add new models, save the pt and json files to:
+  ```
+  ~/Library/Application Support/trapdata/models
+  ```
+  or wherever you set the appropriate dir in settings.
+  The json file is simply a dict of species name and index.
 
 - To clear the cache:
 
   ```
-  rm /Users/kgoldmann/Library/Application Support/trapdata/trapdata.db
+  rm ~/Library/Application Support/trapdata/trapdata.db
   ```
-
-- To add new models, save the pt and json files to: 
-```
-/Users/kgoldmann/Library/Application Support/trapdata/models
-```
