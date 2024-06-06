@@ -118,7 +118,6 @@ class Resnet50Classifier_KG(InferenceBaseClass):
         model = model.to(self.device)
 
         logger.info("KG: check A")
-        # logger.info(f"KG: check {self.weights}")
 
         # # state_dict = torch.hub.load_state_dict_from_url(weights_url)
         checkpoint = torch.load(self.weights, map_location=self.device)
@@ -136,7 +135,7 @@ class Resnet50Classifier_KG(InferenceBaseClass):
         return model
 
     def get_transforms(self):
-        mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
+        mean, std = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
         return torchvision.transforms.Compose(
             [
                 torchvision.transforms.Resize((self.input_size, self.input_size)),
@@ -312,19 +311,35 @@ class QuebecVermontMothSpeciesClassifierMixedResolution(
         "quebec-vermont_moth-category-map_19Jan2023.json"
     )
 
-class CostaRicaSpeciesClassifier(
-    SpeciesClassifier, Resnet50Classifier
+class TuringCostaRicaSpeciesClassifier(
+    SpeciesClassifier, Resnet50Classifier_KG
 ):
-    name = "Costa Rica Species Classifier"
+    name = "Turing Costa Rica Species Classifier"
     description = (
-        "Trained on ___ by Turing"
+        "Trained on 13th May 2024 by Turing team using Resnet50 model."
     )
     weights_path = (
-        "turing-costarica_v02_state_resnet50_2024-01-08-11-14.pt"
+        "turing-costarica_v03_resnet50_2024-06-04-16-17_state.pt"
     )
     labels_path = (
-        "01_costarica_species_name_indices.json"
+        "03_costarica_data_category_map.json"
     )
+
+
+class TuringUKSpeciesClassifier(
+    SpeciesClassifier, Resnet50Classifier_KG
+):
+    name = "Turing UK Species Classifier"
+    description = (
+        "Trained on 13th May 2024 by Turing team using Resnet50 model."
+    )
+    weights_path = (
+        "turing-uk_v03_resnet50_2024-05-13-10-03_state.pt"
+    )
+    labels_path = (
+        "03_uk_data_category_map.json"
+    )
+
 
 
 class UKDenmarkMothSpeciesClassifierMixedResolution(
