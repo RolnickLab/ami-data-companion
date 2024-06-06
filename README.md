@@ -158,8 +158,10 @@ A script is available in the repo source to run the commands above.
   or wherever you set the appropriate dir in settings.
   The json file is simply a dict of species name and index.
 
+  Then you need to create a class in `trapdata/ml/models/classification.py` or `trapdata/ml/models/localization.py` and add the model details.
+
 - To clear the cache:
 
   ```
-  rm ~/Library/Application Support/trapdata/trapdata.db
+  rm ~/Library/Application\ Support/trapdata/trapdata.db
   ```

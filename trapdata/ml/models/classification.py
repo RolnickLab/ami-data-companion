@@ -117,21 +117,15 @@ class Resnet50Classifier_KG(InferenceBaseClass):
         model = Resnet50(num_classes=num_classes)
         model = model.to(self.device)
 
-        logger.info("KG: check A")
-
         # # state_dict = torch.hub.load_state_dict_from_url(weights_url)
         checkpoint = torch.load(self.weights, map_location=self.device)
-        logger.info("KG: check B")
 
         # # The model state dict is nested in some checkpoints, and not in others
         state_dict = checkpoint.get("model_state_dict") or checkpoint
-        logger.info("KG: check C")
 
         model.load_state_dict(state_dict)
         # model.load_state_dict(state_dict)
-        logger.info("KG: check D")
         model.eval()
-        print("KG: model eval complete")
         return model
 
     def get_transforms(self):
