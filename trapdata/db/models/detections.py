@@ -4,7 +4,7 @@ from typing import Any, Iterable, Optional, Sequence, Union
 
 import PIL.Image
 import sqlalchemy as sa
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import orm
 
 from trapdata import constants, db
@@ -27,6 +27,8 @@ class DetectionListItem(BaseModel):
     model_name: Optional[str]
     in_queue: bool
     notes: Optional[str]
+
+    model_config = ConfigDict(protected_namespaces=("protect_me_", "also_protect_"))
 
 
 class DetectionDetail(DetectionListItem):

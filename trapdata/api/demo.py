@@ -30,21 +30,33 @@ def predict(*img_paths, Classifier: typing.Type[MothClassifier]):
         print(source_image, source_image._pil.size)
 
     if len(source_images) == 1:
-        detector = MothDetector(source_images=source_images, single=True)
+        detector = MothDetector(
+            source_images=source_images,
+            single=True,
+        )
     else:
-        detector = MothDetector(source_images=source_images, single=False)
+        detector = MothDetector(
+            source_images=source_images,
+            single=False,
+        )
     detector.run()
     all_detections = detector.results
 
     # Filter out non-moths
     filter = MothClassifierBinary(
-        source_images=source_images, detections=all_detections
+        source_images=source_images,
+        detections=all_detections,
+        filter_results=True,
+        batch_size=20,
     )
     filter.run()
-    all_binary_classifications = filter.results
-    filtered_detections = filter.get_filtered_detections()
+    filtered_detections = filter.results
 
-    classifier = Classifier(source_images=source_images, detections=filtered_detections)
+    classifier = Classifier(
+        source_images=source_images,
+        detections=filtered_detections,
+        batch_size=20,
+    )
     classifier.run()
 
     # ASSUME SINGLE IMAGE
@@ -62,7 +74,7 @@ def predict(*img_paths, Classifier: typing.Type[MothClassifier]):
         MothClassifierBinary.negative_binary_label: "red",
     }
     default_color = "black"
-    for pred in all_binary_classifications:
+    for pred in filtered_detections:
         # Draw rectangle on PIL Image
         assert pred.bbox is not None
         coords = (
@@ -71,7 +83,9 @@ def predict(*img_paths, Classifier: typing.Type[MothClassifier]):
             pred.bbox.x2,
             pred.bbox.y2,
         )
-        color = colors.get(pred.classification, default_color)
+        # First classification is the binary one
+        binary_label = pred.classifications[0].labels[0]
+        color = colors.get(binary_label, default_color)
         canvas.rectangle(coords, outline=color, width=8)
 
     # Create PIL Images:
@@ -80,10 +94,13 @@ def predict(*img_paths, Classifier: typing.Type[MothClassifier]):
     for pred in classifier.results:
         bbox = pred.bbox
         assert bbox is not None
-        coords = (bbox.x1, bbox.y1, bbox.x2, bbox.y2)
+        coords = (round(bbox.x1), round(bbox.y1), round(bbox.x2), round(bbox.y2))
         assert source_image._pil is not None
         crop = source_image._pil.crop(coords)
-        top_label_with_score = f"{pred.labels[0]} ({pred.scores[0]:.2f})"
+        # Last classification is the most specific one
+        labels = pred.classifications[-1].labels
+        scores = pred.classifications[-1].scores
+        top_label_with_score = f"{labels[0]} ({scores[0]:.2f})"
         crops.append((crop, top_label_with_score))
 
     print("Returning results")
@@ -97,7 +114,7 @@ def make_interface(Classifier: MothClassifier, example_images_subdir=""):
     return gr.Interface(
         title=Classifier.name,
         description=Classifier.description,
-        fn=partial(predict, Classifier=Classifier),
+        fn=partial(predict, Classifier=Classifier),  # type: ignore
         inputs=[gr.Image(type="filepath", label="Source Image")],
         outputs=[
             gr.Image(label="Annotated Source Image"),
@@ -111,9 +128,9 @@ def make_interface(Classifier: MothClassifier, example_images_subdir=""):
 
 app = gr.TabbedInterface(
     [
-        make_interface(MothClassifierPanama, "panama"),
-        make_interface(MothClassifierUKDenmark, "denmark"),
-        make_interface(MothClassifierQuebecVermont, "vermont"),
+        make_interface(MothClassifierPanama, "panama"),  # type: ignore
+        make_interface(MothClassifierUKDenmark, "denmark"),  # type: ignore
+        make_interface(MothClassifierQuebecVermont, "vermont"),  # type: ignore
     ],
     [
         "Panama",

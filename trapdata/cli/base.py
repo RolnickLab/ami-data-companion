@@ -81,7 +81,7 @@ def run_gradio():
     """
     Run the gradio interface.
     """
-    from trapdata.api.web import app
+    from trapdata.api.demo import app
 
     app.queue().launch(show_api=False, server_name="0.0.0.0", server_port=7861)
 
