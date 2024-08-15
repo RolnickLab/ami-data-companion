@@ -31,6 +31,12 @@ torch = "^2.1.0"
 torchvision = "^0.16.0"
 timm = "^0.6.13"
 structlog = "^22.3.0"
+kivy = { extras = ["base"], version = "^2.1.0" }
+plyer = "^2.1.0"
+pyobjus = [
+    { version = "^1.2.1", platform = "darwin" },
+    { version = "^1.2.1", platform = "linux" },
+]
 
 # [tool.poetry.group.dev.dependencies] # Can't install these dev deps with pip, so they're in the main deps
 black = "^23.3.0"
@@ -54,6 +60,8 @@ asyncio_mode = 'auto'
 profile = "black"
 
 [tool.poetry.scripts]
+trapdata = 'trapdata.ui.main:run'
+trapdata-test = 'trapdata.tests.test_pipeline:process_deployments'
 ami = 'trapdata.cli.base:cli'
 
 # [tool.setuptools.package_data]

@@ -1,3 +1,4 @@
+import configparser
 import pathlib
 import sys
 from functools import lru_cache
@@ -167,6 +168,7 @@ class Settings(BaseSettings):
             return (
                 init_settings,
                 env_settings,
+                kivy_settings_source,
                 file_secret_settings,
             )
 
@@ -175,10 +177,39 @@ class PipelineSettings(Settings):
     image_base_path: FilePath  # Override default settings to enforce image_base_path
 
 
-cli_help_message = """
+def kivy_settings_path() -> pathlib.Path:
+    project_root = pathlib.Path(__file__).parent
+    kivy_settings_path = project_root / "ui" / "trapdata.ini"
+    return kivy_settings_path
+
+
+def kivy_settings_source(settings: BaseSettings) -> dict[str, str]:
+    """
+    Load settings set by user in the Kivy GUI app.
+    """
+    path = kivy_settings_path()
+    if not path.exists():
+        return {}
+    else:
+        config = configparser.ConfigParser()
+        config.read(kivy_settings_path())
+        kivy_settings = [config.items(section) for section in config.sections()]
+        kivy_settings_flat = dict(
+            [item for section in kivy_settings for item in section]
+        )
+        null_values = ["None"]
+        kivy_settings_flat = {
+            k: v for k, v in kivy_settings_flat.items() if v not in null_values
+        }
+        return kivy_settings_flat
+
+
+cli_help_message = f"""
     Configuration for the CLI is currently set in the following sources, in order of priority:
         - The system environment (os.environ)
         - ".env" file (see ".env.example"), prefix settings with "AMI_"
+        - Kivy settings panel in the GUI app
+        - Directly in the Kivy settings file: {kivy_settings_path()}
     """
 
 
