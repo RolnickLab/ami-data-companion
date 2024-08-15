@@ -10,6 +10,7 @@ from .models.classification import (
     MothClassifierBinary,
     MothClassifierPanama,
     MothClassifierQuebecVermont,
+    MothClassifierTuringCostaRica,
     MothClassifierUKDenmark,
 )
 from .models.localization import MothDetector
@@ -131,11 +132,13 @@ app = gr.TabbedInterface(
         make_interface(MothClassifierPanama, "panama"),  # type: ignore
         make_interface(MothClassifierUKDenmark, "denmark"),  # type: ignore
         make_interface(MothClassifierQuebecVermont, "vermont"),  # type: ignore
+        make_interface(MothClassifierTuringCostaRica, "costarica"),  # type: ignore
     ],
     [
         "Panama",
         "UK/Denmark",
         "Quebec/Vermont",
+        "Costa Rica",
     ],
 )
 

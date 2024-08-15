@@ -15,6 +15,7 @@ from .models.classification import (
     MothClassifierBinary,
     MothClassifierPanama,
     MothClassifierQuebecVermont,
+    MothClassifierTuringCostaRica,
     MothClassifierUKDenmark,
 )
 from .models.localization import MothDetector
@@ -43,6 +44,7 @@ PIPELINE_CHOICES = {
     "panama_moths_2023": MothClassifierPanama,
     "quebec_vermont_moths_2023": MothClassifierQuebecVermont,
     "uk_denmark_moths_2023": MothClassifierUKDenmark,
+    "costa_rica_moths_turing_2024": MothClassifierTuringCostaRica,
 }
 _pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys())))
 
