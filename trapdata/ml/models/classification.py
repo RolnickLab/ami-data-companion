@@ -105,6 +105,44 @@ class Resnet50(torch.nn.Module):
 
         return x
 
+class Resnet50Classifier_Turing(InferenceBaseClass):
+    # function to run the Turing models
+    logger.info("KG: Resnet50Classifier_Turing")
+    input_size = 300
+
+    def get_model(self):
+        num_classes = len(self.category_map)
+        model = Resnet50(num_classes=num_classes)
+        model = model.to(self.device)
+        checkpoint = torch.load(self.weights, map_location=self.device)
+        # The model state dict is nested in some checkpoints, and not in others
+        state_dict = checkpoint.get("model_state_dict") or checkpoint
+
+        model.load_state_dict(state_dict)
+        model.eval()
+        return model
+
+    def get_transforms(self):
+        mean, std = [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
+        return torchvision.transforms.Compose(
+            [
+                torchvision.transforms.Resize((self.input_size, self.input_size)),
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize(mean, std),
+            ]
+        )
+
+    def post_process_batch(self, output):
+        predictions = torch.nn.functional.softmax(output, dim=1)
+        predictions = predictions.cpu().numpy()
+
+        categories = predictions.argmax(axis=1)
+        labels = [self.category_map[cat] for cat in categories]
+        scores = predictions.max(axis=1).astype(float)
+
+        result = list(zip(labels, scores))
+        logger.debug(f"Post-processing result batch: {result}")
+        return result
 
 class Resnet50Classifier(InferenceBaseClass):
     input_size = 300
@@ -260,6 +298,36 @@ class QuebecVermontMothSpeciesClassifierMixedResolution(
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "quebec-vermont_moth-category-map_19Jan2023.json"
     )
+
+class TuringCostaRicaSpeciesClassifier(
+    SpeciesClassifier, Resnet50Classifier_Turing
+):
+    name = "Turing Costa Rica Species Classifier"
+    description = (
+        "Trained on 4th June 2024 by Turing team using Resnet50 model."
+    )
+    weights_path = (
+        "turing-costarica_v03_resnet50_2024-06-04-16-17_state.pt"
+    )
+    labels_path = (
+        "03_costarica_data_category_map.json"
+    )
+
+
+class TuringUKSpeciesClassifier(
+    SpeciesClassifier, Resnet50Classifier_Turing
+):
+    name = "Turing UK Species Classifier"
+    description = (
+        "Trained on 13th May 2024 by Turing team using Resnet50 model."
+    )
+    weights_path = (
+        "turing-uk_v03_resnet50_2024-05-13-10-03_state.pt"
+    )
+    labels_path = (
+        "03_uk_data_category_map.json"
+    )
+
 
 
 class UKDenmarkMothSpeciesClassifierMixedResolution(

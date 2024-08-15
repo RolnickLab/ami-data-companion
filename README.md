@@ -146,3 +146,22 @@ docker stop ami-db && docker remove ami-db
 
 A script is available in the repo source to run the commands above.
 `./scrips/start_db_container.sh`
+
+
+
+## KG Notes for adding new models
+
+- To add new models, save the pt and json files to:
+  ```
+  ~/Library/Application Support/trapdata/models
+  ```
+  or wherever you set the appropriate dir in settings.
+  The json file is simply a dict of species name and index.
+
+  Then you need to create a class in `trapdata/ml/models/classification.py` or `trapdata/ml/models/localization.py` and add the model details.
+
+- To clear the cache:
+
+  ```
+  rm ~/Library/Application\ Support/trapdata/trapdata.db
+  ```
