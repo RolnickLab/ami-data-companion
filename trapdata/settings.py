@@ -1,11 +1,11 @@
-import configparser
 import pathlib
 import sys
 from functools import lru_cache
 from typing import Optional, Union
 
 import sqlalchemy
-from pydantic import BaseSettings, Field, ValidationError, validator
+from pydantic import Field, ValidationError, validator
+from pydantic_settings import BaseSettings
 from rich import print as rprint
 
 from trapdata import ml
@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # Can't use PyDantic DSN validator for database_url if sqlite filepath has spaces, see custom validator below
     database_url: Union[str, sqlalchemy.engine.URL] = default_database_dsn()
     user_data_path: pathlib.Path = get_app_dir()
-    image_base_path: Optional[pathlib.Path]
+    image_base_path: Optional[pathlib.Path] = None
     localization_model: ml.models.ObjectDetectorChoice = Field(
         default=ml.models.DEFAULT_OBJECT_DETECTOR
     )
@@ -34,6 +34,20 @@ class Settings(BaseSettings):
     localization_batch_size: int = 2
     classification_batch_size: int = 20
     num_workers: int = 1
+    api_base_url: str | None = "http://localhost:8000/api/v2/"
+    api_username: str | None = None
+    api_password: str | None = None
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    s3_endpoint_url: str | None = None
+    s3_destination_bucket: str | None = None
+
+    @validator("api_base_url")
+    def validate_base_url(cls, v):
+        if v and not v.endswith("/"):
+            return v + "/"
+        else:
+            return v
 
     @validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
@@ -153,7 +167,6 @@ class Settings(BaseSettings):
             return (
                 init_settings,
                 env_settings,
-                kivy_settings_source,
                 file_secret_settings,
             )
 
@@ -162,39 +175,10 @@ class PipelineSettings(Settings):
     image_base_path: FilePath  # Override default settings to enforce image_base_path
 
 
-def kivy_settings_path() -> pathlib.Path:
-    project_root = pathlib.Path(__file__).parent
-    kivy_settings_path = project_root / "ui" / "trapdata.ini"
-    return kivy_settings_path
-
-
-def kivy_settings_source(settings: BaseSettings) -> dict[str, str]:
-    """
-    Load settings set by user in the Kivy GUI app.
-    """
-    path = kivy_settings_path()
-    if not path.exists():
-        return {}
-    else:
-        config = configparser.ConfigParser()
-        config.read(kivy_settings_path())
-        kivy_settings = [config.items(section) for section in config.sections()]
-        kivy_settings_flat = dict(
-            [item for section in kivy_settings for item in section]
-        )
-        null_values = ["None"]
-        kivy_settings_flat = {
-            k: v for k, v in kivy_settings_flat.items() if v not in null_values
-        }
-        return kivy_settings_flat
-
-
-cli_help_message = f"""
+cli_help_message = """
     Configuration for the CLI is currently set in the following sources, in order of priority:
         - The system environment (os.environ)
         - ".env" file (see ".env.example"), prefix settings with "AMI_"
-        - Kivy settings panel in the GUI app
-        - Directly in the Kivy settings file: {kivy_settings_path()}
     """
 
 

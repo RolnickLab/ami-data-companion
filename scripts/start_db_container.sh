@@ -4,7 +4,7 @@ set -o errexit
 set -o nounset
 
 CONTAINER_NAME=ami-db
-HOST_PORT=5432
+HOST_PORT=5433
 POSTGRES_VERSION=14
 POSTGRES_DB=ami
 
@@ -12,5 +12,5 @@ docker run -d -i --name $CONTAINER_NAME -v "$(pwd)/db_data":/var/lib/postgresql/
 
 docker logs ami-db --tail 100
 
-echo 'Database started, Connection string: "postgresql://postgres@localhost:5432/ami"'
+echo "Database started, Connection string: \"postgresql://postgres@localhost:${HOST_PORT}/${POSTGRES_DB}\""
 echo "Stop (and destroy) database with 'docker stop $CONTAINER_NAME' && docker remove $CONTAINER_NAME"
