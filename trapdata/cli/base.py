@@ -3,7 +3,7 @@ from typing import Optional
 
 import typer
 
-from trapdata.cli import export, queue, settings, shell, show, test
+from trapdata.cli import db, export, queue, settings, shell, show, test
 from trapdata.db.base import get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import add_monitoring_session_to_queue
@@ -14,9 +14,20 @@ cli.add_typer(export.cli, name="export", help="Export data in various formats")
 cli.add_typer(shell.cli, name="shell", help="Open an interactive shell")
 cli.add_typer(test.cli, name="test", help="Run tests")
 cli.add_typer(show.cli, name="show", help="Show data for use in other commands")
+cli.add_typer(db.cli, name="db", help="Create, update and manage the database")
 cli.add_typer(
     queue.cli, name="queue", help="Add and manage images in the processing queue"
 )
+
+
+@cli.command()
+def gui():
+    """
+    Launch graphic interface
+    """
+    from trapdata.ui.main import run
+
+    run()
 
 
 @cli.command("import")
