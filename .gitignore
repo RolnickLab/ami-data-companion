@@ -139,6 +139,6 @@ trapdata.ini
 # Docker volumes
 db_data/
 
-
 # Test files
 sample_images
+bak
