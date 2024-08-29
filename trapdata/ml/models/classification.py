@@ -217,7 +217,7 @@ class Resnet50TimmClassifier(Resnet50Classifier):
         return model
 
 
-class BinaryClassifier(EfficientNetClassifier):
+class BinaryClassifier(Resnet50ClassifierLowRes):
     stage = 2
     type = "binary_classification"
     positive_binary_label: str = constants.POSITIVE_BINARY_LABEL
@@ -248,11 +248,26 @@ class BinaryClassifier(EfficientNetClassifier):
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
 
 
-class MothNonMothClassifier(BinaryClassifier):
+class MothNonMothClassifier2022(EfficientNetClassifier, BinaryClassifier):
     name = "Moth / Non-Moth Classifier"
     description = "Trained on May 6, 2022"
     weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/moth-nonmoth-effv2b3_20220506_061527_30.pth"
     labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/05-moth-nonmoth_category_map.json"
+    positive_binary_label = "moth"
+    negative_binary_label = "nonmoth"
+
+
+class MothNonMothClassifier(BinaryClassifier):
+    name = "Moth / Non-Moth Classifier"
+    description = "Trained on April 17, 2024"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "moth-nonmoth_resnet50_20240417_b4fe3efe.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "05-moth-nonmoth_category_map.json"
+    )
     positive_binary_label = "moth"
     negative_binary_label = "nonmoth"
 
