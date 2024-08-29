@@ -414,18 +414,19 @@ class PanamaMothSpeciesClassifierMixedResolution2023(
     )
 
 
-class GlobalMothSpeciesClassifier(SpeciesClassifier, Resnet50ClassifierLowRes):
+class GlobalMothSpeciesClassifier(SpeciesClassifier, Resnet50TimmClassifier):
     name = "Global Species Classifier 2024"
+    input_size = 128
     lookup_gbif_names = False
     normalization = imagenet_normalization
 
     description = (
-        "Trained on August 28th, 2024 on 30k species. "
+        "Trained on August 28th, 2024 on 29,176 species. "
         "https://wandb.ai/moth-ai/global-moth-classifier/runs/h0cuqrbc/overview"
     )
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "global_resnet50_checkpoint_20240828.pth"
+        "global_resnet50_20240828_b06d3b3a.pth"
     )
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
