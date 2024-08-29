@@ -220,12 +220,15 @@ class Resnet50ClassifierLowRes(Resnet50Classifier):
 class Resnet50TimmClassifier(Resnet50Classifier):
     def get_model(self):
         model = timm.create_model(
-            "resnet50", pretrained=False, num_classes=self.num_classes
+            "resnet50",
+            pretrained=False,
+            num_classes=self.num_classes,
         )
         assert self.weights, f"No weights path configured for {self.name}"
         checkpoint = torch.load(self.weights, map_location=self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
+        model.to(self.device)
         model.eval()
         return model
 
