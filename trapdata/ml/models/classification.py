@@ -162,12 +162,25 @@ class Resnet50Classifier(InferenceBaseClass):
         model.eval()
         return model
 
+    def _pad_to_square(self):
+        """Padding transformation to make the image square"""
+        width, height = self.input_size, self.input_size
+        if height < width:
+            return torchvision.transforms.Pad(padding=[0, 0, 0, width - height])
+        elif height > width:
+            return torchvision.transforms.Pad(padding=[0, 0, height - width, 0])
+        else:
+            return torchvision.transforms.Pad(padding=[0, 0, 0, 0])
+
     def get_transforms(self):
         mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
         return torchvision.transforms.Compose(
             [
-                torchvision.transforms.Resize((self.input_size, self.input_size)),
+                self._pad_to_square(),
                 torchvision.transforms.ToTensor(),
+                torchvision.transforms.Resize(
+                    (self.input_size, self.input_size), antialias=True  # type: ignore
+                ),
                 torchvision.transforms.Normalize(mean, std),
             ]
         )
