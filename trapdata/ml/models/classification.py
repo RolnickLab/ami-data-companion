@@ -396,3 +396,22 @@ class PanamaMothSpeciesClassifierMixedResolution2023(
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "03_moths_centralAmerica_category_map-202311110-with-names.json"
     )
+
+
+class GlobalMothSpeciesClassifier(SpeciesClassifier, Resnet50ClassifierLowRes):
+    name = "Global Species Classifier 2024"
+    lookup_gbif_names = False
+    normalization = imagenet_normalization
+
+    description = (
+        "Trained on August 28th, 2024 on 30k species. "
+        "https://wandb.ai/moth-ai/global-moth-classifier/runs/h0cuqrbc/overview"
+    )
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "global_resnet50_checkpoint_20240828.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "global_category_map_with_names_20240828.json"
+    )

@@ -7,6 +7,7 @@ from rich import print
 
 from trapdata.common.logs import logger
 from trapdata.ml.models.classification import (
+    GlobalMothSpeciesClassifier,
     InferenceBaseClass,
     MothNonMothClassifier,
     PanamaMothSpeciesClassifierMixedResolution2023,
@@ -157,4 +158,8 @@ class MothClassifierQuebecVermont(
 
 
 class MothClassifierTuringCostaRica(MothClassifier, TuringCostaRicaSpeciesClassifier):
+    pass
+
+
+class MothClassifierGlobal(MothClassifier, GlobalMothSpeciesClassifier):
     pass

@@ -8,6 +8,7 @@ from rich import print
 from .models.classification import (
     MothClassifier,
     MothClassifierBinary,
+    MothClassifierGlobal,
     MothClassifierPanama,
     MothClassifierQuebecVermont,
     MothClassifierTuringCostaRica,
@@ -133,12 +134,14 @@ app = gr.TabbedInterface(
         make_interface(MothClassifierUKDenmark, "denmark"),  # type: ignore
         make_interface(MothClassifierQuebecVermont, "vermont"),  # type: ignore
         make_interface(MothClassifierTuringCostaRica, "costarica"),  # type: ignore
+        make_interface(MothClassifierGlobal, "global"),  # type: ignore
     ],
     [
         "Panama",
         "UK/Denmark",
         "Quebec/Vermont",
         "Costa Rica",
+        "Global",
     ],
 )
 

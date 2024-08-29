@@ -13,6 +13,7 @@ from . import settings
 from .models.classification import (
     MothClassifier,
     MothClassifierBinary,
+    MothClassifierGlobal,
     MothClassifierPanama,
     MothClassifierQuebecVermont,
     MothClassifierTuringCostaRica,
@@ -45,6 +46,7 @@ PIPELINE_CHOICES = {
     "quebec_vermont_moths_2023": MothClassifierQuebecVermont,
     "uk_denmark_moths_2023": MothClassifierUKDenmark,
     "costa_rica_moths_turing_2024": MothClassifierTuringCostaRica,
+    "global_moths_2024": MothClassifierGlobal,
 }
 _pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys())))
 
