@@ -113,7 +113,7 @@ def predict(*img_paths, Classifier: typing.Type[MothClassifier]):
 from functools import partial
 
 
-def make_interface(Classifier: MothClassifier, example_images_subdir=""):
+def make_interface(Classifier: MothClassifier, example_images_subdirs: list[str]=[]):
     return gr.Interface(
         title=Classifier.name,
         description=Classifier.description,
@@ -124,19 +124,19 @@ def make_interface(Classifier: MothClassifier, example_images_subdir=""):
             gr.Gallery(label="Classified Crops"),
         ],
         examples=[
-            img.filepath for img in get_test_images(subdir=example_images_subdir)
+            img.filepath for img in get_test_images(subdirs=example_images_subdirs)
         ],
     )
 
 
 app = gr.TabbedInterface(
     [
-        make_interface(MothClassifierPanama, "panama"),  # type: ignore
-        make_interface(MothClassifierPanama2024, "panama"),  # type: ignore
-        make_interface(MothClassifierUKDenmark, "denmark"),  # type: ignore
-        make_interface(MothClassifierQuebecVermont, "vermont"),  # type: ignore
-        make_interface(MothClassifierTuringCostaRica, "costarica"),  # type: ignore
-        make_interface(MothClassifierGlobal, "vermont"),  # type: ignore
+        make_interface(MothClassifierPanama, ["panama"]),
+        make_interface(MothClassifierPanama2024, ["panama"]),
+        make_interface(MothClassifierUKDenmark, ["denmark"]),
+        make_interface(MothClassifierQuebecVermont, ["vermont"]),
+        make_interface(MothClassifierTuringCostaRica, ["costarica"]),
+        make_interface(MothClassifierGlobal, ["vermont", "panama", "denmark", "costarica"]),
     ],
     [
         "Panama 2023",

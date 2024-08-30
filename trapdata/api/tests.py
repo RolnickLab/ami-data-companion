@@ -61,9 +61,10 @@ def make_image():
         return f.name
 
 
-def get_test_images(subdir: str = "vermont") -> list[SourceImage]:
+def get_test_images(subdirs: list[str] = ["vermont", "panama"]) -> list[SourceImage]:
     return [
         SourceImage(id=str(img["path"].name), filepath=img["path"])
+        for subdir in subdirs
         for img in find_images(pathlib.Path(TEST_IMAGES_BASE_PATH) / subdir)
     ]
 
