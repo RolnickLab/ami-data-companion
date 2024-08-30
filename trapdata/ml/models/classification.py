@@ -359,6 +359,22 @@ class TuringUKSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
         "03_uk_data_category_map.json"
     )
 
+class QuebecVermontMothSpeciesClassifierMixedResolution(
+    SpeciesClassifier, Resnet50ClassifierLowRes
+):
+    name = "Quebec & Vermont Species Classifier"
+    description = (
+        "Trained on February 24, 2022 using mix of low & med resolution images"
+    )
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "moths_quebecvermont_resnet50_randaug_mixres_128_fev24.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "quebec-vermont_moth-category-map_19Jan2023.json"
+    )
+
 
 class UKDenmarkMothSpeciesClassifierMixedResolution(
     SpeciesClassifier, Resnet50ClassifierLowRes
@@ -381,7 +397,6 @@ class UKDenmarkMothSpeciesClassifierMixedResolution(
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "01-moths-ukdenmark_v2_category_map_species_names.json"
     )
-
 
 class PanamaMothSpeciesClassifierMixedResolution(SpeciesClassifier, Resnet50Classifier):
     name = "Panama Species Classifier"
@@ -415,13 +430,13 @@ class PanamaMothSpeciesClassifierMixedResolution2023(
 
 
 class GlobalMothSpeciesClassifier(SpeciesClassifier, Resnet50TimmClassifier):
-    name = "Global Species Classifier 2024"
     input_size = 128
-    lookup_gbif_names = False
     normalization = imagenet_normalization
+    lookup_gbif_names = False
 
+    name = "Global Species Classifier - Aug 2024"
     description = (
-        "Trained on August 28th, 2024 on 29,176 species. "
+        "Trained on August 28th, 2024 for 29,176 species. "
         "https://wandb.ai/moth-ai/global-moth-classifier/runs/h0cuqrbc/overview"
     )
     weights_path = (
@@ -432,3 +447,73 @@ class GlobalMothSpeciesClassifier(SpeciesClassifier, Resnet50TimmClassifier):
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "global_category_map_with_names_20240828.json"
     )
+
+
+class QuebecVermontMothSpeciesClassifier2024(
+    SpeciesClassifier, Resnet50TimmClassifier
+):
+    input_size = 128
+    normalization = imagenet_normalization
+    lookup_gbif_names = False
+
+    name = "Quebec & Vermont Species Classifier - Apr 2024"
+    description = (
+        "Trained on April 17, 2024 for 2,497 species. "
+        "https://wandb.ai/moth-ai/ami-gbif-fine-grained/runs/1x53zmp2/overview"
+    )
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "quebec-vermont_resnet50_baseline_20240417_950de764.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "01_ami-gbif_fine-grained_ne-america_category_map-with_names.json"
+    )
+
+
+
+class UKDenmarkMothSpeciesClassifier2024(
+    SpeciesClassifier, Resnet50TimmClassifier
+):
+    input_size = 128
+    normalization = imagenet_normalization
+    lookup_gbif_names = False
+
+    name = "UK & Denmark Species Classifier - Apr 2024"
+    description = (
+        "Trained on April 17, 2024 for 2,603 species. "
+        "https://wandb.ai/moth-ai/ami-gbif-fine-grained/runs/x5u7jcbf/overview"
+    )
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "uk-denmark_resnet50_baseline_20240417_55250a8b.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "02_ami-gbif_fine-grained_w-europe_category_map-with_names.json"
+    )
+
+
+class PanamaMothSpeciesClassifier2024(
+    SpeciesClassifier, Resnet50TimmClassifier
+):
+    input_size = 128
+    normalization = imagenet_normalization
+    lookup_gbif_names = False
+
+    name = "Panama Species Classifier - Apr 2024"
+    description = (
+        "Trained on April 17, 2024 for 636 species. "
+        "https://wandb.ai/moth-ai/ami-gbif-fine-grained/runs/1sekgkan/overview"
+    )
+
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_resnet50_baseline_20240417_edbb46dd.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "03_ami-gbif_fine-grained_c-america_category_map-with_names.json"
+    )
+
+

@@ -15,6 +15,7 @@ from .models.classification import (
     MothClassifierBinary,
     MothClassifierGlobal,
     MothClassifierPanama,
+    MothClassifierPanama2024,
     MothClassifierQuebecVermont,
     MothClassifierTuringCostaRica,
     MothClassifierUKDenmark,
@@ -43,6 +44,7 @@ class SourceImageResponse(pydantic.BaseModel):
 
 PIPELINE_CHOICES = {
     "panama_moths_2023": MothClassifierPanama,
+    "panama_moths_2024": MothClassifierPanama2024,
     "quebec_vermont_moths_2023": MothClassifierQuebecVermont,
     "uk_denmark_moths_2023": MothClassifierUKDenmark,
     "costa_rica_moths_turing_2024": MothClassifierTuringCostaRica,

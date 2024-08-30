@@ -10,6 +10,7 @@ from .models.classification import (
     MothClassifierBinary,
     MothClassifierGlobal,
     MothClassifierPanama,
+    MothClassifierPanama2024,
     MothClassifierQuebecVermont,
     MothClassifierTuringCostaRica,
     MothClassifierUKDenmark,
@@ -131,13 +132,15 @@ def make_interface(Classifier: MothClassifier, example_images_subdir=""):
 app = gr.TabbedInterface(
     [
         make_interface(MothClassifierPanama, "panama"),  # type: ignore
+        make_interface(MothClassifierPanama2024, "panama"),  # type: ignore
         make_interface(MothClassifierUKDenmark, "denmark"),  # type: ignore
         make_interface(MothClassifierQuebecVermont, "vermont"),  # type: ignore
         make_interface(MothClassifierTuringCostaRica, "costarica"),  # type: ignore
-        make_interface(MothClassifierGlobal, "global"),  # type: ignore
+        make_interface(MothClassifierGlobal, "vermont"),  # type: ignore
     ],
     [
-        "Panama",
+        "Panama 2023",
+        "Panama 2024",
         "UK/Denmark",
         "Quebec/Vermont",
         "Costa Rica",

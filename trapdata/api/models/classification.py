@@ -10,10 +10,11 @@ from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
     InferenceBaseClass,
     MothNonMothClassifier,
+    PanamaMothSpeciesClassifier2024,
     PanamaMothSpeciesClassifierMixedResolution2023,
-    QuebecVermontMothSpeciesClassifierMixedResolution,
+    QuebecVermontMothSpeciesClassifier2024,
     TuringCostaRicaSpeciesClassifier,
-    UKDenmarkMothSpeciesClassifierMixedResolution,
+    UKDenmarkMothSpeciesClassifier2024,
 )
 
 from ..datasets import ClassificationImageDataset
@@ -145,14 +146,20 @@ class MothClassifierPanama(
     pass
 
 
+class MothClassifierPanama2024(
+    MothClassifier, PanamaMothSpeciesClassifier2024
+):
+    pass
+
+
 class MothClassifierUKDenmark(
-    MothClassifier, UKDenmarkMothSpeciesClassifierMixedResolution
+    MothClassifier, UKDenmarkMothSpeciesClassifier2024
 ):
     pass
 
 
 class MothClassifierQuebecVermont(
-    MothClassifier, QuebecVermontMothSpeciesClassifierMixedResolution
+    MothClassifier, QuebecVermontMothSpeciesClassifier2024
 ):
     pass
 
