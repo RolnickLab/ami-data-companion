@@ -88,11 +88,17 @@ class MothClassifier(
                 algorithm=self.name,
                 timestamp=datetime.datetime.now(),
             )
-            detection.classifications.append(classification)
+            self.update_classification(detection, classification)
             print(detection)
         self.results.extend(self.detections)
         logger.info(f"Saving {len(self.results)} detections with classifications")
         return self.results
+
+    def update_classification(self, detection: Detection, new_classification: Classification) -> None:
+        # Remove all existing classifications from this algorithm
+        detection.classifications = [c for c in detection.classifications if c.algorithm != self.name]
+        # Add the new classification for this algorithm
+        detection.classifications.append(new_classification)
 
     def run(self) -> list[Detection]:
         super().run()
@@ -129,11 +135,8 @@ class MothClassifierBinary(MothClassifier, MothNonMothClassifier):
                 terminal=False,
             )
             print(detection)
-            if self.filter_results:
-                if classification.classification == self.positive_binary_label:
-                    detection.classifications.append(classification)
-            else:
-                detection.classifications.append(classification)
+            if not self.filter_results or classification.classification == self.positive_binary_label:
+                self.update_classification(detection, classification)
 
         self.results.extend(self.detections)
         logger.info(f"Saving {len(self.results)} detections with classifications")
