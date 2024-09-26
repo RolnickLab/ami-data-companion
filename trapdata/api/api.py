@@ -138,6 +138,26 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         for detection in detections_with_classifications
         if detection.classifications
     ]
+    logger.info(
+        f"Processed {len(source_images)} images in {seconds_elapsed:.2f} seconds"
+    )
+    logger.info(
+        f"Returning {len(detections_with_classifications)} detections with classifications"
+    )
+
+    # If the number of detections is greater than 100, its suspicious. Log it.
+    if len(detections_with_classifications) > 100:
+        logger.warning(
+            f"Detected {len(detections_with_classifications)} detections. This is suspicious."
+        )
+        # Log the detections, order by classification label
+        detections_with_classifications.sort(
+            key=lambda x: x.classifications[0].classification
+        )
+        for detection in detections_with_classifications:
+            logger.warning(
+                f"{detection.source_image_id}: {detection.classifications[0].classification} at {detection.bbox}"
+            )
 
     response = PipelineResponse(
         pipeline=data.pipeline,
