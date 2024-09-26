@@ -3,7 +3,6 @@ import typing
 
 import numpy as np
 import torch
-from rich import print
 
 from trapdata.common.logs import logger
 from trapdata.ml.models.classification import (
@@ -37,6 +36,9 @@ class MothClassifier(
         self.detections = list(detections)
         self.results: list[Detection] = []
         super().__init__(*args, **kwargs)
+        logger.info(
+            f"Initialized {self.__class__.__name__} with {len(self.detections)} detections"
+        )
 
     def get_dataset(self):
         return ClassificationImageDataset(
@@ -89,19 +91,32 @@ class MothClassifier(
                 timestamp=datetime.datetime.now(),
             )
             self.update_classification(detection, classification)
-            print(detection)
+            # print(detection)
         self.results.extend(self.detections)
         logger.info(f"Saving {len(self.results)} detections with classifications")
         return self.results
 
-    def update_classification(self, detection: Detection, new_classification: Classification) -> None:
+    def update_classification(
+        self, detection: Detection, new_classification: Classification
+    ) -> None:
         # Remove all existing classifications from this algorithm
-        detection.classifications = [c for c in detection.classifications if c.algorithm != self.name]
+        detection.classifications = [
+            c for c in detection.classifications if c.algorithm != self.name
+        ]
         # Add the new classification for this algorithm
         detection.classifications.append(new_classification)
+        logger.debug(
+            f"Updated classification for detection {detection.bbox}. Total classifications: {len(detection.classifications)}"
+        )
 
     def run(self) -> list[Detection]:
+        logger.info(
+            f"Starting {self.__class__.__name__} run with {len(self.results)} detections"
+        )
         super().run()
+        logger.info(
+            f"Finished {self.__class__.__name__} run. Processed {len(self.results)} detections"
+        )
         return self.results
 
 
@@ -134,8 +149,11 @@ class MothClassifierBinary(MothClassifier, MothNonMothClassifier):
                 # Specific to binary classification / the filter model
                 terminal=False,
             )
-            print(detection)
-            if not self.filter_results or classification.classification == self.positive_binary_label:
+            # print(detection)
+            if (
+                not self.filter_results
+                or classification.classification == self.positive_binary_label
+            ):
                 self.update_classification(detection, classification)
 
         self.results.extend(self.detections)
@@ -149,15 +167,11 @@ class MothClassifierPanama(
     pass
 
 
-class MothClassifierPanama2024(
-    MothClassifier, PanamaMothSpeciesClassifier2024
-):
+class MothClassifierPanama2024(MothClassifier, PanamaMothSpeciesClassifier2024):
     pass
 
 
-class MothClassifierUKDenmark(
-    MothClassifier, UKDenmarkMothSpeciesClassifier2024
-):
+class MothClassifierUKDenmark(MothClassifier, UKDenmarkMothSpeciesClassifier2024):
     pass
 
 

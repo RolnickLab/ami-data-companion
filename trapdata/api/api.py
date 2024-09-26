@@ -81,11 +81,24 @@ def _get_source_image(source_images, source_image_id):
 
 
 @app.post("/pipeline/process")
+@app.post("/pipeline/process/")
 async def process(data: PipelineRequest) -> PipelineResponse:
+    # Ensure that the source images are unique, filter out duplicates
+    source_images_index = {
+        source_image.id: source_image for source_image in data.source_images
+    }
+    incoming_source_images = list(source_images_index.values())
+    if len(incoming_source_images) != len(data.source_images):
+        logger.warning(
+            f"Removed {len(data.source_images) - len(incoming_source_images)} duplicate source images"
+        )
+
     source_image_results = [
-        SourceImageResponse(**image.model_dump()) for image in data.source_images
+        SourceImageResponse(**image.model_dump()) for image in incoming_source_images
     ]
-    source_images = [SourceImage(**image.model_dump()) for image in data.source_images]
+    source_images = [
+        SourceImage(**image.model_dump()) for image in incoming_source_images
+    ]
 
     start_time = time.time()
     detector = MothDetector(

@@ -93,7 +93,7 @@ def run_api():
     """
     import uvicorn
 
-    uvicorn.run("trapdata.api.api:app", host="0.0.0.0", port=2001, reload=True)
+    uvicorn.run("trapdata.api.api:app", host="0.0.0.0", port=2000, reload=True)
 
 
 if __name__ == "__main__":

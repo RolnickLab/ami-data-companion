@@ -2,8 +2,6 @@ import concurrent.futures
 import datetime
 import typing
 
-from rich import print
-
 from trapdata.common.logs import logger
 from trapdata.ml.models.localization import (
     MothObjectDetector_FasterRCNN_2023,
@@ -98,7 +96,7 @@ class MothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_2023):
                 timestamp=datetime.datetime.now(),
                 crop_image_url=crop_url,
             )
-            print(detection)
+            # print(detection)
             return detection
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
