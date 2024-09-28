@@ -45,70 +45,60 @@ def get_device(device_str=None) -> torch.device:
 
 
 def get_or_download_file(
-    path, destination_dir=None, prefix=None, suffix=None
+    path_or_url, destination_dir=None, prefix=None, suffix=None
 ) -> pathlib.Path:
     """
-    Get or download a file from a given path or URL using the requests library.
-
-    Args:
-    path (str): URL or local path to the file
-    destination_dir (str, optional): Directory to save the downloaded file
-    prefix (str, optional): Prefix to add to the destination directory
-    suffix (str, optional): Suffix to add to the filename
-
-    Returns:
-    pathlib.Path: Path to the local file
-
-    >>> filename = get_or_download_file("https://example.com/file with spaces.zip")
+    Fetch a file from a URL or local path. If the path is a URL, download the file.
+    If the URL has already been downloaded, return the existing local path.
+    If the path is a local path, return the path.
+    >>> filepath = get_or_download_file("https://example.uk/images/31-20230919033000-snapshot.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=451d406b7eb1113e1bb05c083ce51481%2F20240429%2F")
+    >>> filepath.name
+    '31-20230919033000-snapshot.jpg'
+    >>> filepath = get_or_download_file("/home/user/images/31-20230919033000-snapshot.jpg")
+    >>> filepath.name
+    '31-20230919033000-snapshot.jpg'
     """
-    if not path:
-        raise ValueError("Specify a URL or path to fetch file from.")
-
-    # If path is a local path instead of a URL, just return it
-    if os.path.exists(path):
-        return pathlib.Path(path)
-
-    destination_dir = destination_dir or os.environ.get("LOCAL_WEIGHTS_PATH")
+    if not path_or_url:
+        raise Exception("Specify a URL or path to fetch file from.")
     
-    if not destination_dir:
-        raise ValueError(
+    destination_dir = destination_dir or os.environ.get("LOCAL_WEIGHTS_PATH")
+    fname = pathlib.Path(urlparse(path_or_url).path).name
+    
+    if destination_dir:
+        destination_dir = pathlib.Path(destination_dir)
+        if prefix:
+            destination_dir = destination_dir / prefix
+        if not destination_dir.exists():
+            logger.info(f"Creating local directory {str(destination_dir)}")
+            destination_dir.mkdir(parents=True, exist_ok=True)
+        local_filepath = pathlib.Path(destination_dir) / fname
+        if suffix:
+            local_filepath = local_filepath.with_suffix(suffix)
+    else:
+        raise Exception(
             "No destination directory specified by LOCAL_WEIGHTS_PATH or app settings."
         )
-
-    destination_dir = pathlib.Path(destination_dir)
-    if prefix:
-        destination_dir = destination_dir / prefix
-    if not destination_dir.exists():
-        logger.info(f"Creating local directory {str(destination_dir)}")
-        destination_dir.mkdir(parents=True, exist_ok=True)
-
-    # Extract filename from URL
-    fname = path.split("/")[-1]
-    local_filepath = destination_dir / fname
-
-    if suffix:
-        local_filepath = local_filepath.with_suffix(suffix)
-
-    if local_filepath.exists():
+    
+    if local_filepath and local_filepath.exists():
         logger.info(f"Using existing {local_filepath}")
         return local_filepath
-
-    logger.info(f"Downloading {path} to {local_filepath}")
-    
-    try:
-        response = requests.get(path, stream=True)
-        response.raise_for_status()  # Raises an HTTPError for bad responses
-
-        with open(local_filepath, 'wb') as file:
-            for chunk in response.iter_content(chunk_size=8192):
-                file.write(chunk)
-
-        logger.info(f"Downloaded to {local_filepath}")
-        return local_filepath
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error downloading file: {e}")
-        raise
+    else:
+        logger.info(f"Downloading {path_or_url} to {local_filepath}")
+        
+        # Check if the path is a URL
+        if path_or_url.startswith(('http://', 'https://')):
+            response = requests.get(path_or_url, stream=True)
+            response.raise_for_status()  # Raise an exception for HTTP errors
+            
+            with open(local_filepath, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            
+            logger.info(f"Downloaded to {local_filepath}")
+            return local_filepath
+        else:
+            # If it's a local path, just return it
+            return pathlib.Path(path_or_url)
 
 
 def decode_base64_string(string) -> io.BytesIO:
