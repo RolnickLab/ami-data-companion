@@ -57,7 +57,7 @@ class SourceImage(pydantic.BaseModel):
                 raise_exception=raise_exception,
             )
         else:
-            logger.info(f"Using already loaded image {self.id}")
+            logger.debug(f"Using already loaded image {self.id}")
         if self._pil:
             self.width, self.height = self._pil.size
         return self._pil
