@@ -1,10 +1,11 @@
 import datetime
+import subprocess
 import sys
 
-import pytest
 import typer
 from rich import print
 from sqlalchemy import select
+
 from trapdata.cli import settings
 from trapdata.db.base import check_db, get_session_class
 from trapdata.db.models import MonitoringSession
@@ -20,7 +21,9 @@ def all():
     Run pytest tests. Would like this to be the default command.
     """
     # return_code = pytest.main(["--doctest-modules", "-v", "."])
-    return_code = pytest.main(["-v", "."])
+    # return_code = pytest.main(["-v", "."])
+
+    return_code = subprocess.call(["pytest", "-v", "."])
     sys.exit(return_code)
 
 
