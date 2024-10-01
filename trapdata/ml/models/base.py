@@ -88,6 +88,7 @@ class InferenceBaseClass:
     queue: QueueManager
     dataset: torch.utils.data.Dataset
     dataloader: torch.utils.data.DataLoader
+    is_terminal_classifier = True
 
     def __init__(
         self,

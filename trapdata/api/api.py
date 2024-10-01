@@ -49,6 +49,7 @@ PIPELINE_CHOICES = {
     "uk_denmark_moths_2023": MothClassifierUKDenmark,
     "costa_rica_moths_turing_2024": MothClassifierTuringCostaRica,
     "global_moths_2024": MothClassifierGlobal,
+    "moth_nonmoth": MothClassifierBinary,
 }
 _pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys())))
 
@@ -110,26 +111,35 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     )
     detector_results = detector.run()
 
-    filter = MothClassifierBinary(
-        source_images=source_images,
-        detections=detector_results,
-        batch_size=settings.classification_batch_size,
-        num_workers=settings.num_workers,
-        # single=True if len(detector_results) == 1 else False,
-        single=True,  # @TODO solve issues with reading images in multiprocessing
-        filter_results=True,  # Only save results with the positive_binary_label, @TODO make this configurable from request
-    )
-    filter.run()
-    # all_binary_classifications = filter.results
-
     Classifier = PIPELINE_CHOICES[data.pipeline.value]
+
+    if Classifier != MothClassifierBinary:
+
+        filter = MothClassifierBinary(
+            source_images=source_images,
+            detections=detector_results,
+            batch_size=settings.classification_batch_size,
+            num_workers=settings.num_workers,
+            # single=True if len(detector_results) == 1 else False,
+            single=True,  # @TODO solve issues with reading images in multiprocessing
+            filter_results=True,  # Only save results with the positive_binary_label, @TODO make this configurable from request
+            is_terminal_classifier=False,
+        )
+
+        filter.run()
+        detections = filter.results
+        # all_binary_classifications = filter.results
+    else:
+        detections = detector_results
+
     classifier: MothClassifier = Classifier(
         source_images=source_images,
-        detections=filter.results,
+        detections=detections,
         batch_size=settings.classification_batch_size,
         num_workers=settings.num_workers,
         # single=True if len(filtered_detections) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
+        is_terminal_classifier=True,
     )
     classifier.run()
     end_time = time.time()

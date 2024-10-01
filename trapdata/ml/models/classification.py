@@ -238,6 +238,9 @@ class BinaryClassifier(Resnet50ClassifierLowRes):
     type = "binary_classification"
     positive_binary_label: str = constants.POSITIVE_BINARY_LABEL
     negative_binary_label: str = constants.NEGATIVE_BINARY_LABEL
+    is_terminal_classifier = (
+        False  # Usually the binary classifier is an intermediate step in the pipeline
+    )
 
     def get_queue(self) -> DetectedObjectQueue:
         return DetectedObjectQueue(self.db_path, self.image_base_path)
@@ -317,23 +320,6 @@ class SpeciesClassifier(InferenceBaseClass):
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
 
 
-class QuebecVermontMothSpeciesClassifierMixedResolution(
-    SpeciesClassifier, Resnet50ClassifierLowRes
-):
-    name = "Quebec & Vermont Species Classifier"
-    description = (
-        "Trained on February 24, 2022 using mix of low & med resolution images"
-    )
-    weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "moths_quebecvermont_resnet50_randaug_mixres_128_fev24.pth"
-    )
-    labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "quebec-vermont_moth-category-map_19Jan2023.json"
-    )
-
-
 class TuringCostaRicaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
     name = "Turing Costa Rica Species Classifier"
     description = "Trained on 4th June 2024 by Turing team using Resnet50 model."
@@ -358,6 +344,7 @@ class TuringUKSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "03_uk_data_category_map.json"
     )
+
 
 class QuebecVermontMothSpeciesClassifierMixedResolution(
     SpeciesClassifier, Resnet50ClassifierLowRes
@@ -397,6 +384,7 @@ class UKDenmarkMothSpeciesClassifierMixedResolution(
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "01-moths-ukdenmark_v2_category_map_species_names.json"
     )
+
 
 class PanamaMothSpeciesClassifierMixedResolution(SpeciesClassifier, Resnet50Classifier):
     name = "Panama Species Classifier"
@@ -449,9 +437,7 @@ class GlobalMothSpeciesClassifier(SpeciesClassifier, Resnet50TimmClassifier):
     )
 
 
-class QuebecVermontMothSpeciesClassifier2024(
-    SpeciesClassifier, Resnet50TimmClassifier
-):
+class QuebecVermontMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier):
     input_size = 128
     normalization = imagenet_normalization
     lookup_gbif_names = False
@@ -471,10 +457,7 @@ class QuebecVermontMothSpeciesClassifier2024(
     )
 
 
-
-class UKDenmarkMothSpeciesClassifier2024(
-    SpeciesClassifier, Resnet50TimmClassifier
-):
+class UKDenmarkMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier):
     input_size = 128
     normalization = imagenet_normalization
     lookup_gbif_names = False
@@ -494,9 +477,7 @@ class UKDenmarkMothSpeciesClassifier2024(
     )
 
 
-class PanamaMothSpeciesClassifier2024(
-    SpeciesClassifier, Resnet50TimmClassifier
-):
+class PanamaMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier):
     input_size = 128
     normalization = imagenet_normalization
     lookup_gbif_names = False
@@ -515,5 +496,3 @@ class PanamaMothSpeciesClassifier2024(
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "03_ami-gbif_fine-grained_c-america_category_map-with_names.json"
     )
-
-

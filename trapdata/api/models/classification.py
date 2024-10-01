@@ -89,6 +89,7 @@ class MothClassifier(
                 inference_time=seconds_per_item,
                 algorithm=self.name,
                 timestamp=datetime.datetime.now(),
+                terminal=self.is_terminal_classifier,
             )
             self.update_classification(detection, classification)
             # print(detection)
@@ -147,7 +148,7 @@ class MothClassifierBinary(MothClassifier, MothNonMothClassifier):
                 algorithm=self.name,
                 timestamp=datetime.datetime.now(),
                 # Specific to binary classification / the filter model
-                terminal=False,
+                terminal=self.is_terminal_classifier,
             )
             # print(detection)
             if (
