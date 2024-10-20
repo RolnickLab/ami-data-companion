@@ -121,8 +121,8 @@ class MothClassifier(
 
 
 class MothClassifierBinary(MothClassifier, MothNonMothClassifier):
-    def __init__(self, filter_results: bool = False, *args, **kwargs):
-        self.filter_results = filter_results
+    def __init__(self, *args, **kwargs):
+        self.filter_results = kwargs.get("filter_results", True)
         super().__init__(*args, **kwargs)
 
     def save_results(

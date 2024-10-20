@@ -23,6 +23,8 @@ from .models.classification import (
 from .models.localization import MothDetector
 from .schemas import Detection, SourceImage
 
+from rich import print
+
 app = fastapi.FastAPI()
 
 
@@ -109,6 +111,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         single=True,  # @TODO solve issues with reading images in multiprocessing
     )
     detector_results = detector.run()
+    num_pre_filter = len(detector_results)
 
     filter = MothClassifierBinary(
         source_images=source_images,
@@ -117,15 +120,32 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         num_workers=settings.num_workers,
         # single=True if len(detector_results) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
-        filter_results=True,  # Only save results with the positive_binary_label, @TODO make this configurable from request
+        filter_results=False,  # Only save results with the positive_binary_label, @TODO make this configurable from request
     )
     filter.run()
     # all_binary_classifications = filter.results
 
+    # Compare num detections with num moth detections
+    num_post_filter = len(filter.results)
+    logger.info(f"Binary classifier returned {num_post_filter} out of {num_pre_filter} detections")
+
+    # Filter results based on positive_binary_label
+    moth_detections = []
+    non_moth_detections = []
+    for detection in filter.results:
+        for classification in detection.classifications:
+            if classification.classification == filter.positive_binary_label:
+                moth_detections.append(detection)
+            elif classification.classification == filter.negative_binary_label:
+                non_moth_detections.append(detection)
+            break
+
+    logger.info(f"Sending {len(moth_detections)} out of {num_pre_filter} detections to the classifier")
+
     Classifier = PIPELINE_CHOICES[data.pipeline.value]
     classifier: MothClassifier = Classifier(
         source_images=source_images,
-        detections=filter.results,
+        detections=moth_detections,
         batch_size=settings.classification_batch_size,
         num_workers=settings.num_workers,
         # single=True if len(filtered_detections) == 1 else False,
@@ -135,39 +155,46 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     end_time = time.time()
     seconds_elapsed = float(end_time - start_time)
 
-    # all_classifications = all_binary_classifications + classifier.results
-    detections_with_classifications = classifier.results
+    # Return all detections, including those that were not classified as moths
+
+    # Delete the classifications from the detections for non-moths
+    # since right now the interface will show all classifications
+    for detection in non_moth_detections:
+        detection.classifications = []
+
+    all_detections = classifier.results + non_moth_detections
 
     # For each detection, only keep the classifications with terminal=True
-    for detection in detections_with_classifications:
-        detection.classifications = [
-            classification
-            for classification in detection.classifications
-            if classification.terminal
-        ]
+    # for detection in detections_with_classifications:
+    #     detection.classifications = [
+    #         classification
+    #         for classification in detection.classifications
+    #         if classification.terminal
+    #     ]
     # Remove any detections without classifications
-    detections_with_classifications = [
-        detection
-        for detection in detections_with_classifications
-        if detection.classifications
-    ]
+    # detections_with_classifications = [
+    #     detection
+    #     for detection in detections_with_classifications
+    #     if detection.classifications
+    # ]
     logger.info(
         f"Processed {len(source_images)} images in {seconds_elapsed:.2f} seconds"
     )
     logger.info(
-        f"Returning {len(detections_with_classifications)} detections with classifications"
+        f"Returning {len(all_detections)} detections"
     )
+    print(all_detections)
 
     # If the number of detections is greater than 100, its suspicious. Log it.
-    if len(detections_with_classifications) > 100:
+    if len(all_detections) > 100:
         logger.warning(
-            f"Detected {len(detections_with_classifications)} detections. This is suspicious."
+            f"Detected {len(all_detections)} detections. This is suspicious."
         )
         # Log the detections, order by classification label
-        detections_with_classifications.sort(
+        all_detections.sort(
             key=lambda x: x.classifications[0].classification
         )
-        for detection in detections_with_classifications:
+        for detection in all_detections:
             logger.warning(
                 f"{detection.source_image_id}: {detection.classifications[0].classification} at {detection.bbox}"
             )
@@ -175,7 +202,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     response = PipelineResponse(
         pipeline=data.pipeline,
         source_images=source_image_results,
-        detections=detections_with_classifications,
+        detections=all_detections,
         total_time=seconds_elapsed,
     )
     return response
