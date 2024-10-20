@@ -5,7 +5,8 @@ from functools import lru_cache
 from typing import Optional, Union
 
 import sqlalchemy
-from pydantic import BaseSettings, Field, ValidationError, validator
+from pydantic import Field, ValidationError, validator
+from pydantic_settings import BaseSettings
 from rich import print as rprint
 
 from trapdata import ml
@@ -17,7 +18,7 @@ class Settings(BaseSettings):
     # Can't use PyDantic DSN validator for database_url if sqlite filepath has spaces, see custom validator below
     database_url: Union[str, sqlalchemy.engine.URL] = default_database_dsn()
     user_data_path: pathlib.Path = get_app_dir()
-    image_base_path: Optional[pathlib.Path]
+    image_base_path: Optional[pathlib.Path] = None
     localization_model: ml.models.ObjectDetectorChoice = Field(
         default=ml.models.DEFAULT_OBJECT_DETECTOR
     )
@@ -34,6 +35,20 @@ class Settings(BaseSettings):
     localization_batch_size: int = 2
     classification_batch_size: int = 20
     num_workers: int = 1
+    api_base_url: str | None = "http://localhost:8000/api/v2/"
+    api_username: str | None = None
+    api_password: str | None = None
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    s3_endpoint_url: str | None = None
+    s3_destination_bucket: str | None = None
+
+    @validator("api_base_url")
+    def validate_base_url(cls, v):
+        if v and not v.endswith("/"):
+            return v + "/"
+        else:
+            return v
 
     @validator("image_base_path", "user_data_path")
     def validate_path(cls, v):

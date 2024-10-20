@@ -63,5 +63,38 @@ def run_pipeline():
     )
 
 
+@cli.command("api-pipeline")
+def run_api_pipeline(source_image_ids: list[int]):
+    """
+    Process all images via the AMI platform API.
+    """
+    from trapdata.api.pipeline import start_pipeline as start_api_pipeline
+
+    start_api_pipeline(
+        source_image_ids=source_image_ids,
+        settings=settings,
+    )
+
+
+@cli.command("gradio")
+def run_gradio():
+    """
+    Run the gradio interface.
+    """
+    from trapdata.api.demo import app
+
+    app.queue().launch(show_api=False, server_name="0.0.0.0", server_port=7861)
+
+
+@cli.command("api")
+def run_api():
+    """
+    Run the API.
+    """
+    import uvicorn
+
+    uvicorn.run("trapdata.api.api:app", host="0.0.0.0", port=2000, reload=True)
+
+
 if __name__ == "__main__":
     cli()
