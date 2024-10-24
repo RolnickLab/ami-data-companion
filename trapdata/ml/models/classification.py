@@ -109,7 +109,6 @@ class Resnet50(torch.nn.Module):
 
 class Resnet50Classifier_Turing(InferenceBaseClass):
     # function to run the Turing models
-    logger.info("KG: Resnet50Classifier_Turing")
     input_size = 300
 
     def get_model(self):
