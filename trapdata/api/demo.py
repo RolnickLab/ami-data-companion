@@ -149,6 +149,7 @@ app = gr.TabbedInterface(
         "UK/Denmark",
         "Quebec/Vermont",
         "Costa Rica",
+        "Anguilla",
         "Global",
     ],
 )
