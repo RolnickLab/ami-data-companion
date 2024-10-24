@@ -12,6 +12,7 @@ from .models.classification import (
     MothClassifierPanama,
     MothClassifierPanama2024,
     MothClassifierQuebecVermont,
+    MothClassifierTuringAnguilla,
     MothClassifierTuringCostaRica,
     MothClassifierUKDenmark,
 )
@@ -113,7 +114,7 @@ def predict(*img_paths, Classifier: typing.Type[MothClassifier]):
 from functools import partial
 
 
-def make_interface(Classifier: MothClassifier, example_images_subdirs: list[str]=[]):
+def make_interface(Classifier: MothClassifier, example_images_subdirs: list[str] = []):
     return gr.Interface(
         title=Classifier.name,
         description=Classifier.description,
@@ -136,7 +137,11 @@ app = gr.TabbedInterface(
         make_interface(MothClassifierUKDenmark, ["denmark"]),
         make_interface(MothClassifierQuebecVermont, ["vermont"]),
         make_interface(MothClassifierTuringCostaRica, ["costarica"]),
-        make_interface(MothClassifierGlobal, ["vermont", "panama", "denmark", "costarica"]),
+        make_interface(MothClassifierTuringAnguilla, ["anguilla"]),
+        make_interface(
+            MothClassifierGlobal,
+            ["vermont", "panama", "denmark", "costarica", "anguilla"],
+        ),
     ],
     [
         "Panama 2023",
