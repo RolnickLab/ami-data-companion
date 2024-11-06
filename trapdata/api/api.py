@@ -61,12 +61,18 @@ class PipelineRequest(pydantic.BaseModel):
     pipeline: PipelineChoice
     source_images: list[SourceImageRequest]
 
+    class Config:
+        use_enum_values = True
+
 
 class PipelineResponse(pydantic.BaseModel):
     pipeline: PipelineChoice
     total_time: float
     source_images: list[SourceImageResponse]
     detections: list[Detection]
+
+    class Config:
+        use_enum_values = True
 
 
 @app.get("/")

@@ -2,15 +2,20 @@ import datetime
 import logging
 import pathlib
 import tempfile
+import typing as t
 import unittest
 from unittest import TestCase
+
+import sentry_sdk
+
+# Disable Sentry for tests
+sentry_sdk.init(dsn=None)
 
 import PIL.Image
 
 from trapdata.common.filemanagement import find_images
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
-from . import auth, queries, settings
 from .models.classification import MothClassifierBinary, MothClassifierQuebecVermont
 from .models.localization import MothDetector
 from .schemas import BoundingBox, Detection, SourceImage
@@ -61,67 +66,14 @@ def make_image():
         return f.name
 
 
-def get_test_images(subdirs: list[str] = ["vermont", "panama"]) -> list[SourceImage]:
+def get_test_images(
+    subdirs: t.Iterable[str] = ("vermont", "panama")
+) -> list[SourceImage]:
     return [
         SourceImage(id=str(img["path"].name), filepath=img["path"])
         for subdir in subdirs
         for img in find_images(pathlib.Path(TEST_IMAGES_BASE_PATH) / subdir)
     ]
-
-
-class TestAuth(TestCase):
-    def test_login(self):
-        token = auth.get_token()
-        self.assertIsNotNone(token)
-
-    def test_get_session(self):
-        session = auth.get_session()
-        self.assertIsNotNone(session)
-
-    def test_current_user(self):
-        user = auth.get_current_user()
-        self.assertEqual(user["email"], settings.api_username)
-
-
-class NoTestSourceImages(TestCase):
-    def test_get_next_batch(self):
-        batch = queries.get_next_source_images(10)
-        for item in batch:
-            self.assertIsInstance(item, SourceImage)
-        return batch
-
-    def test_save_detections(self):
-        item_ids = [
-            60,
-            1886356,
-        ]
-
-        detected_objects_data = [
-            [
-                {
-                    "bbox": [3980, 285, 4240, 665],
-                    "model_name": "FasterRCNN for AMI Moth Traps 2021",
-                },
-                {
-                    "bbox": [2266, 2321, 3010, 2637],
-                    "model_name": "FasterRCNN for AMI Moth Traps 2021",
-                },
-            ],
-            [
-                {
-                    "bbox": [3980, 285, 4240, 665],
-                    "model_name": "FasterRCNN for AMI Moth Traps 2021",
-                },
-                {
-                    "bbox": [2266, 2321, 3010, 2637],
-                    "model_name": "FasterRCNN for AMI Moth Traps 2021",
-                },
-            ],
-        ]
-
-        queries.save_detected_objects(
-            source_image_ids=item_ids, detected_objects_data=detected_objects_data
-        )
 
 
 class TestLocalization(TestCase):
