@@ -191,14 +191,8 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     # If the number of detections is greater than 100, its suspicious. Log it.
     if len(all_detections) > 100:
         logger.warning(
-            f"Detected {len(all_detections)} detections. This is suspicious."
+            f"Detected {len(all_detections)} detections. This is suspicious and may contain duplicates."
         )
-        # Log the detections, order by classification label
-        all_detections.sort(key=lambda x: x.classifications[0].classification)
-        for detection in all_detections:
-            logger.warning(
-                f"{detection.source_image_id}: {detection.classifications[0].classification} at {detection.bbox}"
-            )
 
     response = PipelineResponse(
         pipeline=data.pipeline,
