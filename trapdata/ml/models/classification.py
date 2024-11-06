@@ -366,23 +366,6 @@ class TuringUKSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
     )
 
 
-class QuebecVermontMothSpeciesClassifierMixedResolution(
-    SpeciesClassifier, Resnet50ClassifierLowRes
-):
-    name = "Quebec & Vermont Species Classifier"
-    description = (
-        "Trained on February 24, 2022 using mix of low & med resolution images"
-    )
-    weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "moths_quebecvermont_resnet50_randaug_mixres_128_fev24.pth"
-    )
-    labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "quebec-vermont_moth-category-map_19Jan2023.json"
-    )
-
-
 class UKDenmarkMothSpeciesClassifierMixedResolution(
     SpeciesClassifier, Resnet50ClassifierLowRes
 ):
