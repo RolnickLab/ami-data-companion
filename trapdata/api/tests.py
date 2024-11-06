@@ -2,6 +2,7 @@ import datetime
 import logging
 import pathlib
 import tempfile
+import typing
 import unittest
 from unittest import TestCase
 
@@ -61,7 +62,9 @@ def make_image():
         return f.name
 
 
-def get_test_images(subdirs: list[str] = ["vermont", "panama"]) -> list[SourceImage]:
+def get_test_images(
+    subdirs: typing.Iterable[str] = ("vermont", "panama")
+) -> list[SourceImage]:
     return [
         SourceImage(id=str(img["path"].name), filepath=img["path"])
         for subdir in subdirs

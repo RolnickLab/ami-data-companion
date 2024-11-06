@@ -7,6 +7,7 @@ import time
 
 import fastapi
 import pydantic
+from rich import print
 
 from ..common.logs import logger  # noqa: F401
 from . import settings
@@ -17,13 +18,12 @@ from .models.classification import (
     MothClassifierPanama,
     MothClassifierPanama2024,
     MothClassifierQuebecVermont,
+    MothClassifierTuringAnguilla,
     MothClassifierTuringCostaRica,
     MothClassifierUKDenmark,
 )
 from .models.localization import MothDetector
 from .schemas import Detection, SourceImage
-
-from rich import print
 
 app = fastapi.FastAPI()
 
@@ -50,6 +50,7 @@ PIPELINE_CHOICES = {
     "quebec_vermont_moths_2023": MothClassifierQuebecVermont,
     "uk_denmark_moths_2023": MothClassifierUKDenmark,
     "costa_rica_moths_turing_2024": MothClassifierTuringCostaRica,
+    "anguilla_moths_turing_2024": MothClassifierTuringAnguilla,
     "global_moths_2024": MothClassifierGlobal,
 }
 _pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys())))
@@ -127,7 +128,9 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
     # Compare num detections with num moth detections
     num_post_filter = len(filter.results)
-    logger.info(f"Binary classifier returned {num_post_filter} out of {num_pre_filter} detections")
+    logger.info(
+        f"Binary classifier returned {num_post_filter} out of {num_pre_filter} detections"
+    )
 
     # Filter results based on positive_binary_label
     moth_detections = []
@@ -140,7 +143,9 @@ async def process(data: PipelineRequest) -> PipelineResponse:
                 non_moth_detections.append(detection)
             break
 
-    logger.info(f"Sending {len(moth_detections)} out of {num_pre_filter} detections to the classifier")
+    logger.info(
+        f"Sending {len(moth_detections)} out of {num_pre_filter} detections to the classifier"
+    )
 
     Classifier = PIPELINE_CHOICES[data.pipeline.value]
     classifier: MothClassifier = Classifier(
@@ -180,9 +185,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     logger.info(
         f"Processed {len(source_images)} images in {seconds_elapsed:.2f} seconds"
     )
-    logger.info(
-        f"Returning {len(all_detections)} detections"
-    )
+    logger.info(f"Returning {len(all_detections)} detections")
     print(all_detections)
 
     # If the number of detections is greater than 100, its suspicious. Log it.
@@ -191,9 +194,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
             f"Detected {len(all_detections)} detections. This is suspicious."
         )
         # Log the detections, order by classification label
-        all_detections.sort(
-            key=lambda x: x.classifications[0].classification
-        )
+        all_detections.sort(key=lambda x: x.classifications[0].classification)
         for detection in all_detections:
             logger.warning(
                 f"{detection.source_image_id}: {detection.classifications[0].classification} at {detection.bbox}"
