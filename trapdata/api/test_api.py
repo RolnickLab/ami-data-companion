@@ -8,6 +8,7 @@ import unittest
 from unittest import TestCase
 
 import PIL.Image
+import pytest
 
 from trapdata.common.filemanagement import find_images
 from trapdata.tests import TEST_IMAGES_BASE_PATH
@@ -158,7 +159,10 @@ class TestClassification(TestCase):
             for classification in result.classifications:
                 self.assertLessEqual(classification.scores[0], 0.4)
 
-    def _skip_test_binary_classification_zero(self):
+    @pytest.mark.skip(
+        reason="The new binary classifier is classifying empty images as moths"
+    )
+    def test_binary_classification_zero(self):
         # @TODO
         # This is classifying empty images as moths!
 
