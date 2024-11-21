@@ -92,8 +92,8 @@ class MothClassifier(
                 timestamp=datetime.datetime.now(),
             )
             self.update_classification(detection, classification)
-            # print(detection)
-        self.results.extend(self.detections)
+
+        self.results = self.detections
         logger.info(f"Saving {len(self.results)} detections with classifications")
         return self.results
 
@@ -133,6 +133,7 @@ class MothClassifierBinary(MothClassifier, MothNonMothClassifier):
         Override the base class method to save only the results that have the
         label we are interested in.
         """
+        logger.info(f"Saving {len(batch_output)} detections with classifications")
         image_ids = metadata[0]
         detection_idxes = metadata[1]
         for image_id, detection_idx, predictions in zip(
@@ -150,14 +151,9 @@ class MothClassifierBinary(MothClassifier, MothNonMothClassifier):
                 # Specific to binary classification / the filter model
                 terminal=False,
             )
-            # print(detection)
-            if (
-                not self.filter_results
-                or classification.classification == self.positive_binary_label
-            ):
-                self.update_classification(detection, classification)
+            self.update_classification(detection, classification)
 
-        self.results.extend(self.detections)
+        self.results = self.detections
         logger.info(f"Saving {len(self.results)} detections with classifications")
         return self.results
 

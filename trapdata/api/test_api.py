@@ -1,3 +1,4 @@
+import collections
 import datetime
 import logging
 import pathlib
@@ -69,6 +70,21 @@ def get_test_images(
         for subdir in subdirs
         for img in find_images(pathlib.Path(TEST_IMAGES_BASE_PATH) / subdir)
     ][:limit]
+
+
+def check_for_duplicate_classifications(results: list[Detection]):
+    """
+    Ensure that there is only one classification per classifier, per bounding box
+    """
+    result_counts = collections.defaultdict(int)
+    for result in results:
+        for classification in result.classifications:
+            bbox = result.bbox.to_tuple()
+            unique_result = tuple(list(bbox) + [classification.algorithm])
+            result_counts[unique_result] += 1
+
+    duplicates = {k: v for k, v in result_counts.items() if v > 1}
+    assert not duplicates, f"Duplicate detections found: {duplicates}"
 
 
 class TestLocalization(TestCase):
@@ -172,6 +188,8 @@ class TestClassification(TestCase):
         classifier.run()
         results = classifier.results
 
+        check_for_duplicate_classifications(results)
+
         self.assertEqual(len(results), len(detections))
         for result in results:
             for classification in result.classifications:
@@ -196,6 +214,15 @@ class TestClassification(TestCase):
         results = classifier.results
         # image_lookup = {img.id: img for img in test_images}
         self.assertEqual(len(results), len(detections))
+
+        check_for_duplicate_classifications(results)
+
+        # Assert that each result has at least one classification
+        for result in results:
+            self.assertGreater(
+                len(result.classifications), 0, f"{result} has no classifications"
+            )
+
         # @TODO ensure classification results are correct
 
 
