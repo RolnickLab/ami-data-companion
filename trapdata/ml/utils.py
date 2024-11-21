@@ -8,17 +8,17 @@ import json
 import os
 import pathlib
 import re
-import requests
 import tempfile
 import time
 import urllib.error
-from urllib.parse import urlparse
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
+from urllib.parse import urlparse
 
 import pandas as pd
 import PIL.Image
 import PIL.ImageFile
+import requests
 import torch
 import torchvision
 
@@ -28,6 +28,10 @@ if TYPE_CHECKING:
 from trapdata import logger
 
 PIL.ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+# This is polite and required by some hosts
+# see: https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy
+USER_AGENT = "AntennaInsectDataPlatform/1.0 (https://insectai.org)"
 
 
 def get_device(device_str=None) -> torch.device:
@@ -51,7 +55,8 @@ def get_or_download_file(
     Fetch a file from a URL or local path. If the path is a URL, download the file.
     If the URL has already been downloaded, return the existing local path.
     If the path is a local path, return the path.
-    >>> filepath = get_or_download_file("https://example.uk/images/31-20230919033000-snapshot.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=451d406b7eb1113e1bb05c083ce51481%2F20240429%2F")
+    >>> filepath = get_or_download_file(
+    "https://example.uk/images/31-20230919033000-snapshot.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=451d406b7eb1113e1bb05c083ce51481%2F20240429%2F")
     >>> filepath.name
     '31-20230919033000-snapshot.jpg'
     >>> filepath = get_or_download_file("/home/user/images/31-20230919033000-snapshot.jpg")
@@ -60,10 +65,10 @@ def get_or_download_file(
     """
     if not path_or_url:
         raise Exception("Specify a URL or path to fetch file from.")
-    
+
     destination_dir = destination_dir or os.environ.get("LOCAL_WEIGHTS_PATH")
     fname = pathlib.Path(urlparse(path_or_url).path).name
-    
+
     if destination_dir:
         destination_dir = pathlib.Path(destination_dir)
         if prefix:
@@ -78,22 +83,23 @@ def get_or_download_file(
         raise Exception(
             "No destination directory specified by LOCAL_WEIGHTS_PATH or app settings."
         )
-    
+
     if local_filepath and local_filepath.exists():
         logger.info(f"Using existing {local_filepath}")
         return local_filepath
     else:
         logger.info(f"Downloading {path_or_url} to {local_filepath}")
-        
+
         # Check if the path is a URL
-        if path_or_url.startswith(('http://', 'https://')):
-            response = requests.get(path_or_url, stream=True)
+        if path_or_url.startswith(("http://", "https://")):
+            headers = {"User-Agent": USER_AGENT}
+            response = requests.get(path_or_url, stream=True, headers=headers)
             response.raise_for_status()  # Raise an exception for HTTP errors
-            
-            with open(local_filepath, 'wb') as f:
+
+            with open(local_filepath, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            
+
             logger.info(f"Downloaded to {local_filepath}")
             return local_filepath
         else:
