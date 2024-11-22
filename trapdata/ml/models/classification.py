@@ -109,7 +109,6 @@ class Resnet50(torch.nn.Module):
 
 class Resnet50Classifier_Turing(InferenceBaseClass):
     # function to run the Turing models
-    logger.info("KG: Resnet50Classifier_Turing")
     input_size = 300
 
     def get_model(self):
@@ -162,12 +161,25 @@ class Resnet50Classifier(InferenceBaseClass):
         model.eval()
         return model
 
+    def _pad_to_square(self):
+        """Padding transformation to make the image square"""
+        width, height = self.input_size, self.input_size
+        if height < width:
+            return torchvision.transforms.Pad(padding=[0, 0, 0, width - height])
+        elif height > width:
+            return torchvision.transforms.Pad(padding=[0, 0, height - width, 0])
+        else:
+            return torchvision.transforms.Pad(padding=[0, 0, 0, 0])
+
     def get_transforms(self):
         mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
         return torchvision.transforms.Compose(
             [
-                torchvision.transforms.Resize((self.input_size, self.input_size)),
+                self._pad_to_square(),
                 torchvision.transforms.ToTensor(),
+                torchvision.transforms.Resize(
+                    (self.input_size, self.input_size), antialias=True  # type: ignore
+                ),
                 torchvision.transforms.Normalize(mean, std),
             ]
         )
@@ -207,21 +219,24 @@ class Resnet50ClassifierLowRes(Resnet50Classifier):
 class Resnet50TimmClassifier(Resnet50Classifier):
     def get_model(self):
         model = timm.create_model(
-            "resnet50", pretrained=False, num_classes=self.num_classes
+            "resnet50",
+            pretrained=False,
+            num_classes=self.num_classes,
         )
         assert self.weights, f"No weights path configured for {self.name}"
         checkpoint = torch.load(self.weights, map_location=self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
+        model.to(self.device)
         model.eval()
         return model
 
 
-class BinaryClassifier(EfficientNetClassifier):
+class BinaryClassifier(Resnet50ClassifierLowRes):
     stage = 2
     type = "binary_classification"
-    positive_binary_label = None
-    positive_negative_label = None
+    positive_binary_label: str = constants.POSITIVE_BINARY_LABEL
+    negative_binary_label: str = constants.NEGATIVE_BINARY_LABEL
 
     def get_queue(self) -> DetectedObjectQueue:
         return DetectedObjectQueue(self.db_path, self.image_base_path)
@@ -234,13 +249,13 @@ class BinaryClassifier(EfficientNetClassifier):
         )
         return dataset
 
-    def save_results(self, object_ids, batch_output):
+    def save_results(self, object_ids, batch_output, *args, **kwargs):
         # Here we are saving the moth/non-moth labels
         classified_objects_data = [
             {
                 "binary_label": str(label),
                 "binary_label_score": float(score),
-                "in_queue": True if label == constants.POSITIVE_BINARY_LABEL else False,
+                "in_queue": True if label == self.positive_binary_label else False,
                 "model_name": self.name,
             }
             for label, score in batch_output
@@ -248,13 +263,28 @@ class BinaryClassifier(EfficientNetClassifier):
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
 
 
-class MothNonMothClassifier(BinaryClassifier):
+class MothNonMothClassifier2022(EfficientNetClassifier, BinaryClassifier):
     name = "Moth / Non-Moth Classifier"
     description = "Trained on May 6, 2022"
     weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/moth-nonmoth-effv2b3_20220506_061527_30.pth"
     labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/05-moth-nonmoth_category_map.json"
     positive_binary_label = "moth"
-    positive_negative_label = "nonmoth"
+    negative_binary_label = "nonmoth"
+
+
+class MothNonMothClassifier(BinaryClassifier):
+    name = "Moth / Non-Moth Classifier"
+    description = "Trained on April 17, 2024"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "moth-nonmoth_resnet50_20240417_b4fe3efe.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "05-moth-nonmoth_category_map.json"
+    )
+    positive_binary_label = "moth"
+    negative_binary_label = "nonmoth"
 
 
 class SpeciesClassifier(InferenceBaseClass):
@@ -272,7 +302,7 @@ class SpeciesClassifier(InferenceBaseClass):
         )
         return dataset
 
-    def save_results(self, object_ids, batch_output):
+    def save_results(self, object_ids, batch_output, *args, **kwargs):
         # Here we are saving the specific taxon labels
         classified_objects_data = [
             {
@@ -314,6 +344,13 @@ class TuringCostaRicaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Tur
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "03_costarica_data_category_map.json"
     )
+
+
+class TuringAnguillaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
+    name = "Turing Anguilla Species Classifier"
+    description = "Trained on 28th June 2024 by Turing team using Resnet50 model."
+    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/turing-anguilla_v01_resnet50_2024-06-28-17-01_state.pt"
+    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/01_anguilla_data_category_map.json"
 
 
 class TuringUKSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
@@ -372,14 +409,93 @@ class PanamaMothSpeciesClassifierMixedResolution2023(
     lookup_gbif_names = True
     normalization = imagenet_normalization
 
-    description = (
-        "Trained on Noveber 07, 2023 using a corrected species list of 1036 classes."
-    )
+    description = "Trained on Novempber 11th, 2023 using a corrected species list of 1060 classes."
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "panama_resnet50_baseline_9270f84a.pth"
+        "panama_resetnet50_best_5aeb515a.pth"
     )
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "03_moths_centralAmerica_category_map-with-names.json"
+        "03_moths_centralAmerica_category_map-202311110-with-names.json"
+    )
+
+
+class GlobalMothSpeciesClassifier(SpeciesClassifier, Resnet50TimmClassifier):
+    input_size = 128
+    normalization = imagenet_normalization
+    lookup_gbif_names = False
+
+    name = "Global Species Classifier - Aug 2024"
+    description = (
+        "Trained on August 28th, 2024 for 29,176 species. "
+        "https://wandb.ai/moth-ai/global-moth-classifier/runs/h0cuqrbc/overview"
+    )
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "global_resnet50_20240828_b06d3b3a.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "global_category_map_with_names_20240828.json"
+    )
+
+
+class QuebecVermontMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier):
+    input_size = 128
+    normalization = imagenet_normalization
+    lookup_gbif_names = False
+
+    name = "Quebec & Vermont Species Classifier - Apr 2024"
+    description = (
+        "Trained on April 17, 2024 for 2,497 species. "
+        "https://wandb.ai/moth-ai/ami-gbif-fine-grained/runs/1x53zmp2/overview"
+    )
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "quebec-vermont_resnet50_baseline_20240417_950de764.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "01_ami-gbif_fine-grained_ne-america_category_map-with_names.json"
+    )
+
+
+class UKDenmarkMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier):
+    input_size = 128
+    normalization = imagenet_normalization
+    lookup_gbif_names = False
+
+    name = "UK & Denmark Species Classifier - Apr 2024"
+    description = (
+        "Trained on April 17, 2024 for 2,603 species. "
+        "https://wandb.ai/moth-ai/ami-gbif-fine-grained/runs/x5u7jcbf/overview"
+    )
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "uk-denmark_resnet50_baseline_20240417_55250a8b.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "02_ami-gbif_fine-grained_w-europe_category_map-with_names.json"
+    )
+
+
+class PanamaMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier):
+    input_size = 128
+    normalization = imagenet_normalization
+    lookup_gbif_names = False
+
+    name = "Panama Species Classifier - Apr 2024"
+    description = (
+        "Trained on April 17, 2024 for 636 species. "
+        "https://wandb.ai/moth-ai/ami-gbif-fine-grained/runs/1sekgkan/overview"
+    )
+
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_resnet50_baseline_20240417_edbb46dd.pth"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "03_ami-gbif_fine-grained_c-america_category_map-with_names.json"
     )

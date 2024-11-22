@@ -5,7 +5,8 @@ from functools import lru_cache
 from typing import Optional, Union
 
 import sqlalchemy
-from pydantic import BaseSettings, Field, ValidationError, validator
+from pydantic import Field, ValidationError, validator
+from pydantic_settings import BaseSettings
 from rich import print as rprint
 
 from trapdata import ml
@@ -17,7 +18,7 @@ class Settings(BaseSettings):
     # Can't use PyDantic DSN validator for database_url if sqlite filepath has spaces, see custom validator below
     database_url: Union[str, sqlalchemy.engine.URL] = default_database_dsn()
     user_data_path: pathlib.Path = get_app_dir()
-    image_base_path: Optional[pathlib.Path]
+    image_base_path: Optional[pathlib.Path] = None
     localization_model: ml.models.ObjectDetectorChoice = Field(
         default=ml.models.DEFAULT_OBJECT_DETECTOR
     )

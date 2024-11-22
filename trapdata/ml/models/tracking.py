@@ -464,7 +464,7 @@ class FeatureExtractor(InferenceBaseClass):
         # logger.debug(f"Post-processing features: {output[0]}")
         return output
 
-    def save_results(self, object_ids, batch_output):
+    def save_results(self, object_ids, batch_output, *args, **kwargs):
         # Here we are saving the moth/non-moth labels
         data = [
             {

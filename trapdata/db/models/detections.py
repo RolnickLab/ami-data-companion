@@ -4,7 +4,7 @@ from typing import Any, Iterable, Optional, Sequence, Union
 
 import PIL.Image
 import sqlalchemy as sa
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import orm
 
 from trapdata import constants, db
@@ -27,6 +27,9 @@ class DetectionListItem(BaseModel):
     model_name: Optional[str]
     in_queue: bool
     notes: Optional[str]
+
+    # PyDantic complains because we have an attribute called `model_name`
+    model_config = ConfigDict(protected_namespaces=[])  # type:ignore
 
 
 class DetectionDetail(DetectionListItem):
@@ -507,9 +510,7 @@ def get_species_for_image(db_path, image_id):
 def num_species_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(
-        sa.func.count(DetectedObject.specific_label.distinct()),
-    ).where(
+    query = sa.select(sa.func.count(DetectedObject.specific_label.distinct()),).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
@@ -521,9 +522,7 @@ def num_species_for_event(
 def num_occurrences_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(
-        sa.func.count(DetectedObject.sequence_id.distinct()),
-    ).where(
+    query = sa.select(sa.func.count(DetectedObject.sequence_id.distinct()),).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )

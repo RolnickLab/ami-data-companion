@@ -1,0 +1,50 @@
+[
+    {
+        "key": "localization",
+        "name": "Object Detection",
+        "params": [
+            {
+                "name": "Model",
+                "key": "algorithm",
+                "category": "algorithm",
+                "value": "FasterRCNN MobileNet for AMI Moth Traps 2023"
+            }
+        ]
+    },
+    {
+        "key": "binary_classification",
+        "name": "Binary Classification",
+        "params": [
+            {
+                "name": "Model",
+                "key": "algorithm",
+                "category": "algorithm",
+                "value": "Moth / Non-Moth Detector 2022"
+            }
+        ]
+    },
+    {
+        "key": "fine_grained_classification",
+        "name": "Fine-grained Species Classification",
+        "params": [
+            {
+                "name": "Model",
+                "key": "algorithm",
+                "category": "algorithm",
+                "value": "Default"
+            }
+        ]
+    },
+    {
+        "key": "tracking",
+        "name": "Occurrence Tracking",
+        "params": [
+            {
+                "name": "Model",
+                "key": "algorithm",
+                "category": "algorithm",
+                "value": "Default"
+            }
+        ]
+    }
+]
