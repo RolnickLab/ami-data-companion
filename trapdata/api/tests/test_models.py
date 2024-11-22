@@ -10,12 +10,14 @@ from unittest import TestCase
 import PIL.Image
 import pytest
 
+from trapdata.api.models.classification import (
+    MothClassifierBinary,
+    MothClassifierQuebecVermont,
+)
+from trapdata.api.models.localization import APIMothDetector
+from trapdata.api.schemas import BoundingBox, Detection, SourceImage
 from trapdata.common.filemanagement import find_images
 from trapdata.tests import TEST_IMAGES_BASE_PATH
-
-from .models.classification import MothClassifierBinary, MothClassifierQuebecVermont
-from .models.localization import APIMothDetector
-from .schemas import BoundingBox, Detection, SourceImage
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
