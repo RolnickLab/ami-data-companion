@@ -30,12 +30,14 @@ class APIMothClassifier(
         self,
         source_images: typing.Iterable[SourceImage],
         detections: typing.Iterable[Detection],
+        top_n: int | None = None,
         *args,
         **kwargs,
     ):
         self.source_images = source_images
         self.detections = list(detections)
         self.results: list[Detection] = []
+        self.top_n = top_n
         super().__init__(*args, **kwargs)
         logger.info(
             f"Initialized {self.__class__.__name__} with {len(self.detections)} detections"
@@ -49,26 +51,22 @@ class APIMothClassifier(
             batch_size=self.batch_size,
         )
 
-    def post_process_batch(self, output, top_n=3):
+    def post_process_batch(self, output):
         predictions = torch.nn.functional.softmax(output, dim=1)
         predictions = predictions.cpu().numpy()
 
         # Ensure that top_n is not greater than the number of categories
         # (e.g. binary classification will have only 2 categories)
-        top_n = min(top_n, predictions.shape[1])
+        if self.top_n is None:
+            num_results = predictions.shape[1]
+        else:
+            num_results = min(self.top_n, predictions.shape[1])
 
-        top_n_indices = np.argpartition(predictions, -top_n, axis=1)[:, -top_n:]
-        top_n_scores = predictions[
-            np.arange(predictions.shape[0])[:, None], top_n_indices
-        ]
-        top_n_labels = np.array(
-            [[self.category_map[i] for i in row] for row in top_n_indices]
-        )
+        indices = np.argpartition(predictions, -num_results, axis=1)[:, -num_results:]
+        scores = predictions[np.arange(predictions.shape[0])[:, None], indices]
+        labels = np.array([[self.category_map[i] for i in row] for row in indices])
 
-        result = [
-            list(zip(labels, scores))
-            for labels, scores in zip(top_n_labels, top_n_scores)
-        ]
+        result = [list(zip(labels, scores)) for labels, scores in zip(labels, scores)]
         result = [sorted(items, key=lambda x: x[1], reverse=True) for items in result]
         logger.debug(f"Post-processing result batch: {result}")
         return result

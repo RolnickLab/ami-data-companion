@@ -32,9 +32,15 @@ class SourceImageRequest(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="ignore")
 
     # @TODO bring over new SourceImage & b64 validation from the lepsAI repo
-    id: str
-    url: str
-    # b64: str | None = None
+    id: str = pydantic.Field(
+        description="Unique identifier for the source image. This is returned in the response.",
+        example="e124f3b4",
+    )
+    url: str = pydantic.Field(
+        description="URL to the source image. This should be publicly accessible.",
+        example="https://static.dev.insectai.org/ami-trapdata/vermont/RawImages/LUNA/2022/movement/2022_06_23/20220623050407-00-235.jpg",
+    )
+    b64: str | None = None
 
 
 class SourceImageResponse(pydantic.BaseModel):
@@ -59,9 +65,24 @@ _pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys
 PipelineChoice = enum.Enum("PipelineChoice", _pipeline_choices)
 
 
+class PipelineConfig(pydantic.BaseModel):
+    """
+    Configuration for the processing pipeline.
+    """
+
+    classification_num_predictions: int | None = pydantic.Field(
+        default=None,
+        description="Number of predictions to return for each classification. If null/None, return all predictions.",
+    )
+
+
 class PipelineRequest(pydantic.BaseModel):
     pipeline: PipelineChoice
     source_images: list[SourceImageRequest]
+    config: PipelineConfig = PipelineConfig()
+
+    class Config:
+        use_enum_values = True
 
 
 class PipelineResponse(pydantic.BaseModel):
@@ -69,6 +90,10 @@ class PipelineResponse(pydantic.BaseModel):
     total_time: float
     source_images: list[SourceImageResponse]
     detections: list[Detection]
+    config: PipelineConfig = PipelineConfig()
+
+    class Config:
+        use_enum_values = True
 
 
 @app.get("/")
@@ -148,6 +173,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         num_workers=settings.num_workers,
         # single=True if len(filtered_detections) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
+        top_n=data.config.classification_num_predictions,
     )
     classifier.run()
     end_time = time.time()
