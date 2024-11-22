@@ -35,20 +35,6 @@ class Settings(BaseSettings):
     localization_batch_size: int = 2
     classification_batch_size: int = 20
     num_workers: int = 1
-    api_base_url: str | None = "http://localhost:8000/api/v2/"
-    api_username: str | None = None
-    api_password: str | None = None
-    s3_access_key_id: str | None = None
-    s3_secret_access_key: str | None = None
-    s3_endpoint_url: str | None = None
-    s3_destination_bucket: str | None = None
-
-    @validator("api_base_url")
-    def validate_base_url(cls, v):
-        if v and not v.endswith("/"):
-            return v + "/"
-        else:
-            return v
 
     @validator("image_base_path", "user_data_path")
     def validate_path(cls, v):

@@ -6,7 +6,7 @@ import PIL.ImageDraw
 from rich import print
 
 from .models.classification import (
-    MothClassifier,
+    APIMothClassifier,
     MothClassifierBinary,
     MothClassifierGlobal,
     MothClassifierPanama,
@@ -16,12 +16,12 @@ from .models.classification import (
     MothClassifierTuringCostaRica,
     MothClassifierUKDenmark,
 )
-from .models.localization import MothDetector
+from .models.localization import APIMothDetector
 from .schemas import SourceImage
 from .tests import get_test_images
 
 
-def predict(*img_paths, Classifier: typing.Type[MothClassifier]):
+def predict(*img_paths, Classifier: typing.Type[APIMothClassifier]):
     # img_paths = img_paths * 4  # Test batch size
     source_images = [
         SourceImage(id=str(i), filepath=img_path)
@@ -34,12 +34,12 @@ def predict(*img_paths, Classifier: typing.Type[MothClassifier]):
         print(source_image, source_image._pil.size)
 
     if len(source_images) == 1:
-        detector = MothDetector(
+        detector = APIMothDetector(
             source_images=source_images,
             single=True,
         )
     else:
-        detector = MothDetector(
+        detector = APIMothDetector(
             source_images=source_images,
             single=False,
         )
@@ -115,7 +115,7 @@ from functools import partial
 
 
 def make_interface(
-    Classifier: typing.Type[MothClassifier],
+    Classifier: typing.Type[APIMothClassifier],
     example_images_subdirs: typing.Iterable[str] = (),
 ):
     return gr.Interface(

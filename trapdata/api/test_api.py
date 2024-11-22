@@ -14,7 +14,7 @@ from trapdata.common.filemanagement import find_images
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 from .models.classification import MothClassifierBinary, MothClassifierQuebecVermont
-from .models.localization import MothDetector
+from .models.localization import APIMothDetector
 from .schemas import BoundingBox, Detection, SourceImage
 
 logging.basicConfig(level=logging.INFO)
@@ -90,14 +90,14 @@ def check_for_duplicate_classifications(results: list[Detection]):
 
 class TestLocalization(TestCase):
     def test_localization_zero(self):
-        detector = MothDetector(source_images=get_empty_test_images())
+        detector = APIMothDetector(source_images=get_empty_test_images())
         detector.run()
         results = detector.results
         self.assertEqual(len(results), 0)
 
     def test_localization(self):
         test_images = get_test_images()
-        detector = MothDetector(
+        detector = APIMothDetector(
             source_images=test_images,
         )
         detector.run()
@@ -123,7 +123,7 @@ class TestLocalization(TestCase):
 class TestClassification(TestCase):
     def get_detections(self, test_images: list[SourceImage]) -> list[Detection]:
         # @TODO Reuse the results from the localization test. Or provide serialized results.
-        detector = MothDetector(
+        detector = APIMothDetector(
             source_images=test_images,
         )
         detector.run()

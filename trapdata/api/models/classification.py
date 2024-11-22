@@ -22,7 +22,7 @@ from ..schemas import Classification, Detection, SourceImage
 from .base import APIInferenceBaseClass
 
 
-class MothClassifier(
+class APIMothClassifier(
     APIInferenceBaseClass,
     InferenceBaseClass,
 ):
@@ -121,7 +121,7 @@ class MothClassifier(
         return self.results
 
 
-class MothClassifierBinary(MothClassifier, MothNonMothClassifier):
+class MothClassifierBinary(APIMothClassifier, MothNonMothClassifier):
     def __init__(self, *args, **kwargs):
         self.filter_results = kwargs.get("filter_results", True)
         super().__init__(*args, **kwargs)
@@ -159,32 +159,34 @@ class MothClassifierBinary(MothClassifier, MothNonMothClassifier):
 
 
 class MothClassifierPanama(
-    MothClassifier, PanamaMothSpeciesClassifierMixedResolution2023
+    APIMothClassifier, PanamaMothSpeciesClassifierMixedResolution2023
 ):
     pass
 
 
-class MothClassifierPanama2024(MothClassifier, PanamaMothSpeciesClassifier2024):
+class MothClassifierPanama2024(APIMothClassifier, PanamaMothSpeciesClassifier2024):
     pass
 
 
-class MothClassifierUKDenmark(MothClassifier, UKDenmarkMothSpeciesClassifier2024):
+class MothClassifierUKDenmark(APIMothClassifier, UKDenmarkMothSpeciesClassifier2024):
     pass
 
 
 class MothClassifierQuebecVermont(
-    MothClassifier, QuebecVermontMothSpeciesClassifier2024
+    APIMothClassifier, QuebecVermontMothSpeciesClassifier2024
 ):
     pass
 
 
-class MothClassifierTuringCostaRica(MothClassifier, TuringCostaRicaSpeciesClassifier):
+class MothClassifierTuringCostaRica(
+    APIMothClassifier, TuringCostaRicaSpeciesClassifier
+):
     pass
 
 
-class MothClassifierTuringAnguilla(MothClassifier, TuringAnguillaSpeciesClassifier):
+class MothClassifierTuringAnguilla(APIMothClassifier, TuringAnguillaSpeciesClassifier):
     pass
 
 
-class MothClassifierGlobal(MothClassifier, GlobalMothSpeciesClassifier):
+class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
     pass

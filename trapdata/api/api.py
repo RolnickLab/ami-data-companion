@@ -12,7 +12,7 @@ from rich import print
 from ..common.logs import logger  # noqa: F401
 from . import settings
 from .models.classification import (
-    MothClassifier,
+    APIMothClassifier,
     MothClassifierBinary,
     MothClassifierGlobal,
     MothClassifierPanama,
@@ -22,7 +22,7 @@ from .models.classification import (
     MothClassifierTuringCostaRica,
     MothClassifierUKDenmark,
 )
-from .models.localization import MothDetector
+from .models.localization import APIMothDetector
 from .schemas import Detection, SourceImage
 
 app = fastapi.FastAPI()
@@ -76,13 +76,6 @@ async def root():
     return fastapi.responses.RedirectResponse("/docs")
 
 
-def _get_source_image(source_images, source_image_id):
-    for source_image in source_images:
-        if source_image.id == source_image_id:
-            return source_image
-    raise ValueError(f"Source image {source_image_id} not found")
-
-
 @app.post("/pipeline/process")
 @app.post("/pipeline/process/")
 async def process(data: PipelineRequest) -> PipelineResponse:
@@ -104,7 +97,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     ]
 
     start_time = time.time()
-    detector = MothDetector(
+    detector = APIMothDetector(
         source_images=source_images,
         batch_size=settings.localization_batch_size,
         num_workers=settings.num_workers,
@@ -148,7 +141,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     )
 
     Classifier = PIPELINE_CHOICES[data.pipeline.value]
-    classifier: MothClassifier = Classifier(
+    classifier: APIMothClassifier = Classifier(
         source_images=source_images,
         detections=moth_detections,
         batch_size=settings.classification_batch_size,
@@ -161,27 +154,8 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     seconds_elapsed = float(end_time - start_time)
 
     # Return all detections, including those that were not classified as moths
-
-    # Delete the classifications from the detections for non-moths
-    # since right now the interface will show all classifications
-    for detection in non_moth_detections:
-        detection.classifications = []
-
     all_detections = classifier.results + non_moth_detections
 
-    # For each detection, only keep the classifications with terminal=True
-    # for detection in detections_with_classifications:
-    #     detection.classifications = [
-    #         classification
-    #         for classification in detection.classifications
-    #         if classification.terminal
-    #     ]
-    # Remove any detections without classifications
-    # detections_with_classifications = [
-    #     detection
-    #     for detection in detections_with_classifications
-    #     if detection.classifications
-    # ]
     logger.info(
         f"Processed {len(source_images)} images in {seconds_elapsed:.2f} seconds"
     )
