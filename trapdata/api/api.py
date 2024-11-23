@@ -165,7 +165,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         f"Sending {len(moth_detections)} out of {num_pre_filter} detections to the classifier"
     )
 
-    Classifier = PIPELINE_CHOICES[data.pipeline.value]
+    Classifier = PIPELINE_CHOICES[str(data.pipeline)]
     classifier: APIMothClassifier = Classifier(
         source_images=source_images,
         detections=moth_detections,
