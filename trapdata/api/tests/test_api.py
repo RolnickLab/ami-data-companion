@@ -48,7 +48,9 @@ class TestInferenceAPI(TestCase):
         ]
         return source_images
 
-    def get_test_pipeline(self, slug: str = "quebec_vermont_moths_2023"):
+    def get_test_pipeline(
+        self, slug: str = "quebec_vermont_moths_2023"
+    ) -> SpeciesClassifier:
         pipeline = PIPELINE_CHOICES[slug]
         return pipeline
 
@@ -69,20 +71,18 @@ class TestInferenceAPI(TestCase):
 
     def test_config_num_classification_predictions(self):
         """
-        Test that the pipeline respects the `classification_num_predictions` configuration.
+        Test that the pipeline respects the `max_predictions_per_classification` configuration.
 
         If the configuration is set to a number, the pipeline should return that number of labels/scores per prediction.
         If the configuration is set to `None`, the pipeline should return all labels/scores per prediction.
         """
         test_images = self.get_test_images(num=1)
         test_pipeline_slug = "quebec_vermont_moths_2023"
-        terminal_classifier: SpeciesClassifier = self.get_test_pipeline(
-            test_pipeline_slug
-        )
+        terminal_classifier = self.get_test_pipeline(test_pipeline_slug)
 
-        def _send_request(classification_num_predictions: int | None):
+        def _send_request(max_predictions_per_classification: int | None):
             config = PipelineConfig(
-                classification_num_predictions=classification_num_predictions
+                max_predictions_per_classification=max_predictions_per_classification
             )
             pipeline_request = PipelineRequest(
                 pipeline=PipelineChoice[test_pipeline_slug],
@@ -102,15 +102,19 @@ class TestInferenceAPI(TestCase):
                 if classification.terminal
             ]
             for classification in terminal_classifications:
-                if classification_num_predictions is None:
+                if max_predictions_per_classification is None:
                     # Ensure that a score is returned for every possible class
                     assert len(classification.labels) == terminal_classifier.num_classes
                     assert len(classification.scores) == terminal_classifier.num_classes
                 else:
                     # Ensure that the number of predictions is limited to the number specified
                     # There may be fewer predictions than the number specified if there are fewer classes.
-                    assert len(classification.labels) <= classification_num_predictions
-                    assert len(classification.scores) <= classification_num_predictions
+                    assert (
+                        len(classification.labels) <= max_predictions_per_classification
+                    )
+                    assert (
+                        len(classification.scores) <= max_predictions_per_classification
+                    )
 
-        _send_request(classification_num_predictions=1)
-        _send_request(classification_num_predictions=None)
+        _send_request(max_predictions_per_classification=1)
+        _send_request(max_predictions_per_classification=None)

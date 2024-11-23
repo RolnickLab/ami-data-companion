@@ -34,13 +34,15 @@ class SourceImageRequest(pydantic.BaseModel):
     # @TODO bring over new SourceImage & b64 validation from the lepsAI repo
     id: str = pydantic.Field(
         description="Unique identifier for the source image. This is returned in the response.",
-        example="e124f3b4",
+        examples=["e124f3b4"],
     )
     url: str = pydantic.Field(
-        description="URL to the source image. This should be publicly accessible.",
-        example="https://static.dev.insectai.org/ami-trapdata/vermont/RawImages/LUNA/2022/movement/2022_06_23/20220623050407-00-235.jpg",
+        description="URL to the source image to be processed.",
+        examples=[
+            "https://static.dev.insectai.org/ami-trapdata/vermont/RawImages/LUNA/2022/movement/2022_06_23/20220623050407-00-235.jpg"
+        ],
     )
-    b64: str | None = None
+    # b64: str | None = None
 
 
 class SourceImageResponse(pydantic.BaseModel):
@@ -70,16 +72,20 @@ class PipelineConfig(pydantic.BaseModel):
     Configuration for the processing pipeline.
     """
 
-    classification_num_predictions: int | None = pydantic.Field(
+    max_predictions_per_classification: int | None = pydantic.Field(
         default=None,
         description="Number of predictions to return for each classification. If null/None, return all predictions.",
+        examples=[3],
     )
 
 
 class PipelineRequest(pydantic.BaseModel):
     pipeline: PipelineChoice
     source_images: list[SourceImageRequest]
-    config: PipelineConfig = PipelineConfig()
+    config: PipelineConfig = pydantic.Field(
+        default=PipelineConfig(),
+        examples=[PipelineConfig(max_predictions_per_classification=3)],
+    )
 
     class Config:
         use_enum_values = True
@@ -173,7 +179,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         num_workers=settings.num_workers,
         # single=True if len(filtered_detections) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
-        top_n=data.config.classification_num_predictions,
+        top_n=data.config.max_predictions_per_classification,
     )
     classifier.run()
     end_time = time.time()
