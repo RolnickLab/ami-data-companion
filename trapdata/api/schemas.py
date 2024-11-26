@@ -70,6 +70,7 @@ class Classification(pydantic.BaseModel):
     classification: str
     labels: list[str] = []
     scores: list[float] = []
+    logits: list[float] = []
     inference_time: float | None = None
     algorithm: str | None = None
     terminal: bool = True

@@ -30,14 +30,12 @@ class APIMothClassifier(
         self,
         source_images: typing.Iterable[SourceImage],
         detections: typing.Iterable[Detection],
-        top_n: int | None = None,
         *args,
         **kwargs,
     ):
         self.source_images = source_images
         self.detections = list(detections)
         self.results: list[Detection] = []
-        self.top_n = top_n
         super().__init__(*args, **kwargs)
         logger.info(
             f"Initialized {self.__class__.__name__} with {len(self.detections)} detections"
@@ -51,25 +49,40 @@ class APIMothClassifier(
             batch_size=self.batch_size,
         )
 
-    def post_process_batch(self, output):
-        predictions = torch.nn.functional.softmax(output, dim=1)
+    def post_process_batch(self, logits: torch.Tensor):
+        """
+        Return the labels, softmax/calibrated scores, and the original logits for each image in the batch.
+        """
+        predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
 
-        # Ensure that top_n is not greater than the number of categories
-        # (e.g. binary classification will have only 2 categories)
-        if self.top_n is None:
-            num_results = predictions.shape[1]
-        else:
-            num_results = min(self.top_n, predictions.shape[1])
+        indices = np.arange(predictions.shape[1])
 
-        indices = np.argpartition(predictions, -num_results, axis=1)[:, -num_results:]
-        scores = predictions[np.arange(predictions.shape[0])[:, None], indices]
+        # @TODO Calibrate the scores here,
+        scores = predictions
+
         labels = np.array([[self.category_map[i] for i in row] for row in indices])
 
-        result = [list(zip(labels, scores)) for labels, scores in zip(labels, scores)]
-        result = [sorted(items, key=lambda x: x[1], reverse=True) for items in result]
-        logger.debug(f"Post-processing result batch: {result}")
-        return result
+        return zip(labels, scores, logits)
+
+    def get_best_label(self, predictions):
+        """
+        Convenience method to get the best label from the predictions, which are a list of tuples
+        in the order of the model's class index, NOT the values.
+
+        This must not modify the predictions list!
+
+        predictions look like:
+        [
+            ('label1', score1, logit1),
+            ('label2', score2, logit2),
+            ...
+        ]
+        """
+
+        best_pred = max(predictions, key=lambda x: x[1])
+        best_label = best_pred[0]
+        return best_label
 
     def save_results(
         self, metadata, batch_output, seconds_per_item, *args, **kwargs
@@ -81,10 +94,12 @@ class APIMothClassifier(
         ):
             detection = self.detections[detection_idx]
             assert detection.source_image_id == image_id
+            labels, scores, logits = zip(*predictions)
             classification = Classification(
-                classification=predictions[0][0],
-                labels=[label for (label, _) in list(predictions)],
-                scores=[score for (_, score) in list(predictions)],
+                classification=self.get_best_label(predictions),
+                labels=labels,  # @TODO move this to the Algorithm class instead of repeating it every prediction
+                scores=scores,
+                logits=logits,
                 inference_time=seconds_per_item,
                 algorithm=self.name,
                 timestamp=datetime.datetime.now(),

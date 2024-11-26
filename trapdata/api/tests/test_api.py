@@ -82,7 +82,7 @@ class TestInferenceAPI(TestCase):
 
         def _send_request(max_predictions_per_classification: int | None):
             config = PipelineConfig(
-                max_predictions_per_classification=max_predictions_per_classification
+                example_config_param=max_predictions_per_classification
             )
             pipeline_request = PipelineRequest(
                 pipeline=PipelineChoice[test_pipeline_slug],

@@ -72,9 +72,9 @@ class PipelineConfig(pydantic.BaseModel):
     Configuration for the processing pipeline.
     """
 
-    max_predictions_per_classification: int | None = pydantic.Field(
+    example_config_param: int | None = pydantic.Field(
         default=None,
-        description="Number of predictions to return for each classification. If null/None, return all predictions.",
+        description="Example of a configuration parameter for a pipeline.",
         examples=[3],
     )
 
@@ -84,7 +84,7 @@ class PipelineRequest(pydantic.BaseModel):
     source_images: list[SourceImageRequest]
     config: PipelineConfig = pydantic.Field(
         default=PipelineConfig(),
-        examples=[PipelineConfig(max_predictions_per_classification=3)],
+        examples=[PipelineConfig(example_config_param=3)],
     )
 
     class Config:
@@ -179,7 +179,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         num_workers=settings.num_workers,
         # single=True if len(filtered_detections) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
-        top_n=data.config.max_predictions_per_classification,
+        example_config_param=data.config.example_config_param,
     )
     classifier.run()
     end_time = time.time()
