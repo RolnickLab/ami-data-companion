@@ -409,7 +409,9 @@ class PanamaMothSpeciesClassifierMixedResolution2023(
     lookup_gbif_names = True
     normalization = imagenet_normalization
 
-    description = "Trained on Novempber 11th, 2023 using a corrected species list of 1060 classes."
+    description = (
+        "Trained on November 11th, 2023 using a corrected species list of 1060 classes."
+    )
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "panama_resetnet50_best_5aeb515a.pth"

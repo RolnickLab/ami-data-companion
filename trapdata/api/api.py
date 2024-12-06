@@ -24,7 +24,7 @@ from .models.classification import (
     MothClassifierUKDenmark,
 )
 from .models.localization import APIMothDetector
-from .schemas import AlgorithmResponse
+from .schemas import AlgorithmCategoryMap, AlgorithmResponse
 from .schemas import PipelineRequest as PipelineRequest_
 from .schemas import PipelineResponse as PipelineResponse_
 from .schemas import SourceImage, SourceImageResponse
@@ -48,14 +48,34 @@ _pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys
 PipelineChoice = enum.Enum("PipelineChoice", _pipeline_choices)
 
 
+def make_category_map_response(
+    model_category_map: dict[int, str]
+) -> AlgorithmCategoryMap:
+    categories_sorted_by_index = sorted(model_category_map.items(), key=lambda x: x[0])
+    # as list of dicts:
+    categories_sorted_by_index = [
+        {"index": index, "label": label} for index, label in categories_sorted_by_index
+    ]
+    label_strings_sorted_by_index = [cat["label"] for cat in categories_sorted_by_index]
+    return AlgorithmCategoryMap(
+        data=categories_sorted_by_index,
+        labels=label_strings_sorted_by_index,
+    )
+
+
 def make_algorithm_response(
-    Model: type[APIMothDetector] | type[APIMothClassifier],
+    model: APIMothDetector | APIMothClassifier,
 ) -> AlgorithmResponse:
+
+    category_map = (
+        make_category_map_response(model.category_map) if model.category_map else None
+    )
     return AlgorithmResponse(
-        name=Model.name,
-        key=Model.get_key(),
-        task_type=Model.type,
-        description=Model.description,
+        name=model.name,
+        key=model.get_key(),
+        task_type=model.task_type,
+        description=model.description,
+        category_map=category_map,
     )
 
 
@@ -113,7 +133,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     )
     detector_results = detector.run()
     num_pre_filter = len(detector_results)
-    algorithms_used[detector.get_key()] = make_algorithm_response(APIMothDetector)
+    algorithms_used[detector.get_key()] = make_algorithm_response(detector)
 
     filter = MothClassifierBinary(
         source_images=source_images,
@@ -124,7 +144,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         single=True,  # @TODO solve issues with reading images in multiprocessing
     )
     filter.run()
-    algorithms_used[filter.get_key()] = make_algorithm_response(MothClassifierBinary)
+    algorithms_used[filter.get_key()] = make_algorithm_response(filter)
 
     # Compare num detections with num moth detections
     num_post_filter = len(filter.results)
@@ -161,7 +181,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     classifier.run()
     end_time = time.time()
     seconds_elapsed = float(end_time - start_time)
-    algorithms_used[classifier.get_key()] = make_algorithm_response(Classifier)
+    algorithms_used[classifier.get_key()] = make_algorithm_response(classifier)
 
     # Return all detections, including those that were not classified as moths
     all_detections = classifier.results + non_moth_detections

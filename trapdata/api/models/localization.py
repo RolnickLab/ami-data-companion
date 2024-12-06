@@ -10,6 +10,8 @@ from .base import APIInferenceBaseClass
 
 
 class APIMothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_2023):
+    task_type = "localization"
+
     def __init__(self, source_images: typing.Iterable[SourceImage], *args, **kwargs):
         self.source_images = source_images
         self.results: list[DetectionResponse] = []

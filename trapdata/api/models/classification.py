@@ -31,7 +31,7 @@ class APIMothClassifier(
     APIInferenceBaseClass,
     InferenceBaseClass,
 ):
-    type = "classification"
+    task_type = "classification"
 
     def __init__(
         self,
