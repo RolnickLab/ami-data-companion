@@ -145,7 +145,7 @@ def occurrences(
                 occurrence.example_crop = example["cropped_image_path"]
                 occurrence.examples = []
 
-    df = pd.DataFrame([obj.dict() for obj in occurrences])
+    df = pd.DataFrame([obj.model_dump() for obj in occurrences])
     if format in tabular_formats:
         df = df.drop(columns=["examples"])
     if format in plain_text_formats:
@@ -174,7 +174,7 @@ def detections(
         image_base_path=settings.image_base_path,
     )
     logger.info(f"Preparing to export {len(objects)} records as {format}")
-    df = pd.DataFrame([obj.report_data().dict() for obj in objects])
+    df = pd.DataFrame([obj.report_data().model_dump() for obj in objects])
     return export(df=df, format=format, outfile=outfile)
 
 
@@ -202,7 +202,7 @@ def sessions(
             settings.database_url, event, limit=5, offset=int(event.num_images / 2)
         )
         event_data["example_captures"] = [
-            img.report_data().dict() for img in example_captures
+            img.report_data().model_dump() for img in example_captures
         ]
         event_data["num_occurrences"] = num_occurrences
         event_data["num_species"] = num_species
@@ -236,7 +236,7 @@ def captures(
     captures = get_monitoring_session_images(settings.database_url, event, limit=100)
     [session.add(img) for img in captures]
 
-    df = pd.DataFrame([img.report_detail().dict() for img in captures])
+    df = pd.DataFrame([img.report_detail().model_dump() for img in captures])
     return export(df=df, format=format, outfile=outfile)
 
 
@@ -252,5 +252,5 @@ def deployments(
     session = Session()
     deployments = list_deployments(session)
 
-    df = pd.DataFrame([d.dict() for d in deployments])
+    df = pd.DataFrame([d.model_dump() for d in deployments])
     return export(df=df, format=format, outfile=outfile)

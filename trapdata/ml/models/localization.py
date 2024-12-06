@@ -208,7 +208,7 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
         model = torchvision.models.get_model(
             name="fasterrcnn_resnet50_fpn",
             num_classes=num_classes,
-            pretrained=False,
+            weights=None,
         )
         checkpoint = torch.load(self.weights, map_location=self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint

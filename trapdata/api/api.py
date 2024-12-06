@@ -84,6 +84,8 @@ class PipelineConfig(pydantic.BaseModel):
 
 
 class PipelineRequest(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(use_enum_values=True)
+
     pipeline: PipelineChoice
     source_images: list[SourceImageRequest]
     config: PipelineConfig = pydantic.Field(
@@ -91,19 +93,15 @@ class PipelineRequest(pydantic.BaseModel):
         examples=[PipelineConfig(example_config_param=3)],
     )
 
-    class Config:
-        use_enum_values = True
-
 
 class PipelineResponse(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(use_enum_values=True)
+
     pipeline: PipelineChoice
     total_time: float
     source_images: list[SourceImageResponse]
     detections: list[DetectionResponse]
     config: PipelineConfig = PipelineConfig()
-
-    class Config:
-        use_enum_values = True
 
 
 @app.get("/")

@@ -220,7 +220,7 @@ class Resnet50TimmClassifier(Resnet50Classifier):
     def get_model(self):
         model = timm.create_model(
             "resnet50",
-            pretrained=False,
+            weights=None,
             num_classes=self.num_classes,
         )
         assert self.weights, f"No weights path configured for {self.name}"

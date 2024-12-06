@@ -64,7 +64,7 @@ class TestInferenceAPI(TestCase):
         )
         with self.file_server:
             response = self.client.post(
-                "/pipeline/process", json=pipeline_request.dict()
+                "/pipeline/process", json=pipeline_request.model_dump()
             )
             assert response.status_code == 200
             PipelineResponse(**response.json())
@@ -91,7 +91,7 @@ class TestInferenceAPI(TestCase):
             )
             with self.file_server:
                 response = self.client.post(
-                    "/pipeline/process", json=pipeline_request.dict()
+                    "/pipeline/process", json=pipeline_request.model_dump()
                 )
             assert response.status_code == 200
             pipeline_response = PipelineResponse(**response.json())
