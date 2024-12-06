@@ -46,7 +46,8 @@ class SourceImage(pydantic.BaseModel):
     def validate_source(self):
         if not any([self.url, self.b64, self.filepath, self._pil]):
             raise ValueError(
-                "At least one of the following fields must be provided: url, b64, filepath, pil"
+                "At least one of the following fields must be provided: "
+                "url, b64, filepath, pil"
             )
         return self
 

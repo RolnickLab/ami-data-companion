@@ -18,7 +18,7 @@ from trapdata.ml.models.classification import (
 )
 
 from ..datasets import ClassificationImageDataset
-from ..schemas import Classification, Detection, SourceImage
+from ..schemas import ClassificationResponse, DetectionResponse, SourceImage
 from .base import APIInferenceBaseClass
 
 
@@ -29,13 +29,13 @@ class APIMothClassifier(
     def __init__(
         self,
         source_images: typing.Iterable[SourceImage],
-        detections: typing.Iterable[Detection],
+        detections: typing.Iterable[DetectionResponse],
         *args,
         **kwargs,
     ):
         self.source_images = source_images
         self.detections = list(detections)
-        self.results: list[Detection] = []
+        self.results: list[DetectionResponse] = []
         super().__init__(*args, **kwargs)
         logger.info(
             f"Initialized {self.__class__.__name__} with {len(self.detections)} detections"
@@ -86,7 +86,7 @@ class APIMothClassifier(
 
     def save_results(
         self, metadata, batch_output, seconds_per_item, *args, **kwargs
-    ) -> list[Detection]:
+    ) -> list[DetectionResponse]:
         image_ids = metadata[0]
         detection_idxes = metadata[1]
         for image_id, detection_idx, predictions in zip(
@@ -95,7 +95,7 @@ class APIMothClassifier(
             detection = self.detections[detection_idx]
             assert detection.source_image_id == image_id
             labels, scores, logits = zip(*predictions)
-            classification = Classification(
+            classification = ClassificationResponse(
                 classification=self.get_best_label(predictions),
                 labels=labels,  # @TODO move this to the Algorithm class instead of repeating it every prediction
                 scores=scores,
@@ -111,7 +111,7 @@ class APIMothClassifier(
         return self.results
 
     def update_classification(
-        self, detection: Detection, new_classification: Classification
+        self, detection: DetectionResponse, new_classification: ClassificationResponse
     ) -> None:
         # Remove all existing classifications from this algorithm
         detection.classifications = [
@@ -123,7 +123,7 @@ class APIMothClassifier(
             f"Updated classification for detection {detection.bbox}. Total classifications: {len(detection.classifications)}"
         )
 
-    def run(self) -> list[Detection]:
+    def run(self) -> list[DetectionResponse]:
         logger.info(
             f"Starting {self.__class__.__name__} run with {len(self.results)} detections"
         )
@@ -141,7 +141,7 @@ class MothClassifierBinary(APIMothClassifier, MothNonMothClassifier):
 
     def save_results(
         self, metadata, batch_output, seconds_per_item, *args, **kwargs
-    ) -> list[Detection]:
+    ) -> list[DetectionResponse]:
         """
         Override the base class method to save only the results that have the
         label we are interested in.
@@ -154,7 +154,7 @@ class MothClassifierBinary(APIMothClassifier, MothNonMothClassifier):
         ):
             detection = self.detections[detection_idx]
             assert detection.source_image_id == image_id
-            classification = Classification(
+            classification = ClassificationResponse(
                 classification=predictions[0][0],
                 labels=[label for (label, _) in list(predictions)],
                 scores=[score for (_, score) in list(predictions)],

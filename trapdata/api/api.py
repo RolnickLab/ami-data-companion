@@ -1,5 +1,6 @@
 """
-Fast API interface for processing images through the localization and classification pipelines.
+Fast API interface for processing images through the localization and classification
+pipelines.
 """
 
 import enum
@@ -23,7 +24,7 @@ from .models.classification import (
     MothClassifierUKDenmark,
 )
 from .models.localization import APIMothDetector
-from .schemas import Detection, SourceImage
+from .schemas import DetectionResponse, SourceImage
 
 app = fastapi.FastAPI()
 
@@ -33,13 +34,16 @@ class SourceImageRequest(pydantic.BaseModel):
 
     # @TODO bring over new SourceImage & b64 validation from the lepsAI repo
     id: str = pydantic.Field(
-        description="Unique identifier for the source image. This is returned in the response.",
+        description=(
+            "Unique identifier for the source image. This is returned in the response."
+        ),
         examples=["e124f3b4"],
     )
     url: str = pydantic.Field(
         description="URL to the source image to be processed.",
         examples=[
-            "https://static.dev.insectai.org/ami-trapdata/vermont/RawImages/LUNA/2022/movement/2022_06_23/20220623050407-00-235.jpg"
+            "https://static.dev.insectai.org/ami-trapdata/"
+            "vermont/RawImages/LUNA/2022/movement/2022_06_23/20220623050407-00-235.jpg"
         ],
     )
     # b64: str | None = None
@@ -95,7 +99,7 @@ class PipelineResponse(pydantic.BaseModel):
     pipeline: PipelineChoice
     total_time: float
     source_images: list[SourceImageResponse]
-    detections: list[Detection]
+    detections: list[DetectionResponse]
     config: PipelineConfig = PipelineConfig()
 
     class Config:
@@ -117,7 +121,8 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     incoming_source_images = list(source_images_index.values())
     if len(incoming_source_images) != len(data.source_images):
         logger.warning(
-            f"Removed {len(data.source_images) - len(incoming_source_images)} duplicate source images"
+            f"Removed {len(data.source_images) - len(incoming_source_images)} "
+            "duplicate source images"
         )
 
     source_image_results = [
@@ -145,7 +150,9 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         num_workers=settings.num_workers,
         # single=True if len(detector_results) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
-        filter_results=False,  # Only save results with the positive_binary_label, @TODO make this configurable from request
+        # Only save results with the positive_binary_label,
+        # @TODO make this configurable from request
+        filter_results=False,
     )
     filter.run()
     # all_binary_classifications = filter.results
@@ -153,7 +160,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     # Compare num detections with num moth detections
     num_post_filter = len(filter.results)
     logger.info(
-        f"Binary classifier returned {num_post_filter} out of {num_pre_filter} detections"
+        f"Binary classifier returned {num_post_filter} of {num_pre_filter} detections"
     )
 
     # Filter results based on positive_binary_label
@@ -168,7 +175,8 @@ async def process(data: PipelineRequest) -> PipelineResponse:
             break
 
     logger.info(
-        f"Sending {len(moth_detections)} out of {num_pre_filter} detections to the classifier"
+        f"Sending {len(moth_detections)} of {num_pre_filter} "
+        "detections to the classifier"
     )
 
     Classifier = PIPELINE_CHOICES[str(data.pipeline)]
@@ -197,7 +205,8 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     # If the number of detections is greater than 100, its suspicious. Log it.
     if len(all_detections) > 100:
         logger.warning(
-            f"Detected {len(all_detections)} detections. This is suspicious and may contain duplicates."
+            f"Detected {len(all_detections)} detections. "
+            "This is suspicious and may contain duplicates."
         )
 
     response = PipelineResponse(

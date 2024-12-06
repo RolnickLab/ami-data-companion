@@ -6,7 +6,7 @@ import torchvision
 
 from trapdata.common.logs import logger
 
-from .schemas import Detection, SourceImage
+from .schemas import DetectionResponse, SourceImage
 
 
 class LocalizationImageDataset(torch.utils.data.Dataset):
@@ -48,7 +48,7 @@ class ClassificationImageDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         source_images: typing.Iterable[SourceImage],
-        detections: typing.Iterable[Detection],
+        detections: typing.Iterable[DetectionResponse],
         image_transforms: torchvision.transforms.Compose,
         batch_size: int = 1,
     ):
@@ -69,7 +69,7 @@ class ClassificationImageDataset(torch.utils.data.Dataset):
         logger.info(f"Using worker: {worker_info}")
 
         detection_idx = idx
-        detection: Detection = self.detections[idx]
+        detection: DetectionResponse = self.detections[idx]
         source_image = self.source_images[detection.source_image_id]
         image_data = source_image.open()
         if not image_data:
