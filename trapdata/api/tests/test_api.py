@@ -29,12 +29,13 @@ class TestInferenceAPI(TestCase):
             raise FileNotFoundError(
                 f"Test images directory not found: {cls.test_images_dir}"
             )
-
         cls.file_server = StaticFileTestServer(cls.test_images_dir)
         cls.client = TestClient(app)
 
-    def setUp(self):
-        self.file_server = StaticFileTestServer(self.test_images_dir)
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "file_server"):
+            cls.file_server.stop()
 
     def get_test_images(self, subdir: str = "vermont", num: int = 2):
         images_dir = self.test_images_dir / subdir
@@ -71,10 +72,13 @@ class TestInferenceAPI(TestCase):
 
     def test_config_num_classification_predictions(self):
         """
-        Test that the pipeline respects the `max_predictions_per_classification` configuration.
+        Test that the pipeline respects the `max_predictions_per_classification`
+        configuration.
 
-        If the configuration is set to a number, the pipeline should return that number of labels/scores per prediction.
-        If the configuration is set to `None`, the pipeline should return all labels/scores per prediction.
+        If the configuration is set to a number, the pipeline should return that number
+        of labels/scores per prediction.
+        If the configuration is set to `None`, the pipeline should return all
+        labels/scores per prediction.
         """
         test_images = self.get_test_images(num=1)
         test_pipeline_slug = "quebec_vermont_moths_2023"
@@ -102,13 +106,16 @@ class TestInferenceAPI(TestCase):
                 if classification.terminal
             ]
             for classification in terminal_classifications:
+                assert classification.labels
                 if max_predictions_per_classification is None:
                     # Ensure that a score is returned for every possible class
                     assert len(classification.labels) == terminal_classifier.num_classes
                     assert len(classification.scores) == terminal_classifier.num_classes
                 else:
-                    # Ensure that the number of predictions is limited to the number specified
-                    # There may be fewer predictions than the number specified if there are fewer classes.
+                    # Ensure that the number of predictions is limited to the number
+                    # specified.
+                    # There may be fewer predictions than the number specified if there
+                    # are fewer classes.
                     assert (
                         len(classification.labels) <= max_predictions_per_classification
                     )
