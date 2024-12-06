@@ -8,6 +8,7 @@ import time
 
 import fastapi
 import pydantic
+from fastapi.middleware.gzip import GZipMiddleware
 from rich import print
 
 from ..common.logs import logger  # noqa: F401
@@ -30,6 +31,7 @@ from .schemas import PipelineResponse as PipelineResponse_
 from .schemas import SourceImage, SourceImageResponse
 
 app = fastapi.FastAPI()
+app.add_middleware(GZipMiddleware)
 
 
 PIPELINE_CHOICES = {
