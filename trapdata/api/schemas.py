@@ -1,7 +1,6 @@
 # Can these be imported from the OpenAPI spec yaml?
 import datetime
 import pathlib
-import typing
 
 import PIL.Image
 import pydantic
@@ -117,10 +116,21 @@ class DetectionResponse(pydantic.BaseModel):
 class SourceImageRequest(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="ignore")
 
-    id: str
-    url: str
-    # b64: str | None = None
     # @TODO bring over new SourceImage & b64 validation from the lepsAI repo
+    id: str = pydantic.Field(
+        description=(
+            "Unique identifier for the source image. This is returned in the response."
+        ),
+        examples=["e124f3b4"],
+    )
+    url: str = pydantic.Field(
+        description="URL to the source image to be processed.",
+        examples=[
+            "https://static.dev.insectai.org/ami-trapdata/"
+            "vermont/RawImages/LUNA/2022/movement/2022_06_23/20220623050407-00-235.jpg"
+        ],
+    )
+    # b64: str | None = None
 
 
 class SourceImageResponse(pydantic.BaseModel):
@@ -208,13 +218,22 @@ class AlgorithmResponse(pydantic.BaseModel):
     category_map: AlgorithmCategoryMap | None = None
 
 
-PipelineChoice = typing.Literal[
-    "dummy",
-]  # @TODO add "random", "dummy",
+class PipelineConfig(pydantic.BaseModel):
+    """
+    Configuration for the processing pipeline.
+    """
+
+    example_config_param: int | None = pydantic.Field(
+        default=None,
+        description="Example of a configuration parameter for a pipeline.",
+        examples=[3],
+    )
 
 
 class PipelineRequest(pydantic.BaseModel):
-    pipeline: PipelineChoice = pydantic.Field(
+    model_config = pydantic.ConfigDict(use_enum_values=True)
+
+    pipeline: str = pydantic.Field(
         description=(
             "The pipeline to use for processing the source images, specified by key"
         ),
@@ -223,22 +242,20 @@ class PipelineRequest(pydantic.BaseModel):
 
     source_images: list[SourceImageRequest] = pydantic.Field(
         description="A list of source image URLs to process.",
-        examples=[
-            [
-                {
-                    "id": "123",
-                    "url": (
-                        "https://archive.org/download/"
-                        "mma_various_moths_and_butterflies_54143/54143.jpg"
-                    ),
-                }
-            ]
-        ],
+    )
+
+    config: PipelineConfig = pydantic.Field(
+        default=PipelineConfig(),
+        examples=[PipelineConfig(example_config_param=3)],
     )
 
 
 class PipelineResponse(pydantic.BaseModel):
-    pipeline: PipelineChoice
+    model_config = pydantic.ConfigDict(use_enum_values=True)
+
+    pipeline: str = pydantic.Field(
+        description="The pipeline used for processing, specified by key."
+    )
     algorithms: dict[str, AlgorithmResponse] = pydantic.Field(
         default_factory=dict,
         description=(
@@ -249,6 +266,7 @@ class PipelineResponse(pydantic.BaseModel):
     total_time: float
     source_images: list[SourceImageResponse]
     detections: list[DetectionResponse]
+    config: PipelineConfig = PipelineConfig()
 
 
 class PipelineStageParam(pydantic.BaseModel):
@@ -266,12 +284,3 @@ class PipelineStage(pydantic.BaseModel):
     name: str
     params: list[PipelineStageParam] = []
     description: str | None = None
-
-
-class PipelineConfig(pydantic.BaseModel):
-    """A configurable pipeline."""
-
-    name: str
-    slug: str
-    description: str | None = None
-    stages: list[PipelineStage] = []

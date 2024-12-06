@@ -5,7 +5,7 @@ import typing
 from trapdata.ml.models.localization import MothObjectDetector_FasterRCNN_2023
 
 from ..datasets import LocalizationImageDataset
-from ..schemas import BoundingBox, DetectionResponse, SourceImage
+from ..schemas import AlgorithmReference, BoundingBox, DetectionResponse, SourceImage
 from .base import APIInferenceBaseClass
 
 
@@ -35,7 +35,7 @@ class APIMothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_2023)
                 source_image_id=image_id,
                 bbox=bbox,
                 inference_time=seconds_per_item,
-                algorithm=self.name,
+                algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
                 timestamp=datetime.datetime.now(),
                 crop_image_url=None,
             )

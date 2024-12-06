@@ -18,7 +18,12 @@ from trapdata.ml.models.classification import (
 )
 
 from ..datasets import ClassificationImageDataset
-from ..schemas import ClassificationResponse, DetectionResponse, SourceImage
+from ..schemas import (
+    AlgorithmReference,
+    ClassificationResponse,
+    DetectionResponse,
+    SourceImage,
+)
 from .base import APIInferenceBaseClass
 
 
@@ -26,19 +31,24 @@ class APIMothClassifier(
     APIInferenceBaseClass,
     InferenceBaseClass,
 ):
+    type = "classification"
+
     def __init__(
         self,
         source_images: typing.Iterable[SourceImage],
         detections: typing.Iterable[DetectionResponse],
+        terminal: bool = True,
         *args,
         **kwargs,
     ):
         self.source_images = source_images
         self.detections = list(detections)
+        self.terminal = terminal
         self.results: list[DetectionResponse] = []
         super().__init__(*args, **kwargs)
         logger.info(
-            f"Initialized {self.__class__.__name__} with {len(self.detections)} detections"
+            f"Initialized {self.__class__.__name__} with {len(self.detections)} "
+            "detections"
         )
 
     def get_dataset(self):
@@ -51,19 +61,25 @@ class APIMothClassifier(
 
     def post_process_batch(self, logits: torch.Tensor):
         """
-        Return the labels, softmax/calibrated scores, and the original logits for each image in the batch.
+        Return the labels, softmax/calibrated scores, and the original logits for
+        each image in the batch.
+
+        Almost like the base class method, but we need to return the logits as well.
         """
         predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
 
-        indices = np.arange(predictions.shape[1])
+        batch_results = []
+        for pred in predictions:
+            # Get all class indices and their corresponding scores
+            class_indices = np.arange(len(pred))
+            scores = pred
+            labels = [self.category_map[i] for i in class_indices]
+            batch_results.append(list(zip(labels, scores, pred)))
 
-        # @TODO Calibrate the scores here,
-        scores = predictions
+        logger.debug(f"Post-processing result batch: {batch_results}")
 
-        labels = np.array([[self.category_map[i] for i in row] for row in indices])
-
-        return zip(labels, scores, logits)
+        return batch_results
 
     def get_best_label(self, predictions):
         """
@@ -79,7 +95,6 @@ class APIMothClassifier(
             ...
         ]
         """
-
         best_pred = max(predictions, key=lambda x: x[1])
         best_label = best_pred[0]
         return best_label
@@ -94,15 +109,15 @@ class APIMothClassifier(
         ):
             detection = self.detections[detection_idx]
             assert detection.source_image_id == image_id
-            labels, scores, logits = zip(*predictions)
+            _labels, scores, logits = zip(*predictions)
             classification = ClassificationResponse(
                 classification=self.get_best_label(predictions),
-                labels=labels,  # @TODO move this to the Algorithm class instead of repeating it every prediction
                 scores=scores,
                 logits=logits,
                 inference_time=seconds_per_item,
-                algorithm=self.name,
+                algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
                 timestamp=datetime.datetime.now(),
+                terminal=self.terminal,
             )
             self.update_classification(detection, classification)
 
@@ -115,60 +130,30 @@ class APIMothClassifier(
     ) -> None:
         # Remove all existing classifications from this algorithm
         detection.classifications = [
-            c for c in detection.classifications if c.algorithm != self.name
+            c for c in detection.classifications if c.algorithm.name != self.name
         ]
         # Add the new classification for this algorithm
         detection.classifications.append(new_classification)
         logger.debug(
-            f"Updated classification for detection {detection.bbox}. Total classifications: {len(detection.classifications)}"
+            f"Updated classification for detection {detection.bbox}. "
+            f"Total classifications: {len(detection.classifications)}"
         )
 
     def run(self) -> list[DetectionResponse]:
         logger.info(
-            f"Starting {self.__class__.__name__} run with {len(self.results)} detections"
+            f"Starting {self.__class__.__name__} run with {len(self.results)} "
+            "detections"
         )
         super().run()
         logger.info(
-            f"Finished {self.__class__.__name__} run. Processed {len(self.results)} detections"
+            f"Finished {self.__class__.__name__} run. "
+            f"Processed {len(self.results)} detections"
         )
         return self.results
 
 
 class MothClassifierBinary(APIMothClassifier, MothNonMothClassifier):
-    def __init__(self, *args, **kwargs):
-        self.filter_results = kwargs.get("filter_results", True)
-        super().__init__(*args, **kwargs)
-
-    def save_results(
-        self, metadata, batch_output, seconds_per_item, *args, **kwargs
-    ) -> list[DetectionResponse]:
-        """
-        Override the base class method to save only the results that have the
-        label we are interested in.
-        """
-        logger.info(f"Saving {len(batch_output)} detections with classifications")
-        image_ids = metadata[0]
-        detection_idxes = metadata[1]
-        for image_id, detection_idx, predictions in zip(
-            image_ids, detection_idxes, batch_output
-        ):
-            detection = self.detections[detection_idx]
-            assert detection.source_image_id == image_id
-            classification = ClassificationResponse(
-                classification=predictions[0][0],
-                labels=[label for (label, _) in list(predictions)],
-                scores=[score for (_, score) in list(predictions)],
-                inference_time=seconds_per_item,
-                algorithm=self.name,
-                timestamp=datetime.datetime.now(),
-                # Specific to binary classification / the filter model
-                terminal=False,
-            )
-            self.update_classification(detection, classification)
-
-        self.results = self.detections
-        logger.info(f"Saving {len(self.results)} detections with classifications")
-        return self.results
+    pass
 
 
 class MothClassifierPanama(

@@ -24,36 +24,12 @@ from .models.classification import (
     MothClassifierUKDenmark,
 )
 from .models.localization import APIMothDetector
-from .schemas import DetectionResponse, SourceImage
+from .schemas import AlgorithmResponse
+from .schemas import PipelineRequest as PipelineRequest_
+from .schemas import PipelineResponse as PipelineResponse_
+from .schemas import SourceImage, SourceImageResponse
 
 app = fastapi.FastAPI()
-
-
-class SourceImageRequest(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(extra="ignore")
-
-    # @TODO bring over new SourceImage & b64 validation from the lepsAI repo
-    id: str = pydantic.Field(
-        description=(
-            "Unique identifier for the source image. This is returned in the response."
-        ),
-        examples=["e124f3b4"],
-    )
-    url: str = pydantic.Field(
-        description="URL to the source image to be processed.",
-        examples=[
-            "https://static.dev.insectai.org/ami-trapdata/"
-            "vermont/RawImages/LUNA/2022/movement/2022_06_23/20220623050407-00-235.jpg"
-        ],
-    )
-    # b64: str | None = None
-
-
-class SourceImageResponse(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(extra="ignore")
-
-    id: str
-    url: str
 
 
 PIPELINE_CHOICES = {
@@ -64,6 +40,7 @@ PIPELINE_CHOICES = {
     "costa_rica_moths_turing_2024": MothClassifierTuringCostaRica,
     "anguilla_moths_turing_2024": MothClassifierTuringAnguilla,
     "global_moths_2024": MothClassifierGlobal,
+    "moth_binary": MothClassifierBinary,
 }
 _pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys())))
 
@@ -71,37 +48,31 @@ _pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys
 PipelineChoice = enum.Enum("PipelineChoice", _pipeline_choices)
 
 
-class PipelineConfig(pydantic.BaseModel):
-    """
-    Configuration for the processing pipeline.
-    """
-
-    example_config_param: int | None = pydantic.Field(
-        default=None,
-        description="Example of a configuration parameter for a pipeline.",
-        examples=[3],
+def make_algorithm_response(
+    Model: type[APIMothDetector] | type[APIMothClassifier],
+) -> AlgorithmResponse:
+    return AlgorithmResponse(
+        name=Model.name,
+        key=Model.get_key(),
+        task_type=Model.type,
+        description=Model.description,
     )
 
 
-class PipelineRequest(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(use_enum_values=True)
-
-    pipeline: PipelineChoice
-    source_images: list[SourceImageRequest]
-    config: PipelineConfig = pydantic.Field(
-        default=PipelineConfig(),
-        examples=[PipelineConfig(example_config_param=3)],
+class PipelineRequest(PipelineRequest_):
+    pipeline: PipelineChoice = pydantic.Field(
+        PipelineChoice,
+        description=PipelineRequest_.model_fields["pipeline"].description,
+        examples=list(_pipeline_choices.keys()),
     )
 
 
-class PipelineResponse(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(use_enum_values=True)
-
-    pipeline: PipelineChoice
-    total_time: float
-    source_images: list[SourceImageResponse]
-    detections: list[DetectionResponse]
-    config: PipelineConfig = PipelineConfig()
+class PipelineResponse(PipelineResponse_):
+    pipeline: PipelineChoice = pydantic.Field(
+        PipelineChoice,
+        description=PipelineResponse_.model_fields["pipeline"].description,
+        examples=list(_pipeline_choices.keys()),
+    )
 
 
 @app.get("/")
@@ -112,6 +83,8 @@ async def root():
 @app.post("/pipeline/process")
 @app.post("/pipeline/process/")
 async def process(data: PipelineRequest) -> PipelineResponse:
+    algorithms_used: dict[str, AlgorithmResponse] = {}
+
     # Ensure that the source images are unique, filter out duplicates
     source_images_index = {
         source_image.id: source_image for source_image in data.source_images
@@ -140,6 +113,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     )
     detector_results = detector.run()
     num_pre_filter = len(detector_results)
+    algorithms_used[detector.get_key()] = make_algorithm_response(APIMothDetector)
 
     filter = MothClassifierBinary(
         source_images=source_images,
@@ -148,12 +122,9 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         num_workers=settings.num_workers,
         # single=True if len(detector_results) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
-        # Only save results with the positive_binary_label,
-        # @TODO make this configurable from request
-        filter_results=False,
     )
     filter.run()
-    # all_binary_classifications = filter.results
+    algorithms_used[filter.get_key()] = make_algorithm_response(MothClassifierBinary)
 
     # Compare num detections with num moth detections
     num_post_filter = len(filter.results)
@@ -190,6 +161,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     classifier.run()
     end_time = time.time()
     seconds_elapsed = float(end_time - start_time)
+    algorithms_used[classifier.get_key()] = make_algorithm_response(Classifier)
 
     # Return all detections, including those that were not classified as moths
     all_detections = classifier.results + non_moth_detections
@@ -209,6 +181,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
     response = PipelineResponse(
         pipeline=data.pipeline,
+        algorithms=algorithms_used,
         source_images=source_image_results,
         detections=all_detections,
         total_time=seconds_elapsed,

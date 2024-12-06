@@ -91,7 +91,7 @@ def check_for_duplicate_classifications(results: list[DetectionResponse]):
     for result in results:
         for classification in result.classifications:
             bbox = result.bbox.to_tuple()
-            unique_result = tuple(list(bbox) + [classification.algorithm])
+            unique_result = tuple(list(bbox) + [classification.algorithm.key])
             result_counts[unique_result] += 1
 
     duplicates = {k: v for k, v in result_counts.items() if v > 1}
