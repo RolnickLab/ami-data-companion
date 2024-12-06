@@ -7,12 +7,11 @@ from fastapi.testclient import TestClient
 from trapdata.api.api import (
     PIPELINE_CHOICES,
     PipelineChoice,
-    PipelineConfig,
     PipelineRequest,
     PipelineResponse,
-    SourceImageRequest,
     app,
 )
+from trapdata.api.schemas import PipelineConfig, SourceImageRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
 from trapdata.ml.models.classification import SpeciesClassifier
 from trapdata.tests import TEST_IMAGES_BASE_PATH
