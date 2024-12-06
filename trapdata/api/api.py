@@ -42,7 +42,7 @@ PIPELINE_CHOICES = {
     "costa_rica_moths_turing_2024": MothClassifierTuringCostaRica,
     "anguilla_moths_turing_2024": MothClassifierTuringAnguilla,
     "global_moths_2024": MothClassifierGlobal,
-    "moth_binary": MothClassifierBinary,
+    # "moth_binary": MothClassifierBinary,
 }
 _pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys())))
 
