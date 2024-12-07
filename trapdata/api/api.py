@@ -9,7 +9,6 @@ import time
 import fastapi
 import pydantic
 from fastapi.middleware.gzip import GZipMiddleware
-from rich import print
 
 from ..common.logs import logger  # noqa: F401
 from . import settings
@@ -197,7 +196,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         f"Processed {len(source_images)} images in {seconds_elapsed:.2f} seconds"
     )
     logger.info(f"Returning {len(all_detections)} detections")
-    print(all_detections)
+    # print(all_detections)
 
     # If the number of detections is greater than 100, its suspicious. Log it.
     if len(all_detections) > 100:
