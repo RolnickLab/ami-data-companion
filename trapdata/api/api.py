@@ -25,7 +25,7 @@ from .models.classification import (
     MothClassifierUKDenmark,
 )
 from .models.localization import APIMothDetector
-from .schemas import AlgorithmCategoryMap, AlgorithmResponse
+from .schemas import AlgorithmCategoryMapResponse, AlgorithmResponse
 from .schemas import PipelineRequest as PipelineRequest_
 from .schemas import PipelineResponse as PipelineResponse_
 from .schemas import SourceImage, SourceImageResponse
@@ -51,17 +51,24 @@ PipelineChoice = enum.Enum("PipelineChoice", _pipeline_choices)
 
 
 def make_category_map_response(
-    model_category_map: dict[int, str]
-) -> AlgorithmCategoryMap:
-    categories_sorted_by_index = sorted(model_category_map.items(), key=lambda x: x[0])
+    model: APIMothDetector | APIMothClassifier,
+    default_taxon_rank: str = "SPECIES",
+) -> AlgorithmCategoryMapResponse:
+    categories_sorted_by_index = sorted(model.category_map.items(), key=lambda x: x[0])
     # as list of dicts:
     categories_sorted_by_index = [
-        {"index": index, "label": label} for index, label in categories_sorted_by_index
+        {
+            "index": index,
+            "label": label,
+            "taxon_rank": default_taxon_rank,
+        }
+        for index, label in categories_sorted_by_index
     ]
     label_strings_sorted_by_index = [cat["label"] for cat in categories_sorted_by_index]
-    return AlgorithmCategoryMap(
+    return AlgorithmCategoryMapResponse(
         data=categories_sorted_by_index,
         labels=label_strings_sorted_by_index,
+        uri=model.labels_path,
     )
 
 
@@ -69,21 +76,19 @@ def make_algorithm_response(
     model: APIMothDetector | APIMothClassifier,
 ) -> AlgorithmResponse:
 
-    category_map = (
-        make_category_map_response(model.category_map) if model.category_map else None
-    )
+    category_map = make_category_map_response(model) if model.category_map else None
     return AlgorithmResponse(
         name=model.name,
         key=model.get_key(),
         task_type=model.task_type,
         description=model.description,
         category_map=category_map,
+        uri=model.weights_path,
     )
 
 
 class PipelineRequest(PipelineRequest_):
     pipeline: PipelineChoice = pydantic.Field(
-        PipelineChoice,
         description=PipelineRequest_.model_fields["pipeline"].description,
         examples=list(_pipeline_choices.keys()),
     )
