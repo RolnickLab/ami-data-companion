@@ -601,5 +601,5 @@ def export_detected_objects(
     directory: Union[pathlib.Path, str],
     report_name: str = "detections",
 ):
-    records = [item.report_data().dict() for item in items]
+    records = [item.report_data().model_dump() for item in items]
     return export_report(records, report_name, directory)

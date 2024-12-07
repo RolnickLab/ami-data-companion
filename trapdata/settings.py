@@ -4,8 +4,9 @@ import sys
 from functools import lru_cache
 from typing import Optional, Union
 
+import pydantic
 import sqlalchemy
-from pydantic import Field, ValidationError, validator
+from pydantic import Field, ValidationError
 from pydantic_settings import BaseSettings
 from rich import print as rprint
 
@@ -36,7 +37,7 @@ class Settings(BaseSettings):
     classification_batch_size: int = 20
     num_workers: int = 1
 
-    @validator("image_base_path", "user_data_path")
+    @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
         """
         Expand relative paths into a normalized path.
@@ -49,7 +50,7 @@ class Settings(BaseSettings):
         else:
             return None
 
-    @validator("database_url")
+    @pydantic.field_validator("database_url")
     def validate_database_dsn(cls, v):
         return sqlalchemy.engine.url.make_url(v)
 
