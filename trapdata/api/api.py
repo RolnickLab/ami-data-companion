@@ -92,21 +92,58 @@ def make_algorithm_response(
     )
 
 
-pipeline_configs = []
-for key, model in CLASSIFIER_CHOICES.items():
-    pipeline_configs.append(
-        PipelineConfigResponse(
-            name=model.name,
-            slug=key,
-            description=model.description,
-            version=0,
-            algorithms=[
-                # Detector,
-                # BinaryClassifier,
-                # Classifier,
-            ],
-        )
+def make_algorithm_config_response(
+    model: APIMothDetector | APIMothClassifier,
+) -> AlgorithmConfigResponse:
+    category_map = make_category_map_response(model)
+    return AlgorithmConfigResponse(
+        name=model.name,
+        key=model.get_key(),
+        task_type=model.task_type,
+        description=model.description,
+        category_map=category_map,
+        uri=model.weights_path,
     )
+
+
+def make_pipeline_config_response(
+    Classifier: type[APIMothClassifier],
+) -> PipelineConfigResponse:
+    detector = APIMothDetector(
+        source_images=[],
+    )
+
+    binary_classifier = MothClassifierBinary(
+        source_images=[],
+        detections=[],
+    )
+
+    classifier = Classifier(
+        source_images=[],
+        detections=[],
+        batch_size=settings.classification_batch_size,
+        num_workers=settings.num_workers,
+        terminal=True,
+    )
+
+    return PipelineConfigResponse(
+        name=classifier.name,
+        slug=classifier.get_key(),
+        description=classifier.description,
+        version=1,
+        algorithms=[
+            make_algorithm_config_response(detector),
+            make_algorithm_config_response(binary_classifier),
+            make_algorithm_config_response(classifier),
+        ],
+    )
+
+
+# @TODO This requires loading all models into memory! Can we avoid this?
+PIPELINE_CONFIGS = [
+    make_pipeline_config_response(classifier_class)
+    for classifier_class in CLASSIFIER_CHOICES.values()
+]
 
 
 class PipelineRequest(PipelineRequest_):
@@ -251,7 +288,7 @@ async def info() -> ProcessingServiceInfoResponse:
             "This API provides access to multiple detection and classification "
             "algorithms by multiple labs for processing images of moths."
         ),
-        pipelines=pipeline_configs,
+        pipelines=PIPELINE_CONFIGS,
         # algorithms=list(algorithm_choices.values()),
     )
     return info
