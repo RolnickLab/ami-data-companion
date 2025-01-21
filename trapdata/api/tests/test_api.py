@@ -5,13 +5,13 @@ from unittest import TestCase
 from fastapi.testclient import TestClient
 
 from trapdata.api.api import (
-    PIPELINE_CHOICES,
+    CLASSIFIER_CHOICES,
     PipelineChoice,
     PipelineRequest,
     PipelineResponse,
     app,
 )
-from trapdata.api.schemas import PipelineConfig, SourceImageRequest
+from trapdata.api.schemas import PipelineConfigRequest, SourceImageRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
 from trapdata.ml.models.classification import SpeciesClassifier
 from trapdata.tests import TEST_IMAGES_BASE_PATH
@@ -51,7 +51,7 @@ class TestInferenceAPI(TestCase):
     def get_test_pipeline(
         self, slug: str = "quebec_vermont_moths_2023"
     ) -> SpeciesClassifier:
-        pipeline = PIPELINE_CHOICES[slug]
+        pipeline = CLASSIFIER_CHOICES[slug]
         return pipeline
 
     def test_pipeline_request(self):
@@ -84,7 +84,7 @@ class TestInferenceAPI(TestCase):
         terminal_classifier = self.get_test_pipeline(test_pipeline_slug)
 
         def _send_request(max_predictions_per_classification: int | None):
-            config = PipelineConfig(
+            config = PipelineConfigRequest(
                 example_config_param=max_predictions_per_classification
             )
             pipeline_request = PipelineRequest(

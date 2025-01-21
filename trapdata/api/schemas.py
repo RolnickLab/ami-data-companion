@@ -187,7 +187,7 @@ class AlgorithmCategoryMapResponse(pydantic.BaseModel):
     )
 
 
-class AlgorithmResponse(pydantic.BaseModel):
+class AlgorithmConfigResponse(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="ignore")
 
     name: str
@@ -224,7 +224,7 @@ class AlgorithmResponse(pydantic.BaseModel):
     category_map: AlgorithmCategoryMapResponse | None = None
 
 
-class PipelineConfig(pydantic.BaseModel):
+class PipelineConfigRequest(pydantic.BaseModel):
     """
     Configuration for the processing pipeline.
     """
@@ -250,19 +250,19 @@ class PipelineRequest(pydantic.BaseModel):
         description="A list of source image URLs to process.",
     )
 
-    config: PipelineConfig = pydantic.Field(
-        default=PipelineConfig(),
-        examples=[PipelineConfig(example_config_param=3)],
+    config: PipelineConfigRequest = pydantic.Field(
+        default=PipelineConfigRequest(),
+        examples=[PipelineConfigRequest(example_config_param=3)],
     )
 
 
-class PipelineResponse(pydantic.BaseModel):
+class PipelineResultsResponse(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(use_enum_values=True)
 
     pipeline: str = pydantic.Field(
         description="The pipeline used for processing, specified by key."
     )
-    algorithms: dict[str, AlgorithmResponse] = pydantic.Field(
+    algorithms: dict[str, AlgorithmConfigResponse] = pydantic.Field(
         default_factory=dict,
         description=(
             "A dictionary of all algorithms used in the pipeline, including their "
@@ -272,7 +272,7 @@ class PipelineResponse(pydantic.BaseModel):
     total_time: float
     source_images: list[SourceImageResponse]
     detections: list[DetectionResponse]
-    config: PipelineConfig = PipelineConfig()
+    config: PipelineConfigRequest = PipelineConfigRequest()
 
 
 class PipelineStageParam(pydantic.BaseModel):
@@ -290,3 +290,36 @@ class PipelineStage(pydantic.BaseModel):
     name: str
     params: list[PipelineStageParam] = []
     description: str | None = None
+
+
+class PipelineConfigResponse(pydantic.BaseModel):
+    """Details about a pipeline, its algorithms and category maps."""
+
+    name: str
+    slug: str
+    version: int
+    description: str | None = None
+    algorithms: list[AlgorithmConfigResponse] = []
+    stages: list[PipelineStage] = []
+
+
+class ProcessingServiceInfoResponse(pydantic.BaseModel):
+    """Information about the processing service."""
+
+    name: str = pydantic.Field(examples=["Mila Research Lab - Moth AI Services"])
+    description: str | None = pydantic.Field(
+        default=None,
+        examples=[
+            "Algorithms developed by the Mila Research Lab for analysis of moth images."
+        ],
+    )
+    pipelines: list[PipelineConfigResponse] = pydantic.Field(
+        default=list,
+        examples=[
+            [
+                PipelineConfigResponse(
+                    name="Random Pipeline", slug="random", version=1, algorithms=[]
+                ),
+            ]
+        ],
+    )

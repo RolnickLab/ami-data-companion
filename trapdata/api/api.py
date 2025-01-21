@@ -24,16 +24,20 @@ from .models.classification import (
     MothClassifierUKDenmark,
 )
 from .models.localization import APIMothDetector
-from .schemas import AlgorithmCategoryMapResponse, AlgorithmResponse
+from .schemas import (
+    AlgorithmCategoryMapResponse,
+    AlgorithmConfigResponse,
+    PipelineConfigResponse,
+)
 from .schemas import PipelineRequest as PipelineRequest_
-from .schemas import PipelineResponse as PipelineResponse_
-from .schemas import SourceImage, SourceImageResponse
+from .schemas import PipelineResultsResponse as PipelineResponse_
+from .schemas import ProcessingServiceInfoResponse, SourceImage, SourceImageResponse
 
 app = fastapi.FastAPI()
 app.add_middleware(GZipMiddleware)
 
 
-PIPELINE_CHOICES = {
+CLASSIFIER_CHOICES = {
     "panama_moths_2023": MothClassifierPanama,
     "panama_moths_2024": MothClassifierPanama2024,
     "quebec_vermont_moths_2023": MothClassifierQuebecVermont,
@@ -43,10 +47,12 @@ PIPELINE_CHOICES = {
     "global_moths_2024": MothClassifierGlobal,
     # "moth_binary": MothClassifierBinary,
 }
-_pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys())))
+_classifier_choices = dict(
+    zip(CLASSIFIER_CHOICES.keys(), list(CLASSIFIER_CHOICES.keys()))
+)
 
 
-PipelineChoice = enum.Enum("PipelineChoice", _pipeline_choices)
+PipelineChoice = enum.Enum("PipelineChoice", _classifier_choices)
 
 
 def make_category_map_response(
@@ -73,10 +79,10 @@ def make_category_map_response(
 
 def make_algorithm_response(
     model: APIMothDetector | APIMothClassifier,
-) -> AlgorithmResponse:
+) -> AlgorithmConfigResponse:
 
     category_map = make_category_map_response(model) if model.category_map else None
-    return AlgorithmResponse(
+    return AlgorithmConfigResponse(
         name=model.name,
         key=model.get_key(),
         task_type=model.task_type,
@@ -86,10 +92,27 @@ def make_algorithm_response(
     )
 
 
+pipeline_configs = []
+for key, model in CLASSIFIER_CHOICES.items():
+    pipeline_configs.append(
+        PipelineConfigResponse(
+            name=model.name,
+            slug=key,
+            description=model.description,
+            version=0,
+            algorithms=[
+                # Detector,
+                # BinaryClassifier,
+                # Classifier,
+            ],
+        )
+    )
+
+
 class PipelineRequest(PipelineRequest_):
     pipeline: PipelineChoice = pydantic.Field(
         description=PipelineRequest_.model_fields["pipeline"].description,
-        examples=list(_pipeline_choices.keys()),
+        examples=list(_classifier_choices.keys()),
     )
 
 
@@ -97,7 +120,7 @@ class PipelineResponse(PipelineResponse_):
     pipeline: PipelineChoice = pydantic.Field(
         PipelineChoice,
         description=PipelineResponse_.model_fields["pipeline"].description,
-        examples=list(_pipeline_choices.keys()),
+        examples=list(_classifier_choices.keys()),
     )
 
 
@@ -106,10 +129,12 @@ async def root():
     return fastapi.responses.RedirectResponse("/docs")
 
 
-@app.post("/pipeline/process")
-@app.post("/pipeline/process/")
+@app.post(
+    "/pipeline/process/", deprecated=True, tags=["services"]
+)  # old endpoint, deprecated, remove after jan 2025
+@app.post("/process/", tags=["services"])  # new endpoint
 async def process(data: PipelineRequest) -> PipelineResponse:
-    algorithms_used: dict[str, AlgorithmResponse] = {}
+    algorithms_used: dict[str, AlgorithmConfigResponse] = {}
 
     # Ensure that the source images are unique, filter out duplicates
     source_images_index = {
@@ -148,6 +173,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         num_workers=settings.num_workers,
         # single=True if len(detector_results) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
+        terminal=False,
     )
     filter.run()
     algorithms_used[filter.get_key()] = make_algorithm_response(filter)
@@ -174,7 +200,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         "detections to the classifier"
     )
 
-    Classifier = PIPELINE_CHOICES[str(data.pipeline)]
+    Classifier = CLASSIFIER_CHOICES[str(data.pipeline)]
     classifier: APIMothClassifier = Classifier(
         source_images=source_images,
         detections=moth_detections,
@@ -183,6 +209,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         # single=True if len(filtered_detections) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
         example_config_param=data.config.example_config_param,
+        terminal=True,
     )
     classifier.run()
     end_time = time.time()
@@ -213,6 +240,45 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         total_time=seconds_elapsed,
     )
     return response
+
+
+@app.get("/info", tags=["services"])
+async def info() -> ProcessingServiceInfoResponse:
+    info = ProcessingServiceInfoResponse(
+        name="Antenna Inference API",
+        description=(
+            "The primary endpoint for processing images for the Antenna platform. "
+            "This API provides access to multiple detection and classification "
+            "algorithms by multiple labs for processing images of moths."
+        ),
+        pipelines=pipeline_configs,
+        # algorithms=list(algorithm_choices.values()),
+    )
+    return info
+
+
+# Check if the server is online
+@app.get("/livez", tags=["health checks"])
+async def livez():
+    return fastapi.responses.JSONResponse(status_code=200, content={"status": True})
+
+
+# Check if the pipelines are ready to process data
+@app.get("/readyz", tags=["health checks"])
+async def readyz():
+    """
+    Check if the server is ready to process data.
+
+    Returns a list of pipeline slugs that are online and ready to process data.
+    @TODO may need to simplify this to just return True/False. Pipeline algorithms will
+    likely be loaded into memory on-demand when the pipeline is selected.
+    """
+    if _classifier_choices:
+        return fastapi.responses.JSONResponse(
+            status_code=200, content={"status": list(_classifier_choices.keys())}
+        )
+    else:
+        return fastapi.responses.JSONResponse(status_code=503, content={"status": []})
 
 
 # Future methods
