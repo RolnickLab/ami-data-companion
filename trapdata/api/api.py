@@ -27,6 +27,7 @@ from .models.localization import APIMothDetector
 from .schemas import (
     AlgorithmCategoryMapResponse,
     AlgorithmConfigResponse,
+    DetectionResponse,
     PipelineConfigResponse,
 )
 from .schemas import PipelineRequest as PipelineRequest_
@@ -45,7 +46,7 @@ CLASSIFIER_CHOICES = {
     "costa_rica_moths_turing_2024": MothClassifierTuringCostaRica,
     "anguilla_moths_turing_2024": MothClassifierTuringAnguilla,
     "global_moths_2024": MothClassifierGlobal,
-    # "moth_binary": MothClassifierBinary,
+    "moth_binary": MothClassifierBinary,
 }
 _classifier_choices = dict(
     zip(CLASSIFIER_CHOICES.keys(), list(CLASSIFIER_CHOICES.keys()))
@@ -53,6 +54,13 @@ _classifier_choices = dict(
 
 
 PipelineChoice = enum.Enum("PipelineChoice", _classifier_choices)
+
+
+def should_filter_detections(Classifier: type[APIMothClassifier]) -> bool:
+    if Classifier == MothClassifierBinary:
+        return False
+    else:
+        return True
 
 
 def make_category_map_response(
@@ -113,14 +121,20 @@ def make_pipeline_config_response(
     """
     Create a configuration for an entire pipeline, given a species classifier class.
     """
+    algorithms = []
+
     detector = APIMothDetector(
         source_images=[],
     )
+    algorithms.append(make_algorithm_config_response(detector))
 
-    binary_classifier = MothClassifierBinary(
-        source_images=[],
-        detections=[],
-    )
+    if should_filter_detections(Classifier):
+        binary_classifier = MothClassifierBinary(
+            source_images=[],
+            detections=[],
+            terminal=False,
+        )
+        algorithms.append(make_algorithm_config_response(binary_classifier))
 
     classifier = Classifier(
         source_images=[],
@@ -129,17 +143,14 @@ def make_pipeline_config_response(
         num_workers=settings.num_workers,
         terminal=True,
     )
+    algorithms.append(make_algorithm_config_response(classifier))
 
     return PipelineConfigResponse(
         name=classifier.name,
         slug=slug,
         description=classifier.description,
         version=1,
-        algorithms=[
-            make_algorithm_config_response(detector),
-            make_algorithm_config_response(binary_classifier),
-            make_algorithm_config_response(classifier),
-        ],
+        algorithms=algorithms,
     )
 
 
@@ -173,6 +184,7 @@ async def root():
 @app.post(
     "/pipeline/process/", deprecated=True, tags=["services"]
 )  # old endpoint, deprecated, remove after jan 2025
+@app.post("/process", tags=["services"])  # new endpoint
 @app.post("/process/", tags=["services"])  # new endpoint
 async def process(data: PipelineRequest) -> PipelineResponse:
     algorithms_used: dict[str, AlgorithmConfigResponse] = {}
@@ -196,6 +208,9 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     ]
 
     start_time = time.time()
+
+    Classifier = CLASSIFIER_CHOICES[str(data.pipeline)]
+
     detector = APIMothDetector(
         source_images=source_images,
         batch_size=settings.localization_batch_size,
@@ -207,50 +222,60 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     num_pre_filter = len(detector_results)
     algorithms_used[detector.get_key()] = make_algorithm_response(detector)
 
-    filter = MothClassifierBinary(
-        source_images=source_images,
-        detections=detector_results,
-        batch_size=settings.classification_batch_size,
-        num_workers=settings.num_workers,
-        # single=True if len(detector_results) == 1 else False,
-        single=True,  # @TODO solve issues with reading images in multiprocessing
-        terminal=False,
-    )
-    filter.run()
-    algorithms_used[filter.get_key()] = make_algorithm_response(filter)
+    detections_for_terminal_classifier: list[DetectionResponse] = []
+    detections_to_return: list[DetectionResponse] = []
 
-    # Compare num detections with num moth detections
-    num_post_filter = len(filter.results)
+    if should_filter_detections(Classifier):
+        filter = MothClassifierBinary(
+            source_images=source_images,
+            detections=detector_results,
+            batch_size=settings.classification_batch_size,
+            num_workers=settings.num_workers,
+            # single=True if len(detector_results) == 1 else False,
+            single=True,  # @TODO solve issues with reading images in multiprocessing
+            terminal=False,
+        )
+        filter.run()
+        algorithms_used[filter.get_key()] = make_algorithm_response(filter)
+
+        # Compare num detections with num moth detections
+        num_post_filter = len(filter.results)
+        logger.info(
+            f"Binary classifier returned {num_post_filter} of {num_pre_filter} detections"
+        )
+
+        # Filter results based on positive_binary_label
+        moth_detections = []
+        non_moth_detections = []
+        for detection in filter.results:
+            for classification in detection.classifications:
+                if classification.classification == filter.positive_binary_label:
+                    moth_detections.append(detection)
+                elif classification.classification == filter.negative_binary_label:
+                    non_moth_detections.append(detection)
+                break
+        detections_for_terminal_classifier += moth_detections
+        detections_to_return += non_moth_detections
+
+    else:
+        logger.info("Skipping binary classification filter")
+        detections_for_terminal_classifier += detector_results
+
     logger.info(
-        f"Binary classifier returned {num_post_filter} of {num_pre_filter} detections"
-    )
-
-    # Filter results based on positive_binary_label
-    moth_detections = []
-    non_moth_detections = []
-    for detection in filter.results:
-        for classification in detection.classifications:
-            if classification.classification == filter.positive_binary_label:
-                moth_detections.append(detection)
-            elif classification.classification == filter.negative_binary_label:
-                non_moth_detections.append(detection)
-            break
-
-    logger.info(
-        f"Sending {len(moth_detections)} of {num_pre_filter} "
+        f"Sending {len(detections_for_terminal_classifier)} of {num_pre_filter} "
         "detections to the classifier"
     )
 
-    Classifier = CLASSIFIER_CHOICES[str(data.pipeline)]
     classifier: APIMothClassifier = Classifier(
         source_images=source_images,
-        detections=moth_detections,
+        detections=detections_for_terminal_classifier,
         batch_size=settings.classification_batch_size,
         num_workers=settings.num_workers,
         # single=True if len(filtered_detections) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
         example_config_param=data.config.example_config_param,
         terminal=True,
+        # critera=data.config.criteria, # @TODO another approach to intermediate filter models
     )
     classifier.run()
     end_time = time.time()
@@ -258,18 +283,18 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     algorithms_used[classifier.get_key()] = make_algorithm_response(classifier)
 
     # Return all detections, including those that were not classified as moths
-    all_detections = classifier.results + non_moth_detections
+    detections_to_return += classifier.results
 
     logger.info(
         f"Processed {len(source_images)} images in {seconds_elapsed:.2f} seconds"
     )
-    logger.info(f"Returning {len(all_detections)} detections")
+    logger.info(f"Returning {len(detections_to_return)} detections")
     # print(all_detections)
 
     # If the number of detections is greater than 100, its suspicious. Log it.
-    if len(all_detections) > 100:
+    if len(detections_to_return) > 100:
         logger.warning(
-            f"Detected {len(all_detections)} detections. "
+            f"Detected {len(detections_to_return)} detections. "
             "This is suspicious and may contain duplicates."
         )
 
@@ -277,7 +302,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         pipeline=data.pipeline,
         algorithms=algorithms_used,
         source_images=source_image_results,
-        detections=all_detections,
+        detections=detections_to_return,
         total_time=seconds_elapsed,
     )
     return response

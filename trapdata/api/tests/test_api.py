@@ -10,6 +10,8 @@ from trapdata.api.api import (
     PipelineRequest,
     PipelineResponse,
     app,
+    make_algorithm_response,
+    make_pipeline_config_response,
 )
 from trapdata.api.schemas import PipelineConfigRequest, SourceImageRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
@@ -63,11 +65,10 @@ class TestInferenceAPI(TestCase):
             source_images=self.get_test_images(num=2),
         )
         with self.file_server:
-            response = self.client.post(
-                "/pipeline/process", json=pipeline_request.model_dump()
-            )
+            response = self.client.post("/process", json=pipeline_request.model_dump())
             assert response.status_code == 200
-            PipelineResponse(**response.json())
+            results = PipelineResponse(**response.json())
+        return results
 
     def test_config_num_classification_predictions(self):
         """
@@ -124,3 +125,58 @@ class TestInferenceAPI(TestCase):
 
         _send_request(max_predictions_per_classification=1)
         _send_request(max_predictions_per_classification=None)
+
+    def test_pipeline_config_with_binary_classifier(self):
+        binary_classifier_pipeline_choice = "moth_binary"
+        BinaryClassifier = CLASSIFIER_CHOICES[binary_classifier_pipeline_choice]
+        BinaryClassifierResponse = make_algorithm_response(BinaryClassifier)
+
+        species_classifier_pipeline_choice = "quebec_vermont_moths_2023"
+        SpeciesClassifier = CLASSIFIER_CHOICES[species_classifier_pipeline_choice]
+        SpeciesClassifierResponse = make_algorithm_response(SpeciesClassifier)
+
+        # Test using a pipeline that finishes with a full species classifier
+        pipeline_config = make_pipeline_config_response(
+            SpeciesClassifier,
+            slug=species_classifier_pipeline_choice,
+        )
+
+        self.assertEqual(len(pipeline_config.algorithms), 3)
+        self.assertEqual(
+            pipeline_config.algorithms[-1].key, SpeciesClassifierResponse.key
+        )
+        self.assertEqual(
+            pipeline_config.algorithms[1].key, BinaryClassifierResponse.key
+        )
+
+        # Test using a pipeline that finishes only with a binary classifier
+        pipeline_config_binary_only = make_pipeline_config_response(
+            BinaryClassifier, slug=binary_classifier_pipeline_choice
+        )
+
+        self.assertEqual(len(pipeline_config_binary_only.algorithms), 2)
+        self.assertEqual(
+            pipeline_config_binary_only.algorithms[-1].key, BinaryClassifierResponse.key
+        )
+        # self.assertTrue(pipeline_config_binary_only.algorithms[-1].terminal)
+
+    def test_processing_with_only_binary_classifier(self):
+        binary_algorithm_key = "moth_binary"
+        binary_algorithm = CLASSIFIER_CHOICES[binary_algorithm_key]
+        pipeline_request = PipelineRequest(
+            pipeline=PipelineChoice[binary_algorithm_key],
+            source_images=self.get_test_images(num=2),
+        )
+        with self.file_server:
+            response = self.client.post("/process", json=pipeline_request.model_dump())
+            assert response.status_code == 200
+            results = PipelineResponse(**response.json())
+
+        for detection in results.detections:
+            for classification in detection.classifications:
+                assert classification.algorithm.key == binary_algorithm_key
+                assert classification.terminal
+                assert classification.labels
+                assert len(classification.labels) == binary_algorithm.num_classes
+                assert classification.scores
+                assert len(classification.scores) == binary_algorithm.num_classes
