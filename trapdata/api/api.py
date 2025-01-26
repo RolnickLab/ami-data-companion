@@ -108,7 +108,11 @@ def make_algorithm_config_response(
 
 def make_pipeline_config_response(
     Classifier: type[APIMothClassifier],
+    slug: str,
 ) -> PipelineConfigResponse:
+    """
+    Create a configuration for an entire pipeline, given a species classifier class.
+    """
     detector = APIMothDetector(
         source_images=[],
     )
@@ -128,7 +132,7 @@ def make_pipeline_config_response(
 
     return PipelineConfigResponse(
         name=classifier.name,
-        slug=classifier.get_key(),
+        slug=slug,
         description=classifier.description,
         version=1,
         algorithms=[
@@ -141,8 +145,8 @@ def make_pipeline_config_response(
 
 # @TODO This requires loading all models into memory! Can we avoid this?
 PIPELINE_CONFIGS = [
-    make_pipeline_config_response(classifier_class)
-    for classifier_class in CLASSIFIER_CHOICES.values()
+    make_pipeline_config_response(classifier_class, slug=key)
+    for key, classifier_class in CLASSIFIER_CHOICES.items()
 ]
 
 
