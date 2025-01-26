@@ -127,14 +127,19 @@ class TestInferenceAPI(TestCase):
         _send_request(max_predictions_per_classification=None)
 
     def test_pipeline_config_with_binary_classifier(self):
-        BinaryClassifier = CLASSIFIER_CHOICES["moth_binary"]
+        binary_classifier_pipeline_choice = "moth_binary"
+        BinaryClassifier = CLASSIFIER_CHOICES[binary_classifier_pipeline_choice]
         BinaryClassifierResponse = make_algorithm_response(BinaryClassifier)
 
-        SpeciesClassifier = CLASSIFIER_CHOICES["quebec_vermont_moths_2023"]
+        species_classifier_pipeline_choice = "quebec_vermont_moths_2023"
+        SpeciesClassifier = CLASSIFIER_CHOICES[species_classifier_pipeline_choice]
         SpeciesClassifierResponse = make_algorithm_response(SpeciesClassifier)
 
         # Test using a pipeline that finishes with a full species classifier
-        pipeline_config = make_pipeline_config_response(SpeciesClassifier)
+        pipeline_config = make_pipeline_config_response(
+            SpeciesClassifier,
+            slug=species_classifier_pipeline_choice,
+        )
 
         self.assertEqual(len(pipeline_config.algorithms), 3)
         self.assertEqual(
@@ -145,7 +150,9 @@ class TestInferenceAPI(TestCase):
         )
 
         # Test using a pipeline that finishes only with a binary classifier
-        pipeline_config_binary_only = make_pipeline_config_response(BinaryClassifier)
+        pipeline_config_binary_only = make_pipeline_config_response(
+            BinaryClassifier, slug=binary_classifier_pipeline_choice
+        )
 
         self.assertEqual(len(pipeline_config_binary_only.algorithms), 2)
         self.assertEqual(

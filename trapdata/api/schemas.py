@@ -82,6 +82,7 @@ class ClassificationResponse(pydantic.BaseModel):
             "classification in the response. Use the category map from the algorithm "
             "to get the full list of labels and metadata."
         ),
+        repr=False,  # Too long to display in the repr
     )
     scores: list[float] = pydantic.Field(
         default_factory=list,
@@ -89,6 +90,7 @@ class ClassificationResponse(pydantic.BaseModel):
             "The calibrated probabilities for each class label, most commonly "
             "the softmax output."
         ),
+        repr=False,  # Too long to display in the repr
     )
     logits: list[float] = pydantic.Field(
         default_factory=list,
@@ -96,6 +98,7 @@ class ClassificationResponse(pydantic.BaseModel):
             "The raw logits output by the model, before any calibration or "
             "normalization."
         ),
+        repr=False,  # Too long to display in the repr
     )
     inference_time: float | None = None
     algorithm: AlgorithmReference
