@@ -74,10 +74,16 @@ def make_image():
 
 
 def get_test_images(
-    subdirs: typing.Iterable[str] = ("vermont", "panama"), limit: int = 6
+    subdirs: typing.Iterable[str] = ("vermont", "panama"),
+    limit: int = 6,
+    with_urls: bool = False,
 ) -> list[SourceImage]:
     return [
-        SourceImage(id=str(img["path"].name), filepath=img["path"])
+        SourceImage(
+            id=str(img["path"].name),
+            filepath=img["path"],
+            url=img["url"] if with_urls else None,
+        )
         for subdir in subdirs
         for img in find_images(pathlib.Path(TEST_IMAGES_BASE_PATH) / subdir)
     ][:limit]

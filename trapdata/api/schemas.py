@@ -153,6 +153,7 @@ class AlgorithmCategoryMapResponse(pydantic.BaseModel):
                 {"label": "Not a moth", "index": 1, "gbif_key": 5678},
             ]
         ],
+        repr=False,  # Too long to display in the repr
     )
     labels: list[str] = pydantic.Field(
         default_factory=list,
@@ -161,6 +162,7 @@ class AlgorithmCategoryMapResponse(pydantic.BaseModel):
             "the model."
         ),
         examples=[["Moth", "Not a moth"]],
+        repr=False,  # Too long to display in the repr
     )
     version: str | None = pydantic.Field(
         default=None,
