@@ -133,7 +133,7 @@ class InferenceBaseClass:
         else:
             logger.warn(f"No weights specified for model {self.name}")
 
-    def get_labels(self, labels_path):
+    def get_labels(self, labels_path) -> dict[int, str]:
         if labels_path:
             local_path = get_or_download_file(
                 labels_path,
