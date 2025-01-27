@@ -10,12 +10,19 @@ from unittest import TestCase
 import PIL.Image
 import pytest
 
+from trapdata.api.models.classification import (
+    MothClassifierBinary,
+    MothClassifierQuebecVermont,
+)
+from trapdata.api.models.localization import APIMothDetector
+from trapdata.api.schemas import (
+    AlgorithmReference,
+    BoundingBox,
+    DetectionResponse,
+    SourceImage,
+)
 from trapdata.common.filemanagement import find_images
 from trapdata.tests import TEST_IMAGES_BASE_PATH
-
-from .models.classification import MothClassifierBinary, MothClassifierQuebecVermont
-from .models.localization import APIMothDetector
-from .schemas import BoundingBox, Detection, SourceImage
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,10 +31,10 @@ logger = logging.getLogger(__name__)
 TEST_IMAGE_SIZE = (100, 100)
 TEST_BASE64_IMAGES = {
     # 10x10 pixel images
-    "RED": "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mP8z8BQz0AEYBxVSF+FABJADveWkH6oAAAAAElFTkSuQmCC",
-    "GREEN": "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNk+M9Qz0AEYBxVSF+FAAhKDveksOjmAAAAAElFTkSuQmCC",
-    "BLUE": "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNkYPhfz0AEYBxVSF+FAP5FDvcfRYWgAAAAAElFTkSuQmCC",
-    "BROWSER_STRING": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNkYPhfz0AEYBxVSF+FAP5FDvcfRYWgAAAAAElFTkSuQmCC=",  # noqa
+    "RED": "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mP8z8BQz0AEYBxVSF+FABJADveWkH6oAAAAAElFTkSuQmCC",  # noqa: E501
+    "GREEN": "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNk+M9Qz0AEYBxVSF+FAAhKDveksOjmAAAAAElFTkSuQmCC",  # noqa: E501
+    "BLUE": "iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNkYPhfz0AEYBxVSF+FAP5FDvcfRYWgAAAAAElFTkSuQmCC",  # noqa: E501
+    "BROWSER_STRING": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNkYPhfz0AEYBxVSF+FAP5FDvcfRYWgAAAAAElFTkSuQmCC=",  # noqa: E501
 }
 
 
@@ -44,10 +51,13 @@ def get_empty_detections():
     # Return one large detection for each image
     # @TODO Also test zero sized box = [0, 0, 0, 0]
     return [
-        Detection(
+        DetectionResponse(
             source_image_id=img.id,
             bbox=BoundingBox.from_coords([0, 0, img.width, img.height]),  # type: ignore
-            algorithm="Full width and height",
+            algorithm=AlgorithmReference(
+                name="Full width and height",
+                key="full_width_height",
+            ),
             timestamp=datetime.datetime.now(),
         )
         for img in get_empty_test_images(read=True)
@@ -64,16 +74,22 @@ def make_image():
 
 
 def get_test_images(
-    subdirs: typing.Iterable[str] = ("vermont", "panama"), limit: int = 6
+    subdirs: typing.Iterable[str] = ("vermont", "panama"),
+    limit: int = 6,
+    with_urls: bool = False,
 ) -> list[SourceImage]:
     return [
-        SourceImage(id=str(img["path"].name), filepath=img["path"])
+        SourceImage(
+            id=str(img["path"].name),
+            filepath=img["path"],
+            url=img["url"] if with_urls else None,
+        )
         for subdir in subdirs
         for img in find_images(pathlib.Path(TEST_IMAGES_BASE_PATH) / subdir)
     ][:limit]
 
 
-def check_for_duplicate_classifications(results: list[Detection]):
+def check_for_duplicate_classifications(results: list[DetectionResponse]):
     """
     Ensure that there is only one classification per classifier, per bounding box
     """
@@ -81,11 +97,12 @@ def check_for_duplicate_classifications(results: list[Detection]):
     for result in results:
         for classification in result.classifications:
             bbox = result.bbox.to_tuple()
-            unique_result = tuple(list(bbox) + [classification.algorithm])
+            unique_result = tuple(list(bbox) + [classification.algorithm.key])
             result_counts[unique_result] += 1
 
     duplicates = {k: v for k, v in result_counts.items() if v > 1}
-    assert not duplicates, f"Duplicate detections found: {duplicates}"
+    msg = f"Duplicate detections found: {duplicates}"
+    assert not duplicates, msg
 
 
 class TestLocalization(TestCase):
@@ -114,15 +131,15 @@ class TestLocalization(TestCase):
         # @TODO ensure bounding boxes are correct
 
         for detection in detector.results:
-            assert isinstance(
-                detection, Detection
-            ), "Detection result is not a Detection object"
+            msg = "Detection result is not a Detection object"
+            assert isinstance(detection, DetectionResponse), msg
             self.assertIn(detection.source_image_id, all_test_image_ids)
 
 
 class TestClassification(TestCase):
-    def get_detections(self, test_images: list[SourceImage]) -> list[Detection]:
-        # @TODO Reuse the results from the localization test. Or provide serialized results.
+    def get_detections(self, test_images: list[SourceImage]) -> list[DetectionResponse]:
+        # @TODO Reuse the results from the localization test. Or provide serialized
+        # results.
         detector = APIMothDetector(
             source_images=test_images,
         )
@@ -132,8 +149,8 @@ class TestClassification(TestCase):
     def filter_detections(
         self,
         test_images: list[SourceImage],
-        detections: list[Detection],
-    ) -> list[Detection]:
+        detections: list[DetectionResponse],
+    ) -> list[DetectionResponse]:
         # Filter detections based on results of the binary classifier
         classifier = MothClassifierBinary(
             source_images=test_images,
@@ -159,9 +176,7 @@ class TestClassification(TestCase):
             for classification in result.classifications:
                 self.assertLessEqual(classification.scores[0], 0.4)
 
-    @pytest.mark.skip(
-        reason="The new binary classifier is classifying empty images as moths"
-    )
+    @pytest.mark.skip(reason="Binary classifier is classifying empty images as moths")
     def test_binary_classification_zero(self):
         # @TODO
         # This is classifying empty images as moths!
@@ -173,7 +188,7 @@ class TestClassification(TestCase):
         classifier.run()
         results = classifier.results
         self.assertGreater(len(results), 0)
-        # Assert that all results are predicted negative and have very high scores
+        # Assert that all results are predicted negative and have high scores
         for result in results:
             for classification in result.classifications:
                 self.assertEqual(
@@ -223,9 +238,8 @@ class TestClassification(TestCase):
 
         # Assert that each result has at least one classification
         for result in results:
-            self.assertGreater(
-                len(result.classifications), 0, f"{result} has no classifications"
-            )
+            msg = f"{result} has no classifications"
+            self.assertGreater(len(result.classifications), 0, msg)
 
         # @TODO ensure classification results are correct
 
@@ -247,7 +261,11 @@ class TestSourceImageSchema(TestCase):
 
     def test_url(self):
         # Don't trust placeholder image services
-        url = "https://upload.wikimedia.org/wikipedia/en/thumb/8/80/Wikipedia-logo-v2.svg/103px-Wikipedia-logo-v2.svg.png"
+        # Don't trust placeholder image services
+        url = (
+            "https://upload.wikimedia.org/wikipedia/en/thumb/8/80/"
+            "Wikipedia-logo-v2.svg/103px-Wikipedia-logo-v2.svg.png"
+        )
         source_image = SourceImage(id="1", url=url)
         self.assertEqual(source_image.url, url)
         img = source_image.open()

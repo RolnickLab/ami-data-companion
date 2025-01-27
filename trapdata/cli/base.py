@@ -87,13 +87,13 @@ def run_gradio():
 
 
 @cli.command("api")
-def run_api():
+def run_api(port: int = 2000):
     """
     Run the API.
     """
     import uvicorn
 
-    uvicorn.run("trapdata.api.api:app", host="0.0.0.0", port=2000, reload=True)
+    uvicorn.run("trapdata.api.api:app", host="0.0.0.0", port=port, reload=True)
 
 
 if __name__ == "__main__":

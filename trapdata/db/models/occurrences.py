@@ -6,6 +6,7 @@ And occurrence is a sequence of detections that are determined to be
 the same individual, tracked over multiple frames in the original images
 from a monitoring session.
 """
+
 import datetime
 import pathlib
 from typing import Optional
@@ -41,7 +42,7 @@ class SpeciesSummaryListItem(pydantic.BaseModel):
     count: int
     example: Optional[pathlib.Path] = None
 
-    @pydantic.validator("name")
+    @pydantic.field_validator("name")
     def name_must_be_string(cls, val):
         """
         If the name is an integer, then assume it's a GBIF ID and we need to fetch the
