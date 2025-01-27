@@ -288,7 +288,7 @@ class InferenceBaseClass:
         #     yield self.post_process_single(item)
 
     def save_results(
-        self, item_ids, batch_output, seconds_per_item: float | None = None
+        self, item_ids, batch_output, seconds_per_item  #: float | None = None
     ):
         logger.warn("No save method configured for model. Doing nothing with results")
         return None

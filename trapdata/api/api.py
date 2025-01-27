@@ -20,6 +20,11 @@ from .models.classification import (
     MothClassifierQuebecVermont,
     MothClassifierTuringAnguilla,
     MothClassifierTuringCostaRica,
+    MothClassifierTuringJapan,
+    MothClassifierTuringKenyaUganda,
+    MothClassifierTuringMadagascar,
+    MothClassifierTuringSingapore,
+    MothClassifierTuringThailand,
     MothClassifierUKDenmark,
 )
 from .models.localization import APIMothDetector
@@ -51,6 +56,11 @@ PIPELINE_CHOICES = {
     "uk_denmark_moths_2023": MothClassifierUKDenmark,
     "costa_rica_moths_turing_2024": MothClassifierTuringCostaRica,
     "anguilla_moths_turing_2024": MothClassifierTuringAnguilla,
+    "singapore_moths_turing_2024": MothClassifierTuringSingapore,
+    "thailand_moths_turing_2024": MothClassifierTuringThailand,
+    "madagascar_moths_turing_2024": MothClassifierTuringMadagascar,
+    "kenya-uganda_moths_turing_2024": MothClassifierTuringKenyaUganda,
+    "japan_moths_turing_2024": MothClassifierTuringJapan,
     "global_moths_2024": MothClassifierGlobal,
 }
 _pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys())))

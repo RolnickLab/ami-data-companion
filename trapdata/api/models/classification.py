@@ -5,7 +5,7 @@ import numpy as np
 import torch
 
 from trapdata.common.logs import logger
-from trapdata.ml.models.classification import (
+from trapdata.ml.models.classification import (  # TuringJapanSpeciesClassifier,; TuringKenyaUgandaSpeciesClassifier,; TuringMadagascarSpeciesClassifier,; TuringSingaporeSpeciesClassifier,; TuringThailandSpeciesClassifier,
     GlobalMothSpeciesClassifier,
     InferenceBaseClass,
     MothNonMothClassifier,
@@ -186,6 +186,32 @@ class MothClassifierTuringCostaRica(
 
 class MothClassifierTuringAnguilla(APIMothClassifier, TuringAnguillaSpeciesClassifier):
     pass
+
+
+# class MothClassifierTuringJapan(APIMothClassifier, TuringJapanSpeciesClassifier):
+#     pass
+
+
+# class MothClassifierTuringKenyaUganda(
+#     APIMothClassifier, TuringKenyaUgandaSpeciesClassifier
+# ):
+#     pass
+
+
+# class MothClassifierTuringMadagascar(
+#     APIMothClassifier, TuringMadagascarSpeciesClassifier
+# ):
+#     pass
+
+
+# class MothClassifierTuringThailand(APIMothClassifier, TuringThailandSpeciesClassifier):
+#     pass
+
+
+# class MothClassifierTuringSingapore(
+#     APIMothClassifier, TuringSingaporeSpeciesClassifier
+# ):
+#     pass
 
 
 class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
