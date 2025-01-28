@@ -107,8 +107,62 @@ class Resnet50(torch.nn.Module):
         return x
 
 
-class ConvNeXtClassifier(InferenceBaseClass):
-    pass
+class ConvNeXtOrderClassifier(InferenceBaseClass):
+    """ConvNeXt based insect order classifier"""    
+    input_size = 128
+
+    def get_model(self):
+        num_classes = len(self.category_map)
+        model = timm.create_model(
+            "convnext_tiny.fb_in22k",
+            weights=None,
+            num_classes=num_classes,
+        )
+        model = model.to(self.device)
+        checkpoint = torch.load(self.weights, map_location=self.device)
+        # The model state dict is nested in some checkpoints, and not in others
+        state_dict = checkpoint.get("model_state_dict") or checkpoint
+
+        model.load_state_dict(state_dict)
+        model.eval()
+        return model
+
+
+    def _pad_to_square(self):
+        """Padding transformation to make the image square"""
+
+        width, height = self.image.size
+        if height < width:
+            return torchvision.transforms.Pad(padding=[0, 0, 0, width - height])
+        elif height > width:
+            return torchvision.transforms.Pad(padding=[0, 0, height - width, 0])
+        else:
+            return torchvision.transforms.Pad(padding=[0, 0, 0, 0])
+
+
+    def get_transforms(self):
+        mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
+        return torchvision.transforms.Compose(
+            [   
+                self._pad_to_square(),
+                torchvision.transforms.Resize((self.input_size, self.input_size)),
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize(mean, std),
+            ]
+        )
+
+    
+    def post_process_batch(self, output):
+        predictions = torch.nn.functional.softmax(output, dim=1)
+        predictions = predictions.cpu().numpy()
+
+        categories = predictions.argmax(axis=1)
+        labels = [self.category_map[cat] for cat in categories]
+        scores = predictions.max(axis=1).astype(float)
+
+        result = list(zip(labels, scores))
+        logger.debug(f"Post-processing result batch: {result}")
+        return result
 
 
 class Resnet50Classifier_Turing(InferenceBaseClass):
@@ -507,7 +561,7 @@ class PanamaMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier)
     )
 
 
-class InsectOrderClassifier2025(SpeciesClassifier, ConvNeXtClassifier):
+class InsectOrderClassifier2025(SpeciesClassifier, ConvNeXtOrderClassifier):
     name = "Insect Order Classifier"
     description = "ConvNeXt-T based insect order classifier for 16 classes trained by Mila in January 2025"
     weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/insect_orders/convnext_tiny_in22k_worder0.5_wbinary0.5_run2_checkpoint.pt"
