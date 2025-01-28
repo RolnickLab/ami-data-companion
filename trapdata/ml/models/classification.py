@@ -107,6 +107,10 @@ class Resnet50(torch.nn.Module):
         return x
 
 
+class ConvNeXtClassifier(InferenceBaseClass):
+    pass
+
+
 class Resnet50Classifier_Turing(InferenceBaseClass):
     # function to run the Turing models
     input_size = 300
@@ -501,3 +505,10 @@ class PanamaMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier)
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "03_ami-gbif_fine-grained_c-america_category_map-with_names.json"
     )
+
+
+class InsectOrderClassifier2025(SpeciesClassifier, ConvNeXtClassifier):
+    name = "Insect Order Classifier"
+    description = "ConvNeXt-T based insect order classifier for 16 classes trained by Mila in January 2025"
+    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/insect_orders/convnext_tiny_in22k_worder0.5_wbinary0.5_run2_checkpoint.pt"
+    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/insect_orders/insect_order_category_map.json"
