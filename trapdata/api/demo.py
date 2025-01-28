@@ -1,4 +1,6 @@
 import typing
+from dataclasses import dataclass
+from functools import partial
 
 import gradio as gr
 import PIL.Image
@@ -18,10 +20,71 @@ from .models.classification import (
 )
 from .models.localization import APIMothDetector
 from .schemas import SourceImage
-from .tests import get_test_images
+from .tests.test_models import get_test_images
 
 
-def predict(*img_paths, Classifier: typing.Type[APIMothClassifier]):
+@dataclass
+class ClassifierChoice:
+    key: str
+    tab_title: str
+    example_images_dir_names: list[str]
+    classifier: type[APIMothClassifier]
+
+
+CLASSIFIER_CHOICES = [
+    ClassifierChoice(
+        key=MothClassifierPanama.get_key(),
+        tab_title="Panama 2023",
+        example_images_dir_names=["panama"],
+        classifier=MothClassifierPanama,
+    ),
+    ClassifierChoice(
+        key=MothClassifierPanama2024.get_key(),
+        tab_title="Panama 2024",
+        example_images_dir_names=["panama"],
+        classifier=MothClassifierPanama2024,
+    ),
+    ClassifierChoice(
+        key=MothClassifierUKDenmark.get_key(),
+        tab_title="UK/Denmark",
+        example_images_dir_names=["denmark"],
+        classifier=MothClassifierUKDenmark,
+    ),
+    ClassifierChoice(
+        key=MothClassifierQuebecVermont.get_key(),
+        tab_title="Quebec/Vermont",
+        example_images_dir_names=["vermont"],
+        classifier=MothClassifierQuebecVermont,
+    ),
+    ClassifierChoice(
+        key=MothClassifierTuringCostaRica.get_key(),
+        tab_title="Costa Rica",
+        example_images_dir_names=["panama"],
+        classifier=MothClassifierTuringCostaRica,
+    ),
+    ClassifierChoice(
+        key=MothClassifierTuringAnguilla.get_key(),
+        tab_title="Anguilla",
+        example_images_dir_names=["panama"],
+        classifier=MothClassifierTuringAnguilla,
+    ),
+    ClassifierChoice(
+        key=MothClassifierGlobal.get_key(),
+        tab_title="Global",
+        example_images_dir_names=["vermont", "panama", "denmark"],
+        classifier=MothClassifierGlobal,
+    ),
+]
+
+
+def get_classifier_by_key(key: str) -> type[APIMothClassifier]:
+    for choice in CLASSIFIER_CHOICES:
+        if choice.key == key:
+            return choice.classifier
+    raise ValueError(f"Classifier with key '{key}' not found.")
+
+
+def predict(*img_paths, Classifier: type[APIMothClassifier]):
     # img_paths = img_paths * 4  # Test batch size
     source_images = [
         SourceImage(id=str(i), filepath=img_path)
@@ -63,6 +126,9 @@ def predict(*img_paths, Classifier: typing.Type[APIMothClassifier]):
     )
     classifier.run()
 
+    all_labels = classifier.category_map
+    assert all_labels, f"No labels found for {Classifier.name}"
+
     # ASSUME SINGLE IMAGE
     assert len(source_images) == 1
     source_image = source_images[0]
@@ -88,7 +154,10 @@ def predict(*img_paths, Classifier: typing.Type[APIMothClassifier]):
             pred.bbox.y2,
         )
         # First classification is the binary one
-        binary_label = pred.classifications[0].labels[0]
+        assert pred.classifications
+        binary_classification = pred.classifications[0]
+        binary_label = binary_classification.classification
+        # all_labels - MothClassifierBinary.category_map
         color = colors.get(binary_label, default_color)
         canvas.rectangle(coords, outline=color, width=8)
 
@@ -102,16 +171,14 @@ def predict(*img_paths, Classifier: typing.Type[APIMothClassifier]):
         assert source_image._pil is not None
         crop = source_image._pil.crop(coords)
         # Last classification is the most specific one
-        labels = pred.classifications[-1].labels
-        scores = pred.classifications[-1].scores
-        top_label_with_score = f"{labels[0]} ({scores[0]:.2f})"
+        classification = pred.classifications[-1]
+        best_score = max(classification.scores)
+        best_label = classification.classification
+        top_label_with_score = f"{best_label} ({best_score:.2f})"
         crops.append((crop, top_label_with_score))
 
     print("Returning results")
     return annotated_image, crops
-
-
-from functools import partial
 
 
 def make_interface(
@@ -121,7 +188,7 @@ def make_interface(
     return gr.Interface(
         title=Classifier.name,
         description=Classifier.description,
-        fn=partial(predict, Classifier=Classifier),  # type: ignore
+        fn=partial(predict, Classifier=Classifier),
         inputs=[gr.Image(type="filepath", label="Source Image")],
         outputs=[
             gr.Image(label="Annotated Source Image"),
@@ -133,33 +200,15 @@ def make_interface(
     )
 
 
-app = gr.TabbedInterface(
-    [
-        make_interface(MothClassifierPanama, ["panama"]),
-        make_interface(MothClassifierPanama2024, ["panama"]),
-        make_interface(MothClassifierUKDenmark, ["denmark"]),
-        make_interface(MothClassifierQuebecVermont, ["vermont"]),
-        make_interface(MothClassifierTuringCostaRica, ["panama"]),
-        make_interface(MothClassifierTuringAnguilla, ["panama"]),
-        make_interface(
-            MothClassifierGlobal,
-            [
-                "vermont",
-                "panama",
-                "denmark",
-            ],
-        ),
-    ],
-    [
-        "Panama 2023",
-        "Panama 2024",
-        "UK/Denmark",
-        "Quebec/Vermont",
-        "Costa Rica",
-        "Anguilla",
-        "Global",
-    ],
-)
+tab_interfaces = []
+tab_titles = []
+for choice in CLASSIFIER_CHOICES:
+    tab_interfaces.append(
+        make_interface(choice.classifier, choice.example_images_dir_names)
+    )
+    tab_titles.append(choice.tab_title)
+
+app = gr.TabbedInterface(tab_interfaces, tab_titles)
 
 if __name__ == "__main__":
     app.launch(
