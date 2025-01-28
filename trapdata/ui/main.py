@@ -8,10 +8,12 @@ import pathlib
 import threading
 import time
 from functools import partial
+from typing import Any, Dict, Optional, cast
 
 import kivy
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.config import ConfigParser
 from kivy.core.window import Window
 from kivy.properties import (
     BooleanProperty,
@@ -156,6 +158,7 @@ class TrapDataApp(App):
     screen_manager = ObjectProperty()
     use_kivy_settings = False
     app_settings = ObjectProperty()
+    config: Optional[ConfigParser] = ObjectProperty()
 
     def on_stop(self):
         # The Kivy event loop is about to stop, set a stop signal;
@@ -177,8 +180,10 @@ class TrapDataApp(App):
         orm.close_all_sessions()
 
     @property
-    def db_path(self) -> str:
-        return self.config.get("paths", "database_url")
+    def db_path(self) -> Optional[str]:
+        if self.config:
+            return self.config.get("paths", "database_url")
+        return None
 
     def build(self):
         self.title = "AMI Trap Data Companion"
@@ -210,7 +215,7 @@ class TrapDataApp(App):
 
         The Settings class reads the Kivy settings file.
         """
-        self.app_settings = Settings(_env_file=None)  # noqa
+        self.app_settings = Settings()  # Initialize without env file
         print(self.app_settings)
 
     def on_config_change(self, config, section, key, value):
@@ -223,8 +228,14 @@ class TrapDataApp(App):
         """
         When a base path is set, create a queue status
         """
-        if self.screen_manager.current == "menu":
-            self.screen_manager.current_screen.image_base_path = self.image_base_path
+        if (
+            self.screen_manager
+            and self.screen_manager.current == "menu"
+            and self.screen_manager.current_screen
+        ):
+            current_screen = self.screen_manager.current_screen
+            if hasattr(current_screen, "image_base_path"):
+                current_screen.image_base_path = self.image_base_path
 
         if self.queue and self.queue.clock:
             Clock.unschedule(self.queue.clock)
@@ -280,52 +291,76 @@ class TrapDataApp(App):
                 "num_workers": 1,
             },
         )
-        # config.write()
+        self.config = config
 
     def build_settings(self, settings):
         kivy_settings = {}
-        properties = Settings.schema()["properties"]  # Main list of settings
-        definitions = Settings.schema()["definitions"]  # Enum choices for drop-downs
+        schema = cast(Dict[str, Any], Settings.model_json_schema())
+        properties = cast(Dict[str, Any], schema.get("properties", {}))
+
+        # Get fields info from model config
+        model_config = cast(Dict[str, Any], Settings.model_config)
+        json_schema_extra = cast(
+            Dict[str, Any], model_config.get("json_schema_extra", {})
+        )
+        fields_info = cast(Dict[str, Any], json_schema_extra.get("fields", {}))
+
         for key, options in properties.items():
-            section = options.get("kivy_section", "Other")
-            type_ = options.get("kivy_type", "string")
+            field_info = fields_info.get(key, {})
+            section = field_info.get("kivy_section", "Other")
+            type_ = field_info.get("kivy_type", "string")
+
             kivy_settings.setdefault(section, [])
             setting = {
                 "key": key,
                 "type": type_,
-                "title": options["title"],
-                "desc": options["description"],
+                "title": field_info.get("title", key),
+                "desc": field_info.get("description", ""),
                 "section": section,
             }
-            # @TODO the following seems sketchy, is there a parser for this format? (OpenAPI?)
-            if type_ == "options" and "allOf" in options:
-                choice_type = options["allOf"][0]["$ref"].split("/")[-1]
-                choices = definitions[choice_type]["enum"]
-                setting["options"] = choices
+
+            # Handle enum options
+            if type_ == "options" and isinstance(options, dict) and "enum" in options:
+                setting["options"] = options["enum"]
+
             kivy_settings[section].append(setting)
 
-        for section, items in kivy_settings.items():
-            settings.add_json_panel(
-                section.title(),
-                self.config,
-                data=json.dumps(items, default=str),
-            )
-        logger.info(f"Kivy settings file: {self.config.filename}")
+        if self.config:
+            for section, items in kivy_settings.items():
+                settings.add_json_panel(
+                    section.title(),
+                    self.config,
+                    data=json.dumps(items, default=str),
+                )
+            if hasattr(self.config, "filename"):
+                logger.info(f"Kivy settings file: {self.config.filename}")
 
     def export_events(self):
         """
         User initiated export of Monitoring Sessions / Survey Events
         with a pop-up.
         """
-        app = self
-        user_data_path = app.config.get("paths", "user_data_path")
+        if not self.config:
+            logger.error("No config available")
+            return
+
+        user_data_path = self.config.get("paths", "user_data_path")
+        if not self.db_path:
+            logger.error("No database path available")
+            return
+
         items = list(
             get_monitoring_sessions_from_db(
-                db_path=app.db_path, base_directory=app.image_base_path
+                db_path=self.db_path,
+                base_directory=self.image_base_path or "",
             )
         )
         timestamp = int(time.time())
-        trap = pathlib.Path(app.image_base_path).name
+        trap = (
+            pathlib.Path(self.image_base_path).name
+            if self.image_base_path
+            else "unknown"
+        )
         report_name = f"{trap}-monitoring_events-{timestamp}"
         filepath = export_monitoring_sessions(
             items=items,
@@ -353,20 +388,35 @@ class TrapDataApp(App):
         """
         User initiated export of Detected Objects with a pop-up.
         """
-        app = self
-        user_data_path = app.config.get("paths", "user_data_path")
+        if not self.config:
+            logger.error("No config available")
+            return
+
+        user_data_path = self.config.get("paths", "user_data_path")
+        if not self.db_path:
+            logger.error("No database path available")
+            return
+
         objects = list(
             detected_objects
             or get_detected_objects(
-                db_path=app.db_path,
-                image_base_path=app.config.get("paths", "image_base_path"),
-                classification_threshold=app.config.get(
-                    "models", "classification_threshold"
+                db_path=self.db_path,
+                image_base_path=(
+                    self.config.get("paths", "image_base_path") if self.config else ""
+                ),
+                classification_threshold=(
+                    float(self.config.get("models", "classification_threshold"))
+                    if self.config
+                    else 0.6
                 ),
             )
         )
         timestamp = int(time.time())
-        trap = pathlib.Path(app.image_base_path).name
+        trap = (
+            pathlib.Path(self.image_base_path).name
+            if self.image_base_path
+            else "unknown"
+        )
         report_name = report_name or f"{trap}-all-detections-{timestamp}"
         filepath = export_detected_objects(
             items=objects,
