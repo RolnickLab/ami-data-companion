@@ -378,7 +378,7 @@ class TuringJapanSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing)
     name = "Turing Japan Species Classifier"
     description = "Trained on 19th November 2024 by Turing team using Resnet50 model."
     weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification//turing-japan_v01_resnet50_2024-11-22-17-22_state.pt"
-    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification//01_kenya-uganda_data_category_map.json"
+    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification//01_japan_data_category_map.json"
 
 
 class TuringSingaporeSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
