@@ -108,13 +108,14 @@ class Resnet50(torch.nn.Module):
 
 
 class ConvNeXtOrderClassifier(InferenceBaseClass):
-    """ConvNeXt based insect order classifier"""    
+    """ConvNeXt based insect order classifier"""
+
     input_size = 128
 
     def get_model(self):
         num_classes = len(self.category_map)
         model = timm.create_model(
-            "convnext_tiny.fb_in22k",
+            "convnext_tiny_in22k",
             weights=None,
             num_classes=num_classes,
         )
@@ -127,7 +128,6 @@ class ConvNeXtOrderClassifier(InferenceBaseClass):
         model.eval()
         return model
 
-
     def _pad_to_square(self):
         """Padding transformation to make the image square"""
 
@@ -139,19 +139,17 @@ class ConvNeXtOrderClassifier(InferenceBaseClass):
         else:
             return torchvision.transforms.Pad(padding=[0, 0, 0, 0])
 
-
     def get_transforms(self):
         mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
         return torchvision.transforms.Compose(
-            [   
-                self._pad_to_square(),
+            [
+                # self._pad_to_square(),
                 torchvision.transforms.Resize((self.input_size, self.input_size)),
                 torchvision.transforms.ToTensor(),
                 torchvision.transforms.Normalize(mean, std),
             ]
         )
 
-    
     def post_process_batch(self, output):
         predictions = torch.nn.functional.softmax(output, dim=1)
         predictions = predictions.cpu().numpy()
