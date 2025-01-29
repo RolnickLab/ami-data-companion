@@ -22,6 +22,7 @@ from .models.classification import (
     MothClassifierTuringAnguilla,
     MothClassifierTuringCostaRica,
     MothClassifierUKDenmark,
+    InsectOrderClassifier
 )
 from .models.localization import APIMothDetector
 from .schemas import (
@@ -47,6 +48,7 @@ CLASSIFIER_CHOICES = {
     "anguilla_moths_turing_2024": MothClassifierTuringAnguilla,
     "global_moths_2024": MothClassifierGlobal,
     "moth_binary": MothClassifierBinary,
+    "insect_orders_2025": InsectOrderClassifier
 }
 _classifier_choices = dict(
     zip(CLASSIFIER_CHOICES.keys(), list(CLASSIFIER_CHOICES.keys()))
@@ -57,7 +59,7 @@ PipelineChoice = enum.Enum("PipelineChoice", _classifier_choices)
 
 
 def should_filter_detections(Classifier: type[APIMothClassifier]) -> bool:
-    if Classifier == MothClassifierBinary:
+    if Classifier in [MothClassifierBinary, InsectOrderClassifier]:
         return False
     else:
         return True
