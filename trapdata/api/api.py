@@ -67,7 +67,6 @@ def should_filter_detections(Classifier: type[APIMothClassifier]) -> bool:
 
 def make_category_map_response(
     model: APIMothDetector | APIMothClassifier,
-    default_taxon_rank: str = "SPECIES",
 ) -> AlgorithmCategoryMapResponse:
     categories_sorted_by_index = sorted(model.category_map.items(), key=lambda x: x[0])
     # as list of dicts:
@@ -75,7 +74,7 @@ def make_category_map_response(
         {
             "index": index,
             "label": label,
-            "taxon_rank": default_taxon_rank,
+            "taxon_rank": model.default_taxon_rank,
         }
         for index, label in categories_sorted_by_index
     ]

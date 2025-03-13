@@ -293,6 +293,7 @@ class BinaryClassifier(Resnet50ClassifierLowRes):
     type = "binary_classification"
     positive_binary_label: str = constants.POSITIVE_BINARY_LABEL
     negative_binary_label: str = constants.NEGATIVE_BINARY_LABEL
+    default_taxon_rank = "SUPERFAMILY"
 
     def get_queue(self) -> DetectedObjectQueue:
         return DetectedObjectQueue(self.db_path, self.image_base_path)
@@ -564,3 +565,4 @@ class InsectOrderClassifier2025(SpeciesClassifier, ConvNeXtOrderClassifier):
     description = "ConvNeXt-T based insect order classifier for 16 classes trained by Mila in January 2025"
     weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/insect_orders/convnext_tiny_in22k_worder0.5_wbinary0.5_run2_checkpoint.pt"
     labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/insect_orders/insect_order_category_map.json"
+    default_taxon_rank = "ORDER"
