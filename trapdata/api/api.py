@@ -14,6 +14,7 @@ from ..common.logs import logger  # noqa: F401
 from . import settings
 from .models.classification import (
     APIMothClassifier,
+    InsectOrderClassifier,
     MothClassifierBinary,
     MothClassifierGlobal,
     MothClassifierPanama,
@@ -22,7 +23,6 @@ from .models.classification import (
     MothClassifierTuringAnguilla,
     MothClassifierTuringCostaRica,
     MothClassifierUKDenmark,
-    InsectOrderClassifier
 )
 from .models.localization import APIMothDetector
 from .schemas import (
@@ -48,7 +48,7 @@ CLASSIFIER_CHOICES = {
     "anguilla_moths_turing_2024": MothClassifierTuringAnguilla,
     "global_moths_2024": MothClassifierGlobal,
     "moth_binary": MothClassifierBinary,
-    "insect_orders_2025": InsectOrderClassifier
+    "insect_orders_2025": InsectOrderClassifier,
 }
 _classifier_choices = dict(
     zip(CLASSIFIER_CHOICES.keys(), list(CLASSIFIER_CHOICES.keys()))
