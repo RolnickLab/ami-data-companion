@@ -75,6 +75,7 @@ class DetectedObject(db.Base):
     sequence_frame = sa.Column(sa.Integer)
     sequence_previous_id = sa.Column(sa.Integer)
     sequence_previous_cost = sa.Column(sa.Float)
+    logits = sa.Column(sa.JSON)
     cnn_features = sa.Column(sa.JSON)
 
     # @TODO add updated & created timestamps to all db models
