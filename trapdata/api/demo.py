@@ -1,3 +1,4 @@
+import datetime
 import typing
 from dataclasses import dataclass
 from functools import partial
@@ -18,8 +19,7 @@ from .models.classification import (
     MothClassifierTuringCostaRica,
     MothClassifierUKDenmark,
 )
-from .models.localization import APIMothDetector
-from .schemas import SourceImage
+from .schemas import AlgorithmReference, BoundingBox, DetectionResponse, SourceImage
 from .tests.test_models import get_test_images
 
 
@@ -96,32 +96,28 @@ def predict(*img_paths, Classifier: type[APIMothClassifier]):
         assert source_image._pil is not None
         print(source_image, source_image._pil.size)
 
-    if len(source_images) == 1:
-        detector = APIMothDetector(
-            source_images=source_images,
-            single=True,
+    # Create a single detection for each whole image
+    whole_image_detections = []
+    for _, source_image in enumerate(source_images):
+        assert source_image._pil is not None
+        width, height = source_image._pil.size
+        # Create a bounding box for the entire image
+        bbox = BoundingBox(x1=0, y1=0, x2=width, y2=height)
+        # Create a detection for the whole image
+        detection = DetectionResponse(
+            source_image_id=source_image.id,
+            bbox=bbox,
+            algorithm=AlgorithmReference(
+                name=Classifier.name, key=Classifier.get_key()
+            ),
+            timestamp=datetime.datetime.now(),
         )
-    else:
-        detector = APIMothDetector(
-            source_images=source_images,
-            single=False,
-        )
-    detector.run()
-    all_detections = detector.results
+        whole_image_detections.append(detection)
 
-    # Filter out non-moths
-    filter = MothClassifierBinary(
-        source_images=source_images,
-        detections=all_detections,
-        filter_results=True,
-        batch_size=20,
-    )
-    filter.run()
-    filtered_detections = filter.results
-
+    # Pass the whole image detections directly to the species classifier
     classifier = Classifier(
         source_images=source_images,
-        detections=filtered_detections,
+        detections=whole_image_detections,
         batch_size=20,
     )
     classifier.run()
@@ -139,12 +135,10 @@ def predict(*img_paths, Classifier: type[APIMothClassifier]):
     print("Drawing bounding boxes on source image")
     annotated_image = source_image._pil.copy()
     canvas = PIL.ImageDraw.Draw(annotated_image)
-    colors = {
-        MothClassifierBinary.positive_binary_label: "green",
-        MothClassifierBinary.negative_binary_label: "red",
-    }
-    default_color = "black"
-    for pred in filtered_detections:
+    default_color = "green"
+
+    # Draw a single rectangle around the whole image
+    for pred in whole_image_detections:
         # Draw rectangle on PIL Image
         assert pred.bbox is not None
         coords = (
@@ -153,13 +147,7 @@ def predict(*img_paths, Classifier: type[APIMothClassifier]):
             pred.bbox.x2,
             pred.bbox.y2,
         )
-        # First classification is the binary one
-        assert pred.classifications
-        binary_classification = pred.classifications[0]
-        binary_label = binary_classification.classification
-        # all_labels - MothClassifierBinary.category_map
-        color = colors.get(binary_label, default_color)
-        canvas.rectangle(coords, outline=color, width=8)
+        canvas.rectangle(coords, outline=default_color, width=8)
 
     # Create PIL Images:
     print("Rendering crops")
