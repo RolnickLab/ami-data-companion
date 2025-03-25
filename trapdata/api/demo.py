@@ -10,14 +10,13 @@ from rich import print
 
 from .models.classification import (
     APIMothClassifier,
-    MothClassifierBinary,
     MothClassifierGlobal,
     MothClassifierPanama,
     MothClassifierPanama2024,
     MothClassifierQuebecVermont,
-    MothClassifierTuringAnguilla,
     MothClassifierTuringCostaRica,
     MothClassifierUKDenmark,
+    MultcoButterflySpeciesClassifier,
 )
 from .schemas import AlgorithmReference, BoundingBox, DetectionResponse, SourceImage
 from .tests.test_models import get_test_images
@@ -63,10 +62,10 @@ CLASSIFIER_CHOICES = [
         classifier=MothClassifierTuringCostaRica,
     ),
     ClassifierChoice(
-        key=MothClassifierTuringAnguilla.get_key(),
-        tab_title="Anguilla",
-        example_images_dir_names=["panama"],
-        classifier=MothClassifierTuringAnguilla,
+        key=MultcoButterflySpeciesClassifier.get_key(),
+        tab_title="Multco Butterfly",
+        example_images_dir_names=["denmark"],
+        classifier=MultcoButterflySpeciesClassifier,
     ),
     ClassifierChoice(
         key=MothClassifierGlobal.get_key(),

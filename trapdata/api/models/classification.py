@@ -9,6 +9,7 @@ from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
     InferenceBaseClass,
     MothNonMothClassifier,
+    MultcoButterflySpeciesClassifier,
     PanamaMothSpeciesClassifier2024,
     PanamaMothSpeciesClassifierMixedResolution2023,
     QuebecVermontMothSpeciesClassifier2024,
@@ -187,4 +188,10 @@ class MothClassifierTuringAnguilla(APIMothClassifier, TuringAnguillaSpeciesClass
 
 
 class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
+    pass
+
+
+class MultcoButterflySpeciesClassifier(
+    APIMothClassifier, MultcoButterflySpeciesClassifier
+):
     pass

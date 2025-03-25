@@ -422,6 +422,19 @@ class PanamaMothSpeciesClassifierMixedResolution2023(
     )
 
 
+class MultcoButterflySpeciesClassifier(SpeciesClassifier, Resnet50TimmClassifier):
+    input_size = 512
+    # normalization = imagenet_normalization
+    lookup_gbif_names = True
+
+    name = "Multnomah County Butterfly Species Classifier"
+    description = ""
+    weights_path = "/home/michael/Projects/AMI/ami-ml/data/output/resnet50_20250320_103856_checkpoint.pt"
+    labels_path = (
+        "/home/michael/Projects/AMI/ami-ml/data/multo_butterflies-category_map.json"
+    )
+
+
 class GlobalMothSpeciesClassifier(SpeciesClassifier, Resnet50TimmClassifier):
     input_size = 128
     normalization = imagenet_normalization

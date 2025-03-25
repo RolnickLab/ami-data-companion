@@ -45,7 +45,9 @@ SpeciesClassifierChoice = ModelChoiceEnum(
     "SpeciesClassifierChoice",
     {Model.get_key(): Model.name for Model in SpeciesClassifier.__subclasses__()},
 )
-DEFAULT_SPECIES_CLASSIFIER = get_default_model(SpeciesClassifierChoice)
+from trapdata.ml.models.classification import GlobalMothSpeciesClassifier
+
+DEFAULT_SPECIES_CLASSIFIER = GlobalMothSpeciesClassifier
 
 
 feature_extractors = {Model.name: Model for Model in FeatureExtractor.__subclasses__()}
