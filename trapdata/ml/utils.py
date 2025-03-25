@@ -275,9 +275,9 @@ def fetch_gbif_species(gbif_id: int) -> Optional[Taxon]:
 
     taxon = Taxon(
         gbif_id=gbif_id,
-        name=data["canonicalName"],
-        genus=data["genus"],
-        family=data["family"],
+        name=data.get("canonicalName", str(gbif_id)),
+        genus=data.get("genus"),
+        family=data.get("family"),
         source="gbif",
     )
     return taxon
