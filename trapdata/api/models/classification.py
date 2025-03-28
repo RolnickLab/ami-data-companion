@@ -8,6 +8,7 @@ from trapdata.common.logs import logger
 from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
     InferenceBaseClass,
+    InsectOrderClassifier2025,
     MothNonMothClassifier,
     PanamaMothSpeciesClassifier2024,
     PanamaMothSpeciesClassifierMixedResolution2023,
@@ -187,4 +188,8 @@ class MothClassifierTuringAnguilla(APIMothClassifier, TuringAnguillaSpeciesClass
 
 
 class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
+    pass
+
+
+class InsectOrderClassifier(APIMothClassifier, InsectOrderClassifier2025):
     pass

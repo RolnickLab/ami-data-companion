@@ -14,6 +14,7 @@ from ..common.logs import logger  # noqa: F401
 from . import settings
 from .models.classification import (
     APIMothClassifier,
+    InsectOrderClassifier,
     MothClassifierBinary,
     MothClassifierGlobal,
     MothClassifierPanama,
@@ -47,6 +48,7 @@ CLASSIFIER_CHOICES = {
     "anguilla_moths_turing_2024": MothClassifierTuringAnguilla,
     "global_moths_2024": MothClassifierGlobal,
     "moth_binary": MothClassifierBinary,
+    "insect_orders_2025": InsectOrderClassifier,
 }
 _classifier_choices = dict(
     zip(CLASSIFIER_CHOICES.keys(), list(CLASSIFIER_CHOICES.keys()))
@@ -57,7 +59,7 @@ PipelineChoice = enum.Enum("PipelineChoice", _classifier_choices)
 
 
 def should_filter_detections(Classifier: type[APIMothClassifier]) -> bool:
-    if Classifier == MothClassifierBinary:
+    if Classifier in [MothClassifierBinary, InsectOrderClassifier]:
         return False
     else:
         return True
@@ -65,7 +67,6 @@ def should_filter_detections(Classifier: type[APIMothClassifier]) -> bool:
 
 def make_category_map_response(
     model: APIMothDetector | APIMothClassifier,
-    default_taxon_rank: str = "SPECIES",
 ) -> AlgorithmCategoryMapResponse:
     categories_sorted_by_index = sorted(model.category_map.items(), key=lambda x: x[0])
     # as list of dicts:
@@ -73,7 +74,7 @@ def make_category_map_response(
         {
             "index": index,
             "label": label,
-            "taxon_rank": default_taxon_rank,
+            "taxon_rank": model.default_taxon_rank,
         }
         for index, label in categories_sorted_by_index
     ]

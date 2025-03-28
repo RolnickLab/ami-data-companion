@@ -76,6 +76,7 @@ class InferenceBaseClass:
     category_map = {}
     num_classes: Union[int, None] = None  # Will use len(category_map) if None
     lookup_gbif_names: bool = False
+    default_taxon_rank: str = "SPECIES"
     model: torch.nn.Module
     normalization = tensorflow_normalization
     transforms: torchvision.transforms.Compose
