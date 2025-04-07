@@ -78,8 +78,10 @@ class EfficientNetClassifier(InferenceBaseClass):
         labels = [self.category_map[cat] for cat in categories]
         scores = predictions.max(axis=1).astype(float)
 
-        result = list(zip(labels, scores))
+        result = list(zip(labels, scores))  # TODO: modify this
         logger.debug(f"Post-processing result batch: {result}")
+
+        # TODO: adding logits
         return result
 
 
@@ -500,4 +502,26 @@ class PanamaMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier)
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "03_ami-gbif_fine-grained_c-america_category_map-with_names.json"
+    )
+
+
+class PanamaMothSpeciesClassifier2025(SpeciesClassifier, Resnet50TimmClassifier):
+    input_size = 128
+    normalization = imagenet_normalization
+    lookup_gbif_names = False
+
+    name = "Panama Species Classifier - Mar 2025"
+    description = (
+        "Trained on March 13th, 2025 for 2360 species. "
+        "https://wandb.ai/moth-ai/panama_classifier/runs/81f5ssv9/overview"
+    )
+
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_plus_resnet50_20250313.pth"
+    )
+
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_plus_category_map-with_names.json"  
     )
