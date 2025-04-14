@@ -199,6 +199,22 @@ class InferenceBaseClass:
         """
         raise NotImplementedError
 
+    def get_features(
+        self, batch_input: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Default get_features method for models that don't implement  feature extraction.
+
+        Returns:
+            - logits: model output
+            - features: dummy zero tensor with shape [batch_size, 2048]
+        """
+        logger.debug("InferenceBaseClass.get_features called")
+
+        batch_size = batch_input.size(0)
+        dummy_features = torch.zeros(batch_size, 2048, device=batch_input.device)
+        return dummy_features
+
     def get_transforms(self) -> torchvision.transforms.Compose:
         """
         This method must be implemented by a subclass.
