@@ -9,6 +9,7 @@ import torchvision.transforms
 from sentry_sdk import start_transaction
 
 from trapdata import logger
+from trapdata.common.constants import FEATURES_DIMENSION
 from trapdata.common.schemas import FilePath
 from trapdata.common.utils import slugify
 from trapdata.db.models.queue import QueueManager
@@ -207,12 +208,14 @@ class InferenceBaseClass:
 
         Returns:
             - logits: model output
-            - features: dummy zero tensor with shape [batch_size, 2048]
+            - features: dummy zero tensor with shape [batch_size, FEATURES_DIMENSION]
         """
         logger.debug("InferenceBaseClass.get_features called")
 
         batch_size = batch_input.size(0)
-        dummy_features = torch.zeros(batch_size, 2048, device=batch_input.device)
+        dummy_features = torch.zeros(
+            batch_size, FEATURES_DIMENSION, device=batch_input.device
+        )
         return dummy_features
 
     def get_transforms(self) -> torchvision.transforms.Compose:
