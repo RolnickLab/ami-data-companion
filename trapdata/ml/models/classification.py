@@ -287,6 +287,20 @@ class Resnet50TimmClassifier(Resnet50Classifier):
         model.eval()
         return model
 
+    def get_features(self, batch_input: torch.Tensor) -> torch.Tensor:
+        logger.info(
+            f"[{self.name}] get_features called with input shape: {batch_input.shape}"
+        )
+
+        features = self.model.forward_features(batch_input)
+        # Flatten the features vector
+        features = torch.nn.functional.adaptive_avg_pool2d(features, output_size=(1, 1))
+        features = features.view(features.size(0), -1)
+
+        logger.debug(f"[{self.name}] features shape: {features.shape}")
+
+        return features
+
 
 class BinaryClassifier(Resnet50ClassifierLowRes):
     stage = 2
