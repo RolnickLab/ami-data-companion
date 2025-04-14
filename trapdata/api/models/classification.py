@@ -3,7 +3,10 @@ import typing
 
 import numpy as np
 import torch
+import torch.utils.data
+from sentry_sdk import start_transaction
 
+from trapdata import logger
 from trapdata.common.logs import logger
 from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
@@ -17,6 +20,7 @@ from trapdata.ml.models.classification import (
     TuringCostaRicaSpeciesClassifier,
     UKDenmarkMothSpeciesClassifier2024,
 )
+from trapdata.ml.utils import StopWatch
 
 from ..datasets import ClassificationImageDataset
 from ..schemas import (
@@ -60,27 +64,42 @@ class APIMothClassifier(
             batch_size=self.batch_size,
         )
 
-    def post_process_batch(self, logits: torch.Tensor):
+    def post_process_batch(
+        self, logits: torch.Tensor, features: torch.Tensor | None = None
+    ):
         """
         Return the labels, softmax/calibrated scores, and the original logits for
-        each image in the batch.
-
-        Almost like the base class method, but we need to return the logits as well.
+        each image in the batch, along with optional feature vectors.
         """
         predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
 
+        features = features.cpu() if features is not None else None
         batch_results = []
-        for pred in predictions:
-            # Get all class indices and their corresponding scores
+        for i, pred in enumerate(predictions):
             class_indices = np.arange(len(pred))
             scores = pred
             labels = [self.category_map[i] for i in class_indices]
-            batch_results.append(list(zip(labels, scores, pred)))
+            preds = list(zip(labels, scores, pred))
 
-        logger.debug(f"Post-processing result batch: {batch_results}")
+            if features is not None:
+                batch_results.append((preds, features[i].tolist()))
+            else:
+                batch_results.append((preds, None))
 
+        logger.debug(f"Post-processing result batch with {len(batch_results)} entries.")
         return batch_results
+
+    def predict_batch(self, batch, return_features: bool = False):
+        batch_input = batch.to(self.device, non_blocking=True)
+
+        if return_features:
+            features = self.get_features(batch_input)
+            logits = self.model(batch_input)
+            return logits, features
+
+        logits = self.model(batch_input)
+        return logits, None
 
     def get_best_label(self, predictions):
         """
@@ -105,16 +124,18 @@ class APIMothClassifier(
     ) -> list[DetectionResponse]:
         image_ids = metadata[0]
         detection_idxes = metadata[1]
-        for image_id, detection_idx, predictions in zip(
+        for image_id, detection_idx, (predictions, features_vec) in zip(
             image_ids, detection_idxes, batch_output
         ):
             detection = self.detections[detection_idx]
             assert detection.source_image_id == image_id
             _labels, scores, logits = zip(*predictions)
+
             classification = ClassificationResponse(
                 classification=self.get_best_label(predictions),
                 scores=scores,
                 logits=logits,
+                features=features_vec,
                 inference_time=seconds_per_item,
                 algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
                 timestamp=datetime.datetime.now(),
@@ -140,12 +161,46 @@ class APIMothClassifier(
             f"Total classifications: {len(detection.classifications)}"
         )
 
-    def run(self) -> list[DetectionResponse]:
+    @torch.no_grad()
+    def run(self):
         logger.info(
             f"Starting {self.__class__.__name__} run with {len(self.results)} "
             "detections"
         )
-        super().run()
+        torch.cuda.empty_cache()
+
+        for i, batch in enumerate(self.dataloader):
+            if not batch:
+                logger.info(f"Batch {i+1} is empty, skipping")
+                continue
+
+            item_ids, batch_input = batch
+
+            logger.info(
+                f"Processing batch {i+1}, about {len(self.dataloader)} remaining"
+            )
+
+            with StopWatch() as batch_time:
+                with start_transaction(op="inference_batch", name=self.name):
+                    logits, features = self.predict_batch(
+                        batch_input, return_features=True
+                    )
+
+            seconds_per_item = batch_time.duration / len(logits)
+
+            batch_output = list(self.post_process_batch(logits, features=features))
+            if isinstance(item_ids, (np.ndarray, torch.Tensor)):
+                item_ids = item_ids.tolist()
+
+            logger.info(f"Saving results from {len(item_ids)} items")
+            logger.debug(f"APIMothClassifier.run: features shape: {features.shape}")
+            self.save_results(
+                item_ids,
+                batch_output,
+                seconds_per_item=seconds_per_item,
+            )
+            logger.info(f"{self.name} Batch -- Done")
+
         logger.info(
             f"Finished {self.__class__.__name__} run. "
             f"Processed {len(self.results)} detections"
