@@ -100,6 +100,13 @@ class ClassificationResponse(pydantic.BaseModel):
         ),
         repr=False,  # Too long to display in the repr
     )
+    features: list[float] = pydantic.Field(
+        default_factory=list,
+        description=(
+            "Intermediate features extracted from the model before the classification head"
+        ),
+        repr=False,
+    )
     inference_time: float | None = None
     algorithm: AlgorithmReference
     terminal: bool = True
