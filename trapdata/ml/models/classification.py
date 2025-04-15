@@ -410,6 +410,41 @@ class TuringAnguillaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turi
     labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/01_anguilla_data_category_map.json"
 
 
+class TuringThailandSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
+    name = "Turing Thailand Species Classifier"
+    description = "Trained on 11th November 2024 by Turing team using Resnet50 model."
+    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification//turing-thailand_v01_resnet50_2024-11-21-16-28_state.pt"
+    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification//01_thailand_data_category_map.json"
+
+
+class TuringMadagascarSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
+    name = "Turing Madagascar Species Classifier"
+    description = "Trained on 11th November 2024 by Turing team using Resnet50 model."
+    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification//turing-madagascar_v01_resnet50_2024-07-01-13-01_state.pt"
+    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification//01_madagascar_data_category_map.json"
+
+
+class TuringKenyaUgandaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
+    name = "Turing Kenya and Uganda Species Classifier"
+    description = "Trained on 19th November 2024 by Turing team using Resnet50 model."
+    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification//turing-kenya-uganda_v01_resnet50_2024-11-19-18-44_state.pt"
+    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification//01_kenya-uganda_data_category_map.json"
+
+
+class TuringJapanSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
+    name = "Turing Japan Species Classifier"
+    description = "Trained on 19th November 2024 by Turing team using Resnet50 model."
+    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification//turing-japan_v01_resnet50_2024-11-22-17-22_state.pt"
+    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification//01_japan_data_category_map.json"
+
+
+class TuringSingaporeSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
+    name = "Turing Singapore Species Classifier"
+    description = "Trained on 21st November 2024 by Turing team using Resnet50 model."
+    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification//turing-singapore_v02_resnet50_2024-11-21-19-58_state.pt"
+    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification//02_singapore_data_category_map.json"
+
+
 class TuringUKSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
     name = "Turing UK Species Classifier"
     description = "Trained on 13th May 2024 by Turing team using Resnet50 model."
