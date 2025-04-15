@@ -22,6 +22,7 @@ from .models.classification import (
     MothClassifierQuebecVermont,
     MothClassifierTuringAnguilla,
     MothClassifierTuringCostaRica,
+    MothClassifierTuringKenyaUganda,
     MothClassifierUKDenmark,
 )
 from .models.localization import APIMothDetector
@@ -46,6 +47,7 @@ CLASSIFIER_CHOICES = {
     "uk_denmark_moths_2023": MothClassifierUKDenmark,
     "costa_rica_moths_turing_2024": MothClassifierTuringCostaRica,
     "anguilla_moths_turing_2024": MothClassifierTuringAnguilla,
+    "kenya-uganda_moths_turing_2024": MothClassifierTuringKenyaUganda,
     "global_moths_2024": MothClassifierGlobal,
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,

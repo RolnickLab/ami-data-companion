@@ -15,6 +15,7 @@ from trapdata.ml.models.classification import (
     QuebecVermontMothSpeciesClassifier2024,
     TuringAnguillaSpeciesClassifier,
     TuringCostaRicaSpeciesClassifier,
+    TuringKenyaUgandaSpeciesClassifier,
     UKDenmarkMothSpeciesClassifier2024,
 )
 
@@ -184,6 +185,12 @@ class MothClassifierTuringCostaRica(
 
 
 class MothClassifierTuringAnguilla(APIMothClassifier, TuringAnguillaSpeciesClassifier):
+    pass
+
+
+class MothClassifierTuringKenyaUganda(
+    APIMothClassifier, TuringKenyaUgandaSpeciesClassifier
+):
     pass
 
 

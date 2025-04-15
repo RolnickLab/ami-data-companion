@@ -406,8 +406,27 @@ class TuringCostaRicaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Tur
 class TuringAnguillaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
     name = "Turing Anguilla Species Classifier"
     description = "Trained on 28th June 2024 by Turing team using Resnet50 model."
-    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/turing-anguilla_v01_resnet50_2024-06-28-17-01_state.pt"
-    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/01_anguilla_data_category_map.json"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "turing-anguilla_v01_resnet50_2024-06-28-17-01_state.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "01_anguilla_data_category_map.json"
+    )
+
+
+class TuringKenyaUgandaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
+    name = "Turing Kenya and Uganda Species Classifier"
+    description = "Trained on 19th November 2024 by Turing team using Resnet50 model."
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "turing-kenya-uganda_v01_resnet50_2024-11-19-18-44_state.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "01_kenya-uganda_data_category_map.json"
+    )
 
 
 class TuringUKSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
