@@ -78,13 +78,11 @@ class TestFeatureExtractionAPI(TestCase):
             len(feature_vectors), 1, "Need at least two features to compare"
         )
 
-        print("Cosine similarity matrix:")
         for i, vec1 in enumerate(feature_vectors):
             sims = []
             for j, vec2 in enumerate(feature_vectors):
                 sim = cosine_similarity(vec1, vec2)
                 sims.append(round(sim, 4))
-            print(f"Feature {i} similarities: {sims}")
 
         # Confirm that similarity with itself is 1.0
         for i, vec in enumerate(feature_vectors):
