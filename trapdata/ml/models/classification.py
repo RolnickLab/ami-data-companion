@@ -288,17 +288,13 @@ class Resnet50TimmClassifier(Resnet50Classifier):
         return model
 
     def get_features(self, batch_input: torch.Tensor) -> torch.Tensor:
-        logger.info(
+        logger.debug(
             f"[{self.name}] get_features called with input shape: {batch_input.shape}"
         )
-
-        features = self.model.forward_features(batch_input)
+        features = self.model.forward_features(batch_input)  # [B, 2048, 4, 4]
         # Flatten the features vector
         features = torch.nn.functional.adaptive_avg_pool2d(features, output_size=(1, 1))
         features = features.view(features.size(0), -1)
-
-        logger.debug(f"[{self.name}] features shape: {features.shape}")
-
         return features
 
 

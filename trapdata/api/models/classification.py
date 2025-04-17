@@ -193,7 +193,6 @@ class APIMothClassifier(
                 item_ids = item_ids.tolist()
 
             logger.info(f"Saving results from {len(item_ids)} items")
-            logger.debug(f"APIMothClassifier.run: features shape: {features.shape}")
             self.save_results(
                 item_ids,
                 batch_output,
