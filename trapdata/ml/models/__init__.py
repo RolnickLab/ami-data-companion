@@ -29,7 +29,6 @@ ObjectDetectorChoice = ModelChoiceEnum(
 )
 DEFAULT_OBJECT_DETECTOR = get_default_model(ObjectDetectorChoice)
 
-
 binary_classifiers = {Model.name: Model for Model in BinaryClassifier.__subclasses__()}
 BinaryClassifierChoice = ModelChoiceEnum(
     "BinaryClassifierChoice",

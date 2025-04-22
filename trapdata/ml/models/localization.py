@@ -214,6 +214,14 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model = model.to(self.device)
+
+        # Get the state dictionary
+        state_dict = model.state_dict()
+
+        # Print the shape of each tensor in the state_dict
+        for name, param in state_dict.items():
+            print(f"{name}: {param.shape}")
+
         model.eval()
         self.model = model
         return self.model
@@ -267,6 +275,14 @@ class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
         checkpoint = torch.load(self.weights, map_location=self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
+
+        # Get the state dictionary
+        state_dict = model.state_dict()
+
+        # Print the shape of each tensor in the state_dict
+        for name, param in state_dict.items():
+            print(f"{name}: {param.shape}")
+
         model = model.to(self.device)
         model.eval()
         self.model = model

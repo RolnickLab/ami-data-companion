@@ -1,13 +1,20 @@
+from typing import Union
+from sqlalchemy.engine.url import URL as URL
 import timm
 import torch
 import torch.utils.data
 import torchvision
 
 from trapdata import constants, logger
+from trapdata.common.schemas import FilePath
 from trapdata.db.models.detections import save_classified_objects
 from trapdata.db.models.queue import DetectedObjectQueue, UnclassifiedObjectQueue
 
 from .base import InferenceBaseClass, imagenet_normalization
+
+import numpy as np
+import os
+from trapdata.ml.utils import get_or_download_file
 
 
 class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
@@ -318,6 +325,24 @@ class SpeciesClassifier(InferenceBaseClass):
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
 
 
+
+# class SpeciesClassifierWithOOD(SpeciesClassifier):
+#     def save_results(self, object_ids, batch_output, *args, **kwargs):
+#         # Here we are saving the specific taxon labels
+#         classified_objects_data = [
+#             {
+#                 "specific_label": label,
+#                 "specific_label_score": score,
+#                 "model_name": self.name,
+#                 "in_queue": True,  # Put back in queue for the feature extractor & tracking
+#             }
+#             for label, score in batch_output
+#         ]
+#         save_classified_objects(self.db_path, object_ids, classified_objects_data)
+
+
+
+
 class QuebecVermontMothSpeciesClassifierMixedResolution(
     SpeciesClassifier, Resnet50ClassifierLowRes
 ):
@@ -456,7 +481,7 @@ class QuebecVermontMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClas
     )
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "quebec-vermont_resnet50_baseline_20240417_950de764.pth"
+        "=-vermont_resnet50_baseline_20240417_950de764.pth"
     )
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
@@ -505,12 +530,12 @@ class PanamaMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier)
     )
 
 
-class PanamaMothSpeciesClassifier2025(SpeciesClassifier, Resnet50TimmClassifier):
+class PanamaPlusWithOODClassifier2025(SpeciesClassifier, Resnet50TimmClassifier):
     input_size = 128
     normalization = imagenet_normalization
     lookup_gbif_names = False
 
-    name = "Panama Species Classifier - Mar 2025"
+    name = "Panama Plus Species Classifier with OOD detection - Mar 2025"
     description = (
         "Trained on March 13th, 2025 for 2360 species. "
         "https://wandb.ai/moth-ai/panama_classifier/runs/81f5ssv9/overview"
@@ -523,5 +548,21 @@ class PanamaMothSpeciesClassifier2025(SpeciesClassifier, Resnet50TimmClassifier)
 
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "panama_plus_category_map-with_names.json"  
+        "panama_plus_category_map-with_names.json"
     )
+
+    training_csv_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/panama_plus_train.csv"
+
+    def save_results(self, object_ids, batch_output, *args, **kwargs):
+        # Here we are saving the specific taxon labels
+        classified_objects_data = [
+            {
+                "specific_label": label,
+                "specific_label_score": score,
+                "model_name": self.name,
+                "in_queue": True,  # Put back in queue for the feature extractor & tracking
+            }
+            for label, score in batch_output
+        ]
+        save_classified_objects(self.db_path, object_ids, classified_objects_data)
+

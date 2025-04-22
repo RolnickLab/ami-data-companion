@@ -23,6 +23,7 @@ def start_pipeline(
         num_workers=settings.num_workers,
         single=single,
     )
+
     if object_detector.queue.queue_count() > 0:
         object_detector.run()
         logger.info("Localization complete")

@@ -1,4 +1,5 @@
 import json
+import pandas as pd
 from typing import Union
 
 import numpy as np
@@ -13,6 +14,8 @@ from trapdata.common.schemas import FilePath
 from trapdata.common.utils import slugify
 from trapdata.db.models.queue import QueueManager
 from trapdata.ml.utils import StopWatch, get_device, get_or_download_file
+
+from dataclasses import dataclass
 
 
 class BatchEmptyException(Exception):
@@ -88,6 +91,7 @@ class InferenceBaseClass:
     queue: QueueManager
     dataset: torch.utils.data.Dataset
     dataloader: torch.utils.data.DataLoader
+    training_csv_path: str | None = None
 
     def __init__(
         self,
@@ -105,6 +109,7 @@ class InferenceBaseClass:
 
         self.device = self.device or get_device()
         self.category_map = self.get_labels(self.labels_path)
+        self.class_prior = self.get_class_prior(self.training_csv_path)
         self.num_classes = self.num_classes or len(self.category_map)
         self.weights = self.get_weights(self.weights_path)
         self.transforms = self.get_transforms()
@@ -182,6 +187,25 @@ class InferenceBaseClass:
             return index_to_label
         else:
             return {}
+
+    def get_class_prior(self, training_csv_path):
+        if training_csv_path:
+            local_path = get_or_download_file(
+                training_csv_path,
+                self.user_data_path or torch.hub.get_dir(),
+                prefix="models",
+            )
+            df_train = pd.read_csv(local_path)
+            categories = sorted(list(df_train["speciesKey"].unique()))
+            categories_map = {categ: id for id, categ in enumerate(categories)}
+            df_train["label"] = df_train["speciesKey"].map(categories_map)
+            cls_idx = df_train["label"].astype(int).values
+            num_classes = df_train["label"].nunique()
+            cls_num = np.bincount(cls_idx, minlength=num_classes)
+            targets = cls_num / cls_num.sum()
+            return targets
+        else:
+            return None
 
     def get_model(self) -> torch.nn.Module:
         """
@@ -330,3 +354,12 @@ class InferenceBaseClass:
             logger.info(f"{self.name} Batch -- Done")
 
         logger.info(f"{self.name} -- Done")
+
+
+@dataclass
+class ClassifierResult:
+    # TODO: add types
+    labels = None
+    logits = None
+    softmax_scores = None
+    ood_scores = None

@@ -27,6 +27,7 @@ class DetectionListItem(BaseModel):
     model_name: Optional[str]
     in_queue: bool
     notes: Optional[str]
+    ood_score: Optional[str]
 
     # PyDantic complains because we have an attribute called `model_name`
     model_config = ConfigDict(protected_namespaces=[])  # type:ignore
@@ -43,6 +44,7 @@ class DetectionDetail(DetectionListItem):
     timestamp: Optional[str]
     bbox_center: Optional[tuple[int, int]]
     area_pixels: Optional[int]
+    ood_score: Optional[float]
 
 
 class DetectedObject(db.Base):
@@ -76,6 +78,7 @@ class DetectedObject(db.Base):
     sequence_previous_id = sa.Column(sa.Integer)
     sequence_previous_cost = sa.Column(sa.Float)
     cnn_features = sa.Column(sa.JSON)
+    ood_score = sa.Column(sa.Float)
 
     # @TODO add updated & created timestamps to all db models
 
@@ -288,6 +291,7 @@ class DetectedObject(db.Base):
             last_detected=self.last_detected,
             notes=self.notes,
             in_queue=self.in_queue,
+            ood_score=self.ood_score
         )
 
     def report_data_simple(self):
@@ -510,7 +514,9 @@ def get_species_for_image(db_path, image_id):
 def num_species_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(sa.func.count(DetectedObject.specific_label.distinct()),).where(
+    query = sa.select(
+        sa.func.count(DetectedObject.specific_label.distinct()),
+    ).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
@@ -522,7 +528,9 @@ def num_species_for_event(
 def num_occurrences_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(sa.func.count(DetectedObject.sequence_id.distinct()),).where(
+    query = sa.select(
+        sa.func.count(DetectedObject.sequence_id.distinct()),
+    ).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )

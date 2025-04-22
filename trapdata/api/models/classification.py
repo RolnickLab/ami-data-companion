@@ -15,6 +15,7 @@ from trapdata.ml.models.classification import (
     TuringAnguillaSpeciesClassifier,
     TuringCostaRicaSpeciesClassifier,
     UKDenmarkMothSpeciesClassifier2024,
+    PanamaPlusWithOODClassifier2025,
 )
 
 from ..datasets import ClassificationImageDataset
@@ -25,6 +26,7 @@ from ..schemas import (
     SourceImage,
 )
 from .base import APIInferenceBaseClass
+from trapdata.ml.models.base import ClassifierResult
 
 
 class APIMothClassifier(
@@ -188,3 +190,47 @@ class MothClassifierTuringAnguilla(APIMothClassifier, TuringAnguillaSpeciesClass
 
 class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
     pass
+
+
+class MothClassifierPanamaPlus2025(APIMothClassifier, PanamaPlusWithOODClassifier2025):
+    def post_process_batch(self, logits: torch.Tensor):
+        """
+        Return the labels, softmax/calibrated scores, and the original logits for
+        each image in the batch.
+
+        Almost like the base class method, but we need to return the logits as well.
+        """
+        predictions = torch.nn.functional.softmax(logits, dim=1)
+        predictions = predictions.cpu().numpy()
+
+        ood_scores = None
+        if self.class_prior:
+            _, ood_scores = torch.max(predictions - self.class_prior, dim=-1)
+        else:
+            _, ood_scores = torch.max(predictions, dim=-1)
+
+        batch_results = []
+        for softmax_scores in predictions:
+            # Get all class indices and their corresponding scores
+            class_indices = np.arange(len(softmax_scores))
+            labels = [self.category_map[i] for i in class_indices]
+
+            print("labels type", type(labels))
+            print("logits type", type(logits))
+            print("label type", type(softmax_scores))
+            print("label type", type(ood_scores))
+
+            exit()
+
+            # TODO: Change batch_results
+            result = ClassifierResult(
+                labels=labels,
+                logits=logits,
+                softmax_scores=softmax_scores,
+                ood_scores=ood_scores,
+            )
+            batch_results.append(result)
+
+        logger.debug(f"Post-processing result batch: {batch_results}")
+
+        return batch_results
