@@ -80,26 +80,33 @@ class APIMothClassifier(
         predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
 
-        if self.class_prior is not None:
-            ood_scores = np.max(predictions - self.class_prior, axis=-1)
-        else:
+        if self.class_prior is None:
             ood_scores = np.max(predictions, axis=-1)
+        else:
+            ood_scores = np.max(predictions - self.class_prior, axis=-1)
+
         features = features.cpu() if features is not None else None
         batch_results = []
 
         logits = logits.cpu().numpy()
 
+        # TODO: update this function with ClassifierResult dataclass
         for i, pred in enumerate(predictions):
             class_indices = np.arange(len(pred))
-            scores = pred
             labels = [self.category_map[i] for i in class_indices]
-            ood_score = [ood_scores[i]]
-            preds = list(zip(labels, scores, logits[i].tolist(), ood_score))
+            ood_score = ood_scores[i]
+            logit = logits[i].tolist()
+            feature = features[i].tolist() if features is not None else None
 
-            if features is not None:
-                batch_results.append((preds, features[i].tolist()))
-            else:
-                batch_results.append((preds, None))
+            result = ClassifierResult(
+                feature=feature,
+                labels=labels,
+                logit=logit,
+                scores=pred,
+                ood_score=ood_score,
+            )
+
+            batch_results.append(result)
 
         logger.debug(f"Post-processing result batch with {len(batch_results)} entries.")
         return batch_results
@@ -116,22 +123,7 @@ class APIMothClassifier(
         return logits, None
 
     def get_best_label(self, predictions):
-        """
-
-        Convenience method to get the best label from the predictions, which are a list of tuples
-        in the order of the model's class index, NOT the values.
-
-        This must not modify the predictions list!
-
-        predictions look like:
-        [
-            ('label1', score1, logit1),
-            ('label2', score2, logit2),
-            ...
-        ]
-        """
-        best_pred = max(predictions, key=lambda x: x[1])
-        best_label = best_pred[0]
+        best_label = predictions.labels[np.argmax(predictions.scores)]
         return best_label
 
     # TODO: to be updated; need to return logits; check the output of post_process_batch()
@@ -140,19 +132,18 @@ class APIMothClassifier(
     ) -> list[DetectionResponse]:
         image_ids = metadata[0]
         detection_idxes = metadata[1]
-        for image_id, detection_idx, (predictions, features_vec) in zip(
+        for image_id, detection_idx, predictions in zip(
             image_ids, detection_idxes, batch_output
         ):
             detection = self.detections[detection_idx]
             assert detection.source_image_id == image_id
-            _labels, scores, logits, ood_scores = zip(*predictions)
 
             classification = ClassificationResponse(
                 classification=self.get_best_label(predictions),
-                scores=scores,
-                ood_score=ood_scores[0],
-                logits=logits,
-                features=features_vec,
+                scores=predictions.scores,
+                ood_score=predictions.ood_score,
+                logits=predictions.logit,
+                features=predictions.feature,
                 inference_time=seconds_per_item,
                 algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
                 timestamp=datetime.datetime.now(),

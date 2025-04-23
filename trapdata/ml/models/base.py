@@ -368,8 +368,8 @@ class InferenceBaseClass:
 @dataclass
 class ClassifierResult:
     # TODO: add types
-    features = None
-    labels = None
-    logits = None
-    softmax_scores = None
-    ood_scores = None
+    feature: None
+    labels: None
+    logit: None
+    scores: None
+    ood_score: float
