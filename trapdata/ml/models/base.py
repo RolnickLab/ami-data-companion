@@ -207,6 +207,15 @@ class InferenceBaseClass:
         else:
             return None
 
+    def get_features(
+        self, batch_input: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Default get_features method for models that don't implement  feature extraction.
+        """
+
+        return None
+
     def get_model(self) -> torch.nn.Module:
         """
         This method must be implemented by a subclass.
@@ -359,6 +368,7 @@ class InferenceBaseClass:
 @dataclass
 class ClassifierResult:
     # TODO: add types
+    features = None
     labels = None
     logits = None
     softmax_scores = None

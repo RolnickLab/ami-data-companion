@@ -32,6 +32,11 @@ from trapdata.settings import PipelineSettings
 # @newrelic.agent.background_task()
 
 
+print(dir(SpeciesClassifierChoice))
+
+exit()
+
+
 def get_settings(db_path: str, image_base_path: FilePath) -> PipelineSettings:
     settings = PipelineSettings(
         database_url=db_path,

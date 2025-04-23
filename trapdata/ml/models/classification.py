@@ -325,7 +325,6 @@ class SpeciesClassifier(InferenceBaseClass):
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
 
 
-
 # class SpeciesClassifierWithOOD(SpeciesClassifier):
 #     def save_results(self, object_ids, batch_output, *args, **kwargs):
 #         # Here we are saving the specific taxon labels
@@ -339,8 +338,6 @@ class SpeciesClassifier(InferenceBaseClass):
 #             for label, score in batch_output
 #         ]
 #         save_classified_objects(self.db_path, object_ids, classified_objects_data)
-
-
 
 
 class QuebecVermontMothSpeciesClassifierMixedResolution(
@@ -481,8 +478,9 @@ class QuebecVermontMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClas
     )
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "=-vermont_resnet50_baseline_20240417_950de764.pth"
+        "quebec-vermont_resnet50_baseline_20240417_950de764.pth"
     )
+
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "01_ami-gbif_fine-grained_ne-america_category_map-with_names.json"
@@ -553,16 +551,15 @@ class PanamaPlusWithOODClassifier2025(SpeciesClassifier, Resnet50TimmClassifier)
 
     training_csv_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/panama_plus_train.csv"
 
-    def save_results(self, object_ids, batch_output, *args, **kwargs):
-        # Here we are saving the specific taxon labels
-        classified_objects_data = [
-            {
-                "specific_label": label,
-                "specific_label_score": score,
-                "model_name": self.name,
-                "in_queue": True,  # Put back in queue for the feature extractor & tracking
-            }
-            for label, score in batch_output
-        ]
-        save_classified_objects(self.db_path, object_ids, classified_objects_data)
-
+    # def save_results(self, object_ids, batch_output, *args, **kwargs):
+    #     # Here we are saving the specific taxon labels
+    #     classified_objects_data = [
+    #         {
+    #             "specific_label": label,
+    #             "specific_label_score": score,
+    #             "model_name": self.name,
+    #             "in_queue": True,  # Put back in queue for the feature extractor & tracking
+    #         }
+    #         for label, score in batch_output
+    #     ]
+    #     save_classified_objects(self.db_path, object_ids, classified_objects_data)

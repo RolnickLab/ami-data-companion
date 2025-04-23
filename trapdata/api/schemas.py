@@ -100,6 +100,8 @@ class ClassificationResponse(pydantic.BaseModel):
         ),
         repr=False,  # Too long to display in the repr
     )
+
+    ood_score: float | None = None
     inference_time: float | None = None
     algorithm: AlgorithmReference
     terminal: bool = True
