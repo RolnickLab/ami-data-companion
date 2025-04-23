@@ -1,7 +1,16 @@
+import os
 import pathlib
 from unittest import TestCase
+from urllib.parse import urlparse
 
+import matplotlib.pyplot as plt
+import numpy as np
+import plotly.express as px
+import requests
 from fastapi.testclient import TestClient
+from PIL import Image
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 
 from trapdata.api.api import PipelineChoice, PipelineRequest, PipelineResponse, app
 from trapdata.api.schemas import SourceImageRequest
@@ -22,8 +31,15 @@ class TestFeatureExtractionAPI(TestCase):
         cls.file_server.stop()
 
     def get_local_test_images(self, num=1):
-        image_path = "panama/01-20231110214539-snapshot.jpg"
-        return [SourceImageRequest(id="0", url=self.file_server.get_url(image_path))]
+        image_paths = [
+            "panama/01-20231110214539-snapshot.jpg",
+            "panama/01-20231111032659-snapshot.jpg",
+            "panama/01-20231111015309-snapshot.jpg",
+        ]
+        return [
+            SourceImageRequest(id="0", url=self.file_server.get_url(image_path))
+            for image_path in image_paths[:num]
+        ]
 
     def get_pipeline_response(self, pipeline_slug="global_moths_2024", num_images=1):
         """
@@ -104,3 +120,65 @@ class TestFeatureExtractionAPI(TestCase):
                 ref_index,
                 f"Expected most similar vector to be at index {ref_index}, got {most_similar_index}",
             )
+
+    def get_detection_crop(self, local_image_path: str, bbox) -> Image.Image | None:
+        """
+        Given a local image path and a bounding box, return a cropped and resized image.
+        """
+
+        try:
+            if not os.path.exists(local_image_path):
+                print(f"File not found: {local_image_path}")
+                return None
+
+            img = Image.open(local_image_path).convert("RGB")
+            x1, y1, x2, y2 = map(int, [bbox.x1, bbox.y1, bbox.x2, bbox.y2])
+            crop = img.crop((x1, y1, x2, y2)).resize((64, 64))
+            return crop
+        except Exception as e:
+            print(f"Failed to load or crop image: {e}")
+            return None
+
+    def test_feature_clustering_visualization(self):
+
+        source_images = self.get_local_test_images(num=3)
+        pipeline_response = self.get_pipeline_response(num_images=len(source_images))
+        image_id_to_url = {img.id: img.url for img in source_images}
+
+        features = []
+        labels = []
+
+        for detection in pipeline_response.detections:
+            source_url = image_id_to_url.get(detection.source_image_id)
+            if not source_url or not detection.bbox:
+                continue
+
+            for classification in detection.classifications:
+                if classification.features:
+                    features.append(classification.features)
+                    print(f"Classification: {classification.classification}")
+
+                    labels.append(classification.classification)
+
+        if len(features) < 2:
+            print("Not enough data for clustering.")
+            return
+
+        # Reduce to 3D using PCA
+        features_np = np.array(features)
+        reduced = PCA(n_components=3).fit_transform(features_np)
+        cluster_labels = KMeans(
+            n_clusters=min(8, len(features)), random_state=42
+        ).fit_predict(features_np)
+
+        fig = px.scatter_3d(
+            x=reduced[:, 0],
+            y=reduced[:, 1],
+            z=reduced[:, 2],
+            color=cluster_labels.astype(str),
+            hover_name=labels,
+            title="3D Clustering of Classification Feature Vectors (K-Means + PCA)",
+        )
+
+        fig.update_traces(marker=dict(size=6))
+        fig.write_html("feature_clustering_3d_pca.html")
