@@ -90,7 +90,6 @@ class APIMothClassifier(
 
         logits = logits.cpu().numpy()
 
-        # TODO: update this function with ClassifierResult dataclass
         for i, pred in enumerate(predictions):
             class_indices = np.arange(len(pred))
             labels = [self.category_map[i] for i in class_indices]
@@ -126,7 +125,6 @@ class APIMothClassifier(
         best_label = predictions.labels[np.argmax(predictions.scores)]
         return best_label
 
-    # TODO: to be updated; need to return logits; check the output of post_process_batch()
     def save_results(
         self, metadata, batch_output, seconds_per_item, *args, **kwargs
     ) -> list[DetectionResponse]:
@@ -255,45 +253,3 @@ class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
 class MothClassifierPanamaPlus2025(APIMothClassifier, PanamaPlusWithOODClassifier2025):
 
     pass
-
-    # def post_process_batch(self, logits: torch.Tensor):
-    #     """
-    #     Return the labels, softmax/calibrated scores, and the original logits for
-    #     each image in the batch.
-
-    #     Almost like the base class method, but we need to return the logits as well.
-    #     """
-    #     predictions = torch.nn.functional.softmax(logits, dim=1)
-    #     predictions = predictions.cpu().numpy()
-
-    #     ood_scores = None
-    #     if self.class_prior:
-    #         _, ood_scores = torch.max(predictions - self.class_prior, dim=-1)
-    #     else:
-    #         _, ood_scores = torch.max(predictions, dim=-1)
-
-    #     batch_results = []
-    #     for softmax_scores in predictions:
-    #         # Get all class indices and their corresponding scores
-    #         class_indices = np.arange(len(softmax_scores))
-    #         labels = [self.category_map[i] for i in class_indices]
-
-    #         print("labels type", type(labels))
-    #         print("logits type", type(logits))
-    #         print("label type", type(softmax_scores))
-    #         print("label type", type(ood_scores))
-
-    #         exit()
-
-    #         # TODO: Change batch_results
-    #         result = ClassifierResult(
-    #             labels=labels,
-    #             logits=logits,
-    #             softmax_scores=softmax_scores,
-    #             ood_scores=ood_scores,
-    #         )
-    #         batch_results.append(result)
-
-    #     logger.debug(f"Post-processing result batch: {batch_results}")
-
-    #     return batch_results
