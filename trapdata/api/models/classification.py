@@ -3,20 +3,24 @@ import typing
 
 import numpy as np
 import torch
+import torch.utils.data
+from sentry_sdk import start_transaction
 
 from trapdata.common.logs import logger
+from trapdata.ml.models.base import ClassifierResult
 from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
     InferenceBaseClass,
     MothNonMothClassifier,
     PanamaMothSpeciesClassifier2024,
     PanamaMothSpeciesClassifierMixedResolution2023,
+    PanamaPlusWithOODClassifier2025,
     QuebecVermontMothSpeciesClassifier2024,
     TuringAnguillaSpeciesClassifier,
     TuringCostaRicaSpeciesClassifier,
     UKDenmarkMothSpeciesClassifier2024,
-    PanamaPlusWithOODClassifier2025,
 )
+from trapdata.ml.utils import StopWatch
 
 from ..datasets import ClassificationImageDataset
 from ..schemas import (
@@ -26,11 +30,6 @@ from ..schemas import (
     SourceImage,
 )
 from .base import APIInferenceBaseClass
-from trapdata.ml.models.base import ClassifierResult
-
-from trapdata.ml.utils import StopWatch
-import torch.utils.data
-from sentry_sdk import start_transaction
 
 
 class APIMothClassifier(
