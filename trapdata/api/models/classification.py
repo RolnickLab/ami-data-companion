@@ -146,6 +146,7 @@ class APIMothClassifier(
                 inference_time=seconds_per_item,
                 algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
                 timestamp=datetime.datetime.now(),
+                terminal=self.terminal,
             )
             self.update_classification(detection, classification)
 
