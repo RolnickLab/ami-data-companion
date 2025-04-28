@@ -1,7 +1,8 @@
-import os
 import pathlib
 from unittest import TestCase
+
 from fastapi.testclient import TestClient
+
 from trapdata.api.api import PipelineChoice, PipelineRequest, PipelineResponse, app
 from trapdata.api.schemas import SourceImageRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
@@ -58,8 +59,15 @@ class TestFeatureExtractionAPI(TestCase):
         self.assertTrue(pipeline_response.detections, "No detections returned")
         for detection in pipeline_response.detections:
             for classification in detection.classifications:
-                print(classification)
-                print(classification.ood_score)
+                assert (
+                    classification.ood_score is not None
+                ), "ood_score should not be None"
+                assert isinstance(
+                    classification.ood_score, float
+                ), "ood_score should be a float"
+                assert (
+                    0 <= classification.ood_score <= 1
+                ), "ood_score should be between 0 and 1"
 
         #         if classification.terminal:
         #             ood_scores = classification.ood_scores

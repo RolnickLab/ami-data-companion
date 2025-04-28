@@ -307,6 +307,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         detections=detections_to_return,
         total_time=seconds_elapsed,
     )
+    logger.debug(response.model_dump_json(indent=2))
     return response
 
 

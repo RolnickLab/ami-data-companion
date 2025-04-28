@@ -1,11 +1,11 @@
 # import newrelic.agent
 # newrelic.agent.initialize(environment="staging")
 
-import json
 import os
 import pathlib
 import tempfile
 from typing import Union
+
 import torch
 from rich import print
 
@@ -30,11 +30,6 @@ from trapdata.ml.utils import StopWatch
 from trapdata.settings import PipelineSettings
 
 # @newrelic.agent.background_task()
-
-
-print(dir(SpeciesClassifierChoice))
-
-exit()
 
 
 def get_settings(db_path: str, image_base_path: FilePath) -> PipelineSettings:
