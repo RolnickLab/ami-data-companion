@@ -11,6 +11,7 @@ from trapdata.ml.models.base import ClassifierResult
 from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
     InferenceBaseClass,
+    InsectOrderClassifier2025,
     MothNonMothClassifier,
     PanamaMothSpeciesClassifier2024,
     PanamaMothSpeciesClassifierMixedResolution2023,
@@ -18,6 +19,7 @@ from trapdata.ml.models.classification import (
     QuebecVermontMothSpeciesClassifier2024,
     TuringAnguillaSpeciesClassifier,
     TuringCostaRicaSpeciesClassifier,
+    TuringKenyaUgandaSpeciesClassifier,
     UKDenmarkMothSpeciesClassifier2024,
 )
 from trapdata.ml.utils import StopWatch
@@ -245,10 +247,19 @@ class MothClassifierTuringAnguilla(APIMothClassifier, TuringAnguillaSpeciesClass
     pass
 
 
+class MothClassifierTuringKenyaUganda(
+    APIMothClassifier, TuringKenyaUgandaSpeciesClassifier
+):
+    pass
+
+
 class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
     pass
 
 
 class MothClassifierPanamaPlus2025(APIMothClassifier, PanamaPlusWithOODClassifier2025):
+    pass
 
+
+class InsectOrderClassifier(APIMothClassifier, InsectOrderClassifier2025):
     pass

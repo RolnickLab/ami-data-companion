@@ -1,20 +1,13 @@
-from typing import Union
-from sqlalchemy.engine.url import URL as URL
 import timm
 import torch
 import torch.utils.data
 import torchvision
 
 from trapdata import constants, logger
-from trapdata.common.schemas import FilePath
 from trapdata.db.models.detections import save_classified_objects
 from trapdata.db.models.queue import DetectedObjectQueue, UnclassifiedObjectQueue
 
 from .base import InferenceBaseClass, imagenet_normalization
-
-import numpy as np
-import os
-from trapdata.ml.utils import get_or_download_file
 
 
 class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
@@ -114,6 +107,62 @@ class Resnet50(torch.nn.Module):
         x = self.classifier(x)
 
         return x
+
+
+class ConvNeXtOrderClassifier(InferenceBaseClass):
+    """ConvNeXt based insect order classifier"""
+
+    input_size = 128
+
+    def get_model(self):
+        num_classes = len(self.category_map)
+        model = timm.create_model(
+            "convnext_tiny_in22k",
+            weights=None,
+            num_classes=num_classes,
+        )
+        model = model.to(self.device)
+        checkpoint = torch.load(self.weights, map_location=self.device)
+        # The model state dict is nested in some checkpoints, and not in others
+        state_dict = checkpoint.get("model_state_dict") or checkpoint
+
+        model.load_state_dict(state_dict)
+        model.eval()
+        return model
+
+    def _pad_to_square(self):
+        """Padding transformation to make the image square"""
+
+        width, height = self.image.size
+        if height < width:
+            return torchvision.transforms.Pad(padding=[0, 0, 0, width - height])
+        elif height > width:
+            return torchvision.transforms.Pad(padding=[0, 0, height - width, 0])
+        else:
+            return torchvision.transforms.Pad(padding=[0, 0, 0, 0])
+
+    def get_transforms(self):
+        mean, std = [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
+        return torchvision.transforms.Compose(
+            [
+                # self._pad_to_square(),
+                torchvision.transforms.Resize((self.input_size, self.input_size)),
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize(mean, std),
+            ]
+        )
+
+    def post_process_batch(self, output):
+        predictions = torch.nn.functional.softmax(output, dim=1)
+        predictions = predictions.cpu().numpy()
+
+        categories = predictions.argmax(axis=1)
+        labels = [self.category_map[cat] for cat in categories]
+        scores = predictions.max(axis=1).astype(float)
+
+        result = list(zip(labels, scores))
+        logger.debug(f"Post-processing result batch: {result}")
+        return result
 
 
 class Resnet50Classifier_Turing(InferenceBaseClass):
@@ -246,6 +295,7 @@ class BinaryClassifier(Resnet50ClassifierLowRes):
     type = "binary_classification"
     positive_binary_label: str = constants.POSITIVE_BINARY_LABEL
     negative_binary_label: str = constants.NEGATIVE_BINARY_LABEL
+    default_taxon_rank = "SUPERFAMILY"
 
     def get_queue(self) -> DetectedObjectQueue:
         return DetectedObjectQueue(self.db_path, self.image_base_path)
@@ -373,8 +423,27 @@ class TuringCostaRicaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Tur
 class TuringAnguillaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
     name = "Turing Anguilla Species Classifier"
     description = "Trained on 28th June 2024 by Turing team using Resnet50 model."
-    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/turing-anguilla_v01_resnet50_2024-06-28-17-01_state.pt"
-    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/01_anguilla_data_category_map.json"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "turing-anguilla_v01_resnet50_2024-06-28-17-01_state.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "01_anguilla_data_category_map.json"
+    )
+
+
+class TuringKenyaUgandaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
+    name = "Turing Kenya and Uganda Species Classifier"
+    description = "Trained on 19th November 2024 by Turing team using Resnet50 model."
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "turing-kenya-uganda_v01_resnet50_2024-11-19-18-44_state.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "01_kenya-uganda_data_category_map.json"
+    )
 
 
 class TuringUKSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
@@ -526,6 +595,14 @@ class PanamaMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier)
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "03_ami-gbif_fine-grained_c-america_category_map-with_names.json"
     )
+
+
+class InsectOrderClassifier2025(SpeciesClassifier, ConvNeXtOrderClassifier):
+    name = "Insect Order Classifier"
+    description = "ConvNeXt-T based insect order classifier for 16 classes trained by Mila in January 2025"
+    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/insect_orders/convnext_tiny_in22k_worder0.5_wbinary0.5_run2_checkpoint.pt"
+    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/insect_orders/insect_order_category_map.json"
+    default_taxon_rank = "ORDER"
 
 
 class PanamaPlusWithOODClassifier2025(SpeciesClassifier, Resnet50TimmClassifier):

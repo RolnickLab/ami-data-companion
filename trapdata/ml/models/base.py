@@ -1,8 +1,9 @@
 import json
-import pandas as pd
+from dataclasses import dataclass
 from typing import Union
 
 import numpy as np
+import pandas as pd
 import sqlalchemy
 import torch
 import torch.utils.data
@@ -14,8 +15,6 @@ from trapdata.common.schemas import FilePath
 from trapdata.common.utils import slugify
 from trapdata.db.models.queue import QueueManager
 from trapdata.ml.utils import StopWatch, get_device, get_or_download_file
-
-from dataclasses import dataclass
 
 
 class BatchEmptyException(Exception):
@@ -79,6 +78,7 @@ class InferenceBaseClass:
     category_map = {}
     num_classes: Union[int, None] = None  # Will use len(category_map) if None
     lookup_gbif_names: bool = False
+    default_taxon_rank: str = "SPECIES"
     model: torch.nn.Module
     normalization = tensorflow_normalization
     transforms: torchvision.transforms.Compose
@@ -196,7 +196,7 @@ class InferenceBaseClass:
                 prefix="models",
             )
             df_train = pd.read_csv(local_path)
-            categories = sorted(list(df_train["speciesKey"].unique()))
+            categories = sorted(df_train["speciesKey"].unique())
             categories_map = {categ: id for id, categ in enumerate(categories)}
             df_train["label"] = df_train["speciesKey"].map(categories_map)
             cls_idx = df_train["label"].astype(int).values

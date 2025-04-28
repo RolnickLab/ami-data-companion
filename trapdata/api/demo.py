@@ -9,6 +9,7 @@ from rich import print
 
 from .models.classification import (
     APIMothClassifier,
+    InsectOrderClassifier,
     MothClassifierBinary,
     MothClassifierGlobal,
     MothClassifierPanama,
@@ -73,6 +74,12 @@ CLASSIFIER_CHOICES = [
         tab_title="Global",
         example_images_dir_names=["vermont", "panama", "denmark"],
         classifier=MothClassifierGlobal,
+    ),
+    ClassifierChoice(
+        key=InsectOrderClassifier.get_key(),
+        tab_title="Insect Orders",
+        example_images_dir_names=["vermont", "panama", "denmark"],
+        classifier=InsectOrderClassifier,
     ),
 ]
 
