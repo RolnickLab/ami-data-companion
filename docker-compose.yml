@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  ami-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ami-api:latest
+    container_name: ami-api
+    restart: unless-stopped
+    ports:
+      - "2000:2000"
+    volumes:
+      - ./:/app
+      - model-data:/app/models
+    environment:
+      - AMI_LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - AMI_LOCALIZATION_BATCH_SIZE=${AMI_LOCALIZATION_BATCH_SIZE:-2}
+      - AMI_CLASSIFICATION_BATCH_SIZE=${AMI_CLASSIFICATION_BATCH_SIZE:-20}
+      - UVICORN_RELOAD=${UVICORN_RELOAD:-false}
+    networks:
+      - antenna_network
+
+volumes:
+  model-data:
+
+networks:
+  antenna_network:
+    external: true
