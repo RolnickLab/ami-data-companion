@@ -1,12 +1,9 @@
 import os
 import pathlib
+import unittest
 from unittest import TestCase
-from urllib.parse import urlparse
 
-import matplotlib.pyplot as plt
 import numpy as np
-import plotly.express as px
-import requests
 from fastapi.testclient import TestClient
 from PIL import Image
 from sklearn.cluster import KMeans
@@ -68,6 +65,7 @@ class TestFeatureExtractionAPI(TestCase):
                 if classification.terminal:
                     features = classification.features
                     self.assertIsNotNone(features, "Features should not be None")
+                    assert features  # This is for type checking
                     self.assertIsInstance(features, list, "Features should be a list")
                     self.assertTrue(
                         all(isinstance(x, float) for x in features),
@@ -79,7 +77,8 @@ class TestFeatureExtractionAPI(TestCase):
 
     def test_cosine_similarity_of_extracted_features(self):
         """
-        Run the pipeline and compare features using cosine similarity to validate output.
+        Run the pipeline and compare features using cosine similarity to validate
+        output.
         """
         pipeline_response = self.get_pipeline_response(num_images=1)
 
@@ -94,9 +93,9 @@ class TestFeatureExtractionAPI(TestCase):
             len(feature_vectors), 1, "Need at least two features to compare"
         )
 
-        for i, vec1 in enumerate(feature_vectors):
+        for _i, vec1 in enumerate(feature_vectors):
             sims = []
-            for j, vec2 in enumerate(feature_vectors):
+            for _j, vec2 in enumerate(feature_vectors):
                 sim = cosine_similarity(vec1, vec2)
                 sims.append(round(sim, 4))
 
@@ -118,7 +117,8 @@ class TestFeatureExtractionAPI(TestCase):
             self.assertEqual(
                 most_similar_index,
                 ref_index,
-                f"Expected most similar vector to be at index {ref_index}, got {most_similar_index}",
+                f"Expected most similar vector to be at index {ref_index}, "
+                "got {most_similar_index}",
             )
 
     def get_detection_crop(self, local_image_path: str, bbox) -> Image.Image | None:
@@ -139,6 +139,7 @@ class TestFeatureExtractionAPI(TestCase):
             print(f"Failed to load or crop image: {e}")
             return None
 
+    @unittest.skip("Skipping visualization test")
     def test_feature_clustering_visualization(self):
 
         source_images = self.get_local_test_images(num=3)
@@ -171,6 +172,8 @@ class TestFeatureExtractionAPI(TestCase):
             n_clusters=min(8, len(features)), random_state=42
         ).fit_predict(features_np)
 
+        import plotly.express as px  # type: ignore[import]
+
         fig = px.scatter_3d(
             x=reduced[:, 0],
             y=reduced[:, 1],
@@ -180,5 +183,5 @@ class TestFeatureExtractionAPI(TestCase):
             title="3D Clustering of Classification Feature Vectors (K-Means + PCA)",
         )
 
-        fig.update_traces(marker=dict(size=6))
+        fig.update_traces(marker={"size": 6})
         fig.write_html("feature_clustering_3d_pca.html")
