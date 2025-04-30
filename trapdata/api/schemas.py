@@ -1,6 +1,7 @@
 # Can these be imported from the OpenAPI spec yaml?
 import datetime
 import pathlib
+from typing import Optional
 
 import PIL.Image
 import pydantic
@@ -100,7 +101,13 @@ class ClassificationResponse(pydantic.BaseModel):
         ),
         repr=False,  # Too long to display in the repr
     )
-
+    features: Optional[list[float]] = pydantic.Field(
+        default=None,
+        description=(
+            "Intermediate features extracted from the model before the classification head"
+        ),
+        repr=False,
+    )
     ood_score: float | None = None
     inference_time: float | None = None
     algorithm: AlgorithmReference

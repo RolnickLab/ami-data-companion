@@ -71,7 +71,7 @@ class APIMothClassifier(
 
     def post_process_batch(
         self, logits: torch.Tensor, features: torch.Tensor | None = None
-    ):
+    ) -> list[ClassifierResult]:
         """
         Return the labels, softmax/calibrated scores, and the original logits for
         each image in the batch.
@@ -91,21 +91,23 @@ class APIMothClassifier(
         ood_scores = 1 - ood_scores
 
         features = features.cpu() if features is not None else None
-        batch_results = []
 
         logits = logits.cpu()
 
+        batch_results = []
         for i, pred in enumerate(predictions):
             class_indices = np.arange(len(pred))
-            labels = [self.category_map[i] for i in class_indices]
+            labels_single = [self.category_map[i] for i in class_indices]
             ood_score = ood_scores[i]
-            logit = logits[i].tolist()
-            feature = features[i].tolist() if features is not None else None
+            logits_single = logits[i].float().tolist()
+            feature_vector = (
+                features[i].float().tolist() if features is not None else None
+            )
 
             result = ClassifierResult(
-                feature=feature,
-                labels=labels,
-                logit=logit,
+                features=feature_vector,
+                labels=labels_single,
+                logits=logits_single,
                 scores=pred,
                 ood_score=ood_score,
             )
@@ -145,8 +147,8 @@ class APIMothClassifier(
                 classification=self.get_best_label(predictions),
                 scores=predictions.scores,
                 ood_score=predictions.ood_score,
-                logits=predictions.logit,
-                features=predictions.feature,
+                logits=predictions.logits,
+                features=predictions.features,
                 inference_time=seconds_per_item,
                 algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
                 timestamp=datetime.datetime.now(),

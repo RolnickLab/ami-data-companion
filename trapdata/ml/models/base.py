@@ -207,15 +207,6 @@ class InferenceBaseClass:
         else:
             return None
 
-    def get_features(
-        self, batch_input: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Default get_features method for models that don't implement  feature extraction.
-        """
-
-        return None
-
     def get_model(self) -> torch.nn.Module:
         """
         This method must be implemented by a subclass.
@@ -230,6 +221,15 @@ class InferenceBaseClass:
         return model
         """
         raise NotImplementedError
+
+    def get_features(
+        self, batch_input: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor] | None:
+        """
+        Default get_features method for models that don't implement  feature extraction.
+        """
+
+        return None
 
     def get_transforms(self) -> torchvision.transforms.Compose:
         """
@@ -367,9 +367,8 @@ class InferenceBaseClass:
 
 @dataclass
 class ClassifierResult:
-    # TODO: add types
-    feature: None
-    labels: None
-    logit: None
-    scores: None
-    ood_score: float
+    features: list[float] | None = None
+    logits: list[float] | None = None
+    ood_score: float | None = None
+    labels: list[str] | None = None
+    scores: list[float] | None = None
