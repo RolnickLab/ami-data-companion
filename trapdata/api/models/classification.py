@@ -85,9 +85,7 @@ class APIMothClassifier(
             ood_scores = np.max(predictions, axis=-1)
         else:
             ood_scores = np.max(predictions - self.class_prior, axis=-1)
-        # Scale the OOD scores to be between 0 and 1
-        ood_scores = 1 / (1 + np.exp(-ood_scores))
-        # Ensure higher scores indicate more likelyhood that it is OOD.
+        # Ensure higher scores indicate more likelihood that it is OOD.
         ood_scores = 1 - ood_scores
 
         features = features.cpu() if features is not None else None
