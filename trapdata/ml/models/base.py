@@ -74,6 +74,7 @@ class InferenceBaseClass:
     weights = None
     labels_path = None
     category_map = {}
+    class_masking_list = None
     num_classes: Union[int, None] = None  # Will use len(category_map) if None
     lookup_gbif_names: bool = False
     default_taxon_rank: str = "SPECIES"
@@ -116,6 +117,7 @@ class InferenceBaseClass:
             f"Loading {self.type} model (stage: {self.stage}) for {self.name} with {len(self.category_map or [])} categories"
         )
         self.model = self.get_model()
+        self.class_masking_list = self.get_class_masking_list()
 
     @classmethod
     def get_key(cls):
@@ -183,6 +185,30 @@ class InferenceBaseClass:
             return index_to_label
         else:
             return {}
+
+    def get_class_masking_list(self) -> list[str]:
+        """
+        This must be implemented by a subclass
+
+        """
+        raise NotImplementedError
+
+    def _mask_classes(self, predictions: torch.Tensor):
+        """Class mask function to include specific output classes and exclude the rest"""
+
+        # Create a mask for the classes to prune
+        mask = torch.zeros(
+            predictions.size(1), dtype=torch.bool, device=predictions.device
+        )
+
+        # Get species keys that needs to be removed
+        for taxon_to_keep in self.class_masking_list:
+            id_to_keep = self.name_to_id_map[taxon_to_keep]
+            mask[id_to_keep] = True
+
+        # Apply the mask to zero out unwanted nodes
+        predictions[:, ~mask] = float("-inf")  # Set to -inf to ignore during softmax
+        return predictions
 
     def get_model(self) -> torch.nn.Module:
         """
