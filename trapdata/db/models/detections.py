@@ -510,7 +510,9 @@ def get_species_for_image(db_path, image_id):
 def num_species_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(sa.func.count(DetectedObject.specific_label.distinct()),).where(
+    query = sa.select(
+        sa.func.count(DetectedObject.specific_label.distinct()),
+    ).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
@@ -522,7 +524,9 @@ def num_species_for_event(
 def num_occurrences_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(sa.func.count(DetectedObject.sequence_id.distinct()),).where(
+    query = sa.select(
+        sa.func.count(DetectedObject.sequence_id.distinct()),
+    ).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
@@ -603,3 +607,18 @@ def export_detected_objects(
 ):
     records = [item.report_data().model_dump() for item in items]
     return export_report(records, report_name, directory)
+
+
+def get_unique_objects_for_image(db_path, image_id) -> Sequence[DetectedObject]:
+    with db.get_session(db_path) as sesh:
+        objects = (
+            sesh.execute(
+                sa.select(DetectedObject)
+                .where(DetectedObject.image_id == image_id)
+                .order_by(DetectedObject.last_detected.desc())
+            )
+            .unique(lambda d: str(d.bbox))
+            .scalars()
+            .all()
+        )
+        return objects

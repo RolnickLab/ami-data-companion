@@ -10,6 +10,11 @@ import fastapi
 import pydantic
 from fastapi.middleware.gzip import GZipMiddleware
 
+from trapdata.db.base import get_session_class
+from trapdata.db.models.detections import get_unique_objects_for_image
+from trapdata.db.models.events import get_monitoring_session_by_date
+from trapdata.ml.models.tracking import find_all_tracks
+
 from ..common.logs import logger  # noqa: F401
 from . import settings
 from .models.classification import (
@@ -285,8 +290,36 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     seconds_elapsed = float(end_time - start_time)
     algorithms_used[classifier.get_key()] = make_algorithm_response(classifier)
 
-    # Return all detections, including those that were not classified as moths
-    detections_to_return += classifier.results
+    Session = get_session_class(settings.database_url)
+
+    with Session() as session:
+        event_dates = list({img.timestamp.date() for img in source_images})
+        events = get_monitoring_session_by_date(settings.database_url, event_dates)
+        if events:
+            event = events[0]
+            find_all_tracks(monitoring_session=event, session=session)
+
+            detections_to_return = []
+            for img in source_images:
+                tracked_objects = get_unique_objects_for_image(
+                    settings.database_url, img.id
+                )
+                for obj in tracked_objects:
+                    det = DetectionResponse(
+                        id=obj.id,
+                        image_id=obj.image_id,
+                        bbox=obj.bbox,
+                        binary_label=obj.binary_label,
+                        specific_label=obj.specific_label,
+                        specific_label_score=obj.specific_label_score,
+                        path=obj.path,
+                        sequence_id=obj.sequence_id,
+                        sequence_frame=obj.sequence_frame,
+                    )
+                    detections_to_return.append(det)
+        else:
+            logger.warning("Tracking skipped: no matching monitoring session found.")
+            detections_to_return += classifier.results
 
     logger.info(
         f"Processed {len(source_images)} images in {seconds_elapsed:.2f} seconds"

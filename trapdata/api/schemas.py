@@ -1,6 +1,7 @@
 # Can these be imported from the OpenAPI spec yaml?
 import datetime
 import pathlib
+from typing import Optional
 
 import PIL.Image
 import pydantic
@@ -114,6 +115,8 @@ class DetectionResponse(pydantic.BaseModel):
     timestamp: datetime.datetime
     crop_image_url: str | None = None
     classifications: list[ClassificationResponse] = []
+    sequence_id: Optional[str] = None
+    sequence_frame: Optional[int] = None
 
 
 class SourceImageRequest(pydantic.BaseModel):
