@@ -1,6 +1,7 @@
 # Can these be imported from the OpenAPI spec yaml?
 import datetime
 import pathlib
+import re
 from typing import Optional
 
 import PIL.Image
@@ -40,6 +41,22 @@ class SourceImage(pydantic.BaseModel):
     _pil: PIL.Image.Image | None = None
     width: int | None = None
     height: int | None = None
+
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def prefill_timestamp(cls, values):
+        if values.get("timestamp") is None:
+            path = str(values.get("url") or values.get("filepath") or "")
+            match = re.search(r"(\d{14})", path)
+            if match:
+                try:
+                    values["timestamp"] = datetime.datetime.strptime(
+                        match.group(1), "%Y%m%d%H%M%S"
+                    )
+                except ValueError:
+                    pass
+        return values
+
     timestamp: datetime.datetime | None = None
 
     # Validate that there is at least one of the following fields
