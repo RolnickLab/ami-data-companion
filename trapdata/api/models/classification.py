@@ -15,6 +15,7 @@ from trapdata.ml.models.classification import (
     MothNonMothClassifier,
     PanamaMothSpeciesClassifier2024,
     PanamaMothSpeciesClassifierMixedResolution2023,
+    PanamaNewWithOODClassifier2025,
     PanamaPlusWithOODClassifier2025,
     QuebecVermontMothSpeciesClassifier2024,
     TuringAnguillaSpeciesClassifier,
@@ -265,6 +266,8 @@ class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
 class MothClassifierPanamaPlus2025(APIMothClassifier, PanamaPlusWithOODClassifier2025):
     pass
 
+class MothClassifierPanamaNew2025(APIMothClassifier, PanamaNewWithOODClassifier2025):
+    pass
 
 class InsectOrderClassifier(APIMothClassifier, InsectOrderClassifier2025):
     pass
