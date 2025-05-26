@@ -615,6 +615,31 @@ class InsectOrderClassifier2025(SpeciesClassifier, ConvNeXtOrderClassifier):
     default_taxon_rank = "ORDER"
 
 
+class PanamaNewWithOODClassifier2025(SpeciesClassifier, Resnet50TimmClassifier):
+    input_size = 128
+    normalization = imagenet_normalization
+    lookup_gbif_names = False
+
+    name = "New Panama Species Classifier with OOD detection - May 2025"
+    description = (
+        "Trained on May 26th, 2025 for 2201 species by removing some North American species from the Panama Plus checklist"
+        "https://wandb.ai/moth-ai/panama_classifier/runs/tynjykch/overview"
+    )
+
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_new_resnet50_20250526.pth"
+    )
+
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_new_category_map-with_names_20250526.json"
+    )
+
+    training_csv_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/panama_new_train.csv"
+
+
+
 class PanamaPlusWithOODClassifier2025(SpeciesClassifier, Resnet50TimmClassifier):
     input_size = 128
     normalization = imagenet_normalization
@@ -638,15 +663,3 @@ class PanamaPlusWithOODClassifier2025(SpeciesClassifier, Resnet50TimmClassifier)
 
     training_csv_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/panama_plus_train.csv"
 
-    # def save_results(self, object_ids, batch_output, *args, **kwargs):
-    #     # Here we are saving the specific taxon labels
-    #     classified_objects_data = [
-    #         {
-    #             "specific_label": label,
-    #             "specific_label_score": score,
-    #             "model_name": self.name,
-    #             "in_queue": True,  # Put back in queue for the feature extractor & tracking
-    #         }
-    #         for label, score in batch_output
-    #     ]
-    #     save_classified_objects(self.db_path, object_ids, classified_objects_data)
