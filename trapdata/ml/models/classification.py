@@ -620,7 +620,7 @@ class PanamaPlusWithOODClassifier2025v2(SpeciesClassifier, Resnet50TimmClassifie
     normalization = imagenet_normalization
     lookup_gbif_names = False
 
-    name = "Panama Species Classifier with OOD detection v2 - May 2025"
+    name = "Panama Plus Species Classifier with OOD detection v2 - May 2025"
     description = (
         "Trained on May 26th, 2025 for 2201 species by removing some North American species from the Panama Plus checklist"
         "https://wandb.ai/moth-ai/panama_classifier/runs/tynjykch/overview"
