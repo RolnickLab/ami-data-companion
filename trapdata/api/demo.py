@@ -14,7 +14,7 @@ from .models.classification import (
     MothClassifierGlobal,
     MothClassifierPanama,
     MothClassifierPanama2024,
-    MothClassifierPanamaNew2025,
+    MothClassifierPanamaPlus2025v2,
     MothClassifierQuebecVermont,
     MothClassifierTuringAnguilla,
     MothClassifierTuringCostaRica,
@@ -35,12 +35,11 @@ class ClassifierChoice:
 
 CLASSIFIER_CHOICES = [
     ClassifierChoice(
-        key=MothClassifierPanamaNew2025.get_key(),
+        key=MothClassifierPanamaPlus2025v2.get_key(),
         tab_title="Panama 2025 New",
         example_images_dir_names=["panama"],
-        classifier=MothClassifierPanamaNew2025,
+        classifier=MothClassifierPanamaPlus2025v2,
     ),
-
     ClassifierChoice(
         key=MothClassifierPanama.get_key(),
         tab_title="Panama 2023",

@@ -615,12 +615,12 @@ class InsectOrderClassifier2025(SpeciesClassifier, ConvNeXtOrderClassifier):
     default_taxon_rank = "ORDER"
 
 
-class PanamaNewWithOODClassifier2025(SpeciesClassifier, Resnet50TimmClassifier):
+class PanamaPlusWithOODClassifier2025v2(SpeciesClassifier, Resnet50TimmClassifier):
     input_size = 128
     normalization = imagenet_normalization
     lookup_gbif_names = False
 
-    name = "New Panama Species Classifier with OOD detection - May 2025"
+    name = "Panama Species Classifier with OOD detection v2 - May 2025"
     description = (
         "Trained on May 26th, 2025 for 2201 species by removing some North American species from the Panama Plus checklist"
         "https://wandb.ai/moth-ai/panama_classifier/runs/tynjykch/overview"
@@ -637,7 +637,6 @@ class PanamaNewWithOODClassifier2025(SpeciesClassifier, Resnet50TimmClassifier):
     )
 
     training_csv_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/panama_new_train.csv"
-
 
 
 class PanamaPlusWithOODClassifier2025(SpeciesClassifier, Resnet50TimmClassifier):
@@ -662,4 +661,3 @@ class PanamaPlusWithOODClassifier2025(SpeciesClassifier, Resnet50TimmClassifier)
     )
 
     training_csv_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/panama_plus_train.csv"
-

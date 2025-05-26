@@ -19,8 +19,8 @@ from .models.classification import (
     MothClassifierGlobal,
     MothClassifierPanama,
     MothClassifierPanama2024,
-    MothClassifierPanamaNew2025,
     MothClassifierPanamaPlus2025,
+    MothClassifierPanamaPlus2025v2,
     MothClassifierQuebecVermont,
     MothClassifierTuringAnguilla,
     MothClassifierTuringCostaRica,
@@ -43,7 +43,7 @@ app.add_middleware(GZipMiddleware)
 
 
 CLASSIFIER_CHOICES = {
-    "panama_new_moths_2025": MothClassifierPanamaNew2025,
+    "panama_plus_moths_2025v2": MothClassifierPanamaPlus2025v2,
     "panama_plus_moths_2025": MothClassifierPanamaPlus2025,
     "panama_moths_2023": MothClassifierPanama,
     "panama_moths_2024": MothClassifierPanama2024,
