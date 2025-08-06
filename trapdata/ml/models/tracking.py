@@ -20,7 +20,9 @@ from trapdata.db.models.queue import ObjectsWithoutFeaturesQueue, UntrackedObjec
 from trapdata.ml.models.classification import (
     ClassificationIterableDatabaseDataset,
     MothNonMothClassifier,
+    PanamaMothSpeciesClassifierMixedResolution2023,
     QuebecVermontMothSpeciesClassifierMixedResolution,
+    UKDenmarkMothSpeciesClassifierMixedResolution,
 )
 from trapdata.ml.utils import get_device
 
@@ -462,7 +464,7 @@ class FeatureExtractor(InferenceBaseClass):
         # logger.debug(f"Post-processing features: {output[0]}")
         return output
 
-    def save_results(self, object_ids, batch_output):
+    def save_results(self, object_ids, batch_output, *args, **kwargs):
         # Here we are saving the moth/non-moth labels
         data = [
             {
@@ -478,6 +480,10 @@ class FeatureExtractor(InferenceBaseClass):
         save_classified_objects(self.db_path, object_ids, data)
 
 
+class MothNonMothFeatureExtractor(FeatureExtractor, MothNonMothClassifier):
+    name = "Features from general Moth/Non-Moth model"
+
+
 class QuebecVermontFeatureExtractor(
     FeatureExtractor, QuebecVermontMothSpeciesClassifierMixedResolution
 ):
@@ -485,13 +491,15 @@ class QuebecVermontFeatureExtractor(
 
 
 class UKDenmarkFeatureExtractor(
-    FeatureExtractor, QuebecVermontMothSpeciesClassifierMixedResolution
+    FeatureExtractor, UKDenmarkMothSpeciesClassifierMixedResolution
 ):
     name = "Features from UK/Denmark species model"
 
 
-class MothNonMothFeatureExtractor(FeatureExtractor, MothNonMothClassifier):
-    name = "Features from general Moth/Non-Moth model"
+class PanamaFeatureExtractor(
+    FeatureExtractor, PanamaMothSpeciesClassifierMixedResolution2023
+):
+    name = "Features from Panama species model"
 
 
 def clear_sequences(monitoring_session: MonitoringSession, session: orm.Session):
@@ -648,7 +656,7 @@ def compare_objects(
         logger.debug(
             "No previous frame found for image, assigning all current objects a solo-sequence"
         )
-        objects_previous = list()
+        objects_previous = []
 
     logger.debug(
         f"Objects in current frame: {len(objects_current)}, objects in previous: {len(objects_previous)}"
@@ -773,7 +781,7 @@ def find_all_tracks(
         .scalars()
         .all()
     )
-    for i, image in enumerate(images):
+    for i, _image in enumerate(images):
         n_current = i
         n_previous = max(n_current - 1, 0)
         image_current = images[n_current]
@@ -812,7 +820,7 @@ def summarize_tracks(
     ).all()
 
     sequences = {}
-    for ms, sequence_id, count in tracks:
+    for _ms, sequence_id, _count in tracks:
         track_objects = (
             session.execute(
                 select(DetectedObject)
@@ -824,7 +832,7 @@ def summarize_tracks(
             .all()
         )
         sequences[sequence_id] = [
-            dict(
+            dict(  # noqa
                 event=obj.monitoring_session.day,
                 sequence=sequence_id,
                 frame=obj.sequence_frame,

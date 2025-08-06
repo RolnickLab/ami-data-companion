@@ -6,12 +6,13 @@ And occurrence is a sequence of detections that are determined to be
 the same individual, tracked over multiple frames in the original images
 from a monitoring session.
 """
+
 import datetime
 import pathlib
 from typing import Optional
 
+import pydantic
 import sqlalchemy as sa
-from pydantic import BaseModel
 
 from trapdata import db
 from trapdata.common.filemanagement import media_url
@@ -19,18 +20,18 @@ from trapdata.common.schemas import FilePath
 from trapdata.db import models
 
 
-class OccurrenceNestedEvent(BaseModel):
+class OccurrenceNestedEvent(pydantic.BaseModel):
     id: int
     day: datetime.date
     url: Optional[str] = None
 
 
-class OccurrenceNestedDetection(BaseModel):
+class OccurrenceNestedDetection(pydantic.BaseModel):
     id: int
     cropped_image_path: str
 
 
-class OccurrenceListItem(BaseModel):
+class OccurrenceListItem(pydantic.BaseModel):
     id: str
     label: str
     best_score: float
@@ -43,16 +44,27 @@ class OccurrenceListItem(BaseModel):
     # cropped_image_path: pathlib.Path
     # source_image_id: int
     examples: list[dict]
+    example_crop: Optional[pathlib.Path] = None
     # detections: list[object]
     # deployment: object
     # captures: list[object] =
     url: Optional[str] = None
 
 
-class SpeciesSummaryListItem(BaseModel):
+class SpeciesSummaryListItem(pydantic.BaseModel):
     name: str
     count: int
     example: Optional[pathlib.Path] = None
+
+    @pydantic.field_validator("name")
+    def name_must_be_string(cls, val):
+        """
+        If the name is an integer, then assume it's a GBIF ID and we need to fetch the
+        species name from GBIF.
+        """
+        from trapdata.ml.utils import replace_gbif_id_with_name
+
+        return replace_gbif_id_with_name(val)
 
 
 def list_occurrences(

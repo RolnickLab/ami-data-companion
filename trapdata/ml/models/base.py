@@ -1,6 +1,7 @@
 import json
-from typing import Optional, Union
+from typing import Union
 
+import numpy as np
 import sqlalchemy
 import torch
 import torch.utils.data
@@ -25,11 +26,30 @@ def zero_okay_collate(batch):
 
     @TODO switch to streaming IterableDataset type.
     """
-    if any([not item for item in batch]):
+    if any(not item for item in batch):
         logger.debug(f"There's a None in the batch of len {len(batch)}")
         return None
     else:
         return torch.utils.data.default_collate(batch)
+
+
+imagenet_normalization = torchvision.transforms.Normalize(
+    # "torch preprocessing"
+    mean=[0.485, 0.456, 0.406],  # RGB
+    std=[0.229, 0.224, 0.225],  # RGB
+)
+
+tensorflow_normalization = torchvision.transforms.Normalize(
+    # -1 to 1
+    mean=[0.5, 0.5, 0.5],  # RGB
+    std=[0.5, 0.5, 0.5],  # RGB
+)
+
+generic_normalization = torchvision.transforms.Normalize(
+    # 0 to 1
+    mean=[0.5, 0.5, 0.5],  # RGB
+    std=[0.5, 0.5, 0.5],  # RGB
+)
 
 
 class InferenceBaseClass:
@@ -54,7 +74,11 @@ class InferenceBaseClass:
     weights = None
     labels_path = None
     category_map = {}
+    num_classes: Union[int, None] = None  # Will use len(category_map) if None
+    lookup_gbif_names: bool = False
+    default_taxon_rank: str = "SPECIES"
     model: torch.nn.Module
+    normalization = tensorflow_normalization
     transforms: torchvision.transforms.Compose
     batch_size = 4
     num_workers = 1
@@ -82,6 +106,7 @@ class InferenceBaseClass:
 
         self.device = self.device or get_device()
         self.category_map = self.get_labels(self.labels_path)
+        self.num_classes = self.num_classes or len(self.category_map)
         self.weights = self.get_weights(self.weights_path)
         self.transforms = self.get_transforms()
         self.queue = self.get_queue()
@@ -102,19 +127,54 @@ class InferenceBaseClass:
     def get_weights(self, weights_path):
         if weights_path:
             return get_or_download_file(
-                weights_path, self.user_data_path, prefix="models"
+                weights_path,
+                self.user_data_path or torch.hub.get_dir(),
+                prefix="models",
             )
         else:
             logger.warn(f"No weights specified for model {self.name}")
 
-    def get_labels(self, labels_path):
+    def get_labels(self, labels_path) -> dict[int, str]:
         if labels_path:
             local_path = get_or_download_file(
-                labels_path, self.user_data_path, prefix="models"
+                labels_path,
+                self.user_data_path or torch.hub.get_dir(),
+                prefix="models",
             )
 
             with open(local_path) as f:
                 labels = json.load(f)
+
+            if self.lookup_gbif_names:
+                """
+                Use this if you want to store name strings instead of taxon IDs.
+                Taxon IDs are helpful for looking up additional information about the species
+                such as the genus and family.
+                """
+                import concurrent.futures
+
+                from trapdata.ml.utils import replace_gbif_id_with_name
+
+                def fetch_gbif_ids(labels):
+                    string_labels = {}
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        futures = []
+                        for label, _index in labels.items():
+                            future = executor.submit(replace_gbif_id_with_name, label)
+                            futures.append(future)
+                        for future, (_label, index) in zip(futures, labels.items()):
+                            string_label = future.result()
+                            string_labels[string_label] = index
+
+                    return string_labels
+
+                string_labels = fetch_gbif_ids(labels)
+
+                logger.info(f"Replacing GBIF IDs with names in {local_path}")
+                # Backup the original file
+                local_path.rename(local_path.with_suffix(".bak"))
+                with open(local_path, "w") as f:
+                    json.dump(string_labels, f)
 
             # @TODO would this be faster as a list? especially when getting the labels of multiple
             # indexes in one prediction
@@ -188,15 +248,27 @@ class InferenceBaseClass:
             logger.info(
                 f"Preparing dataloader with batch size of {self.batch_size} and {self.num_workers} workers."
             )
-        self.dataloader = torch.utils.data.DataLoader(
-            self.dataset,
-            num_workers=0 if self.single else self.num_workers,
-            persistent_workers=False if self.single else True,
-            shuffle=False,
-            pin_memory=False if self.single else True,  # @TODO review this
-            batch_size=None,  # Recommended setting for streaming datasets
-            batch_sampler=None,  # Recommended setting for streaming datasets
-        )
+        dataloader_args = {
+            "num_workers": 0 if self.single else self.num_workers,
+            "persistent_workers": False if self.single else True,
+            "shuffle": False,
+            "pin_memory": False if self.single else True,  # @TODO review this
+        }
+        if isinstance(self.dataset, torch.utils.data.IterableDataset):
+            # Batch size and sample should be None for streaming datasets
+            dataloader_args.update(
+                {
+                    "batch_size": None,
+                    "batch_sampler": None,
+                }
+            )
+        else:
+            dataloader_args.update(
+                {
+                    "batch_size": self.batch_size,
+                }
+            )
+        self.dataloader = torch.utils.data.DataLoader(self.dataset, **dataloader_args)
         return self.dataloader
 
     def predict_batch(self, batch):
@@ -216,7 +288,9 @@ class InferenceBaseClass:
         # for item in batch_output:
         #     yield self.post_process_single(item)
 
-    def save_results(self, item_ids, batch_output):
+    def save_results(
+        self, item_ids, batch_output, seconds_per_item: float | None = None
+    ):
         logger.warn("No save method configured for model. Doing nothing with results")
         return None
 
@@ -249,9 +323,11 @@ class InferenceBaseClass:
             )
 
             batch_output = list(self.post_process_batch(batch_output))
-            item_ids = item_ids.tolist()
-            logger.info(f"Saving {len(item_ids)} results")
-            self.save_results(item_ids, batch_output)
+            if isinstance(item_ids, (np.ndarray, torch.Tensor)):
+                item_ids = item_ids.tolist()
+            logger.info(f"Saving results from {len(item_ids)} items")
+
+            self.save_results(item_ids, batch_output, seconds_per_item=seconds_per_item)
             logger.info(f"{self.name} Batch -- Done")
 
         logger.info(f"{self.name} -- Done")

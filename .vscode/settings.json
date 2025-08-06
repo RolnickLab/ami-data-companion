@@ -1,19 +1,23 @@
 {
-    "python.formatting.provider": "black",
     "editor.formatOnSave": true,
-    "python.linting.enabled": true,
-    "python.linting.flake8Enabled": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit",
+        "source.sortImports": "explicit",
+        "source.fixAll.markdownlint": "explicit",
+        "source.fixAll": "explicit"
+    },
+    "files.insertFinalNewline": true,
+    "files.eol": "\n",
+    "files.trimTrailingWhitespace": true,
+    "isort.args": [
+        "--profile",
+        "black"
+    ],
     "[python]": {
         "editor.formatOnSave": true,
         "diffEditor.codeLens": true,
+        "editor.defaultFormatter": "ms-python.black-formatter"
     },
-    "editor.codeActionsOnSave": {
-        "source.organizeImports": true,
-        "source.sortImports": true,
-        "source.fixAll.markdownlint": true,
-        "source.fixAll": true
-    },
-    "files.trimTrailingWhitespace": true,
     "cSpell.words": [
         "argmax",
         "astype",
@@ -27,5 +31,5 @@
         "sqlalchemy",
         "torchvision",
         "trapdata"
-    ],
+    ]
 }

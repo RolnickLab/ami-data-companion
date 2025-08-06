@@ -4,7 +4,7 @@ from typing import Any, Iterable, Optional, Sequence, Union
 
 import PIL.Image
 import sqlalchemy as sa
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import orm
 from sqlalchemy.ext.hybrid import hybrid_property
 
@@ -35,6 +35,9 @@ class DetectionListItem(BaseModel):
     model_name: Optional[str] = None
     in_queue: bool = False
     notes: Optional[str] = ""
+
+    # PyDantic complains because we have an attribute called `model_name`
+    model_config = ConfigDict(protected_namespaces=[])  # type:ignore
 
 
 class DetectionDetail(DetectionListItem):
@@ -750,5 +753,5 @@ def export_detected_objects(
     directory: Union[pathlib.Path, str],
     report_name: str = "detections",
 ):
-    records = [item.report_data().dict() for item in items]
+    records = [item.report_data().model_dump() for item in items]
     return export_report(records, report_name, directory)

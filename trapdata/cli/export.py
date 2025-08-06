@@ -24,7 +24,7 @@ from trapdata.db.models.events import (
     get_monitoring_session_images,
     get_monitoring_sessions_from_db,
 )
-from trapdata.db.models.occurrences import list_occurrences
+from trapdata.db.models.occurrences import OccurrenceListItem, list_occurrences
 
 cli = typer.Typer(no_args_is_help=True)
 
@@ -88,7 +88,14 @@ def occurrences(
     events = get_monitoring_sessions_from_db(
         db_path=settings.database_url, base_directory=settings.image_base_path
     )
-    occurrences = []
+
+    occurrences: list[OccurrenceListItem] = []
+
+    tabular_formats = [ExportFormat.csv]
+    plain_text_formats = [ExportFormat.csv, ExportFormat.html]
+    if format in tabular_formats:
+        num_examples = 1
+
     for event in events:
         occurrences += list_occurrences(
             settings.database_url,
@@ -101,34 +108,52 @@ def occurrences(
         )
     logger.info(f"Preparing to export {len(occurrences)} records as {format}")
 
+    if outfile:
+        destination_dir = outfile.parent
+    else:
+        destination_dir = settings.user_data_path / "exports"
+    destination_dir.mkdir(parents=True, exist_ok=True)
+
     if collect_images:
         # Collect images for exported occurrences into a subdirectory
-        subdir = "exports"
         if outfile:
             name = outfile.stem
         else:
             name = f"occurrences_{int(time.time())}"
-        destination_dir = settings.user_data_path / subdir / f"{name}_images"
+        destination_dir = destination_dir / f"{name}_images"
         logger.info(f'Collecting images into "{destination_dir}"')
         destination_dir.mkdir(parents=True, exist_ok=True)
-    else:
-        destination_dir = None
 
-    for occurrence in occurrences:
-        for example in occurrence.examples:
-            path = pathlib.Path(example["cropped_image_path"]).resolve()
-            if destination_dir:
-                destination = destination_dir / f"{occurrence.id}-{path.name}"
+        for occurrence in occurrences:
+            for example in occurrence.examples:
+                path = pathlib.Path(example["cropped_image_path"]).resolve()
+                destination = (
+                    destination_dir / f"{occurrence.label} {occurrence.id} {path.name}"
+                )
                 if not destination.exists():
                     shutil.copy(path, destination)
                 path = destination
-            if absolute_paths:
-                final_path = path.absolute()
-            else:
-                final_path = path.relative_to(settings.user_data_path)
-            example["cropped_image_path"] = final_path
+                if absolute_paths:
+                    final_path = path.absolute()
+                else:
+                    final_path = path.relative_to(destination_dir)
+                example["cropped_image_path"] = final_path
 
-    df = pd.DataFrame([obj.dict() for obj in occurrences])
+    if format in tabular_formats:
+        for occurrence in occurrences:
+            if occurrence.examples:
+                example = occurrence.examples[0]
+                occurrence.example_crop = example["cropped_image_path"]
+                occurrence.examples = []
+
+    df = pd.DataFrame([obj.model_dump() for obj in occurrences])
+    if format in tabular_formats:
+        df = df.drop(columns=["examples"])
+    if format in plain_text_formats:
+        # df["cropped_image_path"] = df["cropped_image_path"].astype(str)
+        # df["timestamp"] = df["timestamp"].astype(str)
+        print(df.columns)
+
     return export(df=df, format=format, outfile=outfile)
 
 
@@ -150,7 +175,7 @@ def detections(
         image_base_path=settings.image_base_path,
     )
     logger.info(f"Preparing to export {len(objects)} records as {format}")
-    df = pd.DataFrame([obj.report_data().dict() for obj in objects])
+    df = pd.DataFrame([obj.report_data().model_dump() for obj in objects])
     return export(df=df, format=format, outfile=outfile)
 
 
@@ -178,7 +203,7 @@ def sessions(
             settings.database_url, event, limit=5, offset=int(event.num_images / 2)
         )
         event_data["example_captures"] = [
-            img.report_data().dict() for img in example_captures
+            img.report_data().model_dump() for img in example_captures
         ]
         event_data["num_occurrences"] = num_occurrences
         event_data["num_species"] = num_species
@@ -224,7 +249,7 @@ def captures(
         )
     [session.add(img) for img in captures]
 
-    df = pd.DataFrame([img.report_detail().dict() for img in captures])
+    df = pd.DataFrame([img.report_detail().model_dump() for img in captures])
     return export(df=df, format=format, outfile=outfile)
 
 
@@ -240,5 +265,5 @@ def deployments(
     session = Session()
     deployments = list_deployments(session)
 
-    df = pd.DataFrame([d.dict() for d in deployments])
+    df = pd.DataFrame([d.model_dump() for d in deployments])
     return export(df=df, format=format, outfile=outfile)

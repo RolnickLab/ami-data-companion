@@ -138,12 +138,13 @@ class TrapImage(Base):
 
     def report_detail(self) -> CaptureDetail:
         return CaptureDetail(
-            **self.report_data().dict(),
+            **self.report_data().model_dump(),
+            event=self.monitoring_session.day,
             width=self.width,
             height=self.height,
             filesize=self.filesize,
             detections=[
-                obj.report_data_simple().dict() for obj in self.detected_objects
+                obj.report_data_simple().model_dump() for obj in self.detected_objects
             ],
             notes=self.notes,
         )

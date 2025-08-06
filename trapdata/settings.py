@@ -4,8 +4,10 @@ import sys
 from functools import lru_cache
 from typing import Optional, Union
 
+import pydantic
 import sqlalchemy
-from pydantic import BaseSettings, Field, ValidationError, validator
+from pydantic import Field, ValidationError
+from pydantic_settings import BaseSettings
 from rich import print as rprint
 
 from trapdata import ml
@@ -14,7 +16,10 @@ from trapdata.common.schemas import FilePath
 
 
 class UserSettings(BaseSettings):
-    image_base_path: Optional[pathlib.Path]
+    # Can't use PyDantic DSN validator for database_url if sqlite filepath has spaces, see custom validator below
+    database_url: Union[str, sqlalchemy.engine.URL] = default_database_dsn()
+    user_data_path: pathlib.Path = get_app_dir()
+    image_base_path: Optional[pathlib.Path] = None
     localization_model: ml.models.ObjectDetectorChoice = Field(
         default=ml.models.DEFAULT_OBJECT_DETECTOR
     )
@@ -41,7 +46,7 @@ class Settings(UserSettings):
     classification_batch_size: int = 20
     num_workers: int = 1
 
-    @validator("image_base_path", "user_data_path")
+    @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
         """
         Expand relative paths into a normalized path.
@@ -54,7 +59,7 @@ class Settings(UserSettings):
         else:
             return None
 
-    @validator("database_url")
+    @pydantic.field_validator("database_url")
     def validate_database_dsn(cls, v):
         return sqlalchemy.engine.url.make_url(v)
 

@@ -60,6 +60,14 @@ Test the whole backend pipeline without the GUI using this command
 
 ```sh
 python trapdata/tests/test_pipeline.py
+# or
+ami test pipeline
+```
+
+Run all other tests with:
+
+```sh
+ami test all
 ```
 
 ## GUI Usage
@@ -146,3 +154,61 @@ docker stop ami-db && docker remove ami-db
 
 A script is available in the repo source to run the commands above.
 `./scrips/start_db_container.sh`
+
+
+
+## Adding new models
+
+1) Create a new inference class in `trapdata/ml/models/classification.py` or `trapdata/ml/models/localization.py`. All models inherit from `InferenceBaseClass`, but there are more specific classes for classification and localization and different architectures. Choose the appropriate class to inherit from. It's best to copy an existing inference class that is similar to the new model you are adding.
+
+2) Upload your model weights and category map to a cloud storage service and make sure the file is publicly accessible via a URL. The weights will be downloaded the first time the model is run. Alternatively, you can manually add the model weights to the configured `USER_DATA_PATH` directory under the subdir `USER_DATA_PATH/models/` (on macOS this is `~/Library/Application Support/trapdata/models`). However the model will not be available to other users unless they also manually add the model weights. The category map json file is simply a dict of species names and their indexes in your model's last layer. See the existing category maps for examples.
+
+3) Select your model in the GUI settings or set the `SPECIES_CLASSIFICATION_MODEL` setting. If the model inherits from `SpeciesClassifier` class, it will automatically become one of the valid choices.
+
+## Clearing the cache & starting fresh
+
+Remove the index of images, all detections and classifications by removing the database file. This will not remove the images themselves, only the metadata about them. The database is located in the user data directory.
+
+On macOS:
+  ```
+rm ~/Library/Application\ Support/trapdata/trapdata.db
+```
+
+On Linux:
+```
+rm ~/.config/trapdata/trapdata.db
+```
+
+On Windows:
+```
+del %AppData%\trapdata\trapdata.db
+```
+
+## Running the web API
+
+The model inference pipeline can be run as a web API using FastAPI. This is what the Antenna platform uses to process images.
+
+To run the API, use the following command:
+
+```sh
+ami api
+```
+
+View the interactive API docs at http://localhost:2000/
+
+
+## Web UI demo (Gradio)
+
+A simple web UI is also available to test the inference pipeline. This is a quick way to test models on a remote server via a web browser.
+
+```sh
+ami gradio
+```
+
+Open http://localhost:7861/
+
+Use ngrok to temporarily expose localhost to the internet:
+
+```sh
+ngrok http 7861
+```

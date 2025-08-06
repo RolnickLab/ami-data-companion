@@ -83,7 +83,7 @@ def deployments():
     )
     table.columns[0].overflow = "fold"
     for deployment in deployments:
-        row_values = [str(field) for field in deployment.dict().values()]
+        row_values = [str(field) for field in deployment.model_dump().values()]
         table.add_row(*row_values)
 
     console.print(table)
