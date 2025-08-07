@@ -18,7 +18,7 @@ from trapdata.api.schemas import (
 from trapdata.settings import read_settings
 
 
-class DetectedObjectLike(Protocol):
+class DetectedObjectProtocol(Protocol):
     """Protocol for objects that behave like DetectedObject for conversion."""
 
     id: Optional[int]
@@ -84,7 +84,7 @@ def create_algorithm_reference(
 
 
 def convert_classification_to_classification_response(
-    detected_obj: DetectedObjectLike,
+    detected_obj: DetectedObjectProtocol,
     algorithm_name: Optional[str] = None,
     timestamp: Optional[datetime.datetime] = None,
 ) -> ClassificationResponse:
@@ -125,7 +125,7 @@ def convert_classification_to_classification_response(
 
 
 def convert_detected_object_to_detection_response(
-    detected_obj: DetectedObjectLike,
+    detected_obj: DetectedObjectProtocol,
     source_image_id: str,
     crop_image_url: Optional[str] = None,
     detection_algorithm_name: Optional[str] = None,

@@ -275,7 +275,7 @@ def deployments(
 @cli.command(name="api-occurrences")
 def api_occurrences(
     format: ExportFormat = ExportFormat.json,
-    num_examples: int = 3,
+    num_examples: int = 9999,
     limit: Optional[int] = None,
     offset: int = 0,
     outfile: Optional[pathlib.Path] = None,
