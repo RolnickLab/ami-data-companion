@@ -23,7 +23,8 @@ class DetectionListItem(BaseModel):
     area_pixels: Optional[float]
     last_detected: Optional[datetime.datetime]
     label: Optional[str]
-    score: Optional[int]
+    score: Optional[float]
+    # logits: Optional[list[float]]
     model_name: Optional[str]
     in_queue: bool
     notes: Optional[str]
@@ -42,9 +43,10 @@ class DetectionDetail(DetectionListItem):
     sequence_cost: Optional[float]
     source_image_path: Optional[pathlib.Path]
     timestamp: Optional[str]
-    bbox_center: Optional[tuple[int, int]]
+    bbox_center: Optional[tuple[float, float]]
     area_pixels: Optional[int]
     ood_score: Optional[float]
+    logits: Optional[list[float]]
 
 
 class DetectedObject(db.Base):
@@ -77,6 +79,7 @@ class DetectedObject(db.Base):
     sequence_frame = sa.Column(sa.Integer)
     sequence_previous_id = sa.Column(sa.Integer)
     sequence_previous_cost = sa.Column(sa.Float)
+    logits = sa.Column(sa.JSON)
     cnn_features = sa.Column(sa.JSON)
     ood_score = sa.Column(sa.Float)
 
@@ -291,7 +294,8 @@ class DetectedObject(db.Base):
             last_detected=self.last_detected,
             notes=self.notes,
             in_queue=self.in_queue,
-            ood_score=self.ood_score
+            ood_score=self.ood_score,
+            logits=self.logits,
         )
 
     def report_data_simple(self):
@@ -306,6 +310,7 @@ class DetectedObject(db.Base):
             model_name=self.model_name,
             in_queue=self.in_queue,
             notes=self.notes,
+            ood_score=self.ood_score,
         )
 
 
@@ -514,9 +519,7 @@ def get_species_for_image(db_path, image_id):
 def num_species_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(
-        sa.func.count(DetectedObject.specific_label.distinct()),
-    ).where(
+    query = sa.select(sa.func.count(DetectedObject.specific_label.distinct()),).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
@@ -528,9 +531,7 @@ def num_species_for_event(
 def num_occurrences_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(
-        sa.func.count(DetectedObject.sequence_id.distinct()),
-    ).where(
+    query = sa.select(sa.func.count(DetectedObject.sequence_id.distinct()),).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
