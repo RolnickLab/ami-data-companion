@@ -39,6 +39,144 @@ class ExportFormat(str, enum.Enum):
     csv = "csv"
 
 
+def _export_batched_pipeline_responses(
+    all_detection_responses: list,
+    occurrence_dicts: list,
+    pipeline_slug: str,
+    include_category_maps: bool,
+    batch_size: Optional[int],
+    images_per_batch: int,
+    outfile: Optional[pathlib.Path],
+    destination_dir: pathlib.Path,
+) -> str:
+    """
+    Export pipeline responses split into multiple JSON files.
+
+    Args:
+        all_detection_responses: All detection responses to split
+        occurrence_dicts: All occurrence dictionaries
+        pipeline_slug: Pipeline name
+        include_category_maps: Whether to include category maps
+        batch_size: Number of detections per batch (takes precedence)
+        images_per_batch: Number of source images per batch
+        outfile: Output file path (used for naming pattern)
+        destination_dir: Directory to save files
+
+    Returns:
+        String describing the export results
+    """
+    import json
+    from collections import defaultdict
+
+    # Group detections by source image
+    detections_by_image = defaultdict(list)
+    for detection in all_detection_responses:
+        detections_by_image[detection.source_image_id].append(detection)
+
+    # Group occurrences by source image for consistency
+    occurrences_by_image = defaultdict(list)
+    for occurrence in occurrence_dicts:
+        for example in occurrence.get("examples", []):
+            source_image_id = str(example.get("source_image_id", "unknown"))
+            occurrences_by_image[source_image_id].append(occurrence)
+
+    # Create batches
+    batches = []
+    if batch_size is not None:
+        # Batch by number of detections
+        current_batch_detections = []
+        current_batch_occurrences = []
+
+        for detection in all_detection_responses:
+            current_batch_detections.append(detection)
+
+            # Find corresponding occurrences for this detection
+            source_image_id = detection.source_image_id
+            for occurrence in occurrences_by_image[source_image_id]:
+                if occurrence not in current_batch_occurrences:
+                    current_batch_occurrences.append(occurrence)
+
+            if len(current_batch_detections) >= batch_size:
+                batches.append((current_batch_detections, current_batch_occurrences))
+                current_batch_detections = []
+                current_batch_occurrences = []
+
+        # Add remaining detections as final batch
+        if current_batch_detections:
+            batches.append((current_batch_detections, current_batch_occurrences))
+    else:
+        # Batch by number of source images
+        source_image_ids = list(detections_by_image.keys())
+
+        for i in range(0, len(source_image_ids), images_per_batch):
+            batch_image_ids = source_image_ids[i : i + images_per_batch]
+            batch_detections = []
+            batch_occurrences = []
+
+            for image_id in batch_image_ids:
+                batch_detections.extend(detections_by_image[image_id])
+                batch_occurrences.extend(occurrences_by_image[image_id])
+
+            # Remove duplicate occurrences
+            unique_occurrences = []
+            seen_occurrence_ids = set()
+            for occurrence in batch_occurrences:
+                occ_id = occurrence.get("id")
+                if occ_id not in seen_occurrence_ids:
+                    unique_occurrences.append(occurrence)
+                    seen_occurrence_ids.add(occ_id)
+
+            batches.append((batch_detections, unique_occurrences))
+
+    # Export each batch
+    exported_files = []
+    timestamp = int(time.time())
+
+    for batch_idx, (batch_detections, batch_occurrences) in enumerate(batches):
+        # Create pipeline response for this batch
+        pipeline_response = create_pipeline_results_response(
+            occurrences=batch_occurrences,
+            detection_responses=batch_detections,
+            pipeline_name=pipeline_slug,
+            total_time=0.0,
+            include_category_maps=include_category_maps,
+        )
+
+        # Determine output filename
+        if outfile:
+            base_name = outfile.stem
+            suffix = outfile.suffix
+            batch_filename = f"{base_name}_batch_{batch_idx + 1:03d}{suffix}"
+        else:
+            batch_filename = (
+                f"api_occurrences_{timestamp}_batch_{batch_idx + 1:03d}.json"
+            )
+
+        batch_filepath = destination_dir / batch_filename
+
+        # Write batch file
+        pipeline_dict = pipeline_response.model_dump()
+        with open(batch_filepath, "w") as f:
+            json.dump(pipeline_dict, f, indent=2, default=str)
+
+        exported_files.append(str(batch_filepath.absolute()))
+
+        logger.info(
+            f"Exported batch {batch_idx + 1}/{len(batches)} with "
+            f"{len(batch_detections)} detections from "
+            f"{len({d.source_image_id for d in batch_detections})} source images "
+            f'to "{batch_filepath}"'
+        )
+
+    summary = (
+        f"Exported {len(all_detection_responses)} total detections across "
+        f"{len(batches)} batch files:\n" + "\n".join(f"  - {f}" for f in exported_files)
+    )
+
+    logger.info(f"Batch export complete: {len(batches)} files created")
+    return summary
+
+
 def export(
     df: pd.DataFrame,
     format: ExportFormat = ExportFormat.json,
@@ -285,6 +423,7 @@ def api_occurrences(
     detection_algorithm: Optional[str] = None,
     classification_algorithm: Optional[str] = None,
     include_category_maps: bool = False,
+    images_per_batch: int = 100,
 ) -> Optional[str]:
     """
     Export occurrences using API schemas (DetectionResponse/ClassificationResponse).
@@ -293,7 +432,10 @@ def api_occurrences(
     the new API schema format with DetectionResponse and ClassificationResponse
     objects instead of the legacy Occurrence and ExportedDetection formats.
 
-    Pipeline must be one of the valid choices from CLASSIFIER_CHOICES
+    Args:
+        pipeline_slug: The pipeline reference in Antenna, must be one of the valid
+                       choices from CLASSIFIER_CHOICES.
+        images_per_batch: Number of source images per exported file (default: 100)
     """
     # Validate pipeline choice
     events = get_monitoring_sessions_from_db(
@@ -329,15 +471,6 @@ def api_occurrences(
             classification_algorithm_name=classification_algorithm,
         )
         all_detection_responses.extend(detection_responses)
-
-    # Create full pipeline results response
-    pipeline_response = create_pipeline_results_response(
-        occurrences=occurrence_dicts,
-        detection_responses=all_detection_responses,
-        pipeline_name=pipeline_slug,
-        total_time=0.0,
-        include_category_maps=include_category_maps,
-    )
 
     logger.info(
         f"Preparing to export pipeline response with {len(all_detection_responses)} detection records as {format}"
@@ -439,17 +572,14 @@ def api_occurrences(
         df = pd.DataFrame(flattened_dicts)
         return export(df=df, format=format, outfile=outfile)
     else:
-        # For JSON/HTML, export the full pipeline response directly
-        import json
-
-        pipeline_dict = pipeline_response.model_dump()
-
-        if outfile:
-            with open(outfile, "w") as f:
-                json.dump(pipeline_dict, f, indent=2, default=str)
-            logger.info(f'Exported pipeline response to "{outfile}"')
-            return str(outfile.absolute())
-        else:
-            output = json.dumps(pipeline_dict, indent=2, default=str)
-            print(output)
-            return output
+        # Always use batching with default of 1 image per batch
+        return _export_batched_pipeline_responses(
+            all_detection_responses=all_detection_responses,
+            occurrence_dicts=occurrence_dicts,
+            pipeline_slug=pipeline_slug,
+            include_category_maps=include_category_maps,
+            batch_size=None,
+            images_per_batch=images_per_batch,
+            outfile=outfile,
+            destination_dir=destination_dir,
+        )
