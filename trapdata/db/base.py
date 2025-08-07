@@ -3,10 +3,12 @@ import pathlib
 import time
 from typing import Generator
 
+import alembic
+import alembic.command
 import sqlalchemy as sa
 import sqlalchemy.exc
-from alembic import command as alembic
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from rich import print
 from sqlalchemy import orm
 
@@ -74,19 +76,44 @@ def create_db(db_path: DatabaseURL) -> None:
 
     Base.metadata.create_all(db, checkfirst=True)
     alembic_cfg = get_alembic_config(db_path)
-    alembic.stamp(alembic_cfg, "head")
+    alembic.command.stamp(alembic_cfg, "head")
 
 
 def migrate(db_path: DatabaseURL) -> None:
     """
-    Run database migrations.
-
-    # @TODO See this post for a more complete implementation
-    # https://pawamoy.github.io/posts/testing-fastapi-ormar-alembic-apps/
+    Run database migrations with better error handling and verification.
     """
     logger.debug("Running any database migrations if necessary")
     alembic_cfg = get_alembic_config(db_path)
-    alembic.upgrade(alembic_cfg, "head")
+
+    try:
+        # Check current state first
+        current_head = alembic.command.current(alembic_cfg)
+        script_dir = ScriptDirectory.from_config(alembic_cfg)
+        target_head = script_dir.get_current_head()
+
+        if current_head != target_head:
+            logger.info(f"Upgrading from {current_head} to {target_head}")
+            alembic.command.upgrade(alembic_cfg, "head")
+            logger.info("Migration completed successfully")
+        else:
+            logger.debug("Database already at target revision")
+
+        # Verify the migration actually worked
+        logger.debug("Verifying database schema consistency")
+        alembic.command.check(alembic_cfg)
+        logger.debug("Database schema verification passed")
+
+    except Exception as e:
+        logger.error(f"Migration failed: {e}")
+        # Check if we're in an inconsistent state
+        try:
+            alembic.command.check(alembic_cfg)
+            logger.warning("Migration failed but database schema appears consistent")
+        except Exception as check_error:
+            logger.error(f"Database is in inconsistent state: {check_error}")
+            logger.error("Manual intervention may be required to fix migration state")
+        raise
 
 
 def get_db(db_path, create=False, update=False):
