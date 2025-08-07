@@ -274,8 +274,9 @@ def deployments(
 
 @cli.command(name="api-occurrences")
 def api_occurrences(
+    pipeline_slug: str,
     format: ExportFormat = ExportFormat.json,
-    num_examples: int = 9999,
+    num_examples: int = 3,
     limit: Optional[int] = None,
     offset: int = 0,
     outfile: Optional[pathlib.Path] = None,
@@ -291,7 +292,10 @@ def api_occurrences(
     This exports the same occurrence data as the 'occurrences' command but uses
     the new API schema format with DetectionResponse and ClassificationResponse
     objects instead of the legacy Occurrence and ExportedDetection formats.
+
+    Pipeline must be one of the valid choices from CLASSIFIER_CHOICES
     """
+    # Validate pipeline choice
     events = get_monitoring_sessions_from_db(
         db_path=settings.database_url, base_directory=settings.image_base_path
     )
@@ -330,7 +334,7 @@ def api_occurrences(
     pipeline_response = create_pipeline_results_response(
         occurrences=occurrence_dicts,
         detection_responses=all_detection_responses,
-        pipeline_name="local_batch_processor",
+        pipeline_name=pipeline_slug,
         total_time=0.0,
         include_category_maps=include_category_maps,
     )
