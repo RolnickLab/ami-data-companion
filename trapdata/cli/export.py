@@ -11,6 +11,10 @@ import typer
 from rich import print
 
 from trapdata import logger
+from trapdata.api.export_utils import (
+    convert_occurrence_to_detection_responses,
+    create_pipeline_results_response,
+)
 from trapdata.cli import settings
 from trapdata.db import get_session_class
 from trapdata.db.models.deployments import list_deployments
@@ -265,4 +269,171 @@ def deployments(
     deployments = list_deployments(session)
 
     df = pd.DataFrame([d.model_dump() for d in deployments])
+    return export(df=df, format=format, outfile=outfile)
+
+
+@cli.command(name="api-occurrences")
+def api_occurrences(
+    format: ExportFormat = ExportFormat.json,
+    num_examples: int = 3,
+    limit: Optional[int] = None,
+    offset: int = 0,
+    outfile: Optional[pathlib.Path] = None,
+    collect_images: bool = False,
+    absolute_paths: bool = False,
+    detection_algorithm: Optional[str] = None,
+    classification_algorithm: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Export occurrences using API schemas (DetectionResponse/ClassificationResponse).
+
+    This exports the same occurrence data as the 'occurrences' command but uses
+    the new API schema format with DetectionResponse and ClassificationResponse
+    objects instead of the legacy Occurrence and ExportedDetection formats.
+    """
+    events = get_monitoring_sessions_from_db(
+        db_path=settings.database_url, base_directory=settings.image_base_path
+    )
+
+    # Get occurrence data using existing logic
+    occurrences: list[Occurrence] = []
+    tabular_formats = [ExportFormat.csv]
+
+    if format in tabular_formats:
+        num_examples = 1
+
+    for event in events:
+        occurrences += list_occurrences(
+            settings.database_url,
+            monitoring_session=event,
+            classification_threshold=settings.classification_threshold,
+            num_examples=num_examples,
+            limit=limit,
+            offset=offset,
+        )
+
+    # Convert occurrences to DetectionResponse objects
+    all_detection_responses = []
+    occurrence_dicts = []
+    for occurrence in occurrences:
+        occurrence_dict = occurrence.model_dump()
+        occurrence_dicts.append(occurrence_dict)
+        detection_responses = convert_occurrence_to_detection_responses(
+            occurrence_dict,
+            detection_algorithm_name=detection_algorithm,
+            classification_algorithm_name=classification_algorithm,
+        )
+        all_detection_responses.extend(detection_responses)
+
+    # Create full pipeline results response
+    pipeline_response = create_pipeline_results_response(
+        occurrences=occurrence_dicts,
+        detection_responses=all_detection_responses,
+        pipeline_name="local_batch_processor",
+        total_time=0.0,
+    )
+
+    logger.info(
+        f"Preparing to export pipeline response with {len(all_detection_responses)} detection records as {format}"
+    )
+
+    if outfile:
+        destination_dir = outfile.parent
+    else:
+        destination_dir = settings.user_data_path / "exports"
+    destination_dir.mkdir(parents=True, exist_ok=True)
+
+    if collect_images:
+        # Collect images for exported detections into a subdirectory
+        if outfile:
+            name = outfile.stem
+        else:
+            name = f"api_occurrences_{int(time.time())}"
+        destination_dir = destination_dir / f"{name}_images"
+        logger.info(f'Collecting images into "{destination_dir}"')
+        destination_dir.mkdir(parents=True, exist_ok=True)
+
+        for detection in all_detection_responses:
+            if detection.crop_image_url:
+                source_path = pathlib.Path(detection.crop_image_url).resolve()
+                if source_path.exists():
+                    # Create a meaningful filename
+                    classification = "unknown"
+                    if detection.classifications:
+                        classification = detection.classifications[0].classification
+
+                    destination = (
+                        destination_dir
+                        / f"{classification}_{detection.source_image_id}_{source_path.name}"
+                    )
+                    if not destination.exists():
+                        shutil.copy(source_path, destination)
+
+                    # Update the crop_image_url to point to the collected image
+                    if absolute_paths:
+                        detection.crop_image_url = str(destination.absolute())
+                    else:
+                        detection.crop_image_url = str(
+                            destination.relative_to(destination_dir)
+                        )
+
+    # Convert to DataFrame for export based on format
+    if format in tabular_formats:
+        # For CSV, flatten the detection responses structure
+        detection_dicts = [
+            detection.model_dump() for detection in all_detection_responses
+        ]
+        flattened_dicts = []
+        for detection_dict in detection_dicts:
+            flat_dict = {
+                "source_image_id": detection_dict["source_image_id"],
+                "bbox_x1": detection_dict["bbox"]["x1"],
+                "bbox_y1": detection_dict["bbox"]["y1"],
+                "bbox_x2": detection_dict["bbox"]["x2"],
+                "bbox_y2": detection_dict["bbox"]["y2"],
+                "timestamp": detection_dict["timestamp"],
+                "crop_image_url": detection_dict.get("crop_image_url"),
+                "detection_algorithm_name": detection_dict["algorithm"]["name"],
+                "detection_algorithm_key": detection_dict["algorithm"]["key"],
+            }
+
+            # Add classification data if available
+            if detection_dict["classifications"]:
+                classification = detection_dict["classifications"][0]
+                flat_dict.update(
+                    {
+                        "classification": classification["classification"],
+                        "classification_score": (
+                            classification["scores"][0]
+                            if classification["scores"]
+                            else None
+                        ),
+                        "classification_algorithm_name": classification["algorithm"][
+                            "name"
+                        ],
+                        "classification_algorithm_key": classification["algorithm"][
+                            "key"
+                        ],
+                        "classification_timestamp": classification["timestamp"],
+                    }
+                )
+            else:
+                flat_dict.update(
+                    {
+                        "classification": None,
+                        "classification_score": None,
+                        "classification_algorithm_name": None,
+                        "classification_algorithm_key": None,
+                        "classification_timestamp": None,
+                    }
+                )
+
+            flattened_dicts.append(flat_dict)
+
+        df = pd.DataFrame(flattened_dicts)
+    else:
+        # For JSON/HTML, export the full pipeline response
+        pipeline_dict = pipeline_response.model_dump()
+        df = pd.DataFrame([pipeline_dict])
+
     return export(df=df, format=format, outfile=outfile)

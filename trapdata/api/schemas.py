@@ -40,6 +40,7 @@ class SourceImage(pydantic.BaseModel):
     width: int | None = None
     height: int | None = None
     timestamp: datetime.datetime | None = None
+    deployment: "DeploymentReference | None" = None
 
     # Validate that there is at least one of the following fields
     @pydantic.model_validator(mode="after")
@@ -65,6 +66,23 @@ class SourceImage(pydantic.BaseModel):
         if self._pil:
             self.width, self.height = self._pil.size
         return self._pil
+
+
+class DeploymentReference(pydantic.BaseModel):
+    """Reference to a deployment."""
+
+    name: str = pydantic.Field(
+        description="Name of the deployment, e.g. 'Vermont Moth Camera Station 1'.",
+        examples=["vermont-moth-camera-station-1"],
+    )
+    key: str = pydantic.Field(
+        description=(
+            "A unique key for the deployment, used to reference it in the API. "
+            "In practive the ADC's deployment key and name are the same and are "
+            "derived from the root folder name of the source image."
+        ),
+        examples=["vermont-moth-camera-station-1"],
+    )
 
 
 class AlgorithmReference(pydantic.BaseModel):
@@ -277,6 +295,7 @@ class PipelineResultsResponse(pydantic.BaseModel):
     total_time: float
     source_images: list[SourceImageResponse]
     detections: list[DetectionResponse]
+    deployments: list[DeploymentReference] | None = None
     config: PipelineConfigRequest = PipelineConfigRequest()
 
 
