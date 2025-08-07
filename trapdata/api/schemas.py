@@ -159,6 +159,7 @@ class SourceImageResponse(pydantic.BaseModel):
 
     id: str
     url: str
+    deployment: "DeploymentReference | None" = None
 
 
 class AlgorithmCategoryMapResponse(pydantic.BaseModel):

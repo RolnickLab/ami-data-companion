@@ -303,9 +303,20 @@ def get_source_images_from_occurrences(occurrences: list) -> list[SourceImageRes
     Returns:
         List of SourceImageResponse objects
     """
+    from trapdata.api.schemas import DeploymentReference
+
     source_images = {}
 
     for occurrence in occurrences:
+        # Get deployment information from the occurrence
+        deployment_name = occurrence.get("deployment")
+        deployment = None
+        if deployment_name:
+            deployment = DeploymentReference(
+                name=deployment_name,
+                key=deployment_name,  # Use same value for key as name
+            )
+
         examples = occurrence.get("examples", [])
         for example in examples:
             source_image_id = str(example.get("source_image_id", "unknown"))
@@ -315,6 +326,7 @@ def get_source_images_from_occurrences(occurrences: list) -> list[SourceImageRes
                 source_images[source_image_id] = SourceImageResponse(
                     id=source_image_id,
                     url=source_image_path,
+                    deployment=deployment,
                 )
 
     return list(source_images.values())
@@ -341,7 +353,7 @@ def create_pipeline_results_response(
     # Get current algorithms
     algorithms = get_current_algorithms()
 
-    # Get source images
+    # Get source images with deployment information
     source_images = get_source_images_from_occurrences(occurrences)
 
     return PipelineResultsResponse(
