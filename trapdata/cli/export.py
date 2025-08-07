@@ -431,9 +431,19 @@ def api_occurrences(
             flattened_dicts.append(flat_dict)
 
         df = pd.DataFrame(flattened_dicts)
+        return export(df=df, format=format, outfile=outfile)
     else:
-        # For JSON/HTML, export the full pipeline response
-        pipeline_dict = pipeline_response.model_dump()
-        df = pd.DataFrame([pipeline_dict])
+        # For JSON/HTML, export the full pipeline response directly
+        import json
 
-    return export(df=df, format=format, outfile=outfile)
+        pipeline_dict = pipeline_response.model_dump()
+
+        if outfile:
+            with open(outfile, "w") as f:
+                json.dump(pipeline_dict, f, indent=2, default=str)
+            logger.info(f'Exported pipeline response to "{outfile}"')
+            return str(outfile.absolute())
+        else:
+            output = json.dumps(pipeline_dict, indent=2, default=str)
+            print(output)
+            return output
