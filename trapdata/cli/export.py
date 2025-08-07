@@ -283,6 +283,7 @@ def api_occurrences(
     absolute_paths: bool = False,
     detection_algorithm: Optional[str] = None,
     classification_algorithm: Optional[str] = None,
+    include_category_maps: bool = False,
 ) -> Optional[str]:
     """
     Export occurrences using API schemas (DetectionResponse/ClassificationResponse).
@@ -331,6 +332,7 @@ def api_occurrences(
         detection_responses=all_detection_responses,
         pipeline_name="local_batch_processor",
         total_time=0.0,
+        include_category_maps=include_category_maps,
     )
 
     logger.info(
@@ -377,7 +379,7 @@ def api_occurrences(
                             destination.relative_to(destination_dir)
                         )
 
-    # Convert to DataFrame for export based on format
+    # Handle export based on format
     if format in tabular_formats:
         # For CSV, flatten the detection responses structure
         detection_dicts = [

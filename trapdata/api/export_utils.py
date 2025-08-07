@@ -244,9 +244,14 @@ def convert_occurrence_to_detection_responses(
     return detection_responses
 
 
-def get_current_algorithms() -> dict[str, AlgorithmConfigResponse]:
+def get_current_algorithms(
+    include_category_maps: bool = False,
+) -> dict[str, AlgorithmConfigResponse]:
     """
     Get the currently configured algorithms from settings.
+
+    Args:
+        include_category_maps: Whether to include category maps in algorithm configs
 
     Returns:
         Dictionary of algorithm configurations keyed by algorithm key
@@ -258,36 +263,61 @@ def get_current_algorithms() -> dict[str, AlgorithmConfigResponse]:
     detector_choice = current_settings.localization_model
     detector_class = ml.models.object_detectors.get(detector_choice.value)
     if detector_class:
+        category_map = None
+        if include_category_maps:
+            raise NotImplementedError(
+                "Category maps are not yet implemented for the batch export. "
+            )
+
         algorithms[detector_class.get_key()] = AlgorithmConfigResponse(
             name=detector_class.name,
             key=detector_class.get_key(),
-            task_type="detection",
+            task_type="localization",
             description=getattr(detector_class, "description", None),
             version=1,
+            category_map=category_map,
         )
 
     # Get binary classifier
     binary_choice = current_settings.binary_classification_model
     binary_class = ml.models.binary_classifiers.get(binary_choice.value)
     if binary_class:
+        category_map = None
+        if include_category_maps:
+            # TODO: Implement category map loading for local models
+            raise NotImplementedError(
+                "Category maps for local models require model instantiation which "
+                "downloads large files. This feature needs optimization."
+            )
+
         algorithms[binary_class.get_key()] = AlgorithmConfigResponse(
             name=binary_class.name,
             key=binary_class.get_key(),
             task_type="classification",
             description=getattr(binary_class, "description", None),
             version=1,
+            category_map=category_map,
         )
 
     # Get species classifier
     species_choice = current_settings.species_classification_model
     species_class = ml.models.species_classifiers.get(species_choice.value)
     if species_class:
+        category_map = None
+        if include_category_maps:
+            # TODO: Implement category map loading for local models
+            raise NotImplementedError(
+                "Category maps for local models require model instantiation which "
+                "downloads large files. This feature needs optimization."
+            )
+
         algorithms[species_class.get_key()] = AlgorithmConfigResponse(
             name=species_class.name,
             key=species_class.get_key(),
             task_type="classification",
             description=getattr(species_class, "description", None),
             version=1,
+            category_map=category_map,
         )
 
     return algorithms
@@ -337,6 +367,7 @@ def create_pipeline_results_response(
     detection_responses: list[DetectionResponse],
     pipeline_name: str = "local_batch_processor",
     total_time: float = 0.0,
+    include_category_maps: bool = False,
 ) -> PipelineResultsResponse:
     """
     Create a complete PipelineResultsResponse from occurrence data and responses.
@@ -346,12 +377,13 @@ def create_pipeline_results_response(
         detection_responses: List of DetectionResponse objects
         pipeline_name: Name of the pipeline used
         total_time: Total processing time
+        include_category_maps: Whether to include category maps in algorithm configs
 
     Returns:
         Complete PipelineResultsResponse object
     """
     # Get current algorithms
-    algorithms = get_current_algorithms()
+    algorithms = get_current_algorithms(include_category_maps=include_category_maps)
 
     # Get source images with deployment information
     source_images = get_source_images_from_occurrences(occurrences)
