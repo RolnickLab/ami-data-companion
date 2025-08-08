@@ -29,6 +29,8 @@ class DetectedObjectProtocol(Protocol):
     timestamp: Optional[datetime.datetime]
     detection_algorithm: Optional[str]
     classification_algorithm: Optional[str]
+    logits: Optional[list[float]]
+    cnn_features: Optional[list[float]]
 
 
 def create_algorithm_reference(
@@ -112,11 +114,22 @@ def convert_classification_to_classification_response(
         task_type="classification",
     )
 
+    # Get logits from the detected object if available
+    logits = []
+    if hasattr(detected_obj, "logits") and detected_obj.logits is not None:
+        logits = detected_obj.logits
+
+    # Get CNN features from the detected object if available
+    features = None
+    if hasattr(detected_obj, "cnn_features") and detected_obj.cnn_features is not None:
+        features = detected_obj.cnn_features
+
     return ClassificationResponse(
         classification=classification,
         labels=None,  # Not available in database model
         scores=[score],  # Single score for the predicted class
-        logits=[],  # Not stored in database
+        logits=logits,  # Get logits from database
+        features=features,  # Get CNN features from database
         inference_time=None,  # Not stored in database
         algorithm=algorithm,
         terminal=True,
@@ -228,6 +241,8 @@ def convert_occurrence_to_detection_responses(
                 self.timestamp = example_data.get("timestamp")
                 self.detection_algorithm = detection_algorithm_name
                 self.classification_algorithm = classification_algorithm_name
+                self.logits = example_data.get("logits")
+                self.cnn_features = example_data.get("cnn_features")
 
         mock_obj = MockDetectedObject(example)
         source_image_id = str(example.get("source_image_id", "unknown"))
