@@ -41,6 +41,9 @@ class ExportedDetection(pydantic.BaseModel):
     bbox: list[int]  # Bounding box in the format [x_min, y_min, x_max, y_max]
     logits: list[float] | None = None  # Classification logits from the model
     cnn_features: list[float] | None = None  # CNN feature embeddings from the model
+    model_name: str | None = (
+        None  # Name of the model that generated this classification
+    )
 
 
 class Occurrence(pydantic.BaseModel):
@@ -195,6 +198,7 @@ def get_unique_species_by_track(
                 models.DetectedObject.bbox,
                 models.DetectedObject.logits,
                 models.DetectedObject.cnn_features,
+                models.DetectedObject.model_name,
             )
             .where(
                 (models.DetectedObject.monitoring_session_id == monitoring_session.id)

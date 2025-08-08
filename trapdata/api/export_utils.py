@@ -31,6 +31,7 @@ class DetectedObjectProtocol(Protocol):
     classification_algorithm: Optional[str]
     logits: Optional[list[float]]
     cnn_features: Optional[list[float]]
+    model_name: Optional[str]
 
 
 def create_algorithm_reference(
@@ -108,9 +109,14 @@ def convert_classification_to_classification_response(
     classification = detected_obj.specific_label or "unknown"
     score = detected_obj.specific_label_score or 0.0
 
-    # Create algorithm reference
+    # Create algorithm reference - prefer stored model_name over passed algorithm_name
+    algorithm_name_to_use = (
+        detected_obj.model_name
+        or algorithm_name
+        or detected_obj.classification_algorithm
+    )
     algorithm = create_algorithm_reference(
-        algorithm_name or detected_obj.classification_algorithm,
+        algorithm_name_to_use,
         task_type="classification",
     )
 
@@ -243,6 +249,7 @@ def convert_occurrence_to_detection_responses(
                 self.classification_algorithm = classification_algorithm_name
                 self.logits = example_data.get("logits")
                 self.cnn_features = example_data.get("cnn_features")
+                self.model_name = example_data.get("model_name")
 
         mock_obj = MockDetectedObject(example)
         source_image_id = str(example.get("source_image_id", "unknown"))
@@ -257,6 +264,61 @@ def convert_occurrence_to_detection_responses(
         detection_responses.append(detection_response)
 
     return detection_responses
+
+
+def get_algorithms_from_detections(
+    detection_responses: list[DetectionResponse],
+    include_category_maps: bool = False,
+) -> dict[str, AlgorithmConfigResponse]:
+    """
+    Extract unique algorithms from detection responses.
+
+    Args:
+        detection_responses: List of DetectionResponse objects
+        include_category_maps: Whether to include category maps in algorithm configs
+
+    Returns:
+        Dictionary of algorithm configurations keyed by algorithm key
+    """
+    algorithms = {}
+
+    for detection in detection_responses:
+        # Add detection algorithm
+        if detection.algorithm:
+            key = detection.algorithm.key
+            if key not in algorithms:
+                # Determine task type based on algorithm name patterns
+                task_type = "localization"
+                if any(
+                    keyword in detection.algorithm.name.lower()
+                    for keyword in ["rcnn", "yolo", "detector"]
+                ):
+                    task_type = "localization"
+
+                algorithms[key] = AlgorithmConfigResponse(
+                    name=detection.algorithm.name,
+                    key=key,
+                    task_type=task_type,
+                    description=None,  # Not available from stored data
+                    version=1,
+                    category_map=None if not include_category_maps else None,
+                )
+
+        # Add classification algorithms
+        for classification in detection.classifications:
+            if classification.algorithm:
+                key = classification.algorithm.key
+                if key not in algorithms:
+                    algorithms[key] = AlgorithmConfigResponse(
+                        name=classification.algorithm.name,
+                        key=key,
+                        task_type="classification",
+                        description=None,  # Not available from stored data
+                        version=1,
+                        category_map=None if not include_category_maps else None,
+                    )
+
+    return algorithms
 
 
 def get_current_algorithms(
@@ -397,8 +459,10 @@ def create_pipeline_results_response(
     Returns:
         Complete PipelineResultsResponse object
     """
-    # Get current algorithms
-    algorithms = get_current_algorithms(include_category_maps=include_category_maps)
+    # Collect algorithms from actual detection responses
+    algorithms = get_algorithms_from_detections(
+        detection_responses, include_category_maps=include_category_maps
+    )
 
     # Get source images with deployment information
     source_images = get_source_images_from_occurrences(occurrences)

@@ -64,7 +64,7 @@ def unprocessed_detections():
 
 
 @cli.command()
-def reprocess_detections():
+def reprocess_detections(sample_size: int | None = None):
     """
     Add all detections (processed and unprocessed) to the queue for reprocessing.
 
@@ -88,7 +88,9 @@ def reprocess_detections():
         raise typer.Exit(0)
 
     queue_detections_for_reprocessing(
-        db_path=settings.database_url, base_directory=settings.image_base_path
+        db_path=settings.database_url,
+        base_directory=settings.image_base_path,
+        sample_size=sample_size,
     )
 
 
