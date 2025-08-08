@@ -6,8 +6,8 @@ import torch
 import torch.utils.data
 from sentry_sdk import start_transaction
 
-from trapdata import logger
 from trapdata.common.logs import logger
+from trapdata.ml.models.base import ClassifierResult
 from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
     InferenceBaseClass,
@@ -15,9 +15,12 @@ from trapdata.ml.models.classification import (
     MothNonMothClassifier,
     PanamaMothSpeciesClassifier2024,
     PanamaMothSpeciesClassifierMixedResolution2023,
+    PanamaPlusWithOODClassifier2025,
+    PanamaPlusWithOODClassifier2025v2,
     QuebecVermontMothSpeciesClassifier2024,
     TuringAnguillaSpeciesClassifier,
     TuringCostaRicaSpeciesClassifier,
+    TuringKenyaUgandaSpeciesClassifier,
     UKDenmarkMothSpeciesClassifier2024,
 )
 from trapdata.ml.utils import StopWatch
@@ -64,28 +67,51 @@ class APIMothClassifier(
             batch_size=self.batch_size,
         )
 
+    def get_ood_score(self, preds):
+        pass
+
     def post_process_batch(
         self, logits: torch.Tensor, features: torch.Tensor | None = None
-    ):
+    ) -> list[ClassifierResult]:
         """
         Return the labels, softmax/calibrated scores, and the original logits for
+        each image in the batch.
+        Almost like the base class method, but we need to return the logits as well.
         each image in the batch, along with optional feature vectors.
         """
         predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
 
+        if self.class_prior is None:
+            ood_scores = np.max(predictions, axis=-1)
+        else:
+            ood_scores = np.max(predictions - self.class_prior, axis=-1)
+        # Ensure higher scores indicate more likelihood that it is OOD.
+        ood_scores = 1 - ood_scores
+
         features = features.cpu() if features is not None else None
+
+        logits = logits.cpu()
+
         batch_results = []
         for i, pred in enumerate(predictions):
             class_indices = np.arange(len(pred))
-            scores = pred
-            labels = [self.category_map[i] for i in class_indices]
-            preds = list(zip(labels, scores, pred))
+            labels_single = [self.category_map[i] for i in class_indices]
+            ood_score = ood_scores[i]
+            logits_single = logits[i].float().tolist()
+            feature_vector = (
+                features[i].float().tolist() if features is not None else None
+            )
 
-            if features is not None:
-                batch_results.append((preds, features[i].tolist()))
-            else:
-                batch_results.append((preds, None))
+            result = ClassifierResult(
+                features=feature_vector,
+                labels=labels_single,
+                logits=logits_single,
+                scores=pred,
+                ood_score=ood_score,
+            )
+
+            batch_results.append(result)
 
         logger.debug(f"Post-processing result batch with {len(batch_results)} entries.")
         return batch_results
@@ -102,21 +128,7 @@ class APIMothClassifier(
         return logits, None
 
     def get_best_label(self, predictions):
-        """
-        Convenience method to get the best label from the predictions, which are a list of tuples
-        in the order of the model's class index, NOT the values.
-
-        This must not modify the predictions list!
-
-        predictions look like:
-        [
-            ('label1', score1, logit1),
-            ('label2', score2, logit2),
-            ...
-        ]
-        """
-        best_pred = max(predictions, key=lambda x: x[1])
-        best_label = best_pred[0]
+        best_label = predictions.labels[np.argmax(predictions.scores)]
         return best_label
 
     def save_results(
@@ -124,18 +136,18 @@ class APIMothClassifier(
     ) -> list[DetectionResponse]:
         image_ids = metadata[0]
         detection_idxes = metadata[1]
-        for image_id, detection_idx, (predictions, features_vec) in zip(
+        for image_id, detection_idx, predictions in zip(
             image_ids, detection_idxes, batch_output
         ):
             detection = self.detections[detection_idx]
             assert detection.source_image_id == image_id
-            _labels, scores, logits = zip(*predictions)
 
             classification = ClassificationResponse(
                 classification=self.get_best_label(predictions),
-                scores=scores,
-                logits=logits,
-                features=features_vec,
+                scores=predictions.scores,
+                ood_score=predictions.ood_score,
+                logits=predictions.logits,
+                features=predictions.features,
                 inference_time=seconds_per_item,
                 algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
                 timestamp=datetime.datetime.now(),
@@ -162,7 +174,7 @@ class APIMothClassifier(
         )
 
     @torch.no_grad()
-    def run(self):
+    def run(self) -> list[DetectionResponse]:
         logger.info(
             f"Starting {self.__class__.__name__} run with {len(self.results)} "
             "detections"
@@ -241,7 +253,23 @@ class MothClassifierTuringAnguilla(APIMothClassifier, TuringAnguillaSpeciesClass
     pass
 
 
+class MothClassifierTuringKenyaUganda(
+    APIMothClassifier, TuringKenyaUgandaSpeciesClassifier
+):
+    pass
+
+
 class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
+    pass
+
+
+class MothClassifierPanamaPlus2025(APIMothClassifier, PanamaPlusWithOODClassifier2025):
+    pass
+
+
+class MothClassifierPanamaPlus2025v2(
+    APIMothClassifier, PanamaPlusWithOODClassifier2025v2
+):
     pass
 
 

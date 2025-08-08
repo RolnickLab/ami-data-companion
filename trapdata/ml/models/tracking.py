@@ -23,6 +23,7 @@ from trapdata.ml.models.classification import (
     PanamaMothSpeciesClassifierMixedResolution2023,
     QuebecVermontMothSpeciesClassifierMixedResolution,
     UKDenmarkMothSpeciesClassifierMixedResolution,
+    PanamaPlusWithOODClassifier2025
 )
 from trapdata.ml.utils import get_device
 
@@ -500,6 +501,12 @@ class PanamaFeatureExtractor(
     FeatureExtractor, PanamaMothSpeciesClassifierMixedResolution2023
 ):
     name = "Features from Panama species model"
+
+class PanamaPlusFeatureExtractor(
+    FeatureExtractor, 
+    PanamaPlusWithOODClassifier2025
+):
+    name = "Features from Panama Plus species model"
 
 
 def clear_sequences(monitoring_session: MonitoringSession, session: orm.Session):

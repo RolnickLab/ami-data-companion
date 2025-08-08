@@ -78,8 +78,10 @@ class EfficientNetClassifier(InferenceBaseClass):
         labels = [self.category_map[cat] for cat in categories]
         scores = predictions.max(axis=1).astype(float)
 
-        result = list(zip(labels, scores))
+        result = list(zip(labels, scores))  # TODO: modify this
         logger.debug(f"Post-processing result batch: {result}")
+
+        # TODO: adding logits
         return result
 
 
@@ -240,7 +242,7 @@ class Resnet50Classifier(InferenceBaseClass):
             ]
         )
 
-    def post_process_batch(self, output):
+    def post_process_batch(self, output: torch.Tensor) -> list[tuple[str, float, list]]:
         predictions = torch.nn.functional.softmax(output, dim=1)
         predictions = predictions.cpu().numpy()
 
@@ -248,9 +250,10 @@ class Resnet50Classifier(InferenceBaseClass):
         labels = [self.category_map[cat] for cat in categories]
         scores = predictions.max(axis=1).astype(float)
 
-        result = list(zip(labels, scores))
-        logger.debug(f"Post-processing result batch: {result}")
-        return result
+        logits = output.cpu().detach().numpy().tolist()
+        result_per_image = list(zip(labels, scores, logits))
+        logger.debug(f"Post-processing result batch: {result_per_image}")
+        return result_per_image
 
 
 class Resnet50ClassifierLowRes(Resnet50Classifier):
@@ -316,7 +319,13 @@ class BinaryClassifier(Resnet50ClassifierLowRes):
         )
         return dataset
 
-    def save_results(self, object_ids, batch_output, *args, **kwargs):
+    def save_results(
+        self,
+        object_ids,
+        batch_output: list[tuple[str, float, list]],
+        *args,
+        **kwargs,
+    ):
         # Here we are saving the moth/non-moth labels
         classified_objects_data = [
             {
@@ -325,7 +334,7 @@ class BinaryClassifier(Resnet50ClassifierLowRes):
                 "in_queue": True if label == self.positive_binary_label else False,
                 "model_name": self.name,
             }
-            for label, score in batch_output
+            for label, score, _logits in batch_output
         ]
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
 
@@ -341,6 +350,7 @@ class MothNonMothClassifier2022(EfficientNetClassifier, BinaryClassifier):
 
 class MothNonMothClassifier(BinaryClassifier):
     name = "Moth / Non-Moth Classifier"
+    key = "moth_nonmoth_classifier"
     description = "Trained on April 17, 2024"
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
@@ -369,18 +379,41 @@ class SpeciesClassifier(InferenceBaseClass):
         )
         return dataset
 
-    def save_results(self, object_ids, batch_output, *args, **kwargs):
+    def save_results(
+        self,
+        object_ids,
+        batch_output: tuple[list[tuple[str, float]], list],
+        *args,
+        **kwargs,
+    ):
         # Here we are saving the specific taxon labels
         classified_objects_data = [
             {
                 "specific_label": label,
-                "specific_label_score": score,
+                "specific_label_score": top_score,
+                "logits": logits,
                 "model_name": self.name,
-                "in_queue": True,  # Put back in queue for the feature extractor & tracking
+                # Put back in queue for the feature extractor & tracking
+                "in_queue": True,
             }
-            for label, score in batch_output
+            for label, top_score, logits in batch_output
         ]
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
+
+
+# class SpeciesClassifierWithOOD(SpeciesClassifier):
+#     def save_results(self, object_ids, batch_output, *args, **kwargs):
+#         # Here we are saving the specific taxon labels
+#         classified_objects_data = [
+#             {
+#                 "specific_label": label,
+#                 "specific_label_score": score,
+#                 "model_name": self.name,
+#                 "in_queue": True,  # Put back in queue for the feature extractor & tracking
+#             }
+#             for label, score in batch_output
+#         ]
+#         save_classified_objects(self.db_path, object_ids, classified_objects_data)
 
 
 class QuebecVermontMothSpeciesClassifierMixedResolution(
@@ -416,8 +449,27 @@ class TuringCostaRicaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Tur
 class TuringAnguillaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
     name = "Turing Anguilla Species Classifier"
     description = "Trained on 28th June 2024 by Turing team using Resnet50 model."
-    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/turing-anguilla_v01_resnet50_2024-06-28-17-01_state.pt"
-    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/01_anguilla_data_category_map.json"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "turing-anguilla_v01_resnet50_2024-06-28-17-01_state.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "01_anguilla_data_category_map.json"
+    )
+
+
+class TuringKenyaUgandaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
+    name = "Turing Kenya and Uganda Species Classifier"
+    description = "Trained on 19th November 2024 by Turing team using Resnet50 model."
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "turing-kenya-uganda_v01_resnet50_2024-11-19-18-44_state.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "01_kenya-uganda_data_category_map.json"
+    )
 
 
 class TuringUKSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
@@ -473,6 +525,7 @@ class PanamaMothSpeciesClassifierMixedResolution2023(
     SpeciesClassifier, Resnet50ClassifierLowRes
 ):
     name = "Panama Species Classifier 2023"
+    key = "panama_species_classifier_2023"
     lookup_gbif_names = True
     normalization = imagenet_normalization
 
@@ -495,6 +548,7 @@ class GlobalMothSpeciesClassifier(SpeciesClassifier, Resnet50TimmClassifier):
     lookup_gbif_names = False
 
     name = "Global Species Classifier - Aug 2024"
+    key = "global_species_classifier_aug_2024"
     description = (
         "Trained on August 28th, 2024 for 29,176 species. "
         "https://wandb.ai/moth-ai/global-moth-classifier/runs/h0cuqrbc/overview"
@@ -523,6 +577,7 @@ class QuebecVermontMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClas
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "quebec-vermont_resnet50_baseline_20240417_950de764.pth"
     )
+
     labels_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
         "01_ami-gbif_fine-grained_ne-america_category_map-with_names.json"
@@ -576,3 +631,51 @@ class InsectOrderClassifier2025(SpeciesClassifier, ConvNeXtOrderClassifier):
     weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/insect_orders/convnext_tiny_in22k_worder0.5_wbinary0.5_run2_checkpoint.pt"
     labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/insect_orders/insect_order_category_map.json"
     default_taxon_rank = "ORDER"
+
+
+class PanamaPlusWithOODClassifier2025v2(SpeciesClassifier, Resnet50TimmClassifier):
+    input_size = 128
+    normalization = imagenet_normalization
+    lookup_gbif_names = False
+
+    name = "Panama Plus Species Classifier with OOD detection v2 - May 2025"
+    description = (
+        "Trained on May 26th, 2025 for 2201 species by removing some North American species from the Panama Plus checklist"
+        "https://wandb.ai/moth-ai/panama_classifier/runs/tynjykch/overview"
+    )
+
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_new_resnet50_20250526.pth"
+    )
+
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_new_category_map-with_names_20250526.json"
+    )
+
+    training_csv_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/panama_new_train.csv"
+
+
+class PanamaPlusWithOODClassifier2025(SpeciesClassifier, Resnet50TimmClassifier):
+    input_size = 128
+    normalization = imagenet_normalization
+    lookup_gbif_names = False
+
+    name = "Panama Plus Species Classifier with OOD detection - Mar 2025"
+    description = (
+        "Trained on March 13th, 2025 for 2360 species. "
+        "https://wandb.ai/moth-ai/panama_classifier/runs/81f5ssv9/overview"
+    )
+
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_plus_resnet50_20250313.pth"
+    )
+
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "panama_plus_category_map-with_names.json"
+    )
+
+    training_csv_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/panama_plus_train.csv"

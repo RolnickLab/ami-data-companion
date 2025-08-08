@@ -1,7 +1,9 @@
 import json
+from dataclasses import dataclass
 from typing import Union
 
 import numpy as np
+import pandas as pd
 import sqlalchemy
 import torch
 import torch.utils.data
@@ -89,6 +91,7 @@ class InferenceBaseClass:
     queue: QueueManager
     dataset: torch.utils.data.Dataset
     dataloader: torch.utils.data.DataLoader
+    training_csv_path: str | None = None
 
     def __init__(
         self,
@@ -106,6 +109,7 @@ class InferenceBaseClass:
 
         self.device = self.device or get_device()
         self.category_map = self.get_labels(self.labels_path)
+        self.class_prior = self.get_class_prior(self.training_csv_path)
         self.num_classes = self.num_classes or len(self.category_map)
         self.weights = self.get_weights(self.weights_path)
         self.transforms = self.get_transforms()
@@ -184,6 +188,25 @@ class InferenceBaseClass:
         else:
             return {}
 
+    def get_class_prior(self, training_csv_path):
+        if training_csv_path:
+            local_path = get_or_download_file(
+                training_csv_path,
+                self.user_data_path or torch.hub.get_dir(),
+                prefix="models",
+            )
+            df_train = pd.read_csv(local_path)
+            categories = sorted(df_train["speciesKey"].unique())
+            categories_map = {categ: id for id, categ in enumerate(categories)}
+            df_train["label"] = df_train["speciesKey"].map(categories_map)
+            cls_idx = df_train["label"].astype(int).values
+            num_classes = df_train["label"].nunique()
+            cls_num = np.bincount(cls_idx, minlength=num_classes)
+            targets = cls_num / cls_num.sum()
+            return targets
+        else:
+            return None
+
     def get_model(self) -> torch.nn.Module:
         """
         This method must be implemented by a subclass.
@@ -201,7 +224,7 @@ class InferenceBaseClass:
 
     def get_features(
         self, batch_input: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor] | None:
         """
         Default get_features method for models that don't implement  feature extraction.
         """
@@ -340,3 +363,12 @@ class InferenceBaseClass:
             logger.info(f"{self.name} Batch -- Done")
 
         logger.info(f"{self.name} -- Done")
+
+
+@dataclass
+class ClassifierResult:
+    features: list[float] | None = None
+    logits: list[float] | None = None
+    ood_score: float | None = None
+    labels: list[str] | None = None
+    scores: list[float] | None = None

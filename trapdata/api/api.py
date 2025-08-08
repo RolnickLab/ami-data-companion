@@ -19,9 +19,12 @@ from .models.classification import (
     MothClassifierGlobal,
     MothClassifierPanama,
     MothClassifierPanama2024,
+    MothClassifierPanamaPlus2025,
+    MothClassifierPanamaPlus2025v2,
     MothClassifierQuebecVermont,
     MothClassifierTuringAnguilla,
     MothClassifierTuringCostaRica,
+    MothClassifierTuringKenyaUganda,
     MothClassifierUKDenmark,
 )
 from .models.localization import APIMothDetector
@@ -40,12 +43,15 @@ app.add_middleware(GZipMiddleware)
 
 
 CLASSIFIER_CHOICES = {
+    "panama_plus_moths_2025v2": MothClassifierPanamaPlus2025v2,
+    "panama_plus_moths_2025": MothClassifierPanamaPlus2025,
     "panama_moths_2023": MothClassifierPanama,
     "panama_moths_2024": MothClassifierPanama2024,
     "quebec_vermont_moths_2023": MothClassifierQuebecVermont,
     "uk_denmark_moths_2023": MothClassifierUKDenmark,
     "costa_rica_moths_turing_2024": MothClassifierTuringCostaRica,
     "anguilla_moths_turing_2024": MothClassifierTuringAnguilla,
+    "kenya-uganda_moths_turing_2024": MothClassifierTuringKenyaUganda,
     "global_moths_2024": MothClassifierGlobal,
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
@@ -306,6 +312,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         detections=detections_to_return,
         total_time=seconds_elapsed,
     )
+    logger.debug(response.model_dump_json(indent=2))
     return response
 
 
