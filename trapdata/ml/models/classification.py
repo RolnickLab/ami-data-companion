@@ -548,7 +548,7 @@ class GlobalMothSpeciesClassifier(SpeciesClassifier, Resnet50TimmClassifier):
     lookup_gbif_names = False
 
     name = "Global Species Classifier - Aug 2024"
-    key = "global_moths_2024"
+    key = "global_species_classifier_aug_2024"
     description = (
         "Trained on August 28th, 2024 for 29,176 species. "
         "https://wandb.ai/moth-ai/global-moth-classifier/runs/h0cuqrbc/overview"
