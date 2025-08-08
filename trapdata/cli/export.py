@@ -410,9 +410,10 @@ def deployments(
     return export(df=df, format=format, outfile=outfile)
 
 
-@cli.command(name="api-occurrences")
-def api_occurrences(
-    pipeline_slug: str,
+@cli.command(name="antenna")
+def occurrences_for_antenna(
+    # pipeline_choice: Optional[str] = "pipeline-from-exported-data",
+    pipeline_choice: Optional[str] = "global_moths_2024",
     format: ExportFormat = ExportFormat.json,
     num_examples: int = 3,
     limit: Optional[int] = None,
@@ -433,7 +434,7 @@ def api_occurrences(
     objects instead of the legacy Occurrence and ExportedDetection formats.
 
     Args:
-        pipeline_slug: The pipeline reference in Antenna, must be one of the valid
+        pipeline_choice: The pipeline reference in Antenna, must be one of the valid
                        choices from CLASSIFIER_CHOICES.
         images_per_batch: Number of source images per exported file (default: 100)
     """
@@ -576,7 +577,7 @@ def api_occurrences(
         return _export_batched_pipeline_responses(
             all_detection_responses=all_detection_responses,
             occurrence_dicts=occurrence_dicts,
-            pipeline_slug=pipeline_slug,
+            pipeline_slug=pipeline_choice,
             include_category_maps=include_category_maps,
             batch_size=None,
             images_per_batch=images_per_batch,
