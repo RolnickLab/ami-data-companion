@@ -56,32 +56,32 @@ def create_algorithm_reference(
             key = "unknown_classifier"
         return AlgorithmReference(name=algorithm_name, key=key)
 
-    # Try to find the actual algorithm key from the model classes
-    current_settings = read_settings()
+    # Try to find the actual algorithm key from all available model classes
+    key = None
 
     if task_type == "detection":
-        detector_choice = current_settings.localization_model
-        detector_class = ml.models.object_detectors.get(detector_choice.value)
-        if detector_class and detector_class.name == algorithm_name:
-            key = detector_class.get_key()
-        else:
-            # Fallback to generated key
-            key = algorithm_name.lower().replace(" ", "_").replace("-", "_")
+        # Search through all object detectors
+        for detector_class in ml.models.object_detectors.values():
+            if detector_class.name == algorithm_name:
+                key = detector_class.get_key()
+                break
     else:
-        # Check species classifier first
-        species_choice = current_settings.species_classification_model
-        species_class = ml.models.species_classifiers.get(species_choice.value)
-        if species_class and species_class.name == algorithm_name:
-            key = species_class.get_key()
-        else:
-            # Check binary classifier
-            binary_choice = current_settings.binary_classification_model
-            binary_class = ml.models.binary_classifiers.get(binary_choice.value)
-            if binary_class and binary_class.name == algorithm_name:
-                key = binary_class.get_key()
-            else:
-                # Fallback to generated key
-                key = algorithm_name.lower().replace(" ", "_").replace("-", "_")
+        # Search through all species classifiers first
+        for species_class in ml.models.species_classifiers.values():
+            if species_class.name == algorithm_name:
+                key = species_class.get_key()
+                break
+
+        # If not found, search through binary classifiers
+        if key is None:
+            for binary_class in ml.models.binary_classifiers.values():
+                if binary_class.name == algorithm_name:
+                    key = binary_class.get_key()
+                    break
+
+    # Fallback to generated key if no match found
+    if key is None:
+        key = algorithm_name.lower().replace(" ", "_").replace("-", "_")
 
     return AlgorithmReference(name=algorithm_name, key=key)
 
