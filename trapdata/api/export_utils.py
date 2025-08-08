@@ -467,10 +467,22 @@ def create_pipeline_results_response(
     # Get source images with deployment information
     source_images = get_source_images_from_occurrences(occurrences)
 
+    # Extract unique deployments from source images
+    deployments = []
+    seen_deployments = set()
+    for source_image in source_images:
+        if (
+            source_image.deployment
+            and source_image.deployment.key not in seen_deployments
+        ):
+            deployments.append(source_image.deployment)
+            seen_deployments.add(source_image.deployment.key)
+
     return PipelineResultsResponse(
         pipeline=pipeline_name,
         algorithms=algorithms,
         total_time=total_time,
         source_images=source_images,
         detections=detection_responses,
+        deployments=deployments,
     )
