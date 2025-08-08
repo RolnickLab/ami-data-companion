@@ -25,8 +25,8 @@ class ExportedDetection(pydantic.BaseModel):
     source_image_width: int
     source_image_height: int
     source_image_filesize: int
-    label: str
-    score: float
+    label: str | None = None  # Specific label of the object
+    score: float | None = None  # Confidence score of the label
     cropped_image_path: str | None = None
     sequence_id: str | None = (
         None  # This is the Occurrence ID on the ADC side (= detections in a sequence)
@@ -48,8 +48,8 @@ class ExportedDetection(pydantic.BaseModel):
 
 class Occurrence(pydantic.BaseModel):
     id: str
-    label: str
-    best_score: float
+    label: str | None = None  # Specific label of the object
+    best_score: float | None = None  # Best score of the label in the sequence
     start_time: datetime.datetime
     end_time: datetime.datetime
     duration: datetime.timedelta
