@@ -760,6 +760,53 @@ def unprocessed_counts(db_path):
     return counts
 
 
+def queue_detections_for_reprocessing(
+    db_path: str,
+    base_directory: FilePath,
+    sample_size: int | None = None,
+) -> None:
+    """
+    Add all detections (processed and unprocessed) to the queue for reprocessing.
+    This clears existing binary and specific labels and adds them back to the queue.
+    """
+    logger.info(f"Adding {sample_size or 'all'} detections to queue for reprocessing")
+
+    with get_session(db_path) as sesh:
+        # Get all detections for this base directory
+        detections_query = (
+            sa.select(DetectedObject.id)
+            .where(MonitoringSession.base_directory == str(base_directory))
+            .join(
+                MonitoringSession,
+                DetectedObject.monitoring_session_id == MonitoringSession.id,
+            )
+        )
+        if sample_size is not None:
+            detections_query = detections_query.order_by(sa.func.random()).limit(
+                sample_size
+            )
+
+        # Clear binary and specific labels, and add to queue
+        stmt = (
+            sa.update(DetectedObject)
+            .where(DetectedObject.id.in_(detections_query.scalar_subquery()))
+            .values(
+                {
+                    "binary_label": None,
+                    "binary_label_score": None,
+                    "specific_label": None,
+                    "specific_label_score": None,
+                    "in_queue": True,
+                }
+            )
+        )
+
+        result = sesh.execute(stmt)
+        sesh.commit()
+
+        logger.info(f"Added {result.rowcount} detections to queue for reprocessing")
+
+
 def clear_all_queues(db_path, base_directory):
     logger.info("Clearing all queues")
 

@@ -34,6 +34,34 @@ PIL.ImageFile.LOAD_TRUNCATED_IMAGES = True
 USER_AGENT = "AntennaInsectDataPlatform/1.0 (https://insectai.org)"
 
 
+def mps_available() -> bool:
+    """
+    mps device enables high-performance training on GPU for MacOS devices with Metal programming framework
+
+    https://pytorch.org/docs/stable/notes/mps.html
+    """
+
+    try:
+        from torch.backends import mps
+    except ImportError:
+        return False
+    else:
+        if not mps.is_available():
+            if not mps.is_built():
+                print(
+                    "MPS not available because the current PyTorch install was not "
+                    "built with MPS enabled."
+                )
+            else:
+                print(
+                    "MPS not available because the current MacOS version is not 12.3+ "
+                    "and/or you do not have an MPS-enabled device on this machine."
+                )
+            return None
+        else:
+            return True
+
+
 def get_device(device_str=None) -> torch.device:
     """
     Select CUDA if available.
@@ -41,9 +69,18 @@ def get_device(device_str=None) -> torch.device:
     @TODO add macOS Metal?
     @TODO check Kivy settings to see if user forced use of CPU
     """
-    if not device_str:
-        device_str = "cuda" if torch.cuda.is_available() else "cpu"
-    device = torch.device(device_str)
+    if device_str:
+        device = torch.device(device_str)
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    elif mps_available():
+        device = torch.device("mps")
+        # Allow fallback to CPU if Metal does not support a certain feature (e.g. half-precision)
+        # https://pytorch.org/docs/stable/notes/mps.html#enabling-mps
+        # @TODO this does not stick, need to set env var in shell
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+    else:
+        device = torch.device("cpu")
     logger.info(f"Using device '{device}' for inference")
     return device
 

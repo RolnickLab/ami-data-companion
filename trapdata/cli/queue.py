@@ -33,6 +33,10 @@ def all():
     """
     Add all images to the processing queue.
     """
+    if not settings.image_base_path:
+        console.print("[red]Error: image_base_path not configured in settings[/red]")
+        raise typer.Exit(1)
+
     events = get_or_create_monitoring_sessions(
         settings.database_url, settings.image_base_path
     )
@@ -48,6 +52,10 @@ def unprocessed_detections():
     """
     Add all unprocessed detections to the processing queue.
     """
+    if not settings.image_base_path:
+        console.print("[red]Error: image_base_path not configured in settings[/red]")
+        raise typer.Exit(1)
+
     for queue in all_queues(
         db_path=settings.database_url, base_directory=settings.image_base_path
     ).values():
@@ -56,10 +64,45 @@ def unprocessed_detections():
 
 
 @cli.command()
+def reprocess_detections(sample_size: int | None = None):
+    """
+    Add all detections (processed and unprocessed) to the queue for reprocessing.
+
+    WARNING: This will clear all existing binary and specific classification labels
+    from detections and add them back to the queue for reprocessing with the classifier.
+    """
+    from trapdata.db.models.queue import queue_detections_for_reprocessing
+
+    if not settings.image_base_path:
+        console.print("[red]Error: image_base_path not configured in settings[/red]")
+        raise typer.Exit(1)
+
+    console.print(
+        "[yellow]WARNING: This will clear all existing classification labels from detections![/yellow]"
+    )
+
+    # Prompt user for confirmation
+    confirm = typer.confirm("Are you sure you want to continue?")
+    if not confirm:
+        console.print("[blue]Operation cancelled.[/blue]")
+        raise typer.Exit(0)
+
+    queue_detections_for_reprocessing(
+        db_path=settings.database_url,
+        base_directory=settings.image_base_path,
+        sample_size=sample_size,
+    )
+
+
+@cli.command()
 def clear():
     """
     Clear images from the first stage of the processing queue.
     """
+    if not settings.image_base_path:
+        console.print("[red]Error: image_base_path not configured in settings[/red]")
+        raise typer.Exit(1)
+
     queue = ImageQueue(settings.database_url, base_directory=settings.image_base_path)
     queue.clear_queue()
 
@@ -69,12 +112,19 @@ def clear_everything():
     """
     Clear all images and detections from all processing queues.
     """
+    if not settings.image_base_path:
+        console.print("[red]Error: image_base_path not configured in settings[/red]")
+        raise typer.Exit(1)
+
     clear_all_queues(settings.database_url, base_directory=settings.image_base_path)
 
 
 def get_queue_table():
+    if not settings.image_base_path:
+        return Table("Queue", "Unprocessed", "Queued", "Done")
+
     table = Table("Queue", "Unprocessed", "Queued", "Done")
-    for name, queue in all_queues(
+    for _name, queue in all_queues(
         db_path=settings.database_url, base_directory=settings.image_base_path
     ).items():
         row_values = [

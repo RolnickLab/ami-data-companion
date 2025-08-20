@@ -195,6 +195,7 @@ class MothObjectDetector_FasterRCNN_2021(ObjectDetector):
 
 class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
     name = "FasterRCNN for AMI Moth Traps 2023"
+    key = "fasterrcnn_for_ami_moth_traps_2023"
     weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/localization/fasterrcnn_resnet50_fpn_tz53qv9v.pt"
     description = (
         "Model trained on GBIF images and synthetic data in 2023. "
@@ -236,6 +237,7 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
 
 class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
     name = "FasterRCNN - MobileNet for AMI Moth Traps 2023"
+    key = "fasterrcnn_mobilenet_for_ami_moth_traps_2023"
     weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/localization/fasterrcnn_mobilenet_v3_large_fpn_uqfh7u9w.pt"
     description = (
         "Model trained on GBIF images and synthetic data in 2023. "
