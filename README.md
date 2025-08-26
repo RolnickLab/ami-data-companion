@@ -16,11 +16,10 @@ Desktop app for analyzing images from autonomous insect monitoring stations usin
 </tr>
 </table>
 
-
 ## Dependencies
 
-
 - Requires Python 3.10. Use [Anaconda](https://www.anaconda.com/) (or [miniconda](https://docs.conda.io/en/latest/miniconda.html)) if you need to maintain multiple versions of Python or are unfamiliar with using Python and scientific packages, it is especially helpful on Windows. [PyEnv](https://github.com/pyenv/pyenv) is also a popular tool for managing multiple versions of python if you are familiar with the command line.
+
 ## Installation (for non-developers)
 
 Install (or upgrade) the package with the following command
@@ -74,7 +73,7 @@ ami test all
 
 - Make a directory of sample images to test & learn the whole workflow more quickly.
 
-- Launch the app by opening a terminal and then typing the command ```ami gui```. You may need to activate your Python 3.10 environment first (`conda activate ami`).
+- Launch the app by opening a terminal and then typing the command `ami gui`. You may need to activate your Python 3.10 environment first (`conda activate ami`).
 
 - When the app GUI window opens, it will prompt you to select the root directory with your trapdata. Choose the directory with your sample images.
 
@@ -86,33 +85,37 @@ ami test all
 
 - The cropped images, reports, cached models & local database are stored in the "user data" directory which can be changed in the Settings panel. By default, the user data directory is in one of the locations below, You
 
-    macOS:
-    ```/Library/Application Support/trapdata/```
+  macOS:
+  `/Library/Application Support/trapdata/`
 
-    Linux:
-    ```~/.config/trapdata```
+  Linux:
+  `~/.config/trapdata`
 
-    Windows:
-    ```%AppData%/trapdata```
+  Windows:
+  `%AppData%/trapdata`
 
 A short video of the application in use can be seen here: https://www.youtube.com/watch?v=DCPkxM_PvdQ
-
 
 ## CLI Usage
 
 Configure models and the image_base_path for the deployment images you want to process, then see the example workflow below. Help can be viewed for any of the subcommands with `ami export --help`.
 
 ### Settings
+
 There are two ways to configure settings
+
 1. Using the graphic interface:
-    - Run `ami gui` and click Settings. This will write settings to the file `trapdata.ini`
+   - Run `ami gui` and click Settings. This will write settings to the file `trapdata.ini`
 2. Using environment variables
-    - Copy `.env.example` to `.env` and edit the values, or
-    - Export the env variables to your shell environment
+   - Copy `.env.example` to `.env` and edit the values, or
+   - Export the env variables to your shell environment
 
 The CLI will read settings from either source, but will prioritize environment variables. The GUI only reads from `trapdata.ini`.
 
 ### Example workflow
+
+The AMI Data Companion operates using a pipeline for data processing. By default it lists input images, finds detections in them, identifies which images need to be classified to moth species using a moth/nonmoth threshold, computes features for each object, and performs a photo-to-photo tracking procedure.
+
 ```sh
 ami --help
 ami test pipeline
@@ -130,7 +133,40 @@ ami show occurrences
 ami export occurrences --format json --outfile denmark_sample.json --collect-images
 ```
 
+The models, batch sizes, thresholds, etc. used for each step of the pipeline can be changed by modifying `.env`.
 
+#### Example outputs
+
+```sh
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┓
+┃ Queue                       ┃ Unprocessed ┃ Queued ┃ Done  ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━┩
+│ Source images               │ 3500        │ 300    │ 200   │
+│ Detected objects            │ 1200        │ 1100   │ 100   │
+│ Unclassified objects        │ 0           │ 0      │ 50    │
+│ Detections without features │ 0           │ 0      │ 50    │
+│ Untracked detections        │ 0           │ 0      │ 50    │
+└─────────────────────────────┴─────────────┴────────┴───────┘
+```
+
+The "queue" column indicates the type of objects in the queue, e.g., images, detections, etc. The "unprocessed" column indicates how many of those objects have not gone through the next step in the pipeline. The "queue" column indicates how many of those objects will be put through the pipeline once the `ami run` command is run.
+
+For example, the outputs above indicate:
+
+- **Source images**: out of a total of 4000 original source images, 500 were queued. 200 of the images in the queue have been processed into detections.
+- **Detected objects**: In the 200 images, 1200 objects have been detected. All of were queued for the next steps of the pipeline. 100 have already moved into the next step
+- **Unclassified objects**: 50 of the detections met the detection threshold. The lack of objects in the last 3 rows of the "unprocessed" and "queued" table means that all of these have had features generated for them, classifications have been saved from them, and tracking has been completed for them.
+
+#### Troubleshooting queueing
+
+```sh
+ami queue --help
+ami queue clear # Clear images that haven't been processed into detections
+ami queue clear-everything # Clear queue for all of pipeline
+ami queue reprocess-detections # Add all detections to the queue for reprocessing (e.g. use a different classifier)
+ami queue unprocessed-images # Queue all images that have not been processed into detections
+ami queue unprocessed-detections # Queue all detections that have not been processed in later steps of the pipeline
+```
 
 ## Database
 
@@ -148,6 +184,7 @@ Change the database connection string in the GUI Settings to `postgresql://postg
 (or set it in the environment settings if only using the CLI)
 
 Stop and remove the database container:
+
 ```sh
 docker stop ami-db && docker remove ami-db
 ```
@@ -155,31 +192,32 @@ docker stop ami-db && docker remove ami-db
 A script is available in the repo source to run the commands above.
 `./scrips/start_db_container.sh`
 
-
-
 ## Adding new models
 
-1) Create a new inference class in `trapdata/ml/models/classification.py` or `trapdata/ml/models/localization.py`. All models inherit from `InferenceBaseClass`, but there are more specific classes for classification and localization and different architectures. Choose the appropriate class to inherit from. It's best to copy an existing inference class that is similar to the new model you are adding.
+1. Create a new inference class in `trapdata/ml/models/classification.py` or `trapdata/ml/models/localization.py`. All models inherit from `InferenceBaseClass`, but there are more specific classes for classification and localization and different architectures. Choose the appropriate class to inherit from. It's best to copy an existing inference class that is similar to the new model you are adding.
 
-2) Upload your model weights and category map to a cloud storage service and make sure the file is publicly accessible via a URL. The weights will be downloaded the first time the model is run. Alternatively, you can manually add the model weights to the configured `USER_DATA_PATH` directory under the subdir `USER_DATA_PATH/models/` (on macOS this is `~/Library/Application Support/trapdata/models`). However the model will not be available to other users unless they also manually add the model weights. The category map json file is simply a dict of species names and their indexes in your model's last layer. See the existing category maps for examples.
+2. Upload your model weights and category map to a cloud storage service and make sure the file is publicly accessible via a URL. The weights will be downloaded the first time the model is run. Alternatively, you can manually add the model weights to the configured `USER_DATA_PATH` directory under the subdir `USER_DATA_PATH/models/` (on macOS this is `~/Library/Application Support/trapdata/models`). However the model will not be available to other users unless they also manually add the model weights. The category map json file is simply a dict of species names and their indexes in your model's last layer. See the existing category maps for examples.
 
-3) Select your model in the GUI settings or set the `SPECIES_CLASSIFICATION_MODEL` setting. If the model inherits from `SpeciesClassifier` class, it will automatically become one of the valid choices.
+3. Select your model in the GUI settings or set the `SPECIES_CLASSIFICATION_MODEL` setting. If the model inherits from `SpeciesClassifier` class, it will automatically become one of the valid choices.
 
 ## Clearing the cache & starting fresh
 
 Remove the index of images, all detections and classifications by removing the database file. This will not remove the images themselves, only the metadata about them. The database is located in the user data directory.
 
 On macOS:
-  ```
+
+```
 rm ~/Library/Application\ Support/trapdata/trapdata.db
 ```
 
 On Linux:
+
 ```
 rm ~/.config/trapdata/trapdata.db
 ```
 
 On Windows:
+
 ```
 del %AppData%\trapdata\trapdata.db
 ```
@@ -195,7 +233,6 @@ ami api
 ```
 
 View the interactive API docs at http://localhost:2000/
-
 
 ## Web UI demo (Gradio)
 
