@@ -104,16 +104,18 @@ def get_db(db_path, create=False, update=False):
         "future": True,
         "connect_args": DIALECT_CONNECTION_ARGS.get(dialect, {}),
     }
-    
+
     # Add PostgreSQL-specific engine optimizations
     if dialect == "postgresql":
-        engine_kwargs.update({
-            "pool_size": 20,  # Connection pooling for better performance
-            "max_overflow": 30,
-            "pool_pre_ping": True,
-            "pool_recycle": 3600,
-        })
-    
+        engine_kwargs.update(
+            {
+                "pool_size": 20,  # Connection pooling for better performance
+                "max_overflow": 30,
+                "pool_pre_ping": True,
+                "pool_recycle": 3600,
+            }
+        )
+
     db = sa.create_engine(db_path, **engine_kwargs)
     return db
 

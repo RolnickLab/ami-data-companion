@@ -320,32 +320,38 @@ def save_detected_objects(
             .filter(models.TrapImage.id.in_(image_ids))
             .all()
         )
-        
+
         # CRITICAL PERFORMANCE FIX: Batch fetch all previous images at once
         # This eliminates the N+1 query problem where previous_image was called for each detection
         all_image_ids = [img.id for img in images]
-        
+
         # Get all previous images in a single query
-        previous_images_query = sesh.query(models.TrapImage).filter(
-            models.TrapImage.id.in_(all_image_ids)
-        ).order_by(models.TrapImage.timestamp)
-        
+        previous_images_query = (
+            sesh.query(models.TrapImage)
+            .filter(models.TrapImage.id.in_(all_image_ids))
+            .order_by(models.TrapImage.timestamp)
+        )
+
         # Create a mapping of image_id to previous_image_id
         image_to_previous = {}
         sorted_images = sorted(images, key=lambda x: x.timestamp)
         for i, img in enumerate(sorted_images):
             if i > 0:
-                image_to_previous[img.id] = sorted_images[i-1].id
+                image_to_previous[img.id] = sorted_images[i - 1].id
             else:
                 image_to_previous[img.id] = None
 
         timestamp = datetime.datetime.now()
         orm_objects = []
-        
+
         # Process all images and create objects
         for image, detected_objects in zip(images, detected_objects_data):
             # Collect existing objects for bulk delete instead of individual deletes
-            if delete_existing and hasattr(image, 'detected_objects') and image.detected_objects:
+            if (
+                delete_existing
+                and hasattr(image, "detected_objects")
+                and image.detected_objects
+            ):
                 existing_objects = image.detected_objects
                 logger.info(
                     f"Deleting {len(existing_objects)} existing objects for image {image.id}"
@@ -360,7 +366,7 @@ def save_detected_objects(
 
             # sesh.add(image)
             orm_objects.append(image)
-            
+
             for object_data in detected_objects:
                 detection = DetectedObject(
                     last_detected=timestamp,
@@ -528,7 +534,9 @@ def get_species_for_image(db_path, image_id):
 def num_species_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(sa.func.count(DetectedObject.specific_label.distinct()),).where(
+    query = sa.select(
+        sa.func.count(DetectedObject.specific_label.distinct()),
+    ).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
@@ -540,7 +548,9 @@ def num_species_for_event(
 def num_occurrences_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(sa.func.count(DetectedObject.sequence_id.distinct()),).where(
+    query = sa.select(
+        sa.func.count(DetectedObject.sequence_id.distinct()),
+    ).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
