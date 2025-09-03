@@ -408,24 +408,21 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
         objects = (
             sesh.query(DetectedObject).filter(DetectedObject.id.in_(object_ids)).all()
         )
-        
+
         timestamp = datetime.datetime.now()
-        orm_objects = []
-        
-        # Process all objects in the same session
-        for obj, object_data in zip(objects, classified_objects_data):
-            obj.last_processed = timestamp
 
-            for k, v in object_data.items():
-                setattr(obj, k, v)
+        update_data = []
+        timestamp = datetime.datetime.now()
 
-            orm_objects.append(obj)
+        for obj_id, object_data in zip(object_ids, classified_objects_data):
+            object_data["id"] = obj_id
+            object_data["last_processed"] = timestamp
+            update_data.append(object_data)
 
-        # Single bulk save and commit for all objects
-        logger.info(f"Bulk saving {len(orm_objects)} classified objects")
-        sesh.bulk_save_objects(orm_objects)
+        sesh.bulk_update_mappings(DetectedObject, update_data)
         sesh.commit()
-        logger.info(f"Successfully saved {len(orm_objects)} classified objects")
+
+        logger.info(f"Successfully saved {len(update_data)} classified objects")
 
 
 def get_detected_objects(
