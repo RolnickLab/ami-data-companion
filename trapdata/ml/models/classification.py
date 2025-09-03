@@ -274,6 +274,7 @@ class Resnet50ClassifierLowRes(Resnet50Classifier):
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model.eval()
+        logger.debug(f"Loaded model ({self.name}) onto device {self.device}")
         return model
 
 

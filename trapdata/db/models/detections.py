@@ -395,10 +395,10 @@ def save_detected_objects(
                 orm_objects.append(detection)
 
         # Single bulk save and commit for all objects
-        logger.info(f"Bulk saving {len(orm_objects)} objects")
+        logger.info(f"Bulk saving {len(orm_objects)} detected objects")
         sesh.bulk_save_objects(orm_objects)
         sesh.commit()
-        logger.info(f"Successfully saved {len(orm_objects)} objects")
+        logger.info(f"Successfully saved {len(orm_objects)} detected objects")
 
 
 def save_classified_objects(db_path, object_ids, classified_objects_data):
