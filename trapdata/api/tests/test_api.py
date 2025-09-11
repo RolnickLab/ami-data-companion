@@ -167,13 +167,14 @@ class TestInferenceAPI(TestCase):
         # self.assertTrue(pipeline_config_binary_only.algorithms[-1].terminal)
 
     def test_processing_with_only_binary_classifier(self):
-        binary_algorithm_key = "moth_binary"
-        BinaryAlgorithmClass = CLASSIFIER_CHOICES[binary_algorithm_key]
+        binary_classifier_pipeline_choice = "moth_binary"
+        binary_algorithm_key = "moth_nonmoth_classifier"
+        BinaryAlgorithmClass = CLASSIFIER_CHOICES[binary_classifier_pipeline_choice]
         # Create an instance to get the num_classes
         binary_algorithm = BinaryAlgorithmClass(source_images=[], detections=[])
 
         pipeline_request = PipelineRequest(
-            pipeline=PipelineChoice[binary_algorithm_key],
+            pipeline=PipelineChoice[binary_classifier_pipeline_choice],
             source_images=self.get_test_images(num=2),
         )
         with self.file_server:
