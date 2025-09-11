@@ -81,6 +81,7 @@ class TestInferenceAPI(TestCase):
         labels/scores per prediction.
         """
         test_images = self.get_test_images(num=1)
+
         test_pipeline_slug = "quebec_vermont_moths_2023"
         terminal_classifier = self.get_test_pipeline(test_pipeline_slug)
 
@@ -180,3 +181,45 @@ class TestInferenceAPI(TestCase):
                 assert len(classification.labels) == binary_algorithm.num_classes
                 assert classification.scores
                 assert len(classification.scores) == binary_algorithm.num_classes
+
+    def test_logits_in_classification_response(self):
+        """
+        Test that the logits are included in the classification response when
+        requested via the pipeline configuration.
+        """
+        test_images = self.get_test_images(num=1)
+        assert test_images, "No test images found"
+
+        test_pipeline_slug = "quebec_vermont_moths_2023"
+
+        config = PipelineConfigRequest(
+            # return_logits=True
+        )
+        pipeline_request = PipelineRequest(
+            pipeline=PipelineChoice[test_pipeline_slug],
+            source_images=test_images,
+            config=config,
+        )
+        with self.file_server:
+            response = self.client.post(
+                "/pipeline/process", json=pipeline_request.model_dump()
+            )
+        assert response.status_code == 200
+        pipeline_response = PipelineResponse(**response.json())
+        terminal_classifier = self.get_test_pipeline(test_pipeline_slug)
+        assert pipeline_response.detections, "No detections found in response"
+        terminal_classifications = [
+            classification
+            for detection in pipeline_response.detections
+            for classification in detection.classifications
+            if classification.terminal
+        ]
+        assert terminal_classifications, "No terminal classifications found"
+
+        for classification in terminal_classifications:
+            assert classification.scores
+            assert classification.logits
+            assert len(classification.logits) == terminal_classifier.num_classes
+            assert (
+                classification.logits != classification.scores
+            ), "Logits and scores should not be the same"
