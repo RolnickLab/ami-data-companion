@@ -1,11 +1,13 @@
 import logging
 import pathlib
+from typing import Type
 from unittest import TestCase
 
 from fastapi.testclient import TestClient
 
 from trapdata.api.api import (
     CLASSIFIER_CHOICES,
+    APIMothClassifier,
     PipelineChoice,
     PipelineRequest,
     PipelineResponse,
@@ -15,7 +17,6 @@ from trapdata.api.api import (
 )
 from trapdata.api.schemas import PipelineConfigRequest, SourceImageRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
-from trapdata.ml.models.classification import SpeciesClassifier
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 logging.basicConfig(level=logging.INFO)
@@ -52,7 +53,7 @@ class TestInferenceAPI(TestCase):
 
     def get_test_pipeline(
         self, slug: str = "quebec_vermont_moths_2023"
-    ) -> SpeciesClassifier:
+    ) -> Type[APIMothClassifier]:
         pipeline = CLASSIFIER_CHOICES[slug]
         return pipeline
 
@@ -83,7 +84,9 @@ class TestInferenceAPI(TestCase):
         test_images = self.get_test_images(num=1)
 
         test_pipeline_slug = "quebec_vermont_moths_2023"
-        terminal_classifier = self.get_test_pipeline(test_pipeline_slug)
+        TerminalClassifierClass = self.get_test_pipeline(test_pipeline_slug)
+        # Create an instance to get the num_classes
+        terminal_classifier = TerminalClassifierClass(source_images=[], detections=[])
 
         def _send_request(max_predictions_per_classification: int | None):
             config = PipelineConfigRequest(
@@ -130,11 +133,13 @@ class TestInferenceAPI(TestCase):
     def test_pipeline_config_with_binary_classifier(self):
         binary_classifier_pipeline_choice = "moth_binary"
         BinaryClassifier = CLASSIFIER_CHOICES[binary_classifier_pipeline_choice]
-        BinaryClassifierResponse = make_algorithm_response(BinaryClassifier)
+        binary_classifier_instance = BinaryClassifier(source_images=[], detections=[])
+        BinaryClassifierResponse = make_algorithm_response(binary_classifier_instance)
 
         species_classifier_pipeline_choice = "quebec_vermont_moths_2023"
         SpeciesClassifier = CLASSIFIER_CHOICES[species_classifier_pipeline_choice]
-        SpeciesClassifierResponse = make_algorithm_response(SpeciesClassifier)
+        species_classifier_instance = SpeciesClassifier(source_images=[], detections=[])
+        SpeciesClassifierResponse = make_algorithm_response(species_classifier_instance)
 
         # Test using a pipeline that finishes with a full species classifier
         pipeline_config = make_pipeline_config_response(
@@ -163,7 +168,10 @@ class TestInferenceAPI(TestCase):
 
     def test_processing_with_only_binary_classifier(self):
         binary_algorithm_key = "moth_binary"
-        binary_algorithm = CLASSIFIER_CHOICES[binary_algorithm_key]
+        BinaryAlgorithmClass = CLASSIFIER_CHOICES[binary_algorithm_key]
+        # Create an instance to get the num_classes
+        binary_algorithm = BinaryAlgorithmClass(source_images=[], detections=[])
+
         pipeline_request = PipelineRequest(
             pipeline=PipelineChoice[binary_algorithm_key],
             source_images=self.get_test_images(num=2),
@@ -190,7 +198,7 @@ class TestInferenceAPI(TestCase):
         test_images = self.get_test_images(num=1)
         assert test_images, "No test images found"
 
-        test_pipeline_slug = "quebec_vermont_moths_2023"
+        test_pipeline_slug = "insect_orders_2025"
 
         config = PipelineConfigRequest(
             # return_logits=True
@@ -206,7 +214,6 @@ class TestInferenceAPI(TestCase):
             )
         assert response.status_code == 200
         pipeline_response = PipelineResponse(**response.json())
-        terminal_classifier = self.get_test_pipeline(test_pipeline_slug)
         assert pipeline_response.detections, "No detections found in response"
         terminal_classifications = [
             classification
@@ -216,10 +223,18 @@ class TestInferenceAPI(TestCase):
         ]
         assert terminal_classifications, "No terminal classifications found"
 
+        # Get the expected number of classes from the model
+        Classifier = self.get_test_pipeline(test_pipeline_slug)
+        classifier = Classifier(source_images=[], detections=[])
+        num_classes = classifier.num_classes
+
         for classification in terminal_classifications:
             assert classification.scores
             assert classification.logits
-            assert len(classification.logits) == terminal_classifier.num_classes
+            num_scores = len(classification.scores)
+            num_logits = len(classification.logits)
+            assert num_logits == num_classes
+            assert num_scores == num_classes
             assert (
                 classification.logits != classification.scores
             ), "Logits and scores should not be the same"
