@@ -325,13 +325,6 @@ def save_detected_objects(
         # This eliminates the N+1 query problem where previous_image was called for each detection
         all_image_ids = [img.id for img in images]
 
-        # Get all previous images in a single query
-        previous_images_query = (
-            sesh.query(models.TrapImage)
-            .filter(models.TrapImage.id.in_(all_image_ids))
-            .order_by(models.TrapImage.timestamp)
-        )
-
         # Create a mapping of image_id to previous_image_id
         image_to_previous = {}
         sorted_images = sorted(images, key=lambda x: x.timestamp)
@@ -416,9 +409,7 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
         )
 
         timestamp = datetime.datetime.now()
-
         update_data = []
-        timestamp = datetime.datetime.now()
 
         for obj_id, object_data in zip(object_ids, classified_objects_data):
             object_data["id"] = obj_id
