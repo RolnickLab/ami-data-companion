@@ -41,8 +41,8 @@ class TestInferenceAPI(TestCase):
     def get_test_images(self, subdir: str = "vermont", num: int = 2):
         images_dir = self.test_images_dir / subdir
         source_image_urls = [
-            self.file_server.get_url(f.relative_to(images_dir))
-            for f in self.test_images_dir.glob("*.jpg")
+            self.file_server.get_url(f.relative_to(self.test_images_dir))
+            for f in images_dir.glob("*.jpg")
         ][:num]
         source_images = [
             SourceImageRequest(id=str(i), url=url)
