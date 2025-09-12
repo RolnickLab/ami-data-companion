@@ -15,10 +15,13 @@ from trapdata.common.schemas import DatabaseURL
 
 DIALECT_CONNECTION_ARGS = {
     "sqlite": {
-        "timeout": 10,  # A longer timeout is necessary for SQLite and multiple PyTorch workers
+        "timeout": 30,  # Increased timeout for bulk operations
         "check_same_thread": False,
+        "isolation_level": None,  # Autocommit mode for better performance
     },
-    "postgresql": {},
+    "postgresql": {
+        # PostgreSQL-specific connection arguments (if any needed)
+    },
 }
 
 SUPPORTED_DIALECTS = list(DIALECT_CONNECTION_ARGS.keys())
@@ -95,12 +98,25 @@ def get_db(db_path, create=False, update=False):
 
     dialect = get_dialect(db_path)
 
-    db = sa.create_engine(
-        db_path,
-        echo=False,
-        future=True,
-        connect_args=DIALECT_CONNECTION_ARGS.get(dialect, {}),
-    )
+    # Base engine configuration
+    engine_kwargs = {
+        "echo": False,
+        "future": True,
+        "connect_args": DIALECT_CONNECTION_ARGS.get(dialect, {}),
+    }
+
+    # Add PostgreSQL-specific engine optimizations
+    if dialect == "postgresql":
+        engine_kwargs.update(
+            {
+                "pool_size": 20,  # Connection pooling for better performance
+                "max_overflow": 30,
+                "pool_pre_ping": True,
+                "pool_recycle": 3600,
+            }
+        )
+
+    db = sa.create_engine(db_path, **engine_kwargs)
     return db
 
 

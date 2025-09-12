@@ -1,4 +1,5 @@
 import json
+from math import ceil
 from typing import Union
 
 import numpy as np
@@ -297,7 +298,8 @@ class InferenceBaseClass:
     @torch.no_grad()
     def run(self):
         torch.cuda.empty_cache()
-
+        logger.info(f"Running inference ({self.name})\n\n")
+        num_batches_total = ceil(len(self.dataloader) / self.batch_size)
         for i, batch in enumerate(self.dataloader):
             if not batch:
                 # @TODO review this once we switch to streaming IterableDataset
@@ -307,7 +309,7 @@ class InferenceBaseClass:
             item_ids, batch_input = batch
 
             logger.info(
-                f"Processing batch {i+1}, about {len(self.dataloader)} remaining"
+                f"Processing batch {i+1}, about {num_batches_total-i} batches remaining ({self.name})"
             )
 
             # @TODO the StopWatch doesn't seem to work when there are multiple workers,
@@ -328,6 +330,6 @@ class InferenceBaseClass:
             logger.info(f"Saving results from {len(item_ids)} items")
 
             self.save_results(item_ids, batch_output, seconds_per_item=seconds_per_item)
-            logger.info(f"{self.name} Batch -- Done")
+            logger.info(f"{self.name} Batch {i+1} -- Done\n\n")
 
         logger.info(f"{self.name} -- Done")
