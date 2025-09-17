@@ -272,7 +272,9 @@ class PipelineResultsResponse(pydantic.BaseModel):
         description=(
             "A dictionary of all algorithms used in the pipeline, including their "
             "class list and other metadata, keyed by the algorithm key."
+            "DEPRECATED: Use the algorithms list in PipelineConfigResponse instead."
         ),
+        deprecated=True,
     )
     total_time: float
     source_images: list[SourceImageResponse]
