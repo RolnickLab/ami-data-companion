@@ -1,4 +1,5 @@
 import json
+from dataclasses import dataclass
 from math import ceil
 from typing import Union
 
@@ -333,3 +334,10 @@ class InferenceBaseClass:
             logger.info(f"{self.name} Batch {i+1} -- Done\n\n")
 
         logger.info(f"{self.name} -- Done")
+
+
+@dataclass
+class ClassifierResult:
+    labels: list[str] | None
+    logit: list[float] | None
+    scores: list[float]

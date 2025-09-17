@@ -5,6 +5,7 @@ import numpy as np
 import torch
 
 from trapdata.common.logs import logger
+from trapdata.ml.models.base import ClassifierResult
 from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
     InferenceBaseClass,
@@ -70,14 +71,22 @@ class APIMothClassifier(
         """
         predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
+        logits = logits.cpu()
 
         batch_results = []
-        for pred in predictions:
-            # Get all class indices and their corresponding scores
+
+        for i, pred in enumerate(predictions):
             class_indices = np.arange(len(pred))
-            scores = pred
             labels = [self.category_map[i] for i in class_indices]
-            batch_results.append(list(zip(labels, scores, pred)))
+            logit = logits[i].tolist()
+
+            result = ClassifierResult(
+                labels=labels,
+                logit=logit,
+                scores=pred.tolist(),
+            )
+
+            batch_results.append(result)
 
         logger.debug(f"Post-processing result batch: {batch_results}")
 
@@ -97,8 +106,7 @@ class APIMothClassifier(
             ...
         ]
         """
-        best_pred = max(predictions, key=lambda x: x[1])
-        best_label = best_pred[0]
+        best_label = predictions.labels[np.argmax(predictions.scores)]
         return best_label
 
     def save_results(
@@ -111,11 +119,11 @@ class APIMothClassifier(
         ):
             detection = self.detections[detection_idx]
             assert detection.source_image_id == image_id
-            _labels, scores, logits = zip(*predictions)
+
             classification = ClassificationResponse(
                 classification=self.get_best_label(predictions),
-                scores=scores,
-                logits=logits,
+                scores=predictions.scores,
+                logits=predictions.logit,
                 inference_time=seconds_per_item,
                 algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
                 timestamp=datetime.datetime.now(),
