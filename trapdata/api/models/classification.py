@@ -83,7 +83,7 @@ class APIMothClassifier(
             result = ClassifierResult(
                 labels=labels,
                 logit=logit,
-                scores=pred,
+                scores=pred.tolist(),
             )
 
             batch_results.append(result)
