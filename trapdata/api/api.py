@@ -291,6 +291,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     logger.info(
         f"Processed {len(source_images)} images in {seconds_elapsed:.2f} seconds"
     )
+    logger.info(f"Algorithms used: {list(algorithms_used.keys())}")
     logger.info(f"Returning {len(detections_to_return)} detections")
     # print(all_detections)
 
@@ -303,7 +304,6 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
     response = PipelineResponse(
         pipeline=data.pipeline,
-        algorithms=algorithms_used,
         source_images=source_image_results,
         detections=detections_to_return,
         total_time=seconds_elapsed,

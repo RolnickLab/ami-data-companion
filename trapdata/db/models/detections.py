@@ -312,25 +312,48 @@ def save_detected_objects(
     user_data_path=None,
     delete_existing=True,
 ):
-    orm_objects = []
+    # Use a single session for all operations - this is the critical performance fix
     with db.get_session(db_path) as sesh:
+        # Fetch all images in the single session
         images = (
             sesh.query(models.TrapImage)
             .filter(models.TrapImage.id.in_(image_ids))
             .all()
         )
 
-    timestamp = datetime.datetime.now()
+        # CRITICAL PERFORMANCE FIX: Batch fetch all previous images at once
+        # This eliminates the N+1 query problem where previous_image was called for each detection
+        all_image_ids = [img.id for img in images]
 
-    with db.get_session(db_path) as sesh:
+        # Create a mapping of image_id to previous_image_id
+        image_to_previous = {}
+        sorted_images = sorted(images, key=lambda x: x.timestamp)
+        for i, img in enumerate(sorted_images):
+            if i > 0:
+                image_to_previous[img.id] = sorted_images[i - 1].id
+            else:
+                image_to_previous[img.id] = None
+
+        timestamp = datetime.datetime.now()
+        orm_objects = []
+
+        # Process all images and create objects
         for image, detected_objects in zip(images, detected_objects_data):
-            existing_objects = image.detected_objects
-            if delete_existing and len(existing_objects):
+            # Collect existing objects for bulk delete instead of individual deletes
+            if (
+                delete_existing
+                and hasattr(image, "detected_objects")
+                and image.detected_objects
+            ):
+                existing_objects = image.detected_objects
                 logger.info(
                     f"Deleting {len(existing_objects)} existing objects for image {image.id}"
                 )
-                for existing_obj in existing_objects:
-                    sesh.delete(existing_obj)
+                # Use bulk delete for better performance
+                existing_object_ids = [obj.id for obj in existing_objects]
+                sesh.query(DetectedObject).filter(
+                    DetectedObject.id.in_(existing_object_ids)
+                ).delete(synchronize_session=False)
 
             image.last_processed = timestamp
 
@@ -348,7 +371,6 @@ def save_detected_objects(
                     object_data["area_pixels"] = area_pixels
 
                 for k, v in object_data.items():
-                    logger.debug(f"Adding {k} to detected object {detection.id}")
                     setattr(detection, k, v)
 
                 detection.monitoring_session_id = image.monitoring_session_id
@@ -361,50 +383,43 @@ def save_detected_objects(
 
                 detection.timestamp = image.timestamp
 
-                previous_image = image.previous_image(sesh)
+                # Use the pre-computed previous image mapping
+                previous_image = image_to_previous.get(image.id)
                 detection.source_image_previous_frame = (
-                    previous_image.id if previous_image else None
+                    previous_image if previous_image else None
                 )
                 detection.source_image_width = image.width
                 detection.source_image_height = image.height
-                logger.debug(
-                    f"Previous image: {detection.source_image_previous_frame}, current image: {image.id}"
-                )
-
-                logger.debug(f"Creating detected object {detection} for image {image}")
 
                 orm_objects.append(detection)
 
-            # @TODO this could be faster! Especially for sqlite
-            logger.info(f"Bulk saving {len(orm_objects)} objects")
-            sesh.bulk_save_objects(orm_objects)
-            sesh.commit()
+        # Single bulk save and commit for all objects
+        logger.info(f"Bulk saving {len(orm_objects)} detected objects")
+        sesh.bulk_save_objects(orm_objects)
+        sesh.commit()
+        logger.info(f"Successfully saved {len(orm_objects)} detected objects")
 
 
 def save_classified_objects(db_path, object_ids, classified_objects_data):
-    logger.debug(f"Saving data to classified objects: {object_ids}")
-
-    orm_objects = []
-    timestamp = datetime.datetime.now()
+    # Use a single session for all operations
     with db.get_session(db_path) as sesh:
+        # Batch fetch all objects at once
         objects = (
             sesh.query(DetectedObject).filter(DetectedObject.id.in_(object_ids)).all()
         )
 
-    for obj, object_data in zip(objects, classified_objects_data):
-        obj.last_processed = timestamp
+        timestamp = datetime.datetime.now()
+        update_data = []
 
-        logger.debug(f"Updating classified object {obj}")
-        for k, v in object_data.items():
-            logger.debug(f"Adding {k} to detected object {obj.id}")
-            setattr(obj, k, v)
+        for obj_id, object_data in zip(object_ids, classified_objects_data):
+            object_data["id"] = obj_id
+            object_data["last_processed"] = timestamp
+            update_data.append(object_data)
 
-        orm_objects.append(obj)
-
-    with db.get_session(db_path) as sesh:
-        logger.info(f"Bulk saving {len(orm_objects)} objects")
-        sesh.bulk_save_objects(orm_objects)
+        sesh.bulk_update_mappings(DetectedObject, update_data)
         sesh.commit()
+
+        logger.info(f"Successfully saved {len(update_data)} classified objects")
 
 
 def get_detected_objects(
@@ -510,7 +525,9 @@ def get_species_for_image(db_path, image_id):
 def num_species_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(sa.func.count(DetectedObject.specific_label.distinct()),).where(
+    query = sa.select(
+        sa.func.count(DetectedObject.specific_label.distinct()),
+    ).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )
@@ -522,7 +539,9 @@ def num_species_for_event(
 def num_occurrences_for_event(
     db_path, monitoring_session, classification_threshold: float = 0.6
 ) -> int:
-    query = sa.select(sa.func.count(DetectedObject.sequence_id.distinct()),).where(
+    query = sa.select(
+        sa.func.count(DetectedObject.sequence_id.distinct()),
+    ).where(
         (DetectedObject.specific_label_score >= classification_threshold)
         & (DetectedObject.monitoring_session == monitoring_session)
     )

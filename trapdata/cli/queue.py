@@ -44,9 +44,25 @@ def all():
 
 
 @cli.command()
+def unprocessed_images():
+    """
+    Queue all images that have not been processed into detections
+    """
+    if not settings.image_base_path:
+        console.print("[red]Error: image_base_path not configured in settings[/red]")
+        raise typer.Exit(1)
+
+    for queue in all_queues(
+        db_path=settings.database_url, base_directory=settings.image_base_path
+    ).values():
+        if isinstance(queue, ImageQueue):
+            queue.add_unprocessed()
+
+
+@cli.command()
 def unprocessed_detections():
     """
-    Add all unprocessed detections to the processing queue.
+    Queue all detections that have not been processed in later steps of the pipeline
     """
     for queue in all_queues(
         db_path=settings.database_url, base_directory=settings.image_base_path
