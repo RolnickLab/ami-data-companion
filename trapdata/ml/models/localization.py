@@ -12,6 +12,7 @@ from trapdata import TrapImage, db, logger
 from trapdata.db.models.detections import save_detected_objects
 from trapdata.db.models.queue import ImageQueue
 from trapdata.ml.models.base import InferenceBaseClass
+from trapdata.ml.utils import open_image
 
 
 class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
@@ -31,17 +32,43 @@ class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
 
             records = self.queue.pull_n_from_queue(self.batch_size)
             if records:
-                item_ids = torch.utils.data.default_collate(
-                    [record.id for record in records]
-                )
-                batch_data = torch.utils.data.default_collate(
-                    [self.transform(record.absolute_path) for record in records]
-                )
+                # Filter out None transforms
+                valid_records = []
+                valid_transforms = []
 
-                yield (item_ids, batch_data)
+                for record in records:
+                    transformed = self.transform(record.absolute_path)
+                    if transformed is not None:
+                        valid_records.append(record)
+                        valid_transforms.append(transformed)
+
+                # Only yield if we have valid images
+                if valid_transforms:
+                    item_ids = torch.utils.data.default_collate(
+                        [record.id for record in valid_records]
+                    )
+
+                    # Try batch collation first, fall back to list if sizes differ
+                    try:
+                        batch_data = torch.utils.data.default_collate(valid_transforms)
+                    except RuntimeError as e:
+                        if "stack expects each tensor to be equal size" in str(e):
+                            # Fallback: return as list for variable sizes
+                            logger.info(
+                                "Image sizes differ, returning as list for individual processing"
+                            )
+                            batch_data = valid_transforms
+                        else:
+                            # Re-raise if it's a different RuntimeError
+                            raise
+
+                    yield (item_ids, batch_data)
 
     def transform(self, img_path):
-        return self.image_transforms(PIL.Image.open(img_path))
+        img = open_image(img_path, raise_exception=False)
+        if img is None:
+            return None
+        return self.image_transforms(img)
 
 
 class LocalizationDatabaseDataset(torch.utils.data.Dataset):
@@ -80,9 +107,12 @@ class LocalizationDatabaseDataset(torch.utils.data.Dataset):
             sesh.commit()
 
         img_path = img_path
-        pil_image = PIL.Image.open(img_path)
-        item = (item_id, self.transform(pil_image))
+        pil_image = open_image(img_path, raise_exception=False)
+        if pil_image is None:
+            logger.warning(f"Failed to open image: {img_path}")
+            return None
 
+        item = (item_id, self.transform(pil_image))
         return item
 
 
@@ -104,7 +134,7 @@ class LocalizationFilesystemDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         img_name = self.image_names[idx]
         img_path = self.directory / img_name
-        pil_image = PIL.Image.open(img_path)
+        pil_image = open_image(img_path, raise_exception=False)
         return str(img_path), self.transform(pil_image)
 
 
@@ -130,6 +160,24 @@ class ObjectDetector(InferenceBaseClass):
             batch_size=self.batch_size,
         )
         return dataset
+
+    def predict_batch(self, batch):
+        """
+        Override base class method to handle both batched tensors and lists of tensors.
+        The dataset now handles size mismatches and provides the appropriate format.
+        """
+        if isinstance(batch, torch.Tensor):
+            # Same-size images: use efficient batch transfer
+            batch_input = batch.to(self.device, non_blocking=True)
+            batch_output = self.model(batch_input)
+            return batch_output
+        elif isinstance(batch, list):
+            # Different-size images: transfer individually
+            batch_input = [img.to(self.device, non_blocking=True) for img in batch]
+            batch_output = self.model(batch_input)
+            return batch_output
+        else:
+            raise TypeError(f"Expected tensor or list of tensors, got {type(batch)}")
 
     def save_results(self, item_ids, batch_output, *args, **kwargs):
         # Format data to be saved in DB
