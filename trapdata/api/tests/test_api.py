@@ -68,67 +68,10 @@ class TestInferenceAPI(TestCase):
         with self.file_server:
             response = self.client.post("/process", json=pipeline_request.model_dump())
             assert response.status_code == 200
-            results = PipelineResponse(**response.json())
-        return results
-
-    def test_config_num_classification_predictions(self):
-        """
-        Test that the pipeline respects the `max_predictions_per_classification`
-        configuration.
-
-        If the configuration is set to a number, the pipeline should return that number
-        of labels/scores per prediction.
-        If the configuration is set to `None`, the pipeline should return all
-        labels/scores per prediction.
-        """
-        test_images = self.get_test_images(num=1)
-
-        test_pipeline_slug = "quebec_vermont_moths_2023"
-        TerminalClassifierClass = self.get_test_pipeline(test_pipeline_slug)
-        # Create an instance to get the num_classes
-        terminal_classifier = TerminalClassifierClass(source_images=[], detections=[])
-
-        def _send_request(max_predictions_per_classification: int | None):
-            config = PipelineConfigRequest(
-                example_config_param=max_predictions_per_classification
-            )
-            pipeline_request = PipelineRequest(
-                pipeline=PipelineChoice[test_pipeline_slug],
-                source_images=test_images,
-                config=config,
-            )
-            with self.file_server:
-                response = self.client.post(
-                    "/pipeline/process", json=pipeline_request.model_dump()
-                )
-            assert response.status_code == 200
-            pipeline_response = PipelineResponse(**response.json())
-            terminal_classifications = [
-                classification
-                for detection in pipeline_response.detections
-                for classification in detection.classifications
-                if classification.terminal
-            ]
-            for classification in terminal_classifications:
-                assert classification.labels
-                if max_predictions_per_classification is None:
-                    # Ensure that a score is returned for every possible class
-                    assert len(classification.labels) == terminal_classifier.num_classes
-                    assert len(classification.scores) == terminal_classifier.num_classes
-                else:
-                    # Ensure that the number of predictions is limited to the number
-                    # specified.
-                    # There may be fewer predictions than the number specified if there
-                    # are fewer classes.
-                    assert (
-                        len(classification.labels) <= max_predictions_per_classification
-                    )
-                    assert (
-                        len(classification.scores) <= max_predictions_per_classification
-                    )
-
-        _send_request(max_predictions_per_classification=1)
-        _send_request(max_predictions_per_classification=None)
+            try:
+                PipelineResponse(**response.json())
+            except Exception as e:
+                self.fail(f"Pipeline request did not return a valid response: {e}")
 
     def test_pipeline_config_with_binary_classifier(self):
         binary_classifier_pipeline_choice = "moth_binary"
@@ -186,10 +129,11 @@ class TestInferenceAPI(TestCase):
             for classification in detection.classifications:
                 assert classification.algorithm.key == binary_algorithm_key
                 assert classification.terminal
-                assert classification.labels
-                assert len(classification.labels) == binary_algorithm.num_classes
+                assert classification.labels is None
                 assert classification.scores
+                assert classification.logits
                 assert len(classification.scores) == binary_algorithm.num_classes
+                assert len(classification.logits) == binary_algorithm.num_classes
 
     def test_logits_in_classification_response(self):
         """
@@ -239,3 +183,64 @@ class TestInferenceAPI(TestCase):
             assert (
                 classification.logits != classification.scores
             ), "Logits and scores should not be the same"
+
+    def test_config_num_classification_predictions(self):
+        """
+        Test that classification responses have no labels (from algorithm config)
+        and scores/logits count equals num classes in category map.
+        """
+        test_images = self.get_test_images(num=1)
+        assert test_images, "No test images found"
+
+        test_pipeline_slug = "insect_orders_2025"
+
+        config = PipelineConfigRequest()
+        pipeline_request = PipelineRequest(
+            pipeline=PipelineChoice[test_pipeline_slug],
+            source_images=test_images,
+            config=config,
+        )
+
+        with self.file_server:
+            response = self.client.post(
+                "/pipeline/process", json=pipeline_request.model_dump()
+            )
+        assert response.status_code == 200
+        pipeline_response = PipelineResponse(**response.json())
+        assert pipeline_response.detections, "No detections found in response"
+
+        terminal_classifications = [
+            classification
+            for detection in pipeline_response.detections
+            for classification in detection.classifications
+            if classification.terminal
+        ]
+        assert terminal_classifications, "No terminal classifications found"
+
+        # Get the expected number of classes from the model
+        Classifier = self.get_test_pipeline(test_pipeline_slug)
+        classifier = Classifier(source_images=[], detections=[])
+        num_classes = classifier.num_classes
+        assert (
+            num_classes and num_classes > 2
+        ), "Test requires a model with more than 2 classes"
+
+        for classification in terminal_classifications:
+            # Assert no labels are present in the classification response
+            assert classification.labels is None, (
+                "Labels should not be present in classification response, "
+                "they should be retrieved from algorithm config"
+            )
+
+            # Assert scores and logits count equal the number of classes
+            assert classification.scores, "Scores should be present"
+            assert len(classification.scores) == num_classes, (
+                f"Number of scores ({len(classification.scores)}) should equal "
+                f"number of classes ({num_classes})"
+            )
+
+            assert classification.logits, "Logits should be present"
+            assert len(classification.logits) == num_classes, (
+                f"Number of logits ({len(classification.logits)}) should equal "
+                f"number of classes ({num_classes})"
+            )
