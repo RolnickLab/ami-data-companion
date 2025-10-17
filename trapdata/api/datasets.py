@@ -237,14 +237,12 @@ class RESTDataset(torch.utils.data.IterableDataset):
                         continue
 
                     # Yield the data row
-                    # yield {
-                    #     "image": image_tensor,
-                    #     "reply_subject": task.get("reply_subject"),
-                    #     "batch_index": body.get("batch_index"),
-                    #     "job_id": body.get("job_id"),
-                    #     "image_id": body.get("image_id"),
-                    # }
-                    yield str(body.get("image_id")), image_tensor
+                    yield {
+                        "image": image_tensor,
+                        "reply_subject": task.get("reply_subject"),
+                        "image_id": str(body.get("image_id")),
+                        "image_url": body.get("image_url"),
+                    }
 
             logger.info(f"Worker {worker_id}: Iterator finished")
         except Exception as e:

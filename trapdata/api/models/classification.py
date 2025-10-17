@@ -54,6 +54,10 @@ class APIMothClassifier(
             "detections"
         )
 
+    def reset(self, detections: typing.Iterable[DetectionResponse]):
+        self.detections = list(detections)
+        self.results = []
+
     def get_dataset(self):
         return ClassificationImageDataset(
             source_images=self.source_images,

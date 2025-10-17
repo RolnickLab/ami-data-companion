@@ -12,25 +12,11 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Python Debugger: Module",
+      "name": "Run worker",
       "type": "debugpy",
       "request": "launch",
       "module": "trapdata.cli.base",
-      "args": ["api"]
-    },
-    {
-      "name": "dataset",
-      "type": "debugpy",
-      "request": "launch",
-      "justMyCode": false,
-      "module": "trapdata.api.datasets"
-    },
-    {
-      "name": "localization",
-      "type": "debugpy",
-      "request": "launch",
-      "justMyCode": false,
-      "module": "trapdata.api.models.localization"
+      "args": ["worker"]
     }
   ]
 }

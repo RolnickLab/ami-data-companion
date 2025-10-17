@@ -4,7 +4,6 @@ import typing
 
 import torch
 
-from trapdata.common.utils import log_time
 from trapdata.ml.models.localization import MothObjectDetector_FasterRCNN_2023
 
 from ..datasets import LocalizationImageDataset, RESTDataset
@@ -19,6 +18,10 @@ class APIMothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_2023)
         self.source_images = source_images
         self.results: list[DetectionResponse] = []
         super().__init__(*args, **kwargs)
+
+    def reset(self, source_images: typing.Iterable[SourceImage]):
+        self.source_images = source_images
+        self.results = []
 
     def get_dataset(self):
         return LocalizationImageDataset(
@@ -60,9 +63,7 @@ class APIMothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_2023)
         self.results += detections
 
     def run(self) -> list[DetectionResponse]:
-        _, t = log_time()
         super().run()
-        t("Finished detection")
         return self.results
 
 

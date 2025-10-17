@@ -97,13 +97,18 @@ def run_api(port: int = 2000):
 
 
 @cli.command("worker")
-def worker():
+def worker(
+    pipeline: str = typer.Option(
+        "moth_binary",
+        help="Pipeline to use for processing (e.g., moth_binary, panama_moths_2024, etc.)",
+    )
+):
     """
     Run the worker to process images from the REST API queue.
     """
     from trapdata.cli.worker import run_worker
 
-    run_worker()
+    run_worker(pipeline=pipeline)
 
 
 if __name__ == "__main__":

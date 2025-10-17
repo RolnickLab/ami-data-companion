@@ -1,38 +1,94 @@
 import datetime
+import os
 
 import numpy as np
+import requests
 import torch
 
 from trapdata.api.models.classification import MothClassifierBinary
-from trapdata.api.models.localization import RESTAPIMothDetector
-from trapdata.api.schemas import AlgorithmReference, BoundingBox, DetectionResponse
+from trapdata.api.models.localization import APIMothDetector, RESTAPIMothDetector
+from trapdata.api.schemas import (
+    DetectionResponse,
+    PipelineResultsResponse,
+    SourceImageResponse,
+)
 from trapdata.common.logs import logger
 from trapdata.common.utils import log_time
 
 
+def post_batch_results(
+    base_url: str, job_id: int, results: list[dict], auth_token: str = None
+) -> bool:
+    """
+    Post batch results back to the API.
+
+    Args:
+        base_url: Base URL for the API
+        job_id: Job ID
+        results: List of dicts containing reply_subject and image_id
+        auth_token: API authentication token
+
+    Returns:
+        True if successful, False otherwise
+    """
+    url = f"{base_url}/api/v2/jobs/{job_id}/result/"
+
+    headers = {}
+    if auth_token:
+        headers["Authorization"] = f"Token {auth_token}"
+
+    try:
+        response = requests.post(url, json=results, headers=headers, timeout=60)
+        response.raise_for_status()
+        logger.info(f"Successfully posted {len(results)} results to {url}")
+        return True
+    except requests.RequestException as e:
+        logger.error(f"Failed to post results to {url}: {e}")
+        return False
+
+
 @torch.no_grad()
-def run_worker():
-    """Run the worker to process images from the REST API queue."""
+def run_worker(pipeline: str = "moth_binary"):
+    """Run the worker to process images from the REST API queue.
+
+    Args:
+        pipeline: Pipeline name to use for processing (e.g., moth_binary, panama_moths_2024)
+    """
     # TODO: Poll for new jobs from the API
-    detector = RESTAPIMothDetector(job_id=11)
+    job_id = 11
+    base_url = "http://localhost:8000"
+    auth_token = os.environ.get("ANTENNA_API_TOKEN")
+    assert auth_token is not None, "ANTENNA_API_TOKEN environment variable not set"
+
+    loader = RESTAPIMothDetector(job_id=job_id, auth_token=auth_token)
     classifier = MothClassifierBinary(source_images=[], detections=[])
+    detector = APIMothDetector([])
 
     torch.cuda.empty_cache()
     items = 0
 
     total_detection_time = 0.0
     total_classification_time = 0.0
+    total_save_time = 0.0
     total_dl_time = 0.0
-    detections = []
+    all_detections = []
     _, t = log_time()
-    for i, batch in enumerate(detector.get_dataloader()):
+    for i, batch in enumerate(loader.get_dataloader()):
+        detector.reset([])
         dt, t = t("Finished loading batch")
         total_dl_time += dt
         if not batch:
             logger.warning(f"Batch {i+1} is empty, skipping")
             continue
 
-        item_ids, batch_input = batch
+        # Extract data from dictionary batch
+        batch_input = batch["image"]
+        item_ids = batch["image_id"]
+        reply_subjects = batch.get("reply_subject", [None] * len(batch_input))
+        image_urls = batch.get("image_url", [None] * len(batch_input))
+
+        # Track start time for this batch
+        batch_start_time = datetime.datetime.now()
 
         logger.info(f"Processing batch {i+1}")
         # output is dict of "boxes", "labels", "scores"
@@ -41,39 +97,83 @@ def run_worker():
         items += len(batch_output)
         logger.info(f"Total items processed so far: {items}")
         batch_output = list(detector.post_process_batch(batch_output))
+
+        # Convert item_ids to list if needed
         if isinstance(item_ids, (np.ndarray, torch.Tensor)):
             item_ids = item_ids.tolist()
+
+        # TODO: Add seconds per item calculation for both detector and classifier
+
+        detector.save_results(
+            item_ids=item_ids,
+            batch_output=batch_output,
+            seconds_per_item=0,
+        )
         dt, t = t("Finished detection")
         total_detection_time += dt
 
-        for image_id, boxes, image_tensor in zip(item_ids, batch_output, batch_input):
-            for box in boxes:
-                bbox = BoundingBox(x1=box[0], y1=box[1], x2=box[2], y2=box[3])
-                # crop the image tensor using the bbox
-                crop = image_tensor[
-                    :, int(bbox.y1) : int(bbox.y2), int(bbox.x1) : int(bbox.x2)
-                ]
-                crop = crop.unsqueeze(0)  # add batch dimension
-                classifier_out = classifier.predict_batch(crop)
-                classifier_out = classifier.post_process_batch(classifier_out)
-                detection = DetectionResponse(
-                    source_image_id=image_id,
-                    bbox=bbox,
-                    inference_time=0,
-                    algorithm=AlgorithmReference(
-                        name=detector.name, key=detector.get_key()
-                    ),
-                    timestamp=datetime.datetime.now(),
-                    crop_image_url=None,
-                    classification=classifier_out[0] if classifier_out else None,
-                )
-                detections.append(detection)
+        # Group detections by image_id
+        image_detections: dict[str, list[DetectionResponse]] = {
+            img_id: [] for img_id in item_ids
+        }
+        image_tensors = {
+            img_id: img_tensor for img_id, img_tensor in zip(item_ids, batch_input)
+        }
+        classifier.reset(detector.results)
+
+        for idx, dresp in enumerate(detector.results):
+            image_tensor = image_tensors[dresp.source_image_id]
+            bbox = dresp.bbox
+            # crop the image tensor using the bbox
+            crop = image_tensor[
+                :, int(bbox.y1) : int(bbox.y2), int(bbox.x1) : int(bbox.x2)
+            ]
+            crop = crop.unsqueeze(0)  # add batch dimension
+            classifier_out = classifier.predict_batch(crop)
+            classifier_out = classifier.post_process_batch(classifier_out)
+            detections = classifier.save_results(
+                metadata=([dresp.source_image_id], [idx]),
+                batch_output=classifier_out,
+                seconds_per_item=0,
+            )
+            image_detections[dresp.source_image_id].extend(detections)
+            all_detections.extend(detections)
+
         ct, t = t("Finished classification")
         total_classification_time += ct
-    classifier.detections = detections
-    classifier.results = detections
+
+        # Calculate batch processing time
+        batch_end_time = datetime.datetime.now()
+        batch_elapsed = (batch_end_time - batch_start_time).total_seconds()
+
+        # Post results back to the API with PipelineResponse for each image
+        batch_results = []
+        for reply_subject, image_id, image_url in zip(
+            reply_subjects, item_ids, image_urls
+        ):
+            # Create SourceImageResponse for this image
+            source_image = SourceImageResponse(id=image_id, url=image_url)
+
+            # Create PipelineResultsResponse
+            pipeline_response = PipelineResultsResponse(
+                pipeline=pipeline,
+                source_images=[source_image],
+                detections=image_detections[image_id],
+                total_time=batch_elapsed / len(item_ids),  # Approximate time per image
+            )
+
+            batch_results.append(
+                {
+                    "reply_subject": reply_subject,
+                    "result": pipeline_response.model_dump(mode="json"),
+                }
+            )
+
+        post_batch_results(base_url, job_id, batch_results, auth_token)
+        st, t = t("Finished posting results")
+        total_save_time += st
 
     logger.info(
-        f"Done, detections: {len(classifier.detections)}. Detecting time: {total_detection_time}, "
-        f"classification time: {total_classification_time}, dl time: {total_dl_time}"
+        f"Done, detections: {len(all_detections)}. Detecting time: {total_detection_time}, "
+        f"classification time: {total_classification_time}, dl time: {total_dl_time}, save time: {total_save_time}"
     )
