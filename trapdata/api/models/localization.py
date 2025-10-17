@@ -49,6 +49,7 @@ class APIMothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_2023)
             )
             return detection
 
+        # TODO CGJS: Check with Michael why this helps?
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = []
             for image_id, image_output in zip(item_ids, batch_output):

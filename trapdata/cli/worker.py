@@ -47,20 +47,71 @@ def post_batch_results(
         return False
 
 
-@torch.no_grad()
+def _get_jobs(base_url: str, auth_token: str, pipeline_id: int = 11) -> list:
+    """Fetch job ids from the API for the given pipeline.
+
+    Calls: GET {base_url}/api/v2/jobs?pipeline=<pipeline>&ids_only=1
+
+    Returns a list of job ids (possibly empty) on error.
+    """
+    try:
+        url = f"{base_url.rstrip('/')}/api/v2/jobs"
+        params = {"pipeline": pipeline_id, "ids_only": 1, "incomplete_only": 1}
+
+        headers = {}
+        if auth_token:
+            headers["Authorization"] = f"Token {auth_token}"
+
+        resp = requests.get(url, params=params, headers=headers, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        job_ids = data.get("job_ids") or []
+        if not isinstance(job_ids, list):
+            logger.warning(f"Unexpected job_ids format from {url}: {type(job_ids)}")
+            return []
+        return job_ids
+    except requests.RequestException as e:
+        logger.error(f"Failed to fetch jobs from {base_url}: {e}")
+        return []
+
+
 def run_worker(pipeline: str = "moth_binary"):
+    # Determine API connection details from environment or defaults
+    base_url = os.environ.get("ANTENNA_API_BASE_URL", "http://localhost:8000")
+    auth_token = os.environ.get("ANTENNA_API_TOKEN", "")
+
+    while True:
+        # TODO CGJS: Use the correct pipeline id mapping
+        jobs = _get_jobs(base_url=base_url, auth_token=auth_token, pipeline_id=11)
+        for job_id in jobs:
+            logger.info(f"Processing job {job_id} with pipeline {pipeline}")
+            _process_job(
+                pipeline=pipeline,
+                job_id=job_id,
+                base_url=base_url,
+                auth_token=auth_token,
+            )
+        if not jobs:
+            SLEEP_TIME = 5  # TODO CGJS: Make configurable and put at the top
+            logger.info(f"No jobs found, sleeping for {SLEEP_TIME} seconds")
+            import time
+
+            time.sleep(SLEEP_TIME)
+
+
+@torch.no_grad()
+def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
     """Run the worker to process images from the REST API queue.
 
     Args:
         pipeline: Pipeline name to use for processing (e.g., moth_binary, panama_moths_2024)
     """
-    # TODO: Poll for new jobs from the API
-    job_id = 11
-    base_url = "http://localhost:8000"
-    auth_token = os.environ.get("ANTENNA_API_TOKEN")
     assert auth_token is not None, "ANTENNA_API_TOKEN environment variable not set"
 
-    loader = RESTAPIMothDetector(job_id=job_id, auth_token=auth_token)
+    # TODO CGJS: Remove the class and just make this a helper function
+    loader = RESTAPIMothDetector(
+        job_id=job_id, base_url=base_url, auth_token=auth_token
+    )
     classifier = MothClassifierBinary(source_images=[], detections=[])
     detector = APIMothDetector([])
 
@@ -173,6 +224,8 @@ def run_worker(pipeline: str = "moth_binary"):
         st, t = t("Finished posting results")
         total_save_time += st
 
+    # TODO CGJS: Remove this extra call if not needed
+    post_batch_results(base_url, job_id, [], auth_token)
     logger.info(
         f"Done, detections: {len(all_detections)}. Detecting time: {total_detection_time}, "
         f"classification time: {total_classification_time}, dl time: {total_dl_time}, save time: {total_save_time}"
