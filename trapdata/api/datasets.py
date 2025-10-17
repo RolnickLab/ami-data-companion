@@ -1,9 +1,6 @@
-import functools
-import logging
-import time
+import os
 import typing
 from io import BytesIO
-from typing import Callable, Tuple
 
 import requests
 import torch
@@ -110,6 +107,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
         job_id: int,
         batch_size: int = 1,
         image_transforms: typing.Optional[torchvision.transforms.Compose] = None,
+        auth_token: typing.Optional[str] = None,
     ):
         """
         Initialize the REST dataset.
@@ -119,12 +117,15 @@ class RESTDataset(torch.utils.data.IterableDataset):
             job_id: The job ID to fetch tasks for
             batch_size: Number of tasks to request per batch
             image_transforms: Optional transforms to apply to loaded images
+            auth_token: API authentication token. If not provided, reads from
+                       ANTENNA_API_TOKEN environment variable
         """
         super().__init__()
         self.base_url = base_url.rstrip("/")
         self.job_id = job_id
         self.batch_size = batch_size
         self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
+        self.auth_token = auth_token or os.environ.get("ANTENNA_API_TOKEN")
 
     def _fetch_tasks(self) -> list[dict]:
         """
@@ -136,14 +137,16 @@ class RESTDataset(torch.utils.data.IterableDataset):
         url = f"{self.base_url}/api/v2/jobs/{self.job_id}/tasks"
         params = {"batch": self.batch_size}
 
+        headers = {}
+        if self.auth_token:
+            headers["Authorization"] = f"Token {self.auth_token}"
+
         try:
             response = requests.get(
                 url,
                 params=params,
                 timeout=30,
-                headers={
-                    "Authorization": "",
-                },
+                headers=headers,
             )
             response.raise_for_status()
             data = response.json()
@@ -247,75 +250,3 @@ class RESTDataset(torch.utils.data.IterableDataset):
         except Exception as e:
             logger.error(f"Worker {worker_id}: Exception in iterator: {e}")
             raise
-
-
-def log_time(start: float = 0, msg: str = None) -> Tuple[float, Callable]:
-    """
-    Small helper to measure time between calls.
-
-    Returns: elapsed time since the last call, and a partial function to measure from the current call
-    Usage:
-
-    _, tlog = log_time()
-    # do something
-    _, tlog = tlog("Did something") # will log the time taken by 'something'
-    # do something else
-    t, tlog = tlog("Did something else") # will log the time taken by 'something else', returned as 't'
-    """
-    end = time.perf_counter()
-    if start == 0:
-        dur = 0.0
-    else:
-        dur = end - start
-    if msg and start > 0:
-        logger.info(f"{msg}: {dur:.3f}s")
-    new_start = time.perf_counter()
-    return dur, functools.partial(log_time, new_start)
-
-
-def main():
-    # Initialize console logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler()],
-    )
-
-    dataset = RESTDataset(base_url="http://localhost:8000", job_id=11, batch_size=10)
-
-    _, t = log_time()
-    # for data in dataset:
-    #     image_tensor = data["image"]
-    #     # reply_subject = data["reply_subject"]
-    #     logger.info(f"Image tensor shape: {image_tensor.shape}")
-    #     # logger.info(f"Reply subject: {reply_subject}")
-    # _, t = t("Processed all images via dataset")
-    # time.sleep(40)
-
-    _, t = t("Starting dataloader")
-
-    # Use 'spawn' instead of 'fork' to avoid hanging on macOS
-    # import multiprocessing
-
-    # ctx = multiprocessing.get_context("spawn")
-
-    dl = torch.utils.data.DataLoader(
-        dataset,
-        batch_size=4,
-        num_workers=4,
-        # multiprocessing_context=ctx,  # Use spawn method
-    )
-
-    c = 0
-    for batch in dl:
-        images = batch["image"]
-        c += len(images)
-        logger.info(f"Batch image tensor shape: {images.shape}: {c} images processed")
-
-    _, t = t(f"Processed all images via dataloader: {c} images")
-
-
-if __name__ == "__main__":
-    print("Running REST dataset test... ")
-    main()
-    print("Done.")

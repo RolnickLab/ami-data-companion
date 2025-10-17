@@ -96,5 +96,15 @@ def run_api(port: int = 2000):
     uvicorn.run("trapdata.api.api:app", host="0.0.0.0", port=port, reload=True)
 
 
+@cli.command("worker")
+def worker():
+    """
+    Run the worker to process images from the REST API queue.
+    """
+    from trapdata.cli.worker import run_worker
+
+    run_worker()
+
+
 if __name__ == "__main__":
     cli()
