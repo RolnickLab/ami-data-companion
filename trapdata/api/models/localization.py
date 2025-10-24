@@ -2,11 +2,9 @@ import concurrent.futures
 import datetime
 import typing
 
-import torch
-
 from trapdata.ml.models.localization import MothObjectDetector_FasterRCNN_2023
 
-from ..datasets import LocalizationImageDataset, RESTDataset
+from ..datasets import LocalizationImageDataset
 from ..schemas import AlgorithmReference, BoundingBox, DetectionResponse, SourceImage
 from .base import APIInferenceBaseClass
 
@@ -66,48 +64,3 @@ class APIMothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_2023)
     def run(self) -> list[DetectionResponse]:
         super().run()
         return self.results
-
-
-class RESTAPIMothDetector(APIMothDetector):
-    def __init__(
-        self,
-        job_id: int,
-        base_url: str = "http://localhost:8000",
-        batch_size: int = 4,
-        num_workers: int = 2,
-        *args,
-        **kwargs,
-    ):
-        """REST API based detector.
-
-        Args:
-            base_url: Base URL for the REST API (default: http://localhost:8000)
-            job_id: Job id to fetch tasks for (default: 11)
-            batch_size: Number of tasks/images per batch (default: 4)
-            num_workers: Number of DataLoader workers (default: 2)
-        """
-        # store configuration on the instance
-        self.base_url = base_url.rstrip("/") if base_url else base_url
-        self.job_id = job_id
-        # note: APIMothDetector and upstream classes expect a `batch_size` attribute
-        self.batch_size = batch_size
-        # store num_workers for use when creating dataloader
-        self.num_workers = num_workers
-
-        # call parent with empty source_images list
-        super().__init__([], *args, **kwargs)
-
-    def get_dataset(self):
-        return RESTDataset(
-            base_url=self.base_url, job_id=self.job_id, batch_size=self.batch_size
-        )
-
-    def get_dataloader(self):
-        assert (
-            self.dataset is not None
-        ), "Dataset must be initialized before getting dataloader"
-        return torch.utils.data.DataLoader(
-            self.dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-        )

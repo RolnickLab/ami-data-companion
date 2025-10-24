@@ -248,3 +248,31 @@ class RESTDataset(torch.utils.data.IterableDataset):
         except Exception as e:
             logger.error(f"Worker {worker_id}: Exception in iterator: {e}")
             raise
+
+
+def get_rest_dataloader(
+    job_id: int,
+    base_url: str = "http://localhost:8000",
+    batch_size: int = 4,
+    num_workers: int = 2,
+    auth_token: typing.Optional[str] = None,
+) -> torch.utils.data.DataLoader:
+    """
+    Args:
+        base_url: Base URL for the REST API (default: http://localhost:8000)
+        job_id: Job id to fetch tasks for (default: 11)
+        batch_size: Number of tasks/images per batch (default: 4)
+        num_workers: Number of DataLoader workers (default: 2)
+    """
+    assert base_url is not None, "Base URL must be provided"
+    base_url = base_url.rstrip("/")
+
+    dataset = RESTDataset(
+        base_url=base_url, job_id=job_id, batch_size=batch_size, auth_token=auth_token
+    )
+
+    return torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        num_workers=num_workers,
+    )

@@ -1,12 +1,16 @@
+"""Worker to process images from the REST API queue."""
+
 import datetime
 import os
+import time
 
 import numpy as np
 import requests
 import torch
 
+from trapdata.api.datasets import get_rest_dataloader
 from trapdata.api.models.classification import MothClassifierBinary
-from trapdata.api.models.localization import APIMothDetector, RESTAPIMothDetector
+from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
     DetectionResponse,
     PipelineResultsResponse,
@@ -14,6 +18,8 @@ from trapdata.api.schemas import (
 )
 from trapdata.common.logs import logger
 from trapdata.common.utils import log_time
+
+SLEEP_TIME_SECONDS = 5
 
 
 def post_batch_results(
@@ -47,7 +53,7 @@ def post_batch_results(
         return False
 
 
-def _get_jobs(base_url: str, auth_token: str, pipeline_id: int = 11) -> list:
+def _get_jobs(base_url: str, auth_token: str, pipeline_slug: str) -> list:
     """Fetch job ids from the API for the given pipeline.
 
     Calls: GET {base_url}/api/v2/jobs?pipeline=<pipeline>&ids_only=1
@@ -56,7 +62,7 @@ def _get_jobs(base_url: str, auth_token: str, pipeline_id: int = 11) -> list:
     """
     try:
         url = f"{base_url.rstrip('/')}/api/v2/jobs"
-        params = {"pipeline": pipeline_id, "ids_only": 1, "incomplete_only": 1}
+        params = {"pipeline__slug": pipeline_slug, "ids_only": 1, "incomplete_only": 1}
 
         headers = {}
         if auth_token:
@@ -76,13 +82,15 @@ def _get_jobs(base_url: str, auth_token: str, pipeline_id: int = 11) -> list:
 
 
 def run_worker(pipeline: str = "moth_binary"):
-    # Determine API connection details from environment or defaults
+    """Run the worker to process images from the REST API queue."""
+
     base_url = os.environ.get("ANTENNA_API_BASE_URL", "http://localhost:8000")
     auth_token = os.environ.get("ANTENNA_API_TOKEN", "")
-
+    # TODO CGJS: Support a list of pipelines
     while True:
-        # TODO CGJS: Use the correct pipeline id mapping
-        jobs = _get_jobs(base_url=base_url, auth_token=auth_token, pipeline_id=11)
+        jobs = _get_jobs(
+            base_url=base_url, auth_token=auth_token, pipeline_slug=pipeline
+        )
         for job_id in jobs:
             logger.info(f"Processing job {job_id} with pipeline {pipeline}")
             _process_job(
@@ -92,11 +100,9 @@ def run_worker(pipeline: str = "moth_binary"):
                 auth_token=auth_token,
             )
         if not jobs:
-            SLEEP_TIME = 5  # TODO CGJS: Make configurable and put at the top
-            logger.info(f"No jobs found, sleeping for {SLEEP_TIME} seconds")
-            import time
+            logger.info(f"No jobs found, sleeping for {SLEEP_TIME_SECONDS} seconds")
 
-            time.sleep(SLEEP_TIME)
+            time.sleep(SLEEP_TIME_SECONDS)
 
 
 @torch.no_grad()
@@ -108,8 +114,7 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
     """
     assert auth_token is not None, "ANTENNA_API_TOKEN environment variable not set"
 
-    # TODO CGJS: Remove the class and just make this a helper function
-    loader = RESTAPIMothDetector(
+    loader = get_rest_dataloader(
         job_id=job_id, base_url=base_url, auth_token=auth_token
     )
     classifier = MothClassifierBinary(source_images=[], detections=[])
@@ -124,7 +129,7 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
     total_dl_time = 0.0
     all_detections = []
     _, t = log_time()
-    for i, batch in enumerate(loader.get_dataloader()):
+    for i, batch in enumerate(loader):
         detector.reset([])
         dt, t = t("Finished loading batch")
         total_dl_time += dt
@@ -224,8 +229,6 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
         st, t = t("Finished posting results")
         total_save_time += st
 
-    # TODO CGJS: Remove this extra call if not needed
-    post_batch_results(base_url, job_id, [], auth_token)
     logger.info(
         f"Done, detections: {len(all_detections)}. Detecting time: {total_detection_time}, "
         f"classification time: {total_classification_time}, dl time: {total_dl_time}, save time: {total_save_time}"
