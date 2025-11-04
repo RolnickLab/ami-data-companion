@@ -102,7 +102,7 @@ def run_worker(pipeline: str = "moth_binary"):
         if not jobs:
             logger.info(f"No jobs found, sleeping for {SLEEP_TIME_SECONDS} seconds")
 
-            time.sleep(SLEEP_TIME_SECONDS)
+        time.sleep(SLEEP_TIME_SECONDS)
 
 
 @torch.no_grad()
@@ -117,6 +117,7 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
     loader = get_rest_dataloader(
         job_id=job_id, base_url=base_url, auth_token=auth_token
     )
+    # TODO CGJS: Generalize model selection based on pipeline
     classifier = MothClassifierBinary(source_images=[], detections=[])
     detector = APIMothDetector([])
 
@@ -138,8 +139,8 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
             continue
 
         # Extract data from dictionary batch
-        batch_input = batch["image"]
-        item_ids = batch["image_id"]
+        batch_input = batch.get("image", [])
+        item_ids = batch.get("image_id", [])
         reply_subjects = batch.get("reply_subject", [None] * len(batch_input))
         image_urls = batch.get("image_url", [None] * len(batch_input))
 
@@ -148,7 +149,9 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
 
         logger.info(f"Processing batch {i+1}")
         # output is dict of "boxes", "labels", "scores"
-        batch_output = detector.predict_batch(batch_input)
+        batch_output = []
+        if len(batch_input) > 0:
+            batch_output = detector.predict_batch(batch_input)
 
         items += len(batch_output)
         logger.info(f"Total items processed so far: {items}")
@@ -158,7 +161,7 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
         if isinstance(item_ids, (np.ndarray, torch.Tensor)):
             item_ids = item_ids.tolist()
 
-        # TODO: Add seconds per item calculation for both detector and classifier
+        # TODO CGJS: Add seconds per item calculation for both detector and classifier
 
         detector.save_results(
             item_ids=item_ids,
@@ -224,6 +227,19 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
                     "result": pipeline_response.model_dump(mode="json"),
                 }
             )
+        failed_items = batch.get("failed_items")
+        if failed_items:
+            for failed_item in failed_items:
+                batch_results.append(
+                    {
+                        "reply_subject": failed_item.get("reply_subject"),
+                        # TODO CGJS: Should we extend PipelineResultsResponse to include errors?
+                        "result": {
+                            "error": failed_item.get("error", "Unknown error"),
+                            "image_id": failed_item.get("image_id"),
+                        },
+                    }
+                )
 
         post_batch_results(base_url, job_id, batch_results, auth_token)
         st, t = t("Finished posting results")

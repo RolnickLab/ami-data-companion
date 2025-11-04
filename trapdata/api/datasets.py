@@ -219,35 +219,89 @@ class RESTDataset(torch.utils.data.IterableDataset):
                     body = task.get("body", {})
                     image_url = body.get("image_url")
 
+                    errors = []
                     if not image_url:
-                        logger.warning(
-                            f"Task {task.get('id')} missing image_url, skipping"
-                        )
-                        continue
+                        errors.append("missing image_url")
+                    elif not body.get("image_id"):
+                        errors.append("missing image_id")
 
                     # Load the image
                     # _, t = log_time()
-                    image_tensor = self._load_image(image_url)
+                    image_tensor = self._load_image(image_url) if image_url else None
                     # _, t = t(f"Loaded image from {image_url}")
 
                     if image_tensor is None:
+                        errors.append("failed to load image")
+
+                    if errors:
                         logger.warning(
-                            f"Failed to load image for task {task.get('id')}, skipping"
+                            f"Worker {worker_id}: Errors in task '{task.get('id')}': {', '.join(errors)}"
                         )
-                        continue
 
                     # Yield the data row
-                    yield {
+                    row = {
                         "image": image_tensor,
                         "reply_subject": task.get("reply_subject"),
                         "image_id": str(body.get("image_id")),
                         "image_url": body.get("image_url"),
                     }
+                    if errors:
+                        row["error"] = ("; ".join(errors) if errors else None,)
+                    yield row
 
             logger.info(f"Worker {worker_id}: Iterator finished")
         except Exception as e:
             logger.error(f"Worker {worker_id}: Exception in iterator: {e}")
             raise
+
+
+def rest_collate_fn(batch: list[dict]) -> dict:
+    """
+    Custom collate function that separates failed and successful items.
+
+    Returns a dict with:
+        - images: List of valid tensors
+        - reply_subjects: List of reply subjects for valid images
+        - image_ids: List of image IDs for valid images
+        - image_urls: List of image URLs for valid images
+        - failed_items: List of dicts with metadata for failed items
+    """
+    successful = []
+    failed = []
+
+    for item in batch:
+        if item["image"] is None or item.get("error"):
+            # Failed item
+            failed.append(
+                {
+                    "reply_subject": item["reply_subject"],
+                    "image_id": item["image_id"],
+                    "image_url": item.get("image_url"),
+                    "error": item.get("error", "Unknown error"),
+                }
+            )
+        else:
+            # Successful item
+            successful.append(item)
+
+    # Collate successful items
+    if successful:
+        result = {
+            "image": torch.stack([item["image"] for item in successful]),
+            "reply_subject": [item["reply_subject"] for item in successful],
+            "image_id": [item["image_id"] for item in successful],
+            "image_url": [item.get("image_url") for item in successful],
+        }
+    else:
+        # Empty batch - all failed
+        result = {
+            "reply_subject": [],
+            "image_id": [],
+        }
+
+    result["failed_items"] = failed
+
+    return result
 
 
 def get_rest_dataloader(
@@ -275,4 +329,5 @@ def get_rest_dataloader(
         dataset,
         batch_size=batch_size,
         num_workers=num_workers,
+        collate_fn=rest_collate_fn,
     )
