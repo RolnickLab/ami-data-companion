@@ -205,7 +205,7 @@ class MothObjectDetector_FasterRCNN_2021(ObjectDetector):
         "Accurate but can be slow on a machine without GPU."
     )
     bbox_score_threshold = 0.99
-    box_detections_per_img = 1000
+    box_detections_per_img = 500
 
     def get_model(self):
         model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
@@ -252,7 +252,7 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
         "Accurate but can be slow on a machine without GPU."
     )
     bbox_score_threshold = 0.80
-    box_detections_per_img = 1000
+    box_detections_per_img = 500
 
     def get_model(self):
         num_classes = 2  # 1 class (object) + background
@@ -298,7 +298,7 @@ class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
     trainable_backbone_layers = 6  # all layers are trained
     anchor_sizes = (64, 128, 256, 512)
     num_classes = 2
-    box_detections_per_img = 1000
+    box_detections_per_img = 500
 
     def get_model(self):
         norm_layer = torch.nn.BatchNorm2d
