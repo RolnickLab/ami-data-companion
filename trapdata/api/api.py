@@ -295,8 +295,8 @@ async def process(data: PipelineRequest) -> PipelineResponse:
     logger.info(f"Returning {len(detections_to_return)} detections")
     # print(all_detections)
 
-    # If the number of detections is greater than 100, its suspicious. Log it.
-    if len(detections_to_return) > 100:
+    # If the number of detections is greater than 200, its suspicious. Log it.
+    if len(detections_to_return) > 200:
         logger.warning(
             f"Detected {len(detections_to_return)} detections. "
             "This is suspicious and may contain duplicates."
