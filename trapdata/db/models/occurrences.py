@@ -18,6 +18,29 @@ from trapdata import db
 from trapdata.db import models
 
 
+class ExportedDetection(pydantic.BaseModel):
+    id: int
+    source_image_id: int
+    source_image_path: str
+    source_image_width: int
+    source_image_height: int
+    source_image_filesize: int
+    label: str
+    score: float
+    cropped_image_path: str | None = None
+    sequence_id: str | None = (
+        None  # This is the Occurrence ID on the ADC side (= detections in a sequence)
+    )
+    timestamp: datetime.datetime
+    detection_algorithm: str | None = (
+        None  # Name of the object detection algorithm used
+    )
+    classification_algorithm: str | None = (
+        None  # Classification algorithm used to generate the label & score
+    )
+    bbox: list[int]  # Bounding box in the format [x_min, y_min, x_max, y_max]
+
+
 class Occurrence(pydantic.BaseModel):
     id: str
     label: str
@@ -30,7 +53,7 @@ class Occurrence(pydantic.BaseModel):
     num_frames: int
     # cropped_image_path: pathlib.Path
     # source_image_id: int
-    examples: list[dict]
+    examples: list[ExportedDetection] = []
     example_crop: Optional[pathlib.Path] = None
     # detections: list[object]
     # deployment: object
@@ -159,11 +182,15 @@ def get_unique_species_by_track(
                 models.DetectedObject.id,
                 models.DetectedObject.image_id.label("source_image_id"),
                 models.TrapImage.path.label("source_image_path"),
+                models.TrapImage.width.label("source_image_width"),
+                models.TrapImage.height.label("source_image_height"),
+                models.TrapImage.filesize.label("source_image_filesize"),
                 models.DetectedObject.specific_label.label("label"),
                 models.DetectedObject.specific_label_score.label("score"),
                 models.DetectedObject.path.label("cropped_image_path"),
                 models.DetectedObject.sequence_id,
                 models.DetectedObject.timestamp,
+                models.DetectedObject.bbox,
             )
             .where(
                 (models.DetectedObject.monitoring_session_id == monitoring_session.id)

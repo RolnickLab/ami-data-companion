@@ -29,6 +29,9 @@ class CaptureListItem(BaseModel):
 class CaptureDetail(CaptureListItem):
     id: int
     event: object
+    url: Optional[str] = None
+    event: object
+    deployment: str
     notes: Optional[str]
     detections: list
     filesize: int
@@ -121,11 +124,14 @@ class TrapImage(Base):
         return CaptureListItem(
             id=self.id,
             source_image=f"{constants.IMAGE_BASE_URL}vermont/snapshots/{self.path}",
+            path=self.path,
             timestamp=self.timestamp,
             last_read=self.last_read,
             last_processed=self.last_processed,
             in_queue=self.in_queue,
             num_detections=self.num_detected_objects,
+            event=self.monitoring_session.day,
+            deployment=self.monitoring_session.deployment,
         )
 
     def report_detail(self) -> CaptureDetail:
