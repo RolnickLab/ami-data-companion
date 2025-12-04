@@ -3,13 +3,14 @@
 import datetime
 import os
 import time
+from typing import List
 
 import numpy as np
 import requests
 import torch
 
+from trapdata.api.api import CLASSIFIER_CHOICES
 from trapdata.api.datasets import get_rest_dataloader
-from trapdata.api.models.classification import MothClassifierBinary
 from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
     DetectionResponse,
@@ -81,28 +82,35 @@ def _get_jobs(base_url: str, auth_token: str, pipeline_slug: str) -> list:
         return []
 
 
-def run_worker(pipeline: str = "moth_binary"):
+def run_worker(pipelines: List[str] = ["moth_binary"]):
     """Run the worker to process images from the REST API queue."""
 
     base_url = os.environ.get("ANTENNA_API_BASE_URL", "http://localhost:8000")
     auth_token = os.environ.get("ANTENNA_API_TOKEN", "")
     # TODO CGJS: Support a list of pipelines
     while True:
-        jobs = _get_jobs(
-            base_url=base_url, auth_token=auth_token, pipeline_slug=pipeline
-        )
-        for job_id in jobs:
-            logger.info(f"Processing job {job_id} with pipeline {pipeline}")
-            _process_job(
-                pipeline=pipeline,
-                job_id=job_id,
-                base_url=base_url,
-                auth_token=auth_token,
+        # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
+        # These should probably come from a dedicated endpoint and should preempt batch jobs under the assumption that they
+        # would run on the same GPU.
+        any_jobs = False
+        for pipeline in pipelines:
+            logger.info(f"Checking for jobs for pipeline {pipeline}")
+            jobs = _get_jobs(
+                base_url=base_url, auth_token=auth_token, pipeline_slug=pipeline
             )
-        if not jobs:
-            logger.info(f"No jobs found, sleeping for {SLEEP_TIME_SECONDS} seconds")
+            any_jobs = any_jobs or bool(jobs)
+            for job_id in jobs:
+                logger.info(f"Processing job {job_id} with pipeline {pipeline}")
+                _process_job(
+                    pipeline=pipeline,
+                    job_id=job_id,
+                    base_url=base_url,
+                    auth_token=auth_token,
+                )
 
-        time.sleep(SLEEP_TIME_SECONDS)
+        if not any_jobs:
+            logger.info(f"No jobs found, sleeping for {SLEEP_TIME_SECONDS} seconds")
+            time.sleep(SLEEP_TIME_SECONDS)
 
 
 @torch.no_grad()
@@ -118,7 +126,8 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
         job_id=job_id, base_url=base_url, auth_token=auth_token
     )
     # TODO CGJS: Generalize model selection based on pipeline
-    classifier = MothClassifierBinary(source_images=[], detections=[])
+    classifier_class = CLASSIFIER_CHOICES[pipeline]
+    classifier = classifier_class(source_images=[], detections=[])
     detector = APIMothDetector([])
 
     torch.cuda.empty_cache()
@@ -162,7 +171,6 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
             item_ids = item_ids.tolist()
 
         # TODO CGJS: Add seconds per item calculation for both detector and classifier
-
         detector.save_results(
             item_ids=item_ids,
             batch_output=batch_output,

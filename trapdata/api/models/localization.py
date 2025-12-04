@@ -1,4 +1,3 @@
-import concurrent.futures
 import datetime
 import typing
 
@@ -47,16 +46,9 @@ class APIMothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_2023)
             )
             return detection
 
-        # TODO CGJS: Check with Michael why this helps?
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = []
-            for image_id, image_output in zip(item_ids, batch_output):
-                for coords in image_output:
-                    future = executor.submit(save_detection, image_id, coords)
-                    futures.append(future)
-
-            for future in concurrent.futures.as_completed(futures):
-                detection = future.result()
+        for image_id, image_output in zip(item_ids, batch_output):
+            for coords in image_output:
+                detection = save_detection(image_id, coords)
                 detections.append(detection)
 
         self.results += detections

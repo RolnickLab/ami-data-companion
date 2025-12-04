@@ -1,8 +1,9 @@
 import pathlib
-from typing import Optional
+from typing import List, Optional
 
 import typer
 
+from trapdata.api.api import CLASSIFIER_CHOICES
 from trapdata.cli import db, export, queue, settings, shell, show, test
 from trapdata.db.base import get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
@@ -98,17 +99,27 @@ def run_api(port: int = 2000):
 
 @cli.command("worker")
 def worker(
-    pipeline: str = typer.Option(
-        "moth_binary",
-        help="Pipeline to use for processing (e.g., moth_binary, panama_moths_2024, etc.)",
+    pipelines: List[str] = typer.Option(
+        ["moth_binary"],  # Default to a list with one pipeline
+        help="List of pipelines to use for processing (e.g., moth_binary, panama_moths_2024, etc.)",
     )
 ):
     """
     Run the worker to process images from the REST API queue.
     """
+    # Validate that each pipeline is in CLASSIFIER_CHOICES
+    invalid_pipelines = [
+        pipeline for pipeline in pipelines if pipeline not in CLASSIFIER_CHOICES.keys()
+    ]
+
+    if invalid_pipelines:
+        raise typer.BadParameter(
+            f"Invalid pipeline(s): {', '.join(invalid_pipelines)}. Must be one of: {', '.join(CLASSIFIER_CHOICES.keys())}"
+        )
+
     from trapdata.cli.worker import run_worker
 
-    run_worker(pipeline=pipeline)
+    run_worker(pipelines=pipelines)
 
 
 if __name__ == "__main__":

@@ -36,6 +36,8 @@ from .schemas import PipelineRequest as PipelineRequest_
 from .schemas import PipelineResultsResponse as PipelineResponse_
 from .schemas import ProcessingServiceInfoResponse, SourceImage, SourceImageResponse
 
+# cache the service info to be built only one
+_info: ProcessingServiceInfoResponse | None = None
 app = fastapi.FastAPI()
 app.add_middleware(GZipMiddleware)
 
@@ -155,13 +157,6 @@ def make_pipeline_config_response(
         version=1,
         algorithms=algorithms,
     )
-
-
-# @TODO This requires loading all models into memory! Can we avoid this?
-PIPELINE_CONFIGS = [
-    make_pipeline_config_response(classifier_class, slug=key)
-    for key, classifier_class in CLASSIFIER_CHOICES.items()
-]
 
 
 class PipelineRequest(PipelineRequest_):
@@ -313,17 +308,8 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
 @app.get("/info", tags=["services"])
 async def info() -> ProcessingServiceInfoResponse:
-    info = ProcessingServiceInfoResponse(
-        name="Antenna Inference API",
-        description=(
-            "The primary endpoint for processing images for the Antenna platform. "
-            "This API provides access to multiple detection and classification "
-            "algorithms by multiple labs for processing images of moths."
-        ),
-        pipelines=PIPELINE_CONFIGS,
-        # algorithms=list(algorithm_choices.values()),
-    )
-    return info
+    assert _info is not None, "Service info not initialized"
+    return _info
 
 
 # Check if the server is online
@@ -363,5 +349,22 @@ async def readyz():
 
 if __name__ == "__main__":
     import uvicorn
+
+    # @TODO This requires loading all models into memory! Can we avoid this?
+    pipeline_configs = [
+        make_pipeline_config_response(classifier_class, slug=key)
+        for key, classifier_class in CLASSIFIER_CHOICES.items()
+    ]
+
+    _info = ProcessingServiceInfoResponse(
+        name="Antenna Inference API",
+        description=(
+            "The primary endpoint for processing images for the Antenna platform. "
+            "This API provides access to multiple detection and classification "
+            "algorithms by multiple labs for processing images of moths."
+        ),
+        pipelines=pipeline_configs,
+        # algorithms=list(algorithm_choices.values()),
+    )
 
     uvicorn.run(app, host="0.0.0.0", port=2000)
