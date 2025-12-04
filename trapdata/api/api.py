@@ -91,7 +91,6 @@ def make_category_map_response(
 def make_algorithm_response(
     model: APIMothDetector | APIMothClassifier,
 ) -> AlgorithmConfigResponse:
-
     category_map = make_category_map_response(model) if model.category_map else None
     return AlgorithmConfigResponse(
         name=model.name,

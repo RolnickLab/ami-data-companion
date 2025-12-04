@@ -59,6 +59,7 @@ asyncio_mode = 'auto'
 
 [tool.isort]
 profile = "black"
+line_length = 88
 
 [tool.poetry.scripts]
 trapdata = 'trapdata.ui.main:run'

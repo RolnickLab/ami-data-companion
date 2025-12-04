@@ -1,35 +1,33 @@
 {
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit",
+    "source.sortImports": "explicit",
+    "source.fixAll.markdownlint": "explicit",
+    "source.fixAll": "explicit"
+  },
+  "files.insertFinalNewline": true,
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "isort.args": ["--profile", "black", "--line-length=88"],
+  "black-formatter.args": ["--line-length=88"],
+  "[python]": {
     "editor.formatOnSave": true,
-    "editor.codeActionsOnSave": {
-        "source.organizeImports": "explicit",
-        "source.sortImports": "explicit",
-        "source.fixAll.markdownlint": "explicit",
-        "source.fixAll": "explicit"
-    },
-    "files.insertFinalNewline": true,
-    "files.eol": "\n",
-    "files.trimTrailingWhitespace": true,
-    "isort.args": [
-        "--profile",
-        "black"
-    ],
-    "[python]": {
-        "editor.formatOnSave": true,
-        "diffEditor.codeLens": true,
-        "editor.defaultFormatter": "ms-python.black-formatter"
-    },
-    "cSpell.words": [
-        "argmax",
-        "astype",
-        "customise",
-        "fasterrcnn",
-        "kivy",
-        "resnet",
-        "sesh",
-        "sessionmaker",
-        "softmax",
-        "sqlalchemy",
-        "torchvision",
-        "trapdata"
-    ]
+    "diffEditor.codeLens": true,
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+  "cSpell.words": [
+    "argmax",
+    "astype",
+    "customise",
+    "fasterrcnn",
+    "kivy",
+    "resnet",
+    "sesh",
+    "sessionmaker",
+    "softmax",
+    "sqlalchemy",
+    "torchvision",
+    "trapdata"
+  ]
 }

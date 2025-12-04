@@ -9,10 +9,11 @@ repos:
 
   # Backend hooks
   - repo: https://github.com/psf/black
-    rev: 22.3.0
+    rev: 23.3.0
     hooks:
       - id: black
         types: [file, python]
+        args: ["--line-length=88"]
   - repo: https://github.com/myint/autoflake
     rev: v1.4
     hooks:
@@ -24,18 +25,21 @@ repos:
         types: [file, python]
 
   - repo: https://github.com/pycqa/isort
-    rev: 5.11.5
+    rev: 5.12.0
     hooks:
       - id: isort
         name: isort (python)
+        args: ["--profile", "black", "--line-length=88"]
       - id: isort
         files: .
         name: isort (cython)
         types: [cython]
+        args: ["--profile", "black", "--line-length=88"]
       - id: isort
         files: .
         name: isort (pyi)
         types: [pyi]
+        args: ["--profile", "black", "--line-length=88"]
 
   - repo: https://github.com/pycqa/flake8
     rev: 3.8.3
