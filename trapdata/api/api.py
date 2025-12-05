@@ -5,6 +5,7 @@ pipelines.
 
 import enum
 import time
+from contextlib import asynccontextmanager
 
 import fastapi
 import pydantic
@@ -36,9 +37,18 @@ from .schemas import PipelineRequest as PipelineRequest_
 from .schemas import PipelineResultsResponse as PipelineResponse_
 from .schemas import ProcessingServiceInfoResponse, SourceImage, SourceImageResponse
 
-# cache the service info to be built only one
-_info: ProcessingServiceInfoResponse | None = None
-app = fastapi.FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: fastapi.FastAPI):
+    # cache the service info to be built only once at startup
+    app.state.service_info = initialize_service_info()
+    logger.info("Initialized service info")
+    yield
+    # Shutdown event: Clean up resources (if necessary)
+    logger.info("Shutting down API")
+
+
+app = fastapi.FastAPI(lifespan=lifespan)
 app.add_middleware(GZipMiddleware)
 
 
@@ -308,8 +318,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
 @app.get("/info", tags=["services"])
 async def info() -> ProcessingServiceInfoResponse:
-    assert _info is not None, "Service info not initialized"
-    return _info
+    return app.state.service_info
 
 
 # Check if the server is online
@@ -347,9 +356,7 @@ async def readyz():
 #     pass
 
 
-if __name__ == "__main__":
-    import uvicorn
-
+def initialize_service_info() -> ProcessingServiceInfoResponse:
     # @TODO This requires loading all models into memory! Can we avoid this?
     pipeline_configs = [
         make_pipeline_config_response(classifier_class, slug=key)
@@ -366,5 +373,10 @@ if __name__ == "__main__":
         pipelines=pipeline_configs,
         # algorithms=list(algorithm_choices.values()),
     )
+    return _info
+
+
+if __name__ == "__main__":
+    import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=2000)
