@@ -17,6 +17,13 @@
       "request": "launch",
       "module": "trapdata.cli.base",
       "args": ["worker"]
+    },
+    {
+      "name": "Run api",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "trapdata.cli.base",
+      "args": ["api"]
     }
   ]
 }
