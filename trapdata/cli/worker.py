@@ -72,7 +72,9 @@ def _get_jobs(base_url: str, auth_token: str, pipeline_slug: str) -> list:
         resp = requests.get(url, params=params, headers=headers, timeout=30)
         resp.raise_for_status()
         data = resp.json()
-        job_ids = data.get("job_ids") or []
+
+        jobs = data.get("results") or []
+        job_ids = [job["id"] for job in jobs]
         if not isinstance(job_ids, list):
             logger.warning(f"Unexpected job_ids format from {url}: {type(job_ids)}")
             return []
@@ -82,7 +84,7 @@ def _get_jobs(base_url: str, auth_token: str, pipeline_slug: str) -> list:
         return []
 
 
-def run_worker(pipelines: List[str] = ["moth_binary"]):
+def run_worker(pipelines: List[str]):
     """Run the worker to process images from the REST API queue."""
 
     base_url = os.environ.get("ANTENNA_API_BASE_URL", "http://localhost:8000")
@@ -98,15 +100,15 @@ def run_worker(pipelines: List[str] = ["moth_binary"]):
             jobs = _get_jobs(
                 base_url=base_url, auth_token=auth_token, pipeline_slug=pipeline
             )
-            any_jobs = any_jobs or bool(jobs)
             for job_id in jobs:
                 logger.info(f"Processing job {job_id} with pipeline {pipeline}")
-                _process_job(
+                any_work_done = _process_job(
                     pipeline=pipeline,
                     job_id=job_id,
                     base_url=base_url,
                     auth_token=auth_token,
                 )
+                any_jobs = any_jobs or any_work_done
 
         if not any_jobs:
             logger.info(f"No jobs found, sleeping for {SLEEP_TIME_SECONDS} seconds")
@@ -114,21 +116,24 @@ def run_worker(pipelines: List[str] = ["moth_binary"]):
 
 
 @torch.no_grad()
-def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
+def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str) -> bool:
     """Run the worker to process images from the REST API queue.
 
     Args:
         pipeline: Pipeline name to use for processing (e.g., moth_binary, panama_moths_2024)
+        job_id: Job ID to process
+        base_url: Base URL for the API
+        auth_token: API authentication token
+    Returns:
+        True if any work was done, False otherwise
     """
     assert auth_token is not None, "ANTENNA_API_TOKEN environment variable not set"
-
+    did_work = False
     loader = get_rest_dataloader(
         job_id=job_id, base_url=base_url, auth_token=auth_token
     )
-    # TODO CGJS: Generalize model selection based on pipeline
-    classifier_class = CLASSIFIER_CHOICES[pipeline]
-    classifier = classifier_class(source_images=[], detections=[])
-    detector = APIMothDetector([])
+    classifier = None
+    detector = None
 
     torch.cuda.empty_cache()
     items = 0
@@ -139,13 +144,23 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
     total_dl_time = 0.0
     all_detections = []
     _, t = log_time()
+
     for i, batch in enumerate(loader):
-        detector.reset([])
         dt, t = t("Finished loading batch")
         total_dl_time += dt
         if not batch:
             logger.warning(f"Batch {i+1} is empty, skipping")
             continue
+
+        # Defer instantiation of detector and classifier until we have data
+        if not classifier:
+            classifier_class = CLASSIFIER_CHOICES[pipeline]
+            classifier = classifier_class(source_images=[], detections=[])
+            detector = APIMothDetector([])
+        assert detector is not None, "Detector not initialized"
+        assert classifier is not None, "Classifier not initialized"
+        detector.reset([])
+        did_work = True
 
         # Extract data from dictionary batch
         batch_input = batch.get("image", [])
@@ -183,9 +198,8 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
         image_detections: dict[str, list[DetectionResponse]] = {
             img_id: [] for img_id in item_ids
         }
-        image_tensors = {
-            img_id: img_tensor for img_id, img_tensor in zip(item_ids, batch_input)
-        }
+        image_tensors = dict(zip(item_ids, batch_input))
+
         classifier.reset(detector.results)
 
         for idx, dresp in enumerate(detector.results):
@@ -257,3 +271,4 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str):
         f"Done, detections: {len(all_detections)}. Detecting time: {total_detection_time}, "
         f"classification time: {total_classification_time}, dl time: {total_dl_time}, save time: {total_save_time}"
     )
+    return did_work
