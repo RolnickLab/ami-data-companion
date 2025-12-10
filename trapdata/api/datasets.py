@@ -10,7 +10,7 @@ from PIL import Image
 
 from trapdata.common.logs import logger
 
-from .schemas import DetectionResponse, SourceImage
+from .schemas import DetectionResponse, PipelineProcessingTask, SourceImage
 
 
 class LocalizationImageDataset(torch.utils.data.Dataset):
@@ -127,7 +127,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
         self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
         self.auth_token = auth_token or os.environ.get("ANTENNA_API_TOKEN")
 
-    def _fetch_tasks(self) -> list[dict]:
+    def _fetch_tasks(self) -> list[PipelineProcessingTask]:
         """
         Fetch a batch of tasks from the REST API.
 
@@ -150,7 +150,8 @@ class RESTDataset(torch.utils.data.IterableDataset):
             )
             response.raise_for_status()
             data = response.json()
-            return data.get("tasks", [])
+            tasks = [PipelineProcessingTask(**task) for task in data.get("tasks", [])]
+            return tasks
         except requests.RequestException as e:
             logger.error(f"Failed to fetch tasks from {url}: {e}")
             return []
@@ -216,18 +217,12 @@ class RESTDataset(torch.utils.data.IterableDataset):
                     break
 
                 for task in tasks:
-                    body = task.get("body", {})
-                    image_url = body.get("image_url")
-
                     errors = []
-                    if not image_url:
-                        errors.append("missing image_url")
-                    elif not body.get("image_id"):
-                        errors.append("missing image_id")
-
                     # Load the image
                     # _, t = log_time()
-                    image_tensor = self._load_image(image_url) if image_url else None
+                    image_tensor = (
+                        self._load_image(task.image_url) if task.image_url else None
+                    )
                     # _, t = t(f"Loaded image from {image_url}")
 
                     if image_tensor is None:
@@ -235,15 +230,15 @@ class RESTDataset(torch.utils.data.IterableDataset):
 
                     if errors:
                         logger.warning(
-                            f"Worker {worker_id}: Errors in task '{task.get('id')}': {', '.join(errors)}"
+                            f"Worker {worker_id}: Errors in task for image '{task.image_id}': {', '.join(errors)}"
                         )
 
                     # Yield the data row
                     row = {
                         "image": image_tensor,
-                        "reply_subject": task.get("reply_subject"),
-                        "image_id": str(body.get("image_id")),
-                        "image_url": body.get("image_url"),
+                        "reply_subject": task.reply_subject,
+                        "image_id": task.image_id,
+                        "image_url": task.image_url,
                     }
                     if errors:
                         row["error"] = ("; ".join(errors) if errors else None,)
