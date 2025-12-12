@@ -212,13 +212,14 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str) -> 
             crop = crop.unsqueeze(0)  # add batch dimension
             classifier_out = classifier.predict_batch(crop)
             classifier_out = classifier.post_process_batch(classifier_out)
-            detections = classifier.save_results(
-                metadata=([dresp.source_image_id], [idx]),
-                batch_output=classifier_out,
+            detection = classifier.update_detection_classification(
                 seconds_per_item=0,
+                image_id=dresp.source_image_id,
+                detection_idx=idx,
+                predictions=classifier_out[0],
             )
-            image_detections[dresp.source_image_id].extend(detections)
-            all_detections.extend(detections)
+            image_detections[dresp.source_image_id].append(detection)
+            all_detections.append(detection)
 
         ct, t = t("Finished classification")
         total_classification_time += ct
