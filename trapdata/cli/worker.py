@@ -2,6 +2,7 @@
 
 import datetime
 import os
+import socket
 import time
 from typing import List
 
@@ -9,10 +10,11 @@ import numpy as np
 import requests
 import torch
 
-from trapdata.api.api import CLASSIFIER_CHOICES
+from trapdata.api.api import CLASSIFIER_CHOICES, initialize_service_info
 from trapdata.api.datasets import get_rest_dataloader
 from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
+    AsyncPipelineRegistrationRequest,
     DetectionResponse,
     PipelineResultsResponse,
     SourceImageResponse,
@@ -273,3 +275,202 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str) -> 
         f"classification time: {total_classification_time}, dl time: {total_dl_time}, save time: {total_save_time}"
     )
     return did_work
+
+
+def get_user_projects(base_url: str, auth_token: str) -> list[dict]:
+    """
+    Fetch all projects the user has access to.
+
+    Args:
+        base_url: Base URL for the API
+        auth_token: API authentication token
+
+    Returns:
+        List of project dictionaries with 'id' and 'name' fields
+    """
+    try:
+        url = f"{base_url.rstrip('/')}/api/v2/projects/"
+        headers = {}
+        if auth_token:
+            headers["Authorization"] = f"Token {auth_token}"
+
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        # Handle paginated response
+        projects = data.get("results", [])
+        if isinstance(projects, list):
+            return projects
+        else:
+            logger.warning(f"Unexpected projects format from {url}: {type(projects)}")
+            return []
+
+    except requests.RequestException as e:
+        logger.error(f"Failed to fetch projects from {base_url}: {e}")
+        return []
+
+
+def register_pipelines_for_project(
+    base_url: str,
+    auth_token: str,
+    project_id: int,
+    service_name: str,
+    pipeline_configs: list
+) -> tuple[bool, str]:
+    """
+    Register all available pipelines for a specific project.
+
+    Args:
+        base_url: Base URL for the API
+        auth_token: API authentication token
+        project_id: Project ID to register pipelines for
+        service_name: Name of the processing service
+        pipeline_configs: Pre-built pipeline configuration objects
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    try:
+        # Create the registration request
+        registration_request = AsyncPipelineRegistrationRequest(
+            processing_service_name=service_name,
+            pipelines=pipeline_configs
+        )
+
+        # Make the API call
+        url = f"{base_url.rstrip('/')}/api/v2/projects/{project_id}/pipelines/"
+        headers = {"Content-Type": "application/json"}
+        if auth_token:
+            headers["Authorization"] = f"Token {auth_token}"
+
+        response = requests.post(
+            url,
+            json=registration_request.model_dump(mode="json"),
+            headers=headers,
+            timeout=60
+        )
+        response.raise_for_status()
+
+        result_data = response.json()
+        created_pipelines = result_data.get("pipelines_created", [])
+
+        return True, f"Created {len(created_pipelines)} new pipelines"
+
+    except requests.RequestException as e:
+        if e.response and e.response.status_code == 400:
+            error_detail = ""
+            try:
+                error_data = e.response.json()
+                error_detail = error_data.get("detail", str(e))
+            except:
+                error_detail = str(e)
+            return False, f"Registration failed: {error_detail}"
+        else:
+            return False, f"Network error during registration: {e}"
+    except Exception as e:
+        return False, f"Unexpected error during registration: {e}"
+
+
+def register_pipelines(
+    project_ids: list[int] = None,
+    service_name: str = None,
+    base_url: str = None,
+    auth_token: str = None
+) -> None:
+    """
+    Register pipelines for specified projects or all accessible projects.
+
+    Args:
+        project_ids: List of specific project IDs to register for. If None, registers for all accessible projects.
+        service_name: Name of the processing service
+        base_url: Base URL for the API (defaults to ANTENNA_API_BASE_URL env var)
+        auth_token: API authentication token (defaults to ANTENNA_API_TOKEN env var)
+    """
+    # Set up defaults from environment
+    if base_url is None:
+        base_url = os.environ.get("ANTENNA_API_BASE_URL", "http://localhost:8000")
+    if auth_token is None:
+        auth_token = os.environ.get("ANTENNA_API_TOKEN", "")
+
+    if not auth_token:
+        logger.error("ANTENNA_API_TOKEN environment variable not set")
+        return
+
+    if service_name is None:
+        logger.error("Service name is required for registration")
+        return
+
+    # Add hostname to service name
+    hostname = socket.gethostname()
+    full_service_name = f"{service_name} ({hostname})"
+
+    # Get projects to register for
+    projects_to_process = []
+    if project_ids:
+        # Use specified project IDs
+        projects_to_process = [{"id": pid, "name": f"Project {pid}"} for pid in project_ids]
+        logger.info(f"Registering pipelines for specified projects: {project_ids}")
+    else:
+        # Fetch all accessible projects
+        logger.info("Fetching all accessible projects...")
+        all_projects = get_user_projects(base_url, auth_token)
+        projects_to_process = all_projects
+        logger.info(f"Found {len(projects_to_process)} accessible projects")
+
+    if not projects_to_process:
+        logger.warning("No projects found to register pipelines for")
+        return
+
+    # Initialize service info once to get pipeline configurations
+    logger.info("Initializing pipeline configurations...")
+    service_info = initialize_service_info()
+    pipeline_configs = service_info.pipelines
+    logger.info(f"Generated {len(pipeline_configs)} pipeline configurations")
+
+    # Register pipelines for each project
+    successful_registrations = []
+    failed_registrations = []
+
+    logger.info(f"Available pipelines to register: {list(CLASSIFIER_CHOICES.keys())}")
+
+    for project in projects_to_process:
+        project_id = project["id"]
+        project_name = project.get("name", f"Project {project_id}")
+
+        logger.info(f"Registering pipelines for project {project_id} ({project_name})...")
+
+        success, message = register_pipelines_for_project(
+            base_url=base_url,
+            auth_token=auth_token,
+            project_id=project_id,
+            service_name=full_service_name,
+            pipeline_configs=pipeline_configs
+        )
+
+        if success:
+            successful_registrations.append((project_id, project_name, message))
+            logger.info(f"✓ Project {project_id} ({project_name}): {message}")
+        else:
+            failed_registrations.append((project_id, project_name, message))
+            if "Processing service already exists" in message:
+                logger.warning(f"⚠ Project {project_id} ({project_name}): {message}")
+            else:
+                logger.error(f"✗ Project {project_id} ({project_name}): {message}")
+
+    # Summary report
+    logger.info(f"\n=== Registration Summary ===")
+    logger.info(f"Service name: {full_service_name}")
+    logger.info(f"Total projects processed: {len(projects_to_process)}")
+    logger.info(f"Successful registrations: {len(successful_registrations)}")
+    logger.info(f"Failed registrations: {len(failed_registrations)}")
+
+    if successful_registrations:
+        logger.info("\nSuccessful registrations:")
+        for project_id, project_name, message in successful_registrations:
+            logger.info(f"  - Project {project_id} ({project_name}): {message}")
+
+    if failed_registrations:
+        logger.info("\nFailed registrations:")
+        for project_id, project_name, message in failed_registrations:
+            logger.info(f"  - Project {project_id} ({project_name}): {message}")

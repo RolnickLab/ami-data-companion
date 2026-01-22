@@ -344,3 +344,13 @@ class ProcessingServiceInfoResponse(pydantic.BaseModel):
             ]
         ],
     )
+
+
+class AsyncPipelineRegistrationRequest(pydantic.BaseModel):
+    """
+    Request to register pipelines from an async processing service
+    """
+
+    processing_service_name: str
+    pipelines: list[PipelineConfigResponse] = []
+
