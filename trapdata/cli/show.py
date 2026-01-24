@@ -174,7 +174,7 @@ def sessions():
 
 @cli.command()
 def detections(
-    session_day: Optional[datetime.datetime] = None,
+    session_day: Optional[str] = typer.Option(None, help="Session day in YYYY-MM-DD format"),
     limit: Optional[int] = 100,
     offset: int = 0,
 ):
@@ -182,10 +182,12 @@ def detections(
     Show all detections for a given event.
     """
     if session_day:
+        # Parse the date string
+        date_obj = datetime.datetime.strptime(session_day, "%Y-%m-%d")
         sessions = get_monitoring_session_by_date(
             db_path=settings.database_url,
             base_directory=settings.image_base_path,
-            event_dates=[session_day],
+            event_dates=[date_obj],
         )
         session = sessions[0] if sessions else None
     else:
