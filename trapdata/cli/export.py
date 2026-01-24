@@ -4,7 +4,7 @@ import enum
 import pathlib
 import shutil
 import time
-from typing import Optional, Union
+from typing import Annotated, Optional, Union
 
 import pandas as pd
 import typer
@@ -213,7 +213,7 @@ def sessions(
 
 @cli.command()
 def captures(
-    date: str = typer.Argument(..., help="Date in YYYY-MM-DD format"),
+    date: Annotated[datetime.datetime, typer.Argument(formats=["%Y-%m-%d"])],
     format: ExportFormat = ExportFormat.json,
     outfile: Optional[pathlib.Path] = None,
 ) -> Optional[str]:
@@ -224,15 +224,13 @@ def captures(
     """
     Session = get_session_class(settings.database_url)
     session = Session()
-    # Parse the date string
-    date_obj = datetime.datetime.strptime(date, "%Y-%m-%d")
     events = get_monitoring_session_by_date(
         db_path=settings.database_url,
         base_directory=settings.image_base_path,
-        event_dates=[str(date_obj.date())],
+        event_dates=[date.date()],
     )
     if not len(events):
-        raise Exception(f"No Monitoring Event with date: {date_obj.date()}")
+        raise Exception(f"No Monitoring Event with date: {date.date()}")
 
     event = events[0]
     captures = get_monitoring_session_images(settings.database_url, event, limit=100)
