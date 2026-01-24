@@ -10,11 +10,7 @@ import requests
 import torch
 
 from trapdata.api.datasets import RESTDataset, rest_collate_fn
-from trapdata.api.schemas import (
-    AntennaTaskResult,
-    AntennaTaskResultError,
-    PipelineResultsResponse,
-)
+from trapdata.api.schemas import AntennaTaskResult, PipelineResultsResponse
 from trapdata.cli.worker import _get_jobs, _process_job
 
 # ---------------------------------------------------------------------------
@@ -493,11 +489,12 @@ class TestProcessJob:
         batch_results = mock_post.call_args[0][2]
         # 1 success + 1 failure
         assert len(batch_results) == 2
+        # Find error items by checking source_images[0].error
         error_items = [
-            r for r in batch_results if isinstance(r.result, AntennaTaskResultError)
+            r for r in batch_results if r.result.source_images[0].error is not None
         ]
         assert len(error_items) == 1
-        assert error_items[0].result.error == "404 not found"
+        assert error_items[0].result.source_images[0].error == "404 not found"
         assert error_items[0].reply_subject == "reply_fail"
 
     @patch("trapdata.cli.worker.get_rest_dataloader")
