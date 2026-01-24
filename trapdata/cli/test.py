@@ -43,15 +43,17 @@ def pipeline():
 
 
 @cli.command()
-def species_by_track(event_day: datetime.datetime):
-    """"""
+def species_by_track(event_day: str = typer.Argument(..., help="Event day in YYYY-MM-DD format")):
+    """Get unique species by track for a specific event day."""
     Session = get_session_class(settings.database_url)
     session = Session()
+    # Parse the date string
+    event_date = datetime.datetime.strptime(event_day, "%Y-%m-%d").date()
     event = session.execute(
         select(MonitoringSession).where(
             # MonitoringSession.base_directory="",  @TODO retrieve from settings?
             MonitoringSession.day
-            == event_day.date(),
+            == event_date,
         )
     ).scalar_one()
     print(f"Matched of event: {event}")
