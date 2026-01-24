@@ -13,6 +13,8 @@ from trapdata.api.datasets import get_rest_dataloader
 from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
     AntennaJobsListResponse,
+    AntennaTaskResult,
+    AntennaTaskResultError,
     DetectionResponse,
     PipelineResultsResponse,
     SourceImageResponse,
@@ -25,7 +27,7 @@ SLEEP_TIME_SECONDS = 5
 
 
 def post_batch_results(
-    base_url: str, job_id: int, results: list[dict], auth_token: str = None
+    base_url: str, job_id: int, results: list[AntennaTaskResult], auth_token: str = None
 ) -> bool:
     """
     Post batch results back to the API.
@@ -33,7 +35,7 @@ def post_batch_results(
     Args:
         base_url: Base URL for the API
         job_id: Job ID
-        results: List of dicts containing reply_subject and image_id
+        results: List of AntennaTaskResult objects
         auth_token: API authentication token
 
     Returns:
@@ -45,8 +47,10 @@ def post_batch_results(
     if auth_token:
         headers["Authorization"] = f"Token {auth_token}"
 
+    payload = [r.model_dump(mode="json") for r in results]
+
     try:
-        response = requests.post(url, json=results, headers=headers, timeout=60)
+        response = requests.post(url, json=payload, headers=headers, timeout=60)
         response.raise_for_status()
         logger.info(f"Successfully posted {len(results)} results to {url}")
         return True
@@ -232,7 +236,7 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
         batch_elapsed = (batch_end_time - batch_start_time).total_seconds()
 
         # Post results back to the API with PipelineResponse for each image
-        batch_results = []
+        batch_results: list[AntennaTaskResult] = []
         for reply_subject, image_id, image_url in zip(
             reply_subjects, image_ids, image_urls
         ):
@@ -248,23 +252,22 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
             )
 
             batch_results.append(
-                {
-                    "reply_subject": reply_subject,
-                    "result": pipeline_response.model_dump(mode="json"),
-                }
+                AntennaTaskResult(
+                    reply_subject=reply_subject,
+                    result=pipeline_response,
+                )
             )
         failed_items = batch.get("failed_items")
         if failed_items:
             for failed_item in failed_items:
                 batch_results.append(
-                    {
-                        "reply_subject": failed_item.get("reply_subject"),
-                        # TODO CGJS: Should we extend PipelineResultsResponse to include errors?
-                        "result": {
-                            "error": failed_item.get("error", "Unknown error"),
-                            "image_id": failed_item.get("image_id"),
-                        },
-                    }
+                    AntennaTaskResult(
+                        reply_subject=failed_item.get("reply_subject"),
+                        result=AntennaTaskResultError(
+                            error=failed_item.get("error", "Unknown error"),
+                            image_id=failed_item.get("image_id"),
+                        ),
+                    )
                 )
 
         post_batch_results(

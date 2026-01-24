@@ -342,6 +342,26 @@ class PipelineConfigResponse(pydantic.BaseModel):
     stages: list[PipelineStage] = []
 
 
+class AntennaTaskResultError(pydantic.BaseModel):
+    """Error result for a single Antenna task that failed to process."""
+
+    error: str
+    image_id: str | None = None
+
+
+class AntennaTaskResult(pydantic.BaseModel):
+    """Result for a single Antenna task, either success or error."""
+
+    reply_subject: str | None = None
+    result: PipelineResultsResponse | AntennaTaskResultError
+
+
+class AntennaTaskResults(pydantic.BaseModel):
+    """Batch of task results to post back to Antenna API."""
+
+    results: list[AntennaTaskResult] = pydantic.Field(default_factory=list)
+
+
 class ProcessingServiceInfoResponse(pydantic.BaseModel):
     """Information about the processing service."""
 
