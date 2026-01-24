@@ -32,10 +32,7 @@ timm = "^0.6.13"
 structlog = "^22.3.0"
 kivy = { extras = ["base"], version = "^2.3.0" }
 plyer = "^2.1.0"
-pyobjus = [
-    { version = "^1.2.1", platform = "darwin" },
-    { version = "^1.2.1", platform = "linux" },
-]
+pyobjus = { version = "^1.2.1", markers = "sys_platform == 'darwin'" }
 
 # [tool.poetry.group.dev.dependencies] # Can't install these dev deps with pip, so they're in the main deps
 black = "^23.3.0"
