@@ -2,7 +2,6 @@ import os
 import time
 import typing
 from io import BytesIO
-from urllib.parse import urljoin
 
 import requests
 import torch
@@ -140,8 +139,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
             auth_token: API authentication token
         """
         super().__init__()
-        # Ensure base_url has trailing slash for proper urljoin behavior
-        self.base_url = base_url if base_url.endswith("/") else base_url + "/"
+        self.base_url = base_url
         self.job_id = job_id
         self.batch_size = batch_size
         self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
@@ -157,7 +155,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
         Raises:
             requests.RequestException: If the request fails (network error, etc.)
         """
-        url = urljoin(self.base_url, f"jobs/{self.job_id}/tasks")
+        url = f"{self.base_url.rstrip('/')}/jobs/{self.job_id}/tasks"
         params = {"batch": self.batch_size}
 
         headers = {}

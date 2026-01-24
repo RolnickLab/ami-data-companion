@@ -3,7 +3,6 @@
 import datetime
 import time
 from typing import List
-from urllib.parse import urljoin
 
 import numpy as np
 import requests
@@ -40,10 +39,7 @@ def post_batch_results(
     Returns:
         True if successful, False otherwise
     """
-    # Ensure base_url has trailing slash for proper urljoin behavior
-    if not base_url.endswith("/"):
-        base_url += "/"
-    url = urljoin(base_url, f"jobs/{job_id}/result/")
+    url = f"{base_url.rstrip('/')}/jobs/{job_id}/result/"
 
     headers = {}
     if auth_token:
@@ -67,10 +63,7 @@ def _get_jobs(base_url: str, auth_token: str, pipeline_slug: str) -> list[int]:
     Returns a list of job ids (possibly empty) on success or error.
     """
     try:
-        # Ensure base_url has trailing slash for proper urljoin behavior
-        if not base_url.endswith("/"):
-            base_url += "/"
-        url = urljoin(base_url, "jobs")
+        url = f"{base_url.rstrip('/')}/jobs"
         params = {"pipeline__slug": pipeline_slug, "ids_only": 1, "incomplete_only": 1}
 
         headers = {}
