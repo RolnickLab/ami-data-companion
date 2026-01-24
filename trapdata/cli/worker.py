@@ -1,9 +1,9 @@
 """Worker to process images from the REST API queue."""
 
 import datetime
-import os
 import time
 from typing import List
+from urllib.parse import urljoin
 
 import numpy as np
 import requests
@@ -13,12 +13,14 @@ from trapdata.api.api import CLASSIFIER_CHOICES
 from trapdata.api.datasets import get_rest_dataloader
 from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
+    AntennaJobsListResponse,
     DetectionResponse,
     PipelineResultsResponse,
     SourceImageResponse,
 )
 from trapdata.common.logs import logger
 from trapdata.common.utils import log_time
+from trapdata.settings import Settings, read_settings
 
 SLEEP_TIME_SECONDS = 5
 
@@ -38,7 +40,10 @@ def post_batch_results(
     Returns:
         True if successful, False otherwise
     """
-    url = f"{base_url}/api/v2/jobs/{job_id}/result/"
+    # Ensure base_url has trailing slash for proper urljoin behavior
+    if not base_url.endswith("/"):
+        base_url += "/"
+    url = urljoin(base_url, f"jobs/{job_id}/result/")
 
     headers = {}
     if auth_token:
@@ -54,15 +59,18 @@ def post_batch_results(
         return False
 
 
-def _get_jobs(base_url: str, auth_token: str, pipeline_slug: str) -> list:
+def _get_jobs(base_url: str, auth_token: str, pipeline_slug: str) -> list[int]:
     """Fetch job ids from the API for the given pipeline.
 
-    Calls: GET {base_url}/api/v2/jobs?pipeline=<pipeline>&ids_only=1
+    Calls: GET {base_url}/jobs?pipeline__slug=<pipeline>&ids_only=1
 
-    Returns a list of job ids (possibly empty) on error.
+    Returns a list of job ids (possibly empty) on success or error.
     """
     try:
-        url = f"{base_url.rstrip('/')}/api/v2/jobs"
+        # Ensure base_url has trailing slash for proper urljoin behavior
+        if not base_url.endswith("/"):
+            base_url += "/"
+        url = urljoin(base_url, "jobs")
         params = {"pipeline__slug": pipeline_slug, "ids_only": 1, "incomplete_only": 1}
 
         headers = {}
@@ -71,24 +79,29 @@ def _get_jobs(base_url: str, auth_token: str, pipeline_slug: str) -> list:
 
         resp = requests.get(url, params=params, headers=headers, timeout=30)
         resp.raise_for_status()
-        data = resp.json()
 
-        jobs = data.get("results") or []
-        job_ids = [job["id"] for job in jobs]
-        if not isinstance(job_ids, list):
-            logger.warning(f"Unexpected job_ids format from {url}: {type(job_ids)}")
-            return []
-        return job_ids
+        # Parse and validate response with Pydantic
+        jobs_response = AntennaJobsListResponse.model_validate(resp.json())
+        return [job.id for job in jobs_response.results]
     except requests.RequestException as e:
         logger.error(f"Failed to fetch jobs from {base_url}: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Failed to parse jobs response: {e}")
         return []
 
 
 def run_worker(pipelines: List[str]):
     """Run the worker to process images from the REST API queue."""
+    settings = read_settings()
 
-    base_url = os.environ.get("ANTENNA_API_BASE_URL", "http://localhost:8000")
-    auth_token = os.environ.get("ANTENNA_API_TOKEN", "")
+    # Validate auth token
+    if not settings.antenna_api_auth_token:
+        raise ValueError(
+            "AMI_ANTENNA_API_AUTH_TOKEN environment variable must be set. "
+            "Get your auth token from your Antenna project settings."
+        )
+
     # TODO CGJS: Support a list of pipelines
     while True:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
@@ -98,15 +111,16 @@ def run_worker(pipelines: List[str]):
         for pipeline in pipelines:
             logger.info(f"Checking for jobs for pipeline {pipeline}")
             jobs = _get_jobs(
-                base_url=base_url, auth_token=auth_token, pipeline_slug=pipeline
+                base_url=settings.antenna_api_base_url,
+                auth_token=settings.antenna_api_auth_token,
+                pipeline_slug=pipeline,
             )
             for job_id in jobs:
                 logger.info(f"Processing job {job_id} with pipeline {pipeline}")
                 any_work_done = _process_job(
                     pipeline=pipeline,
                     job_id=job_id,
-                    base_url=base_url,
-                    auth_token=auth_token,
+                    settings=settings,
                 )
                 any_jobs = any_jobs or any_work_done
 
@@ -116,22 +130,18 @@ def run_worker(pipelines: List[str]):
 
 
 @torch.no_grad()
-def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str) -> bool:
+def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
     """Run the worker to process images from the REST API queue.
 
     Args:
         pipeline: Pipeline name to use for processing (e.g., moth_binary, panama_moths_2024)
         job_id: Job ID to process
-        base_url: Base URL for the API
-        auth_token: API authentication token
+        settings: Settings object with antenna_api_* configuration
     Returns:
         True if any work was done, False otherwise
     """
-    assert auth_token is not None, "ANTENNA_API_TOKEN environment variable not set"
     did_work = False
-    loader = get_rest_dataloader(
-        job_id=job_id, base_url=base_url, auth_token=auth_token
-    )
+    loader = get_rest_dataloader(job_id=job_id, settings=settings)
     classifier = None
     detector = None
 
@@ -264,7 +274,12 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str) -> 
                     }
                 )
 
-        post_batch_results(base_url, job_id, batch_results, auth_token)
+        post_batch_results(
+            settings.antenna_api_base_url,
+            job_id,
+            batch_results,
+            settings.antenna_api_auth_token,
+        )
         st, t = t("Finished posting results")
         total_save_time += st
 
