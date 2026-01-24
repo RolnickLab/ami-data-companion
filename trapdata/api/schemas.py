@@ -282,7 +282,7 @@ class PipelineResultsResponse(pydantic.BaseModel):
     config: PipelineConfigRequest = PipelineConfigRequest()
 
 
-class PipelineProcessingTask(pydantic.BaseModel):
+class AntennaPipelineProcessingTask(pydantic.BaseModel):
     """
     A task representing a single image or detection to be processed in an async pipeline.
     """
@@ -294,6 +294,24 @@ class PipelineProcessingTask(pydantic.BaseModel):
     # TODO: Do we need these?
     # detections: list[DetectionRequest] | None = None
     # config: PipelineRequestConfigParameters | dict | None = None
+
+
+class AntennaJobListItem(pydantic.BaseModel):
+    """A single job item from the Antenna jobs list API response."""
+
+    id: int
+
+
+class AntennaJobsListResponse(pydantic.BaseModel):
+    """Response from Antenna API GET /api/v2/jobs with ids_only=1."""
+
+    results: list[AntennaJobListItem]
+
+
+class AntennaTasksListResponse(pydantic.BaseModel):
+    """Response from Antenna API GET /api/v2/jobs/{job_id}/tasks."""
+
+    tasks: list[AntennaPipelineProcessingTask]
 
 
 class PipelineStageParam(pydantic.BaseModel):
