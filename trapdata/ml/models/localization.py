@@ -1,6 +1,5 @@
 import pathlib
 
-import PIL.Image
 import torch
 import torchvision
 import torchvision.models.detection.anchor_utils
@@ -206,9 +205,13 @@ class MothObjectDetector_FasterRCNN_2021(ObjectDetector):
         "Accurate but can be slow on a machine without GPU."
     )
     bbox_score_threshold = 0.99
+    box_detections_per_img = 500
 
     def get_model(self):
-        model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=None)
+        model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
+            weights=None,
+            box_detections_per_img=self.box_detections_per_img,
+        )
         num_classes = 2  # 1 class (object) + background
         in_features = model.roi_heads.box_predictor.cls_score.in_features
         model.roi_heads.box_predictor = (
@@ -249,6 +252,7 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
         "Accurate but can be slow on a machine without GPU."
     )
     bbox_score_threshold = 0.80
+    box_detections_per_img = 500
 
     def get_model(self):
         num_classes = 2  # 1 class (object) + background
@@ -257,6 +261,7 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
             name="fasterrcnn_resnet50_fpn",
             num_classes=num_classes,
             weights=None,
+            box_detections_per_img=self.box_detections_per_img,
         )
         checkpoint = torch.load(self.weights, map_location=self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
@@ -293,6 +298,7 @@ class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
     trainable_backbone_layers = 6  # all layers are trained
     anchor_sizes = (64, 128, 256, 512)
     num_classes = 2
+    box_detections_per_img = 500
 
     def get_model(self):
         norm_layer = torch.nn.BatchNorm2d
@@ -311,6 +317,7 @@ class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
                 anchor_sizes, aspect_ratios
             ),
             rpn_score_thresh=0.05,
+            box_detections_per_img=self.box_detections_per_img,
         )
         checkpoint = torch.load(self.weights, map_location=self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint

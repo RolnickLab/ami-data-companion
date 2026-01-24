@@ -1,6 +1,7 @@
 import datetime
 import subprocess
 import sys
+from typing import Annotated
 
 import typer
 from rich import print
@@ -43,15 +44,18 @@ def pipeline():
 
 
 @cli.command()
-def species_by_track(event_day: datetime.datetime):
-    """"""
+def species_by_track(
+    event_day: Annotated[datetime.datetime, typer.Argument(formats=["%Y-%m-%d"])]
+):
+    """Get unique species by track for a specific event day."""
     Session = get_session_class(settings.database_url)
     session = Session()
+    event_date = event_day.date()
     event = session.execute(
         select(MonitoringSession).where(
             # MonitoringSession.base_directory="",  @TODO retrieve from settings?
             MonitoringSession.day
-            == event_day.date(),
+            == event_date,
         )
     ).scalar_one()
     print(f"Matched of event: {event}")
