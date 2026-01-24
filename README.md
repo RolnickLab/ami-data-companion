@@ -234,6 +234,47 @@ ami api
 
 View the interactive API docs at http://localhost:2000/
 
+## Running the Antenna Worker
+
+The worker polls the Antenna platform API for queued image processing jobs, downloads images, runs detection and classification, and posts results back to Antenna.
+
+**Setup:**
+
+1. Get your Antenna auth token from your Antenna project settings
+2. Configure the worker in `.env`:
+
+```sh
+AMI_ANTENNA_API_BASE_URL=https://antenna.insectai.org/api/v2  # Or your Antenna instance
+AMI_ANTENNA_API_AUTH_TOKEN=your_token_here
+AMI_ANTENNA_API_BATCH_SIZE=4
+AMI_NUM_WORKERS=2  # Safe for REST API (atomic task dequeue)
+```
+
+**Run the worker:**
+
+```sh
+ami worker --pipelines moth_binary
+# Or multiple pipelines:
+ami worker --pipelines moth_binary --pipelines panama_moths_2024
+```
+
+The worker will:
+
+1. Poll Antenna for jobs matching the specified pipeline(s)
+2. Download images from the job queue
+3. Run detection and classification
+4. Post results back to Antenna
+5. Repeat until queue is empty, then sleep and poll again
+
+**Notes:**
+
+- Multiple workers can run in parallel (they won't duplicate work)
+- Auth token ties results to your Antenna project
+- Worker continues running until interrupted (Ctrl+C)
+- Safe to run multiple workers on different machines
+
+For more information, see the [Antenna platform documentation](https://github.com/RolnickLab/antenna).
+
 ## Web UI demo (Gradio)
 
 A simple web UI is also available to test the inference pipeline. This is a quick way to test models on a remote server via a web browser.
