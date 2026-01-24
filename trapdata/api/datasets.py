@@ -1,6 +1,8 @@
 import os
+import time
 import typing
 from io import BytesIO
+from urllib.parse import urljoin
 
 import requests
 import torch
@@ -10,7 +12,15 @@ from PIL import Image
 
 from trapdata.common.logs import logger
 
-from .schemas import DetectionResponse, PipelineProcessingTask, SourceImage
+from .schemas import (
+    AntennaPipelineProcessingTask,
+    AntennaTasksListResponse,
+    DetectionResponse,
+    SourceImage,
+)
+
+if typing.TYPE_CHECKING:
+    from trapdata.settings import Settings
 
 
 class LocalizationImageDataset(torch.utils.data.Dataset):
@@ -99,6 +109,16 @@ class RESTDataset(torch.utils.data.IterableDataset):
 
     The dataset continuously polls the API for tasks, loads the associated images,
     and yields them as PyTorch tensors along with metadata.
+
+    IMPORTANT: This dataset assumes the API endpoint atomically removes tasks from
+    the queue when fetched (like RabbitMQ, SQS, Redis LPOP). This means multiple
+    DataLoader workers are SAFE and won't process duplicate tasks. Each worker
+    independently fetches different tasks from the shared queue.
+
+    With num_workers > 0:
+        Worker 1: GET /tasks → receives [1,2,3,4], removed from queue
+        Worker 2: GET /tasks → receives [5,6,7,8], removed from queue
+        No duplicates, safe for parallel processing
     """
 
     def __init__(
@@ -113,48 +133,48 @@ class RESTDataset(torch.utils.data.IterableDataset):
         Initialize the REST dataset.
 
         Args:
-            base_url: Base URL for the API (e.g., "http://localhost:8000")
+            base_url: Base URL for the API including /api/v2 (e.g., "http://localhost:8000/api/v2")
             job_id: The job ID to fetch tasks for
             batch_size: Number of tasks to request per batch
             image_transforms: Optional transforms to apply to loaded images
-            auth_token: API authentication token. If not provided, reads from
-                       ANTENNA_API_TOKEN environment variable
+            auth_token: API authentication token
         """
         super().__init__()
-        self.base_url = base_url.rstrip("/")
+        # Ensure base_url has trailing slash for proper urljoin behavior
+        self.base_url = base_url if base_url.endswith("/") else base_url + "/"
         self.job_id = job_id
         self.batch_size = batch_size
         self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
         self.auth_token = auth_token or os.environ.get("ANTENNA_API_TOKEN")
 
-    def _fetch_tasks(self) -> list[PipelineProcessingTask]:
+    def _fetch_tasks(self) -> list[AntennaPipelineProcessingTask]:
         """
         Fetch a batch of tasks from the REST API.
 
         Returns:
-            List of task dictionaries from the API response
+            List of tasks (possibly empty if queue is drained)
+
+        Raises:
+            requests.RequestException: If the request fails (network error, etc.)
         """
-        url = f"{self.base_url}/api/v2/jobs/{self.job_id}/tasks"
+        url = urljoin(self.base_url, f"jobs/{self.job_id}/tasks")
         params = {"batch": self.batch_size}
 
         headers = {}
         if self.auth_token:
             headers["Authorization"] = f"Token {self.auth_token}"
 
-        try:
-            response = requests.get(
-                url,
-                params=params,
-                timeout=30,
-                headers=headers,
-            )
-            response.raise_for_status()
-            data = response.json()
-            tasks = [PipelineProcessingTask(**task) for task in data.get("tasks", [])]
-            return tasks
-        except requests.RequestException as e:
-            logger.error(f"Failed to fetch tasks from {url}: {e}")
-            return []
+        response = requests.get(
+            url,
+            params=params,
+            timeout=30,
+            headers=headers,
+        )
+        response.raise_for_status()
+
+        # Parse and validate response with Pydantic
+        tasks_response = AntennaTasksListResponse.model_validate(response.json())
+        return tasks_response.tasks  # Empty list is valid (queue drained)
 
     def _load_image(self, image_url: str) -> typing.Optional[torch.Tensor]:
         """
@@ -205,14 +225,20 @@ class RESTDataset(torch.utils.data.IterableDataset):
             )
 
             while True:
-                tasks = self._fetch_tasks()
-                # _, t = log_time()
-                # _, t = t(f"Worker {worker_id}: Fetched {len(tasks)} tasks from API")
+                try:
+                    tasks = self._fetch_tasks()
+                except requests.RequestException as e:
+                    # Fetch failed - retry after delay
+                    logger.warning(
+                        f"Worker {worker_id}: Fetch failed ({e}), retrying in 5s"
+                    )
+                    time.sleep(5)
+                    continue
 
-                # If no tasks returned, dataset is finished
                 if not tasks:
+                    # Queue is empty - job complete
                     logger.info(
-                        f"Worker {worker_id}: No more tasks for job {self.job_id}, terminating"
+                        f"Worker {worker_id}: No more tasks for job {self.job_id}"
                     )
                     break
 
@@ -241,7 +267,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
                         "image_url": task.image_url,
                     }
                     if errors:
-                        row["error"] = ("; ".join(errors) if errors else None,)
+                        row["error"] = "; ".join(errors) if errors else None
                     yield row
 
             logger.info(f"Worker {worker_id}: Iterator finished")
@@ -255,11 +281,16 @@ def rest_collate_fn(batch: list[dict]) -> dict:
     Custom collate function that separates failed and successful items.
 
     Returns a dict with:
-        - images: List of valid tensors
-        - reply_subjects: List of reply subjects for valid images
-        - image_ids: List of image IDs for valid images
-        - image_urls: List of image URLs for valid images
+        - image: Stacked tensor of valid images (only present if there are successful items)
+        - reply_subject: List of reply subjects for valid images
+        - image_id: List of image IDs for valid images
+        - image_url: List of image URLs for valid images
         - failed_items: List of dicts with metadata for failed items
+
+    When all items in the batch have failed, the returned dict will only contain:
+        - reply_subject: empty list
+        - image_id: empty list
+        - failed_items: list of failure metadata
     """
     successful = []
     failed = []
@@ -301,28 +332,31 @@ def rest_collate_fn(batch: list[dict]) -> dict:
 
 def get_rest_dataloader(
     job_id: int,
-    base_url: str = "http://localhost:8000",
-    batch_size: int = 4,
-    num_workers: int = 2,
-    auth_token: typing.Optional[str] = None,
+    settings: "Settings",
 ) -> torch.utils.data.DataLoader:
     """
-    Args:
-        base_url: Base URL for the REST API (default: http://localhost:8000)
-        job_id: Job id to fetch tasks for (default: 11)
-        batch_size: Number of tasks/images per batch (default: 4)
-        num_workers: Number of DataLoader workers (default: 2)
-    """
-    assert base_url is not None, "Base URL must be provided"
-    base_url = base_url.rstrip("/")
+    Create a DataLoader that fetches tasks from Antenna API.
 
+    Note: num_workers > 0 is SAFE here (unlike local file reading) because:
+    - Antenna API provides atomic task dequeue (work queue pattern)
+    - No shared file handles between workers
+    - Each worker gets different tasks automatically
+    - Parallel downloads improve throughput for I/O-bound work
+
+    Args:
+        job_id: Job ID to fetch tasks for
+        settings: Settings object with antenna_api_* configuration
+    """
     dataset = RESTDataset(
-        base_url=base_url, job_id=job_id, batch_size=batch_size, auth_token=auth_token
+        base_url=settings.antenna_api_base_url,
+        job_id=job_id,
+        batch_size=settings.antenna_api_batch_size,
+        auth_token=settings.antenna_api_auth_token,
     )
 
     return torch.utils.data.DataLoader(
         dataset,
-        batch_size=batch_size,
-        num_workers=num_workers,
+        batch_size=settings.antenna_api_batch_size,
+        num_workers=settings.num_workers,
         collate_fn=rest_collate_fn,
     )
