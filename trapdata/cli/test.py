@@ -1,6 +1,7 @@
 import datetime
 import subprocess
 import sys
+from typing import Annotated
 
 import typer
 from rich import print
@@ -43,12 +44,13 @@ def pipeline():
 
 
 @cli.command()
-def species_by_track(event_day: str = typer.Argument(..., help="Event day in YYYY-MM-DD format")):
+def species_by_track(
+    event_day: Annotated[datetime.datetime, typer.Argument(formats=["%Y-%m-%d"])]
+):
     """Get unique species by track for a specific event day."""
     Session = get_session_class(settings.database_url)
     session = Session()
-    # Parse the date string
-    event_date = datetime.datetime.strptime(event_day, "%Y-%m-%d").date()
+    event_date = event_day.date()
     event = session.execute(
         select(MonitoringSession).where(
             # MonitoringSession.base_directory="",  @TODO retrieve from settings?
