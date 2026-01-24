@@ -279,15 +279,15 @@ def rest_collate_fn(batch: list[dict]) -> dict:
     Custom collate function that separates failed and successful items.
 
     Returns a dict with:
-        - image: Stacked tensor of valid images (only present if there are successful items)
-        - reply_subject: List of reply subjects for valid images
-        - image_id: List of image IDs for valid images
-        - image_url: List of image URLs for valid images
+        - images: Stacked tensor of valid images (only present if there are successful items)
+        - reply_subjects: List of reply subjects for valid images
+        - image_ids: List of image IDs for valid images
+        - image_urls: List of image URLs for valid images
         - failed_items: List of dicts with metadata for failed items
 
     When all items in the batch have failed, the returned dict will only contain:
-        - reply_subject: empty list
-        - image_id: empty list
+        - reply_subjects: empty list
+        - image_ids: empty list
         - failed_items: list of failure metadata
     """
     successful = []
@@ -311,16 +311,16 @@ def rest_collate_fn(batch: list[dict]) -> dict:
     # Collate successful items
     if successful:
         result = {
-            "image": torch.stack([item["image"] for item in successful]),
-            "reply_subject": [item["reply_subject"] for item in successful],
-            "image_id": [item["image_id"] for item in successful],
-            "image_url": [item.get("image_url") for item in successful],
+            "images": torch.stack([item["image"] for item in successful]),
+            "reply_subjects": [item["reply_subject"] for item in successful],
+            "image_ids": [item["image_id"] for item in successful],
+            "image_urls": [item.get("image_url") for item in successful],
         }
     else:
         # Empty batch - all failed
         result = {
-            "reply_subject": [],
-            "image_id": [],
+            "reply_subjects": [],
+            "image_ids": [],
         }
 
     result["failed_items"] = failed

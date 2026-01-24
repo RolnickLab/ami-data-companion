@@ -166,10 +166,10 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
         did_work = True
 
         # Extract data from dictionary batch
-        batch_input = batch.get("image", [])
-        item_ids = batch.get("image_id", [])
-        reply_subjects = batch.get("reply_subject", [None] * len(batch_input))
-        image_urls = batch.get("image_url", [None] * len(batch_input))
+        images = batch.get("images", [])
+        image_ids = batch.get("image_ids", [])
+        reply_subjects = batch.get("reply_subjects", [None] * len(images))
+        image_urls = batch.get("image_urls", [None] * len(images))
 
         # Track start time for this batch
         batch_start_time = datetime.datetime.now()
@@ -177,20 +177,20 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
         logger.info(f"Processing batch {i+1}")
         # output is dict of "boxes", "labels", "scores"
         batch_output = []
-        if len(batch_input) > 0:
-            batch_output = detector.predict_batch(batch_input)
+        if len(images) > 0:
+            batch_output = detector.predict_batch(images)
 
         items += len(batch_output)
         logger.info(f"Total items processed so far: {items}")
         batch_output = list(detector.post_process_batch(batch_output))
 
-        # Convert item_ids to list if needed
-        if isinstance(item_ids, (np.ndarray, torch.Tensor)):
-            item_ids = item_ids.tolist()
+        # Convert image_ids to list if needed
+        if isinstance(image_ids, (np.ndarray, torch.Tensor)):
+            image_ids = image_ids.tolist()
 
         # TODO CGJS: Add seconds per item calculation for both detector and classifier
         detector.save_results(
-            item_ids=item_ids,
+            item_ids=image_ids,
             batch_output=batch_output,
             seconds_per_item=0,
         )
@@ -199,9 +199,9 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
 
         # Group detections by image_id
         image_detections: dict[str, list[DetectionResponse]] = {
-            img_id: [] for img_id in item_ids
+            img_id: [] for img_id in image_ids
         }
-        image_tensors = dict(zip(item_ids, batch_input))
+        image_tensors = dict(zip(image_ids, images))
 
         classifier.reset(detector.results)
 
@@ -234,7 +234,7 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
         # Post results back to the API with PipelineResponse for each image
         batch_results = []
         for reply_subject, image_id, image_url in zip(
-            reply_subjects, item_ids, image_urls
+            reply_subjects, image_ids, image_urls
         ):
             # Create SourceImageResponse for this image
             source_image = SourceImageResponse(id=image_id, url=image_url)
@@ -244,7 +244,7 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
                 pipeline=pipeline,
                 source_images=[source_image],
                 detections=image_detections[image_id],
-                total_time=batch_elapsed / len(item_ids),  # Approximate time per image
+                total_time=batch_elapsed / len(image_ids),  # Approximate time per image
             )
 
             batch_results.append(
