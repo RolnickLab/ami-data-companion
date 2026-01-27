@@ -1,5 +1,5 @@
 import pathlib
-from typing import List, Optional
+from typing import Annotated, Optional
 
 import typer
 
@@ -10,7 +10,8 @@ from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import add_monitoring_session_to_queue
 from trapdata.ml.pipeline import start_pipeline
 
-cli = typer.Typer(no_args_is_help=True)
+# don't display variable values in errors:
+cli = typer.Typer(no_args_is_help=True, pretty_exceptions_show_locals=False)
 cli.add_typer(export.cli, name="export", help="Export data in various formats")
 cli.add_typer(shell.cli, name="shell", help="Open an interactive shell")
 cli.add_typer(test.cli, name="test", help="Run tests")
@@ -99,14 +100,19 @@ def run_api(port: int = 2000):
 
 @cli.command("worker")
 def worker(
-    pipelines: List[str] = typer.Option(
-        ["moth_binary"],  # Default to a list with one pipeline
-        help="List of pipelines to use for processing (e.g., moth_binary, panama_moths_2024, etc.)",
-    )
+    pipelines: Annotated[
+        list[str] | None,
+        typer.Option(
+            # help="List of pipelines to use for processing (e.g., moth_binary, panama_moths_2024, etc.) or all if not specified."
+        ),
+    ] = None,
 ):
     """
     Run the worker to process images from the REST API queue.
     """
+    if not pipelines:
+        pipelines = list(CLASSIFIER_CHOICES.keys())
+
     # Validate that each pipeline is in CLASSIFIER_CHOICES
     invalid_pipelines = [
         pipeline for pipeline in pipelines if pipeline not in CLASSIFIER_CHOICES.keys()
