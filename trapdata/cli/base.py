@@ -103,7 +103,7 @@ def worker(
     pipelines: Annotated[
         list[str] | None,
         typer.Option(
-            # help="List of pipelines to use for processing (e.g., moth_binary, panama_moths_2024, etc.) or all if not specified."
+            help="List of pipelines to use for processing (e.g., moth_binary, panama_moths_2024, etc.) or all if not specified."
         ),
     ] = None,
 ):
