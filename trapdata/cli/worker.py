@@ -14,6 +14,9 @@ from trapdata.api.api import CLASSIFIER_CHOICES, initialize_service_info
 from trapdata.api.datasets import get_rest_dataloader
 from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
+    AntennaJobsListResponse,
+    AntennaTaskResult,
+    AntennaTaskResultError,
     AsyncPipelineRegistrationRequest,
     DetectionResponse,
     PipelineResultsResponse,
@@ -21,12 +24,13 @@ from trapdata.api.schemas import (
 )
 from trapdata.common.logs import logger
 from trapdata.common.utils import log_time
+from trapdata.settings import Settings, read_settings
 
 SLEEP_TIME_SECONDS = 5
 
 
 def post_batch_results(
-    base_url: str, job_id: int, results: list[dict], auth_token: str = None
+    base_url: str, job_id: int, results: list[AntennaTaskResult], auth_token: str = None
 ) -> bool:
     """
     Post batch results back to the API.
@@ -34,20 +38,22 @@ def post_batch_results(
     Args:
         base_url: Base URL for the API
         job_id: Job ID
-        results: List of dicts containing reply_subject and image_id
+        results: List of AntennaTaskResult objects
         auth_token: API authentication token
 
     Returns:
         True if successful, False otherwise
     """
-    url = f"{base_url}/api/v2/jobs/{job_id}/result/"
+    url = f"{base_url.rstrip('/')}/jobs/{job_id}/result/"
 
     headers = {}
     if auth_token:
         headers["Authorization"] = f"Token {auth_token}"
 
+    payload = [r.model_dump(mode="json") for r in results]
+
     try:
-        response = requests.post(url, json=results, headers=headers, timeout=60)
+        response = requests.post(url, json=payload, headers=headers, timeout=60)
         response.raise_for_status()
         logger.info(f"Successfully posted {len(results)} results to {url}")
         return True
@@ -56,15 +62,15 @@ def post_batch_results(
         return False
 
 
-def _get_jobs(base_url: str, auth_token: str, pipeline_slug: str) -> list:
+def _get_jobs(base_url: str, auth_token: str, pipeline_slug: str) -> list[int]:
     """Fetch job ids from the API for the given pipeline.
 
-    Calls: GET {base_url}/api/v2/jobs?pipeline=<pipeline>&ids_only=1
+    Calls: GET {base_url}/jobs?pipeline__slug=<pipeline>&ids_only=1
 
-    Returns a list of job ids (possibly empty) on error.
+    Returns a list of job ids (possibly empty) on success or error.
     """
     try:
-        url = f"{base_url.rstrip('/')}/api/v2/jobs"
+        url = f"{base_url.rstrip('/')}/jobs"
         params = {"pipeline__slug": pipeline_slug, "ids_only": 1, "incomplete_only": 1}
 
         headers = {}
@@ -73,24 +79,29 @@ def _get_jobs(base_url: str, auth_token: str, pipeline_slug: str) -> list:
 
         resp = requests.get(url, params=params, headers=headers, timeout=30)
         resp.raise_for_status()
-        data = resp.json()
 
-        jobs = data.get("results") or []
-        job_ids = [job["id"] for job in jobs]
-        if not isinstance(job_ids, list):
-            logger.warning(f"Unexpected job_ids format from {url}: {type(job_ids)}")
-            return []
-        return job_ids
+        # Parse and validate response with Pydantic
+        jobs_response = AntennaJobsListResponse.model_validate(resp.json())
+        return [job.id for job in jobs_response.results]
     except requests.RequestException as e:
         logger.error(f"Failed to fetch jobs from {base_url}: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Failed to parse jobs response: {e}")
         return []
 
 
 def run_worker(pipelines: List[str]):
     """Run the worker to process images from the REST API queue."""
+    settings = read_settings()
 
-    base_url = os.environ.get("ANTENNA_API_BASE_URL", "http://localhost:8000")
-    auth_token = os.environ.get("ANTENNA_API_TOKEN", "")
+    # Validate auth token
+    if not settings.antenna_api_auth_token:
+        raise ValueError(
+            "AMI_ANTENNA_API_AUTH_TOKEN environment variable must be set. "
+            "Get your auth token from your Antenna project settings."
+        )
+
     # TODO CGJS: Support a list of pipelines
     while True:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
@@ -100,15 +111,16 @@ def run_worker(pipelines: List[str]):
         for pipeline in pipelines:
             logger.info(f"Checking for jobs for pipeline {pipeline}")
             jobs = _get_jobs(
-                base_url=base_url, auth_token=auth_token, pipeline_slug=pipeline
+                base_url=settings.antenna_api_base_url,
+                auth_token=settings.antenna_api_auth_token,
+                pipeline_slug=pipeline,
             )
             for job_id in jobs:
                 logger.info(f"Processing job {job_id} with pipeline {pipeline}")
                 any_work_done = _process_job(
                     pipeline=pipeline,
                     job_id=job_id,
-                    base_url=base_url,
-                    auth_token=auth_token,
+                    settings=settings,
                 )
                 any_jobs = any_jobs or any_work_done
 
@@ -118,22 +130,18 @@ def run_worker(pipelines: List[str]):
 
 
 @torch.no_grad()
-def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str) -> bool:
+def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
     """Run the worker to process images from the REST API queue.
 
     Args:
         pipeline: Pipeline name to use for processing (e.g., moth_binary, panama_moths_2024)
         job_id: Job ID to process
-        base_url: Base URL for the API
-        auth_token: API authentication token
+        settings: Settings object with antenna_api_* configuration
     Returns:
         True if any work was done, False otherwise
     """
-    assert auth_token is not None, "ANTENNA_API_TOKEN environment variable not set"
     did_work = False
-    loader = get_rest_dataloader(
-        job_id=job_id, base_url=base_url, auth_token=auth_token
-    )
+    loader = get_rest_dataloader(job_id=job_id, settings=settings)
     classifier = None
     detector = None
 
@@ -151,7 +159,7 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str) -> 
         dt, t = t("Finished loading batch")
         total_dl_time += dt
         if not batch:
-            logger.warning(f"Batch {i+1} is empty, skipping")
+            logger.warning(f"Batch {i + 1} is empty, skipping")
             continue
 
         # Defer instantiation of detector and classifier until we have data
@@ -165,31 +173,31 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str) -> 
         did_work = True
 
         # Extract data from dictionary batch
-        batch_input = batch.get("image", [])
-        item_ids = batch.get("image_id", [])
-        reply_subjects = batch.get("reply_subject", [None] * len(batch_input))
-        image_urls = batch.get("image_url", [None] * len(batch_input))
+        images = batch.get("images", [])
+        image_ids = batch.get("image_ids", [])
+        reply_subjects = batch.get("reply_subjects", [None] * len(images))
+        image_urls = batch.get("image_urls", [None] * len(images))
 
         # Track start time for this batch
         batch_start_time = datetime.datetime.now()
 
-        logger.info(f"Processing batch {i+1}")
+        logger.info(f"Processing batch {i + 1}")
         # output is dict of "boxes", "labels", "scores"
         batch_output = []
-        if len(batch_input) > 0:
-            batch_output = detector.predict_batch(batch_input)
+        if len(images) > 0:
+            batch_output = detector.predict_batch(images)
 
         items += len(batch_output)
         logger.info(f"Total items processed so far: {items}")
         batch_output = list(detector.post_process_batch(batch_output))
 
-        # Convert item_ids to list if needed
-        if isinstance(item_ids, (np.ndarray, torch.Tensor)):
-            item_ids = item_ids.tolist()
+        # Convert image_ids to list if needed
+        if isinstance(image_ids, (np.ndarray, torch.Tensor)):
+            image_ids = image_ids.tolist()
 
         # TODO CGJS: Add seconds per item calculation for both detector and classifier
         detector.save_results(
-            item_ids=item_ids,
+            item_ids=image_ids,
             batch_output=batch_output,
             seconds_per_item=0,
         )
@@ -198,9 +206,9 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str) -> 
 
         # Group detections by image_id
         image_detections: dict[str, list[DetectionResponse]] = {
-            img_id: [] for img_id in item_ids
+            img_id: [] for img_id in image_ids
         }
-        image_tensors = dict(zip(item_ids, batch_input))
+        image_tensors = dict(zip(image_ids, images))
 
         classifier.reset(detector.results)
 
@@ -231,9 +239,9 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str) -> 
         batch_elapsed = (batch_end_time - batch_start_time).total_seconds()
 
         # Post results back to the API with PipelineResponse for each image
-        batch_results = []
+        batch_results: list[AntennaTaskResult] = []
         for reply_subject, image_id, image_url in zip(
-            reply_subjects, item_ids, image_urls
+            reply_subjects, image_ids, image_urls
         ):
             # Create SourceImageResponse for this image
             source_image = SourceImageResponse(id=image_id, url=image_url)
@@ -243,30 +251,34 @@ def _process_job(pipeline: str, job_id: int, base_url: str, auth_token: str) -> 
                 pipeline=pipeline,
                 source_images=[source_image],
                 detections=image_detections[image_id],
-                total_time=batch_elapsed / len(item_ids),  # Approximate time per image
+                total_time=batch_elapsed / len(image_ids),  # Approximate time per image
             )
 
             batch_results.append(
-                {
-                    "reply_subject": reply_subject,
-                    "result": pipeline_response.model_dump(mode="json"),
-                }
+                AntennaTaskResult(
+                    reply_subject=reply_subject,
+                    result=pipeline_response,
+                )
             )
         failed_items = batch.get("failed_items")
         if failed_items:
             for failed_item in failed_items:
                 batch_results.append(
-                    {
-                        "reply_subject": failed_item.get("reply_subject"),
-                        # TODO CGJS: Should we extend PipelineResultsResponse to include errors?
-                        "result": {
-                            "error": failed_item.get("error", "Unknown error"),
-                            "image_id": failed_item.get("image_id"),
-                        },
-                    }
+                    AntennaTaskResult(
+                        reply_subject=failed_item.get("reply_subject"),
+                        result=AntennaTaskResultError(
+                            error=failed_item.get("error", "Unknown error"),
+                            image_id=failed_item.get("image_id"),
+                        ),
+                    )
                 )
 
-        post_batch_results(base_url, job_id, batch_results, auth_token)
+        post_batch_results(
+            settings.antenna_api_base_url,
+            job_id,
+            batch_results,
+            settings.antenna_api_auth_token,
+        )
         st, t = t("Finished posting results")
         total_save_time += st
 
@@ -316,7 +328,7 @@ def register_pipelines_for_project(
     auth_token: str,
     project_id: int,
     service_name: str,
-    pipeline_configs: list
+    pipeline_configs: list,
 ) -> tuple[bool, str]:
     """
     Register all available pipelines for a specific project.
@@ -334,8 +346,7 @@ def register_pipelines_for_project(
     try:
         # Create the registration request
         registration_request = AsyncPipelineRegistrationRequest(
-            processing_service_name=service_name,
-            pipelines=pipeline_configs
+            processing_service_name=service_name, pipelines=pipeline_configs
         )
 
         # Make the API call
@@ -348,7 +359,7 @@ def register_pipelines_for_project(
             url,
             json=registration_request.model_dump(mode="json"),
             headers=headers,
-            timeout=60
+            timeout=60,
         )
         response.raise_for_status()
 
@@ -363,7 +374,7 @@ def register_pipelines_for_project(
             try:
                 error_data = e.response.json()
                 error_detail = error_data.get("detail", str(e))
-            except:
+            except requests.RequestException:
                 error_detail = str(e)
             return False, f"Registration failed: {error_detail}"
         else:
@@ -373,10 +384,10 @@ def register_pipelines_for_project(
 
 
 def register_pipelines(
-    project_ids: list[int] = None,
-    service_name: str = None,
-    base_url: str = None,
-    auth_token: str = None
+    project_ids: list[int],
+    service_name: str,
+    base_url: str | None = None,
+    auth_token: str | None = None,
 ) -> None:
     """
     Register pipelines for specified projects or all accessible projects.
@@ -409,7 +420,9 @@ def register_pipelines(
     projects_to_process = []
     if project_ids:
         # Use specified project IDs
-        projects_to_process = [{"id": pid, "name": f"Project {pid}"} for pid in project_ids]
+        projects_to_process = [
+            {"id": pid, "name": f"Project {pid}"} for pid in project_ids
+        ]
         logger.info(f"Registering pipelines for specified projects: {project_ids}")
     else:
         # Fetch all accessible projects
@@ -438,14 +451,16 @@ def register_pipelines(
         project_id = project["id"]
         project_name = project.get("name", f"Project {project_id}")
 
-        logger.info(f"Registering pipelines for project {project_id} ({project_name})...")
+        logger.info(
+            f"Registering pipelines for project {project_id} ({project_name})..."
+        )
 
         success, message = register_pipelines_for_project(
             base_url=base_url,
             auth_token=auth_token,
             project_id=project_id,
             service_name=full_service_name,
-            pipeline_configs=pipeline_configs
+            pipeline_configs=pipeline_configs,
         )
 
         if success:
@@ -459,7 +474,7 @@ def register_pipelines(
                 logger.error(f"✗ Project {project_id} ({project_name}): {message}")
 
     # Summary report
-    logger.info(f"\n=== Registration Summary ===")
+    logger.info("\n=== Registration Summary ===")
     logger.info(f"Service name: {full_service_name}")
     logger.info(f"Total projects processed: {len(projects_to_process)}")
     logger.info(f"Successful registrations: {len(successful_registrations)}")

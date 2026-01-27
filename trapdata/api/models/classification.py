@@ -147,8 +147,12 @@ class APIMothClassifier(
         )
 
     def update_detection_classification(
-        self, seconds_per_item, image_id, detection_idx, predictions
-    ):
+        self,
+        seconds_per_item: float,
+        image_id: str,
+        detection_idx: int,
+        predictions: ClassifierResult,
+    ) -> DetectionResponse:
         detection = self.detections[detection_idx]
         assert detection.source_image_id == image_id
 
