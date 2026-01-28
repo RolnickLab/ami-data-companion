@@ -354,7 +354,7 @@ def get_rest_dataloader(
 
     return torch.utils.data.DataLoader(
         dataset,
-        batch_size=settings.antenna_api_batch_size,
+        batch_size=settings.localization_batch_size,
         num_workers=settings.num_workers,
         collate_fn=rest_collate_fn,
     )
