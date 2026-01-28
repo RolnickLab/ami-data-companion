@@ -123,7 +123,7 @@ def random_color():
     return color
 
 
-def log_time(start: float = 0, msg: str = None) -> Tuple[float, Callable]:
+def log_time(start: float = 0, msg: str | None = None) -> Tuple[float, Callable]:
     """
     Small helper to measure time between calls.
 
