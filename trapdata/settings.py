@@ -168,18 +168,9 @@ class Settings(BaseSettings):
                 "kivy_type": "numeric",
                 "kivy_section": "antenna",
             },
-            "antenna_api_retry_max": {
-                "title": "Antenna API Max Retries",
-                "description": "Maximum number of retry attempts for failed HTTP requests (5XX errors, network failures)",
-                "kivy_type": "numeric",
-                "kivy_section": "antenna",
-            },
-            "antenna_api_retry_backoff": {
-                "title": "Antenna API Retry Backoff Factor",
-                "description": "Exponential backoff factor for retries (seconds). Delays will be 0.5s, 1s, 2s, etc.",
-                "kivy_type": "numeric",
-                "kivy_section": "antenna",
-            },
+            # Note: antenna_api_retry_max and antenna_api_retry_backoff are intentionally
+            # not exposed in Kivy settings - they're implementation details configurable
+            # via environment variables for ops/debugging purposes only.
         }
 
         @classmethod

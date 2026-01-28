@@ -147,7 +147,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
         self.job_id = job_id
         self.batch_size = batch_size
         self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
-        self.auth_token = auth_token or os.environ.get("ANTENNA_API_TOKEN")
+        self.auth_token = auth_token or os.environ.get("AMI_ANTENNA_API_AUTH_TOKEN")
         self.retry_max = retry_max
         self.retry_backoff = retry_backoff
 

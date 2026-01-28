@@ -2,7 +2,6 @@
 
 import datetime
 import time
-from typing import List
 
 import numpy as np
 import requests
@@ -105,7 +104,7 @@ def _get_jobs(
             return []
 
 
-def run_worker(pipelines: List[str]):
+def run_worker(pipelines: list[str]):
     """Run the worker to process images from the REST API queue."""
     settings = read_settings()
 
@@ -116,7 +115,6 @@ def run_worker(pipelines: List[str]):
             "Get your auth token from your Antenna project settings."
         )
 
-    # TODO CGJS: Support a list of pipelines
     while True:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
         # These should probably come from a dedicated endpoint and should preempt batch jobs under the assumption that they
