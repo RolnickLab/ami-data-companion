@@ -28,89 +28,81 @@ SLEEP_TIME_SECONDS = 5
 
 
 def post_batch_results(
-    base_url: str,
+    settings: Settings,
     job_id: int,
     results: list[AntennaTaskResult],
-    auth_token: str | None = None,
-    retry_max: int = 3,
-    retry_backoff: float = 0.5,
 ) -> bool:
     """
     Post batch results back to the API.
 
     Args:
-        base_url: Base URL for the API
+        settings: Settings object with antenna_api_* configuration
         job_id: Job ID
         results: List of AntennaTaskResult objects
-        auth_token: API authentication token
-        retry_max: Maximum number of retry attempts for failed HTTP requests
-        retry_backoff: Exponential backoff factor for retries (seconds)
 
     Returns:
         True if successful, False otherwise
     """
-    url = f"{base_url.rstrip('/')}/jobs/{job_id}/result/"
+    url = f"{settings.antenna_api_base_url.rstrip('/')}/jobs/{job_id}/result/"
     payload = [r.model_dump(mode="json") for r in results]
 
-    session = get_http_session(
-        auth_token=auth_token,
-        max_retries=retry_max,
-        backoff_factor=retry_backoff,
-    )
-
-    try:
-        response = session.post(url, json=payload, timeout=60)
-        response.raise_for_status()
-        logger.info(f"Successfully posted {len(results)} results to {url}")
-        return True
-    except requests.RequestException as e:
-        logger.error(f"Failed to post results to {url}: {e}")
-        return False
+    with get_http_session(
+        auth_token=settings.antenna_api_auth_token,
+        max_retries=settings.antenna_api_retry_max,
+        backoff_factor=settings.antenna_api_retry_backoff,
+    ) as session:
+        try:
+            response = session.post(url, json=payload, timeout=60)
+            response.raise_for_status()
+            logger.info(f"Successfully posted {len(results)} results to {url}")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"Failed to post results to {url}: {e}")
+            return False
 
 
 def _get_jobs(
-    base_url: str,
-    auth_token: str,
+    settings: Settings,
     pipeline_slug: str,
-    retry_max: int = 3,
-    retry_backoff: float = 0.5,
 ) -> list[int]:
     """Fetch job ids from the API for the given pipeline.
 
     Calls: GET {base_url}/jobs?pipeline__slug=<pipeline>&ids_only=1
 
     Args:
-        base_url: Base URL for the API
-        auth_token: API authentication token
+        settings: Settings object with antenna_api_* configuration
         pipeline_slug: Pipeline slug to filter jobs
-        retry_max: Maximum number of retry attempts for failed HTTP requests
-        retry_backoff: Exponential backoff factor for retries (seconds)
 
     Returns:
         List of job ids (possibly empty) on success or error.
     """
-    session = get_http_session(
-        auth_token=auth_token,
-        max_retries=retry_max,
-        backoff_factor=retry_backoff,
-    )
+    with get_http_session(
+        auth_token=settings.antenna_api_auth_token,
+        max_retries=settings.antenna_api_retry_max,
+        backoff_factor=settings.antenna_api_retry_backoff,
+    ) as session:
+        try:
+            url = f"{settings.antenna_api_base_url.rstrip('/')}/jobs"
+            params = {
+                "pipeline__slug": pipeline_slug,
+                "ids_only": 1,
+                "incomplete_only": 1,
+            }
 
-    try:
-        url = f"{base_url.rstrip('/')}/jobs"
-        params = {"pipeline__slug": pipeline_slug, "ids_only": 1, "incomplete_only": 1}
+            resp = session.get(url, params=params, timeout=30)
+            resp.raise_for_status()
 
-        resp = session.get(url, params=params, timeout=30)
-        resp.raise_for_status()
-
-        # Parse and validate response with Pydantic
-        jobs_response = AntennaJobsListResponse.model_validate(resp.json())
-        return [job.id for job in jobs_response.results]
-    except requests.RequestException as e:
-        logger.error(f"Failed to fetch jobs from {base_url}: {e}")
-        return []
-    except Exception as e:
-        logger.error(f"Failed to parse jobs response: {e}")
-        return []
+            # Parse and validate response with Pydantic
+            jobs_response = AntennaJobsListResponse.model_validate(resp.json())
+            return [job.id for job in jobs_response.results]
+        except requests.RequestException as e:
+            logger.error(
+                f"Failed to fetch jobs from {settings.antenna_api_base_url}: {e}"
+            )
+            return []
+        except Exception as e:
+            logger.error(f"Failed to parse jobs response: {e}")
+            return []
 
 
 def run_worker(pipelines: List[str]):
@@ -132,13 +124,7 @@ def run_worker(pipelines: List[str]):
         any_jobs = False
         for pipeline in pipelines:
             logger.info(f"Checking for jobs for pipeline {pipeline}")
-            jobs = _get_jobs(
-                base_url=settings.antenna_api_base_url,
-                auth_token=settings.antenna_api_auth_token,
-                pipeline_slug=pipeline,
-                retry_max=settings.antenna_api_retry_max,
-                retry_backoff=settings.antenna_api_retry_backoff,
-            )
+            jobs = _get_jobs(settings=settings, pipeline_slug=pipeline)
             for job_id in jobs:
                 logger.info(f"Processing job {job_id} with pipeline {pipeline}")
                 any_work_done = _process_job(
@@ -301,14 +287,7 @@ def _process_job(
                     )
                 )
 
-        post_batch_results(
-            settings.antenna_api_base_url,
-            job_id,
-            batch_results,
-            settings.antenna_api_auth_token,
-            retry_max=settings.antenna_api_retry_max,
-            retry_backoff=settings.antenna_api_retry_backoff,
-        )
+        post_batch_results(settings, job_id, batch_results)
         st, t = t("Finished posting results")
         total_save_time += st
 
