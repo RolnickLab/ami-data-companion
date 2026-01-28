@@ -14,7 +14,6 @@ from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
     AntennaJobsListResponse,
     AntennaTaskResult,
-    AntennaTaskResultError,
     DetectionResponse,
     PipelineResultsResponse,
     SourceImageResponse,
@@ -260,13 +259,22 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
         failed_items = batch.get("failed_items")
         if failed_items:
             for failed_item in failed_items:
+                # Create error response with error in SourceImageResponse
+                error_source_image = SourceImageResponse(
+                    id=failed_item.get("image_id", "unknown"),
+                    url=failed_item.get("image_url"),
+                    error=failed_item.get("error", "Unknown error"),
+                )
+                error_response = PipelineResultsResponse(
+                    pipeline=pipeline,
+                    source_images=[error_source_image],
+                    detections=[],
+                    total_time=0.0,
+                )
                 batch_results.append(
                     AntennaTaskResult(
                         reply_subject=failed_item.get("reply_subject"),
-                        result=AntennaTaskResultError(
-                            error=failed_item.get("error", "Unknown error"),
-                            image_id=failed_item.get("image_id"),
-                        ),
+                        result=error_response,
                     )
                 )
 

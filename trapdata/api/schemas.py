@@ -137,10 +137,16 @@ class SourceImageRequest(pydantic.BaseModel):
 
 
 class SourceImageResponse(pydantic.BaseModel):
+    """Response for a source image, with optional error if processing failed."""
+
     model_config = pydantic.ConfigDict(extra="ignore")
 
     id: str
-    url: str
+    url: str | None = None
+    error: str | None = pydantic.Field(
+        default=None,
+        description="Error message if the image failed to process. None means success.",
+    )
 
 
 class AlgorithmCategoryMapResponse(pydantic.BaseModel):
@@ -342,18 +348,14 @@ class PipelineConfigResponse(pydantic.BaseModel):
     stages: list[PipelineStage] = []
 
 
-class AntennaTaskResultError(pydantic.BaseModel):
-    """Error result for a single Antenna task that failed to process."""
-
-    error: str
-    image_id: str | None = None
-
-
 class AntennaTaskResult(pydantic.BaseModel):
-    """Result for a single Antenna task, either success or error."""
+    """Result for a single Antenna task.
+
+    Check source_images[0].error for failure. If error is None, the task succeeded.
+    """
 
     reply_subject: str | None = None
-    result: PipelineResultsResponse | AntennaTaskResultError
+    result: PipelineResultsResponse
 
 
 class AntennaTaskResults(pydantic.BaseModel):
