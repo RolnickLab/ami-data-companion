@@ -391,3 +391,22 @@ class AsyncPipelineRegistrationRequest(pydantic.BaseModel):
 
     processing_service_name: str
     pipelines: list[PipelineConfigResponse] = []
+
+
+class AsyncPipelineRegistrationResponse(pydantic.BaseModel):
+    """
+    Response from registering pipelines with a project.
+    """
+
+    pipelines_created: list[str] = pydantic.Field(
+        default_factory=list,
+        description="List of pipeline slugs that were created",
+    )
+    pipelines_updated: list[str] = pydantic.Field(
+        default_factory=list,
+        description="List of pipeline slugs that were updated",
+    )
+    processing_service_id: int | None = pydantic.Field(
+        default=None,
+        description="ID of the processing service that was created or updated",
+    )
