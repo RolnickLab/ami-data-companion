@@ -17,6 +17,7 @@ from trapdata.api.schemas import (
     AntennaTaskResult,
     AntennaTaskResultError,
     AsyncPipelineRegistrationRequest,
+    AsyncPipelineRegistrationResponse,
     DetectionResponse,
     PipelineResultsResponse,
     SourceImageResponse,
@@ -307,38 +308,44 @@ def _process_job(
     return did_work
 
 
-def get_user_projects(base_url: str, auth_token: str) -> list[dict]:
+def get_user_projects(
+    base_url: str,
+    auth_token: str,
+    retry_max: int = 3,
+    retry_backoff: float = 0.5,
+) -> list[dict]:
     """
     Fetch all projects the user has access to.
 
     Args:
-        base_url: Base URL for the API
+        base_url: Base URL for the API (should NOT include /api/v2)
         auth_token: API authentication token
+        retry_max: Maximum retry attempts for failed requests
+        retry_backoff: Exponential backoff factor in seconds
 
     Returns:
         List of project dictionaries with 'id' and 'name' fields
     """
-    try:
-        url = f"{base_url.rstrip('/')}/api/v2/projects/"
-        headers = {}
-        if auth_token:
-            headers["Authorization"] = f"Token {auth_token}"
+    with get_http_session(
+        auth_token=auth_token,
+        max_retries=retry_max,
+        backoff_factor=retry_backoff,
+    ) as session:
+        try:
+            url = f"{base_url.rstrip('/')}/projects/"
+            response = session.get(url, timeout=30)
+            response.raise_for_status()
+            data = response.json()
 
-        response = requests.get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-
-        # Handle paginated response
-        projects = data.get("results", [])
-        if isinstance(projects, list):
-            return projects
-        else:
-            logger.warning(f"Unexpected projects format from {url}: {type(projects)}")
+            projects = data.get("results", [])
+            if isinstance(projects, list):
+                return projects
+            else:
+                logger.warning(f"Unexpected projects format from {url}: {type(projects)}")
+                return []
+        except requests.RequestException as e:
+            logger.error(f"Failed to fetch projects from {base_url}: {e}")
             return []
-
-    except requests.RequestException as e:
-        logger.error(f"Failed to fetch projects from {base_url}: {e}")
-        return []
 
 
 def register_pipelines_for_project(
@@ -347,58 +354,57 @@ def register_pipelines_for_project(
     project_id: int,
     service_name: str,
     pipeline_configs: list,
+    retry_max: int = 3,
+    retry_backoff: float = 0.5,
 ) -> tuple[bool, str]:
     """
     Register all available pipelines for a specific project.
 
     Args:
-        base_url: Base URL for the API
+        base_url: Base URL for the API (should NOT include /api/v2)
         auth_token: API authentication token
         project_id: Project ID to register pipelines for
         service_name: Name of the processing service
         pipeline_configs: Pre-built pipeline configuration objects
+        retry_max: Maximum retry attempts for failed requests
+        retry_backoff: Exponential backoff factor in seconds
 
     Returns:
         Tuple of (success: bool, message: str)
     """
-    try:
-        # Create the registration request
-        registration_request = AsyncPipelineRegistrationRequest(
-            processing_service_name=service_name, pipelines=pipeline_configs
-        )
+    with get_http_session(
+        auth_token=auth_token,
+        max_retries=retry_max,
+        backoff_factor=retry_backoff,
+    ) as session:
+        try:
+            registration_request = AsyncPipelineRegistrationRequest(
+                processing_service_name=service_name, pipelines=pipeline_configs
+            )
 
-        # Make the API call
-        url = f"{base_url.rstrip('/')}/api/v2/projects/{project_id}/pipelines/"
-        headers = {"Content-Type": "application/json"}
-        if auth_token:
-            headers["Authorization"] = f"Token {auth_token}"
+            url = f"{base_url.rstrip('/')}/projects/{project_id}/pipelines/"
+            response = session.post(
+                url,
+                json=registration_request.model_dump(mode="json"),
+                timeout=60,
+            )
+            response.raise_for_status()
 
-        response = requests.post(
-            url,
-            json=registration_request.model_dump(mode="json"),
-            headers=headers,
-            timeout=60,
-        )
-        response.raise_for_status()
+            result = AsyncPipelineRegistrationResponse.model_validate(response.json())
+            return True, f"Created {len(result.pipelines_created)} new pipelines"
 
-        result_data = response.json()
-        created_pipelines = result_data.get("pipelines_created", [])
-
-        return True, f"Created {len(created_pipelines)} new pipelines"
-
-    except requests.RequestException as e:
-        if e.response and e.response.status_code == 400:
-            error_detail = ""
-            try:
-                error_data = e.response.json()
-                error_detail = error_data.get("detail", str(e))
-            except requests.RequestException:
-                error_detail = str(e)
-            return False, f"Registration failed: {error_detail}"
-        else:
-            return False, f"Network error during registration: {e}"
-    except Exception as e:
-        return False, f"Unexpected error during registration: {e}"
+        except requests.RequestException as e:
+            if hasattr(e, 'response') and e.response is not None and e.response.status_code == 400:
+                try:
+                    error_data = e.response.json()
+                    error_detail = error_data.get("detail", str(e))
+                except Exception:
+                    error_detail = str(e)
+                return False, f"Registration failed: {error_detail}"
+            else:
+                return False, f"Network error during registration: {e}"
+        except Exception as e:
+            return False, f"Unexpected error during registration: {e}"
 
 
 def register_pipelines(
@@ -418,7 +424,7 @@ def register_pipelines(
     """
     # Set up defaults from environment
     if base_url is None:
-        base_url = os.environ.get("ANTENNA_API_BASE_URL", "http://localhost:8000")
+        base_url = os.environ.get("ANTENNA_API_BASE_URL", "http://localhost:8000/api/v2")
     if auth_token is None:
         auth_token = os.environ.get("ANTENNA_API_TOKEN", "")
 
