@@ -96,5 +96,36 @@ def run_api(port: int = 2000):
     uvicorn.run("trapdata.api.api:app", host="0.0.0.0", port=port, reload=True)
 
 
+@cli.command("worker")
+def worker(
+    pipelines: Optional[list[str]] = typer.Option(
+        None,
+        help="List of pipelines to use for processing (e.g., moth_binary, panama_moths_2024, etc.) or all if not specified.",
+    ),
+):
+    """
+    Run the worker to process images from the REST API queue.
+    """
+    from trapdata.api.api import CLASSIFIER_CHOICES
+
+    if not pipelines:
+        pipelines = list(CLASSIFIER_CHOICES.keys())
+
+    # Validate that each pipeline is in CLASSIFIER_CHOICES
+    invalid_pipelines = [
+        pipeline for pipeline in pipelines if pipeline not in CLASSIFIER_CHOICES.keys()
+    ]
+
+    if invalid_pipelines:
+        raise typer.BadParameter(
+            f"Invalid pipeline(s): {', '.join(invalid_pipelines)}. "
+            f"Must be one of: {', '.join(CLASSIFIER_CHOICES.keys())}"
+        )
+
+    from trapdata.cli.worker import run_worker
+
+    run_worker(pipelines=pipelines)
+
+
 if __name__ == "__main__":
     cli()

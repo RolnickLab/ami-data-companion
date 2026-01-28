@@ -7,6 +7,7 @@ from typing import List
 import numpy as np
 import requests
 import torch
+import torchvision.transforms
 
 from trapdata.api.api import CLASSIFIER_CHOICES
 from trapdata.api.datasets import get_rest_dataloader
@@ -209,24 +210,47 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
 
         classifier.reset(detector.results)
 
-        for idx, dresp in enumerate(detector.results):
-            image_tensor = image_tensors[dresp.source_image_id]
-            bbox = dresp.bbox
-            # crop the image tensor using the bbox
-            crop = image_tensor[
-                :, int(bbox.y1) : int(bbox.y2), int(bbox.x1) : int(bbox.x2)
-            ]
-            crop = crop.unsqueeze(0)  # add batch dimension
-            classifier_out = classifier.predict_batch(crop)
+        # Batch classification: collect all crops first, then classify together
+        if detector.results:
+            # Step 1: Collect all crops and metadata
+            crops = []
+            detection_metadata = []  # (idx, image_id, detection)
+            
+            for idx, dresp in enumerate(detector.results):
+                image_tensor = image_tensors[dresp.source_image_id]
+                bbox = dresp.bbox
+                # Crop the image tensor using the bbox
+                crop = image_tensor[
+                    :, int(bbox.y1) : int(bbox.y2), int(bbox.x1) : int(bbox.x2)
+                ]
+                
+                # Convert tensor to PIL Image for transforms (same as API pipeline)
+                # Transforms expect PIL images and handle resizing to model's input_size
+                crop_pil = torchvision.transforms.ToPILImage()(crop)
+                
+                # Apply classifier transforms (resizes to uniform size)
+                crop_transformed = classifier.get_transforms()(crop_pil)
+                
+                crops.append(crop_transformed)
+                detection_metadata.append((idx, dresp.source_image_id, dresp))
+            
+            # Step 2: Stack crops into a batch tensor
+            batched_crops = torch.stack(crops)
+            
+            # Step 3: Run batched classification (single GPU call)
+            classifier_out = classifier.predict_batch(batched_crops)
             classifier_out = classifier.post_process_batch(classifier_out)
-            detection = classifier.update_detection_classification(
-                seconds_per_item=0,
-                image_id=dresp.source_image_id,
-                detection_idx=idx,
-                predictions=classifier_out[0],
-            )
-            image_detections[dresp.source_image_id].append(detection)
-            all_detections.append(detection)
+            
+            # Step 4: Map results back to detections
+            for (idx, image_id, dresp), predictions in zip(detection_metadata, classifier_out):
+                detection = classifier.update_detection_classification(
+                    seconds_per_item=0,
+                    image_id=image_id,
+                    detection_idx=idx,
+                    predictions=predictions,
+                )
+                image_detections[image_id].append(detection)
+                all_detections.append(detection)
 
         ct, t = t("Finished classification")
         total_classification_time += ct
