@@ -283,8 +283,10 @@ class TestGetJobs:
 
         _get_jobs("http://api.test/api/v2", "secret-token", "pipeline1")
 
-        call_kwargs = mock_session.get.call_args[1]
-        assert call_kwargs["headers"]["Authorization"] == "Token secret-token"
+        # Verify auth_token was passed to get_http_session
+        mock_get_session.assert_called_once()
+        call_kwargs = mock_get_session.call_args[1]
+        assert call_kwargs["auth_token"] == "secret-token"
 
     @patch("trapdata.cli.worker.get_http_session")
     def test_query_params(self, mock_get_session):

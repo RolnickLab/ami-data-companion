@@ -2,6 +2,9 @@ import pathlib
 import time
 
 import PIL.Image
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from ..common.utils import slugify
 from .schemas import BoundingBox, SourceImage
@@ -33,3 +36,55 @@ def get_crop_fname(source_image: SourceImage, bbox: BoundingBox) -> str:
     bbox_name = bbox.to_path()
     timestamp = int(time.time())  # @TODO use pipeline name/version instead
     return f"{source_name}/{bbox_name}-{timestamp}.jpg"
+
+
+def get_http_session(
+    auth_token: str | None = None,
+    max_retries: int = 3,
+    backoff_factor: float = 0.5,
+    status_forcelist: tuple[int, ...] = (500, 502, 503, 504),
+) -> requests.Session:
+    """
+    Create an HTTP session with retry logic for transient failures.
+
+    Configures a requests.Session with HTTPAdapter and urllib3.Retry to automatically
+    retry failed requests with exponential backoff. Only retries on server errors (5XX)
+    and network failures, NOT on client errors (4XX).
+
+    Args:
+        auth_token: Optional authentication token (adds "Token {token}" to Authorization header)
+        max_retries: Maximum number of retry attempts (default: 3)
+        backoff_factor: Exponential backoff multiplier in seconds (default: 0.5)
+                       Delays will be: backoff_factor * (2 ** retry_number)
+                       e.g., 0.5s, 1s, 2s for default settings
+        status_forcelist: HTTP status codes that trigger a retry (default: 500, 502, 503, 504)
+
+    Returns:
+        Configured requests.Session with retry adapter mounted
+
+    Example:
+        >>> session = get_http_session(max_retries=3, backoff_factor=0.5)
+        >>> response = session.get("https://api.example.com/data")
+        >>> # With authentication:
+        >>> session = get_http_session(auth_token="abc123")
+        >>> response = session.get("https://api.example.com/data")
+    """
+    session = requests.Session()
+
+    retry_strategy = Retry(
+        total=max_retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=status_forcelist,
+        allowed_methods=["GET", "POST"],
+        raise_on_status=False,  # Don't raise exception, let caller handle status codes
+    )
+
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
+    # Add auth header if token provided
+    if auth_token:
+        session.headers["Authorization"] = f"Token {auth_token}"
+
+    return session

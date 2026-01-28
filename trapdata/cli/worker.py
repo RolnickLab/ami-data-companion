@@ -19,8 +19,9 @@ from trapdata.api.schemas import (
     PipelineResultsResponse,
     SourceImageResponse,
 )
+from trapdata.api.utils import get_http_session
 from trapdata.common.logs import logger
-from trapdata.common.utils import get_http_session, log_time
+from trapdata.common.utils import log_time
 from trapdata.settings import Settings, read_settings
 
 SLEEP_TIME_SECONDS = 5
@@ -31,7 +32,8 @@ def post_batch_results(
     job_id: int,
     results: list[AntennaTaskResult],
     auth_token: str | None = None,
-    session: requests.Session | None = None,
+    retry_max: int = 3,
+    retry_backoff: float = 0.5,
 ) -> bool:
     """
     Post batch results back to the API.
@@ -41,25 +43,23 @@ def post_batch_results(
         job_id: Job ID
         results: List of AntennaTaskResult objects
         auth_token: API authentication token
-        session: Optional HTTP session with retry logic (creates new session if not provided)
+        retry_max: Maximum number of retry attempts for failed HTTP requests
+        retry_backoff: Exponential backoff factor for retries (seconds)
 
     Returns:
         True if successful, False otherwise
     """
     url = f"{base_url.rstrip('/')}/jobs/{job_id}/result/"
-
-    headers = {}
-    if auth_token:
-        headers["Authorization"] = f"Token {auth_token}"
-
     payload = [r.model_dump(mode="json") for r in results]
 
-    # Use provided session or create a new one
-    if session is None:
-        session = get_http_session()
+    session = get_http_session(
+        auth_token=auth_token,
+        max_retries=retry_max,
+        backoff_factor=retry_backoff,
+    )
 
     try:
-        response = session.post(url, json=payload, headers=headers, timeout=60)
+        response = session.post(url, json=payload, timeout=60)
         response.raise_for_status()
         logger.info(f"Successfully posted {len(results)} results to {url}")
         return True
@@ -72,7 +72,8 @@ def _get_jobs(
     base_url: str,
     auth_token: str,
     pipeline_slug: str,
-    session: requests.Session | None = None,
+    retry_max: int = 3,
+    retry_backoff: float = 0.5,
 ) -> list[int]:
     """Fetch job ids from the API for the given pipeline.
 
@@ -82,24 +83,23 @@ def _get_jobs(
         base_url: Base URL for the API
         auth_token: API authentication token
         pipeline_slug: Pipeline slug to filter jobs
-        session: Optional HTTP session with retry logic (creates new session if not provided)
+        retry_max: Maximum number of retry attempts for failed HTTP requests
+        retry_backoff: Exponential backoff factor for retries (seconds)
 
     Returns:
         List of job ids (possibly empty) on success or error.
     """
-    # Use provided session or create a new one
-    if session is None:
-        session = get_http_session()
+    session = get_http_session(
+        auth_token=auth_token,
+        max_retries=retry_max,
+        backoff_factor=retry_backoff,
+    )
 
     try:
         url = f"{base_url.rstrip('/')}/jobs"
         params = {"pipeline__slug": pipeline_slug, "ids_only": 1, "incomplete_only": 1}
 
-        headers = {}
-        if auth_token:
-            headers["Authorization"] = f"Token {auth_token}"
-
-        resp = session.get(url, params=params, headers=headers, timeout=30)
+        resp = session.get(url, params=params, timeout=30)
         resp.raise_for_status()
 
         # Parse and validate response with Pydantic
@@ -126,12 +126,6 @@ def run_worker(pipelines: List[str]):
 
     # TODO CGJS: Support a list of pipelines
     while True:
-        # Create session for this iteration (reused across all API calls in this loop)
-        session = get_http_session(
-            max_retries=settings.antenna_api_retry_max,
-            backoff_factor=settings.antenna_api_retry_backoff,
-        )
-
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
         # These should probably come from a dedicated endpoint and should preempt batch jobs under the assumption that they
         # would run on the same GPU.
@@ -142,7 +136,8 @@ def run_worker(pipelines: List[str]):
                 base_url=settings.antenna_api_base_url,
                 auth_token=settings.antenna_api_auth_token,
                 pipeline_slug=pipeline,
-                session=session,
+                retry_max=settings.antenna_api_retry_max,
+                retry_backoff=settings.antenna_api_retry_backoff,
             )
             for job_id in jobs:
                 logger.info(f"Processing job {job_id} with pipeline {pipeline}")
@@ -150,7 +145,6 @@ def run_worker(pipelines: List[str]):
                     pipeline=pipeline,
                     job_id=job_id,
                     settings=settings,
-                    session=session,
                 )
                 any_jobs = any_jobs or any_work_done
 
@@ -164,7 +158,6 @@ def _process_job(
     pipeline: str,
     job_id: int,
     settings: Settings,
-    session: requests.Session | None = None,
 ) -> bool:
     """Run the worker to process images from the REST API queue.
 
@@ -172,16 +165,9 @@ def _process_job(
         pipeline: Pipeline name to use for processing (e.g., moth_binary, panama_moths_2024)
         job_id: Job ID to process
         settings: Settings object with antenna_api_* configuration
-        session: Optional HTTP session with retry logic (creates new session if not provided)
     Returns:
         True if any work was done, False otherwise
     """
-    # Use provided session or create a new one
-    if session is None:
-        session = get_http_session(
-            max_retries=settings.antenna_api_retry_max,
-            backoff_factor=settings.antenna_api_retry_backoff,
-        )
     did_work = False
     loader = get_rest_dataloader(job_id=job_id, settings=settings)
     classifier = None
@@ -320,7 +306,8 @@ def _process_job(
             job_id,
             batch_results,
             settings.antenna_api_auth_token,
-            session,
+            retry_max=settings.antenna_api_retry_max,
+            retry_backoff=settings.antenna_api_retry_backoff,
         )
         st, t = t("Finished posting results")
         total_save_time += st

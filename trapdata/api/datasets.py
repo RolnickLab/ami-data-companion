@@ -8,8 +8,8 @@ import torch.utils.data
 import torchvision
 from PIL import Image
 
+from trapdata.api.utils import get_http_session
 from trapdata.common.logs import logger
-from trapdata.common.utils import get_http_session
 
 from .schemas import (
     AntennaPipelineProcessingTask,
@@ -148,9 +148,8 @@ class RESTDataset(torch.utils.data.IterableDataset):
         self.batch_size = batch_size
         self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
         self.auth_token = auth_token or os.environ.get("ANTENNA_API_TOKEN")
-        self.session = get_http_session(
-            max_retries=retry_max, backoff_factor=retry_backoff
-        )
+        self.retry_max = retry_max
+        self.retry_backoff = retry_backoff
 
     def _fetch_tasks(self) -> list[AntennaPipelineProcessingTask]:
         """
@@ -165,16 +164,12 @@ class RESTDataset(torch.utils.data.IterableDataset):
         url = f"{self.base_url.rstrip('/')}/jobs/{self.job_id}/tasks"
         params = {"batch": self.batch_size}
 
-        headers = {}
-        if self.auth_token:
-            headers["Authorization"] = f"Token {self.auth_token}"
-
-        response = self.session.get(
-            url,
-            params=params,
-            timeout=30,
-            headers=headers,
-        )
+        # Create session with auth for API call
+        response = get_http_session(
+            auth_token=self.auth_token,
+            max_retries=self.retry_max,
+            backoff_factor=self.retry_backoff,
+        ).get(url, params=params, timeout=30)
         response.raise_for_status()
 
         # Parse and validate response with Pydantic
@@ -192,7 +187,8 @@ class RESTDataset(torch.utils.data.IterableDataset):
             Image as a PyTorch tensor, or None if loading failed
         """
         try:
-            response = self.session.get(image_url, timeout=30)
+            # External image URLs - don't send API auth token
+            response = get_http_session().get(image_url, timeout=30)
             response.raise_for_status()
             image = Image.open(BytesIO(response.content))
 
