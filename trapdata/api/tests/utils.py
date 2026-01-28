@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 from trapdata.api.api import CLASSIFIER_CHOICES, APIMothClassifier
 from trapdata.api.schemas import SourceImageRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
-from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 
 def get_test_image_urls(
@@ -93,14 +92,13 @@ def patch_antenna_api_requests(test_client: TestClient):
             response = requests.get("http://testserver/api/v2/jobs")
     """
     import requests
-    import httpx
 
-    # Save original functions BEFORE patching
-    original_get = requests.get
-    original_post = requests.post
+    # Save original methods BEFORE patching
+    original_session_get = requests.Session.get
+    original_session_post = requests.Session.post
 
-    def mock_get(url, **kwargs):
-        """Mock requests.get - route testserver through TestClient, others pass through."""
+    def mock_session_get(self, url, **kwargs):
+        """Mock Session.get - route testserver through TestClient, others pass through."""
         if "testserver" in url:
             path = url.replace("http://testserver", "")
             headers = kwargs.get("headers", {})
@@ -108,20 +106,19 @@ def patch_antenna_api_requests(test_client: TestClient):
             return test_client.get(path, headers=headers, params=params)
         else:
             # Let real HTTP requests through (e.g., to file server)
-            return original_get(url, **kwargs)
+            return original_session_get(self, url, **kwargs)
 
-    def mock_post(url, **kwargs):
-        """Mock requests.post - route testserver through TestClient, others pass through."""
+    def mock_session_post(self, url, **kwargs):
+        """Mock Session.post - route testserver through TestClient, others pass through."""
         if "testserver" in url:
             path = url.replace("http://testserver", "")
             headers = kwargs.get("headers", {})
             json_data = kwargs.get("json")
             return test_client.post(path, headers=headers, json=json_data)
         else:
-            return original_post(url, **kwargs)
+            return original_session_post(self, url, **kwargs)
 
-    # Patch both locations where requests are used
-    with patch("trapdata.api.datasets.requests.get", mock_get):
-        with patch("trapdata.cli.worker.requests.get", mock_get):
-            with patch("trapdata.cli.worker.requests.post", mock_post):
-                yield
+    # Patch Session methods (used by get_http_session)
+    with patch.object(requests.Session, "get", mock_session_get):
+        with patch.object(requests.Session, "post", mock_session_post):
+            yield

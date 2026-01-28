@@ -4,7 +4,6 @@ import datetime
 import os
 import socket
 import time
-from typing import List
 
 import numpy as np
 import requests
@@ -22,6 +21,7 @@ from trapdata.api.schemas import (
     PipelineResultsResponse,
     SourceImageResponse,
 )
+from trapdata.api.utils import get_http_session
 from trapdata.common.logs import logger
 from trapdata.common.utils import log_time
 from trapdata.settings import Settings, read_settings
@@ -30,68 +30,88 @@ SLEEP_TIME_SECONDS = 5
 
 
 def post_batch_results(
-    base_url: str, job_id: int, results: list[AntennaTaskResult], auth_token: str | None = None
+    settings: Settings,
+    job_id: int,
+    results: list[AntennaTaskResult],
 ) -> bool:
     """
     Post batch results back to the API.
 
     Args:
-        base_url: Base URL for the API
+        settings: Settings object with antenna_api_* configuration
         job_id: Job ID
         results: List of AntennaTaskResult objects
-        auth_token: API authentication token
 
     Returns:
         True if successful, False otherwise
     """
-    url = f"{base_url.rstrip('/')}/jobs/{job_id}/result/"
-
-    headers = {}
-    if auth_token:
-        headers["Authorization"] = f"Token {auth_token}"
-
+    url = f"{settings.antenna_api_base_url.rstrip('/')}/jobs/{job_id}/result/"
     payload = [r.model_dump(mode="json") for r in results]
 
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=60)
-        response.raise_for_status()
-        logger.info(f"Successfully posted {len(results)} results to {url}")
-        return True
-    except requests.RequestException as e:
-        logger.error(f"Failed to post results to {url}: {e}")
-        return False
+    with get_http_session(
+        auth_token=settings.antenna_api_auth_token,
+        max_retries=settings.antenna_api_retry_max,
+        backoff_factor=settings.antenna_api_retry_backoff,
+    ) as session:
+        try:
+            response = session.post(url, json=payload, timeout=60)
+            response.raise_for_status()
+            logger.info(f"Successfully posted {len(results)} results to {url}")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"Failed to post results to {url}: {e}")
+            return False
 
 
-def _get_jobs(base_url: str, auth_token: str, pipeline_slug: str) -> list[int]:
+def _get_jobs(
+    base_url: str,
+    auth_token: str,
+    pipeline_slug: str,
+    retry_max: int = 3,
+    retry_backoff: float = 0.5,
+) -> list[int]:
     """Fetch job ids from the API for the given pipeline.
 
     Calls: GET {base_url}/jobs?pipeline__slug=<pipeline>&ids_only=1
 
-    Returns a list of job ids (possibly empty) on success or error.
+    Args:
+        base_url: Antenna API base URL (e.g., "http://localhost:8000/api/v2")
+        auth_token: API authentication token
+        pipeline_slug: Pipeline slug to filter jobs
+        retry_max: Maximum retry attempts for failed requests
+        retry_backoff: Exponential backoff factor in seconds
+
+    Returns:
+        List of job ids (possibly empty) on success or error.
     """
-    try:
-        url = f"{base_url.rstrip('/')}/jobs"
-        params = {"pipeline__slug": pipeline_slug, "ids_only": 1, "incomplete_only": 1}
+    with get_http_session(
+        auth_token=auth_token,
+        max_retries=retry_max,
+        backoff_factor=retry_backoff,
+    ) as session:
+        try:
+            url = f"{base_url.rstrip('/')}/jobs"
+            params = {
+                "pipeline__slug": pipeline_slug,
+                "ids_only": 1,
+                "incomplete_only": 1,
+            }
 
-        headers = {}
-        if auth_token:
-            headers["Authorization"] = f"Token {auth_token}"
+            resp = session.get(url, params=params, timeout=30)
+            resp.raise_for_status()
 
-        resp = requests.get(url, params=params, headers=headers, timeout=30)
-        resp.raise_for_status()
-
-        # Parse and validate response with Pydantic
-        jobs_response = AntennaJobsListResponse.model_validate(resp.json())
-        return [job.id for job in jobs_response.results]
-    except requests.RequestException as e:
-        logger.error(f"Failed to fetch jobs from {base_url}: {e}")
-        return []
-    except Exception as e:
-        logger.error(f"Failed to parse jobs response: {e}")
-        return []
+            # Parse and validate response with Pydantic
+            jobs_response = AntennaJobsListResponse.model_validate(resp.json())
+            return [job.id for job in jobs_response.results]
+        except requests.RequestException as e:
+            logger.error(f"Failed to fetch jobs from {base_url}: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Failed to parse jobs response: {e}")
+            return []
 
 
-def run_worker(pipelines: List[str]):
+def run_worker(pipelines: list[str]):
     """Run the worker to process images from the REST API queue."""
     settings = read_settings()
 
@@ -102,7 +122,6 @@ def run_worker(pipelines: List[str]):
             "Get your auth token from your Antenna project settings."
         )
 
-    # TODO CGJS: Support a list of pipelines
     while True:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
         # These should probably come from a dedicated endpoint and should preempt batch jobs under the assumption that they
@@ -130,7 +149,11 @@ def run_worker(pipelines: List[str]):
 
 
 @torch.no_grad()
-def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
+def _process_job(
+    pipeline: str,
+    job_id: int,
+    settings: Settings,
+) -> bool:
     """Run the worker to process images from the REST API queue.
 
     Args:
@@ -273,12 +296,7 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
                     )
                 )
 
-        post_batch_results(
-            settings.antenna_api_base_url,
-            job_id,
-            batch_results,
-            settings.antenna_api_auth_token,
-        )
+        post_batch_results(settings, job_id, batch_results)
         st, t = t("Finished posting results")
         total_save_time += st
 
