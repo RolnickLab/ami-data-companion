@@ -27,7 +27,7 @@ SLEEP_TIME_SECONDS = 5
 
 
 def post_batch_results(
-    base_url: str, job_id: int, results: list[AntennaTaskResult], auth_token: str = None
+    base_url: str, job_id: int, results: list[AntennaTaskResult], auth_token: str | None = None
 ) -> bool:
     """
     Post batch results back to the API.
