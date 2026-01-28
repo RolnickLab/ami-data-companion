@@ -173,8 +173,8 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
         # Extract data from dictionary batch
         images = batch.get("images", [])
         image_ids = batch.get("image_ids", [])
-        reply_subjects = batch.get("reply_subjects", [None] * len(images))
-        image_urls = batch.get("image_urls", [None] * len(images))
+        reply_subjects = batch.get("reply_subjects", [])
+        image_urls = batch.get("image_urls", [])
 
         # Track start time for this batch
         batch_start_time = datetime.datetime.now()
@@ -219,6 +219,15 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
             for idx, dresp in enumerate(detector.results):
                 image_tensor = image_tensors[dresp.source_image_id]
                 bbox = dresp.bbox
+                
+                # Validate bbox dimensions to avoid empty crops
+                if bbox.y1 >= bbox.y2 or bbox.x1 >= bbox.x2:
+                    logger.warning(
+                        f"Skipping detection {idx} with invalid bbox: "
+                        f"({bbox.x1}, {bbox.y1}, {bbox.x2}, {bbox.y2})"
+                    )
+                    continue
+                
                 # Crop the image tensor using the bbox
                 crop = image_tensor[
                     :, int(bbox.y1) : int(bbox.y2), int(bbox.x1) : int(bbox.x2)
@@ -234,23 +243,24 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
                 crops.append(crop_transformed)
                 detection_metadata.append((idx, dresp.source_image_id, dresp))
             
-            # Step 2: Stack crops into a batch tensor
-            batched_crops = torch.stack(crops)
-            
-            # Step 3: Run batched classification (single GPU call)
-            classifier_out = classifier.predict_batch(batched_crops)
-            classifier_out = classifier.post_process_batch(classifier_out)
-            
-            # Step 4: Map results back to detections
-            for (idx, image_id, dresp), predictions in zip(detection_metadata, classifier_out):
-                detection = classifier.update_detection_classification(
-                    seconds_per_item=0,
-                    image_id=image_id,
-                    detection_idx=idx,
-                    predictions=predictions,
-                )
-                image_detections[image_id].append(detection)
-                all_detections.append(detection)
+            # Step 2: Stack crops into a batch tensor (only if we have valid crops)
+            if crops:
+                batched_crops = torch.stack(crops)
+                
+                # Step 3: Run batched classification (single GPU call)
+                classifier_out = classifier.predict_batch(batched_crops)
+                classifier_out = classifier.post_process_batch(classifier_out)
+                
+                # Step 4: Map results back to detections
+                for (idx, image_id, dresp), predictions in zip(detection_metadata, classifier_out):
+                    detection = classifier.update_detection_classification(
+                        seconds_per_item=0,
+                        image_id=image_id,
+                        detection_idx=idx,
+                        predictions=predictions,
+                    )
+                    image_detections[image_id].append(detection)
+                    all_detections.append(detection)
 
         ct, t = t("Finished classification")
         total_classification_time += ct
@@ -272,7 +282,7 @@ def _process_job(pipeline: str, job_id: int, settings: Settings) -> bool:
                 pipeline=pipeline,
                 source_images=[source_image],
                 detections=image_detections[image_id],
-                total_time=batch_elapsed / len(image_ids),  # Approximate time per image
+                total_time=batch_elapsed / len(image_ids) if image_ids else 0,  # Avoid division by zero
             )
 
             batch_results.append(
