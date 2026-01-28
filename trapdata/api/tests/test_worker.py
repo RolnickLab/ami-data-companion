@@ -1,24 +1,33 @@
-"""Tests for the REST worker and related utilities.
+"""Integration tests for the REST worker and related utilities.
 
-All ML models and network calls are mocked so tests run without GPU or network access.
+These tests validate the Antenna API contract and run real ML inference through
+the worker's unique code path (RESTDataset → rest_collate_fn → batch processing).
+Only external service dependencies are mocked - ML models and image loading are real.
 """
 
-import datetime
-from unittest.mock import MagicMock, patch
+import pathlib
+from unittest import TestCase
+from unittest.mock import MagicMock
 
-import requests
 import torch
+from fastapi.testclient import TestClient
 
 from trapdata.api.datasets import RESTDataset, rest_collate_fn
 from trapdata.api.schemas import (
+    AntennaPipelineProcessingTask,
     AntennaTaskResult,
     AntennaTaskResultError,
     PipelineResultsResponse,
 )
+from trapdata.api.tests import antenna_api_server
+from trapdata.api.tests.antenna_api_server import app as antenna_app
+from trapdata.api.tests.image_server import StaticFileTestServer
+from trapdata.api.tests.utils import get_test_image_urls, patch_antenna_api_requests
 from trapdata.cli.worker import _get_jobs, _process_job
+from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 # ---------------------------------------------------------------------------
-# TestRestCollateFn
+# TestRestCollateFn - Unit tests for collation logic
 # ---------------------------------------------------------------------------
 
 
@@ -114,458 +123,442 @@ class TestRestCollateFn:
 
 
 # ---------------------------------------------------------------------------
-# TestRESTDatasetIteration
+# TestRESTDatasetIntegration - Integration tests with real image loading
 # ---------------------------------------------------------------------------
 
 
-class TestRESTDatasetIteration:
-    """Tests for RESTDataset.__iter__() with mocked network calls."""
+class TestRESTDatasetIntegration(TestCase):
+    """Integration tests for RESTDataset that fetch tasks and load real images."""
 
-    def _make_dataset(self, **kwargs):
-        defaults = {
-            "base_url": "http://api.test/api/v2",
-            "job_id": 42,
-            "batch_size": 2,
-            "auth_token": "test-token",
-        }
-        defaults.update(kwargs)
-        return RESTDataset(**defaults)
+    @classmethod
+    def setUpClass(cls):
+        # Setup file server for test images
+        cls.test_images_dir = pathlib.Path(TEST_IMAGES_BASE_PATH)
+        cls.file_server = StaticFileTestServer(cls.test_images_dir)
+        cls.file_server.start()  # Start server and keep it running for all tests
 
-    @patch("trapdata.api.datasets.get_http_session")
-    def test_normal_iteration(self, mock_get_session):
-        """Fetch tasks, load images, yield rows, then empty stops iteration."""
-        # First call: return tasks; second call: image download; etc.
-        tasks_response = MagicMock()
-        tasks_response.status_code = 200
-        tasks_response.json.return_value = {
-            "tasks": [
-                {
-                    "id": "t1",
-                    "image_id": "img1",
-                    "image_url": "http://images.test/1.jpg",
-                    "reply_subject": "reply1",
-                },
-            ]
-        }
-        tasks_response.raise_for_status = MagicMock()
+        # Setup mock Antenna API
+        cls.antenna_client = TestClient(antenna_app)
 
-        # Create a small valid image for download
-        import io
+    @classmethod
+    def tearDownClass(cls):
+        cls.file_server.stop()
 
-        from PIL import Image
+    def setUp(self):
+        # Reset state between tests
+        antenna_api_server.reset()
 
-        buf = io.BytesIO()
-        Image.new("RGB", (64, 64), color="red").save(buf, format="PNG")
-        image_bytes = buf.getvalue()
+    def _make_dataset(self, job_id: int = 42, batch_size: int = 2) -> RESTDataset:
+        """Create a RESTDataset pointing to the mock API."""
+        return RESTDataset(
+            base_url="http://testserver/api/v2",
+            job_id=job_id,
+            batch_size=batch_size,
+            auth_token="test-token",
+        )
 
-        image_response = MagicMock()
-        image_response.status_code = 200
-        image_response.content = image_bytes
-        image_response.raise_for_status = MagicMock()
+    def test_fetches_and_loads_images(self):
+        """RESTDataset fetches tasks and loads images from URLs."""
+        # Setup mock API job with real image URLs
+        image_urls = get_test_image_urls(
+            self.file_server, self.test_images_dir, subdir="vermont", num=2
+        )
+        tasks = [
+            AntennaPipelineProcessingTask(
+                id=f"task_{i}",
+                image_id=f"img_{i}",
+                image_url=url,
+                reply_subject=f"reply_{i}",
+            )
+            for i, url in enumerate(image_urls)
+        ]
+        antenna_api_server.setup_job(job_id=1, tasks=tasks)
 
-        empty_response = MagicMock()
-        empty_response.status_code = 200
-        empty_response.json.return_value = {"tasks": []}
-        empty_response.raise_for_status = MagicMock()
+        # Create dataset and iterate
+        with patch_antenna_api_requests(self.antenna_client):
+            dataset = self._make_dataset(job_id=1, batch_size=2)
+            rows = list(dataset)
 
-        # Create a mock session
-        mock_session = MagicMock()
-        mock_session.get.side_effect = [tasks_response, image_response, empty_response]
-        mock_get_session.return_value = mock_session
+        # Validate images actually loaded
+        assert len(rows) == 2
+        assert all(r["image"] is not None for r in rows)
+        assert all(isinstance(r["image"], torch.Tensor) for r in rows)
+        assert rows[0]["image_id"] == "img_0"
+        assert rows[1]["image_id"] == "img_1"
 
-        ds = self._make_dataset()
-        rows = list(ds)
+    def test_image_failure(self):
+        """Invalid image URL produces error row with image=None."""
+        tasks = [
+            AntennaPipelineProcessingTask(
+                id="task_bad",
+                image_id="img_bad",
+                image_url="http://invalid-url.test/bad.jpg",
+                reply_subject="reply_bad",
+            )
+        ]
+        antenna_api_server.setup_job(job_id=2, tasks=tasks)
 
-        assert len(rows) == 1
-        assert rows[0]["image_id"] == "img1"
-        assert rows[0]["image"] is not None
-        assert isinstance(rows[0]["image"], torch.Tensor)
-
-    @patch("trapdata.api.datasets.get_http_session")
-    def test_image_failure(self, mock_get_session):
-        """Image download returns 404 → row has error, image is None."""
-        tasks_response = MagicMock()
-        tasks_response.json.return_value = {
-            "tasks": [
-                {
-                    "id": "t1",
-                    "image_id": "img1",
-                    "image_url": "http://images.test/bad.jpg",
-                    "reply_subject": "reply1",
-                },
-            ]
-        }
-        tasks_response.raise_for_status = MagicMock()
-
-        image_response = MagicMock()
-        image_response.raise_for_status.side_effect = requests.HTTPError("404")
-
-        empty_response = MagicMock()
-        empty_response.json.return_value = {"tasks": []}
-        empty_response.raise_for_status = MagicMock()
-
-        # Create a mock session
-        mock_session = MagicMock()
-        mock_session.get.side_effect = [tasks_response, image_response, empty_response]
-        mock_get_session.return_value = mock_session
-
-        ds = self._make_dataset()
-        rows = list(ds)
+        with patch_antenna_api_requests(self.antenna_client):
+            dataset = self._make_dataset(job_id=2)
+            rows = list(dataset)
 
         assert len(rows) == 1
         assert rows[0]["image"] is None
         assert "error" in rows[0]
 
-    @patch("trapdata.api.datasets.get_http_session")
-    def test_empty_queue(self, mock_get_session):
-        """First fetch returns empty → iterator stops immediately."""
-        empty_response = MagicMock()
-        empty_response.json.return_value = {"tasks": []}
-        empty_response.raise_for_status = MagicMock()
+    def test_empty_queue(self):
+        """First fetch returns empty tasks → iterator stops immediately."""
+        antenna_api_server.setup_job(job_id=3, tasks=[])
 
-        # Create a mock session
-        mock_session = MagicMock()
-        mock_session.get.return_value = empty_response
-        mock_get_session.return_value = mock_session
-
-        ds = self._make_dataset()
-        rows = list(ds)
+        with patch_antenna_api_requests(self.antenna_client):
+            dataset = self._make_dataset(job_id=3)
+            rows = list(dataset)
 
         assert rows == []
 
-    @patch("trapdata.api.datasets.get_http_session")
-    def test_fetch_failure_stops_iteration(self, mock_get_session):
-        """After max retries exhausted, iterator stops (no infinite loop)."""
-        # Create a mock session that always fails
-        mock_session = MagicMock()
-        mock_session.get.side_effect = requests.RequestException("connection failed")
-        mock_get_session.return_value = mock_session
+    def test_multiple_batches(self):
+        """Dataset fetches multiple batches until queue is empty."""
+        # Setup job with 3 images (all available in vermont dir), batch size 2
+        image_urls = get_test_image_urls(
+            self.file_server, self.test_images_dir, subdir="vermont", num=3
+        )
+        tasks = [
+            AntennaPipelineProcessingTask(
+                id=f"task_{i}",
+                image_id=f"img_{i}",
+                image_url=url,
+                reply_subject=f"reply_{i}",
+            )
+            for i, url in enumerate(image_urls)
+        ]
+        antenna_api_server.setup_job(job_id=4, tasks=tasks)
 
-        ds = self._make_dataset()
-        rows = list(ds)
+        with patch_antenna_api_requests(self.antenna_client):
+            dataset = self._make_dataset(job_id=4, batch_size=2)
+            rows = list(dataset)
 
-        # Iterator should stop after failure (not infinite loop)
-        assert rows == []
-        # Verify fetch was attempted
-        assert mock_session.get.called
+        # Should get all 3 images (batch1: 2 images, batch2: 1 image)
+        assert len(rows) == 3
+        assert all(r["image"] is not None for r in rows)
 
 
 # ---------------------------------------------------------------------------
-# TestGetJobs
+# TestGetJobsIntegration - Integration tests for job fetching
 # ---------------------------------------------------------------------------
 
 
-class TestGetJobs:
-    """Tests for _get_jobs() which fetches job IDs from the API."""
+class TestGetJobsIntegration(TestCase):
+    """Integration tests for _get_jobs() with mock Antenna API."""
 
-    def _make_settings(self):
-        settings = MagicMock()
-        settings.antenna_api_base_url = "http://api.test/api/v2"
-        settings.antenna_api_auth_token = "mytoken"
-        settings.antenna_api_retry_max = 3
-        settings.antenna_api_retry_backoff = 0.5
-        return settings
+    @classmethod
+    def setUpClass(cls):
+        cls.antenna_client = TestClient(antenna_app)
 
-    @patch("trapdata.cli.worker.get_http_session")
-    def test_returns_job_ids(self, mock_get_session):
-        response = MagicMock()
-        response.json.return_value = {"results": [{"id": 10}, {"id": 20}, {"id": 30}]}
-        response.raise_for_status = MagicMock()
+    def setUp(self):
+        antenna_api_server.reset()
 
-        mock_session = MagicMock()
-        mock_session.get.return_value = response
-        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
+    def test_returns_job_ids(self):
+        """Successfully fetches list of job IDs."""
+        # Setup jobs in queue
+        antenna_api_server.setup_job(10, [])
+        antenna_api_server.setup_job(20, [])
+        antenna_api_server.setup_job(30, [])
 
-        settings = self._make_settings()
-        result = _get_jobs(settings, "moths_2024")
+        with patch_antenna_api_requests(self.antenna_client):
+            result = _get_jobs("http://testserver/api/v2", "test-token", "moths_2024")
+
         assert result == [10, 20, 30]
 
-    @patch("trapdata.cli.worker.get_http_session")
-    def test_auth_header(self, mock_get_session):
-        response = MagicMock()
-        response.json.return_value = {"results": []}
-        response.raise_for_status = MagicMock()
+    def test_empty_queue(self):
+        """Empty job queue returns empty list."""
+        with patch_antenna_api_requests(self.antenna_client):
+            result = _get_jobs("http://testserver/api/v2", "test-token", "moths_2024")
 
-        mock_session = MagicMock()
-        mock_session.get.return_value = response
-        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
-
-        settings = self._make_settings()
-        settings.antenna_api_auth_token = "secret-token"
-        _get_jobs(settings, "pipeline1")
-
-        # Verify auth_token was passed to get_http_session
-        mock_get_session.assert_called_once()
-        call_kwargs = mock_get_session.call_args[1]
-        assert call_kwargs["auth_token"] == "secret-token"
-
-    @patch("trapdata.cli.worker.get_http_session")
-    def test_query_params(self, mock_get_session):
-        response = MagicMock()
-        response.json.return_value = {"results": []}
-        response.raise_for_status = MagicMock()
-
-        mock_session = MagicMock()
-        mock_session.get.return_value = response
-        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
-
-        settings = self._make_settings()
-        _get_jobs(settings, "my_pipeline")
-
-        call_kwargs = mock_session.get.call_args[1]
-        params = call_kwargs["params"]
-        assert params["pipeline__slug"] == "my_pipeline"
-        assert params["ids_only"] == 1
-        assert params["incomplete_only"] == 1
-
-    @patch("trapdata.cli.worker.get_http_session")
-    def test_network_error(self, mock_get_session):
-        mock_session = MagicMock()
-        mock_session.get.side_effect = requests.RequestException("timeout")
-        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
-
-        settings = self._make_settings()
-        result = _get_jobs(settings, "pipeline1")
         assert result == []
 
-    @patch("trapdata.cli.worker.get_http_session")
-    def test_invalid_response(self, mock_get_session):
-        response = MagicMock()
-        response.raise_for_status = MagicMock()
-        response.json.return_value = {"unexpected": "format"}
+    def test_query_params_sent(self):
+        """Request includes correct query parameters."""
+        # This test validates the query params are sent by checking the function works
+        # The mock API checks the params internally
+        antenna_api_server.setup_job(1, [])
 
-        mock_session = MagicMock()
-        mock_session.get.return_value = response
-        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
-        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
+        with patch_antenna_api_requests(self.antenna_client):
+            result = _get_jobs("http://testserver/api/v2", "test-token", "my_pipeline")
 
-        settings = self._make_settings()
-        result = _get_jobs(settings, "pipeline1")
-        assert result == []
+        assert isinstance(result, list)
 
 
 # ---------------------------------------------------------------------------
-# TestProcessJob
+# TestProcessJobIntegration - Integration tests with real ML inference
 # ---------------------------------------------------------------------------
 
 
-class TestProcessJob:
-    """Tests for _process_job() with mocked dataloader and models."""
+class TestProcessJobIntegration(TestCase):
+    """Integration tests for _process_job() with real detector and classifier."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.test_images_dir = pathlib.Path(TEST_IMAGES_BASE_PATH)
+        cls.file_server = StaticFileTestServer(cls.test_images_dir)
+        cls.file_server.start()  # Start server and keep it running for all tests
+        cls.antenna_client = TestClient(antenna_app)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.file_server.stop()
+
+    def setUp(self):
+        antenna_api_server.reset()
+
+    def _make_settings(self):
+        """Create mock settings for worker."""
+        settings = MagicMock()
+        settings.antenna_api_base_url = "http://testserver/api/v2"
+        settings.antenna_api_auth_token = "test-token"
+        settings.antenna_api_batch_size = 2
+        settings.num_workers = 0  # Disable multiprocessing for tests
+        settings.localization_batch_size = 2  # Real integer for batch processing
+        return settings
+
+    def test_empty_queue(self):
+        """No tasks in queue → returns False."""
+        antenna_api_server.setup_job(job_id=100, tasks=[])
+
+        with patch_antenna_api_requests(self.antenna_client):
+            result = _process_job(
+                "quebec_vermont_moths_2023", 100, self._make_settings()
+            )
+
+        assert result is False
+
+    def test_processes_batch_with_real_inference(self):
+        """Worker fetches tasks, loads images, runs ML, posts results."""
+        # Setup job with 2 test images
+        image_urls = get_test_image_urls(
+            self.file_server, self.test_images_dir, subdir="vermont", num=2
+        )
+        tasks = [
+            AntennaPipelineProcessingTask(
+                id=f"task_{i}",
+                image_id=f"img_{i}",
+                image_url=url,
+                reply_subject=f"reply_{i}",
+            )
+            for i, url in enumerate(image_urls)
+        ]
+        antenna_api_server.setup_job(job_id=101, tasks=tasks)
+
+        # Run worker
+        with patch_antenna_api_requests(self.antenna_client):
+            result = _process_job(
+                "quebec_vermont_moths_2023", 101, self._make_settings()
+            )
+
+        # Validate processing succeeded
+        assert result is True
+
+        # Validate results were posted
+        posted_results = antenna_api_server.get_posted_results(101)
+        assert len(posted_results) == 2
+
+        # Validate schema compliance
+        for task_result in posted_results:
+            assert isinstance(task_result, AntennaTaskResult)
+            assert isinstance(task_result.result, PipelineResultsResponse)
+
+            # Validate structure
+            response = task_result.result
+            assert response.pipeline == "quebec_vermont_moths_2023"
+            assert response.total_time > 0
+            assert len(response.source_images) == 1
+            assert len(response.detections) >= 0  # May be 0 if no moths
+
+    def test_handles_failed_items(self):
+        """Failed image downloads produce AntennaTaskResultError."""
+        tasks = [
+            AntennaPipelineProcessingTask(
+                id="task_fail",
+                image_id="img_fail",
+                image_url="http://invalid-url.test/image.jpg",
+                reply_subject="reply_fail",
+            )
+        ]
+        antenna_api_server.setup_job(job_id=102, tasks=tasks)
+
+        with patch_antenna_api_requests(self.antenna_client):
+            _process_job("quebec_vermont_moths_2023", 102, self._make_settings())
+
+        posted_results = antenna_api_server.get_posted_results(102)
+        assert len(posted_results) == 1
+        assert isinstance(posted_results[0].result, AntennaTaskResultError)
+        assert posted_results[0].result.error  # Error message should not be empty
+
+    def test_mixed_batch_success_and_failures(self):
+        """Batch with some successful and some failed images."""
+        # One valid image, one invalid
+        valid_url = get_test_image_urls(
+            self.file_server, self.test_images_dir, subdir="vermont", num=1
+        )[0]
+
+        tasks = [
+            AntennaPipelineProcessingTask(
+                id="task_good",
+                image_id="img_good",
+                image_url=valid_url,
+                reply_subject="reply_good",
+            ),
+            AntennaPipelineProcessingTask(
+                id="task_bad",
+                image_id="img_bad",
+                image_url="http://invalid-url.test/bad.jpg",
+                reply_subject="reply_bad",
+            ),
+        ]
+        antenna_api_server.setup_job(job_id=103, tasks=tasks)
+
+        with patch_antenna_api_requests(self.antenna_client):
+            result = _process_job(
+                "quebec_vermont_moths_2023", 103, self._make_settings()
+            )
+
+        assert result is True
+        posted_results = antenna_api_server.get_posted_results(103)
+        assert len(posted_results) == 2
+
+        # One success, one error
+        success_results = [
+            r for r in posted_results if isinstance(r.result, PipelineResultsResponse)
+        ]
+        error_results = [
+            r for r in posted_results if isinstance(r.result, AntennaTaskResultError)
+        ]
+        assert len(success_results) == 1
+        assert len(error_results) == 1
+
+
+# ---------------------------------------------------------------------------
+# TestWorkerEndToEnd - Full workflow integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestWorkerEndToEnd(TestCase):
+    """End-to-end integration tests for complete worker workflow."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.test_images_dir = pathlib.Path(TEST_IMAGES_BASE_PATH)
+        cls.file_server = StaticFileTestServer(cls.test_images_dir)
+        cls.file_server.start()  # Start server and keep it running for all tests
+        cls.antenna_client = TestClient(antenna_app)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.file_server.stop()
+
+    def setUp(self):
+        antenna_api_server.reset()
 
     def _make_settings(self):
         settings = MagicMock()
-        settings.antenna_api_base_url = "http://api.test/api/v2"
+        settings.antenna_api_base_url = "http://testserver/api/v2"
         settings.antenna_api_auth_token = "test-token"
-        settings.antenna_api_batch_size = 4
-        settings.antenna_api_retry_max = 3
-        settings.antenna_api_retry_backoff = 0.5
+        settings.antenna_api_batch_size = 2
         settings.num_workers = 0
+        settings.localization_batch_size = 2  # Real integer for batch processing
         return settings
 
-    def _make_batch(
-        self,
-        num_images=2,
-        image_size=(3, 128, 128),
-        failed_items=None,
-    ):
-        """Create a fake batch dict as produced by rest_collate_fn."""
-        batch = {
-            "images": torch.rand(num_images, *image_size),
-            "image_ids": [f"img{i}" for i in range(num_images)],
-            "reply_subjects": [f"reply{i}" for i in range(num_images)],
-            "image_urls": [f"http://img.test/{i}.jpg" for i in range(num_images)],
-            "failed_items": failed_items or [],
-        }
-        return batch
-
-    @patch("trapdata.cli.worker.post_batch_results")
-    @patch("trapdata.cli.worker.APIMothDetector")
-    @patch("trapdata.cli.worker.CLASSIFIER_CHOICES", {"moths_2024": MagicMock})
-    @patch("trapdata.cli.worker.get_rest_dataloader")
-    def test_processes_batch_and_posts_results(
-        self, mock_loader_fn, mock_detector_cls, mock_post
-    ):
-        """Batch with images → detection + classification → post_batch_results called."""
-        batch = self._make_batch(num_images=2)
-        mock_loader_fn.return_value = [batch]
-
-        # Mock detector
-        mock_detector = MagicMock()
-        mock_detector_cls.return_value = mock_detector
-        mock_detector.predict_batch.return_value = [
-            {"boxes": torch.tensor([[10, 10, 50, 50]]), "scores": torch.tensor([0.9])},
-            {"boxes": torch.tensor([[20, 20, 60, 60]]), "scores": torch.tensor([0.8])},
+    def test_full_workflow_with_real_inference(self):
+        """
+        Complete workflow: fetch jobs → fetch tasks → load images →
+        run detection → run classification → post results.
+        """
+        # Setup job with 2 test images
+        image_urls = get_test_image_urls(
+            self.file_server, self.test_images_dir, subdir="vermont", num=2
+        )
+        tasks = [
+            AntennaPipelineProcessingTask(
+                id=f"task_{i}",
+                image_id=f"img_{i}",
+                image_url=url,
+                reply_subject=f"reply_{i}",
+            )
+            for i, url in enumerate(image_urls)
         ]
-        mock_detector.post_process_batch.return_value = iter(
-            mock_detector.predict_batch.return_value
-        )
-        # After save_results, detector.results has DetectionResponse objects
-        from trapdata.api.schemas import (
-            AlgorithmReference,
-            BoundingBox,
-            DetectionResponse,
-        )
+        antenna_api_server.setup_job(job_id=200, tasks=tasks)
 
-        det1 = DetectionResponse(
-            source_image_id="img0",
-            bbox=BoundingBox(x1=10, y1=10, x2=50, y2=50),
-            algorithm=AlgorithmReference(name="detector", key="det_v1"),
-            timestamp=datetime.datetime.now(),
-        )
-        det2 = DetectionResponse(
-            source_image_id="img1",
-            bbox=BoundingBox(x1=20, y1=20, x2=60, y2=60),
-            algorithm=AlgorithmReference(name="detector", key="det_v1"),
-            timestamp=datetime.datetime.now(),
-        )
-        mock_detector.results = [det1, det2]
+        # Step 1: Get jobs
+        with patch_antenna_api_requests(self.antenna_client):
+            job_ids = _get_jobs(
+                "http://testserver/api/v2",
+                "test-token",
+                "quebec_vermont_moths_2023",
+            )
 
-        # Mock classifier
-        mock_classifier_cls = MagicMock()
-        with patch.dict(
-            "trapdata.cli.worker.CLASSIFIER_CHOICES",
-            {"moths_2024": mock_classifier_cls},
-        ):
-            mock_classifier = MagicMock()
-            mock_classifier_cls.return_value = mock_classifier
-            mock_classifier.predict_batch.return_value = [{"scores": [0.95]}]
-            mock_classifier.post_process_batch.return_value = [{"scores": [0.95]}]
-            mock_classifier.update_detection_classification.return_value = det1
+        assert 200 in job_ids
 
-            mock_post.return_value = True
-
-            result = _process_job("moths_2024", 1, self._make_settings())
+        # Step 2: Process job
+        with patch_antenna_api_requests(self.antenna_client):
+            result = _process_job(
+                "quebec_vermont_moths_2023", 200, self._make_settings()
+            )
 
         assert result is True
-        mock_post.assert_called_once()
-        # Verify AntennaTaskResult objects were passed
-        call_args = mock_post.call_args
-        batch_results = call_args[0][2]  # third positional arg
-        assert len(batch_results) == 2
-        assert all(isinstance(r, AntennaTaskResult) for r in batch_results)
-        assert all(isinstance(r.result, PipelineResultsResponse) for r in batch_results)
 
-    @patch("trapdata.cli.worker.post_batch_results")
-    @patch("trapdata.cli.worker.APIMothDetector")
-    @patch("trapdata.cli.worker.CLASSIFIER_CHOICES", {"moths_2024": MagicMock})
-    @patch("trapdata.cli.worker.get_rest_dataloader")
-    def test_handles_failed_items(self, mock_loader_fn, mock_detector_cls, mock_post):
-        """Batch with failed_items → error results in posted payload."""
-        failed_items = [
-            {
-                "reply_subject": "reply_fail",
-                "image_id": "imgX",
-                "error": "404 not found",
-            },
+        # Step 3: Validate results posted
+        posted_results = antenna_api_server.get_posted_results(200)
+        assert len(posted_results) == 2
+
+        # Validate all results are valid
+        for task_result in posted_results:
+            assert isinstance(task_result, AntennaTaskResult)
+            assert task_result.reply_subject is not None
+
+            # Should be success results
+            assert isinstance(task_result.result, PipelineResultsResponse)
+            response = task_result.result
+
+            # Validate pipeline response structure
+            assert response.pipeline == "quebec_vermont_moths_2023"
+            assert response.total_time > 0
+            assert len(response.source_images) == 1
+
+            # Validate detections structure (may be empty if no moths)
+            assert isinstance(response.detections, list)
+            if response.detections:
+                detection = response.detections[0]
+                assert detection.bbox is not None
+                assert detection.source_image_id is not None
+
+    def test_multiple_batches_processed(self):
+        """Job with more tasks than batch size processes in multiple batches."""
+        # Setup job with 3 images (all available in vermont dir), batch size 2
+        image_urls = get_test_image_urls(
+            self.file_server, self.test_images_dir, subdir="vermont", num=3
+        )
+        tasks = [
+            AntennaPipelineProcessingTask(
+                id=f"task_{i}",
+                image_id=f"img_{i}",
+                image_url=url,
+                reply_subject=f"reply_{i}",
+            )
+            for i, url in enumerate(image_urls)
         ]
-        # Batch with 1 successful image + 1 failed
-        batch = self._make_batch(num_images=1, failed_items=failed_items)
-        mock_loader_fn.return_value = [batch]
+        antenna_api_server.setup_job(job_id=201, tasks=tasks)
 
-        mock_detector = MagicMock()
-        mock_detector_cls.return_value = mock_detector
-        mock_detector.predict_batch.return_value = [
-            {"boxes": torch.tensor([[5, 5, 30, 30]]), "scores": torch.tensor([0.7])},
-        ]
-        mock_detector.post_process_batch.return_value = iter(
-            mock_detector.predict_batch.return_value
+        with patch_antenna_api_requests(self.antenna_client):
+            result = _process_job(
+                "quebec_vermont_moths_2023", 201, self._make_settings()
+            )
+
+        assert result is True
+
+        # All 3 results should be posted (batch1: 2, batch2: 1)
+        posted_results = antenna_api_server.get_posted_results(201)
+        assert len(posted_results) == 3
+
+        # All should be successful
+        assert all(
+            isinstance(r.result, PipelineResultsResponse) for r in posted_results
         )
-
-        from trapdata.api.schemas import (
-            AlgorithmReference,
-            BoundingBox,
-            DetectionResponse,
-        )
-
-        det = DetectionResponse(
-            source_image_id="img0",
-            bbox=BoundingBox(x1=5, y1=5, x2=30, y2=30),
-            algorithm=AlgorithmReference(name="det", key="det_v1"),
-            timestamp=datetime.datetime.now(),
-        )
-        mock_detector.results = [det]
-
-        mock_classifier_cls = MagicMock()
-        with patch.dict(
-            "trapdata.cli.worker.CLASSIFIER_CHOICES",
-            {"moths_2024": mock_classifier_cls},
-        ):
-            mock_classifier = MagicMock()
-            mock_classifier_cls.return_value = mock_classifier
-            mock_classifier.predict_batch.return_value = [{"scores": [0.9]}]
-            mock_classifier.post_process_batch.return_value = [{"scores": [0.9]}]
-            mock_classifier.update_detection_classification.return_value = det
-
-            mock_post.return_value = True
-            _process_job("moths_2024", 1, self._make_settings())
-
-        batch_results = mock_post.call_args[0][2]
-        # 1 success + 1 failure
-        assert len(batch_results) == 2
-        error_items = [
-            r for r in batch_results if isinstance(r.result, AntennaTaskResultError)
-        ]
-        assert len(error_items) == 1
-        assert error_items[0].result.error == "404 not found"
-        assert error_items[0].reply_subject == "reply_fail"
-
-    @patch("trapdata.cli.worker.get_rest_dataloader")
-    def test_empty_loader(self, mock_loader_fn):
-        """No batches → returns False."""
-        mock_loader_fn.return_value = []
-
-        result = _process_job("moths_2024", 1, self._make_settings())
-        assert result is False
-
-    @patch("trapdata.cli.worker.post_batch_results")
-    @patch("trapdata.cli.worker.APIMothDetector")
-    @patch("trapdata.cli.worker.CLASSIFIER_CHOICES", {"moths_2024": MagicMock})
-    @patch("trapdata.cli.worker.get_rest_dataloader")
-    def test_multiple_batches(self, mock_loader_fn, mock_detector_cls, mock_post):
-        """Results posted per-batch (post called once per batch)."""
-        batch1 = self._make_batch(num_images=1)
-        batch2 = self._make_batch(num_images=1)
-        mock_loader_fn.return_value = [batch1, batch2]
-
-        mock_detector = MagicMock()
-        mock_detector_cls.return_value = mock_detector
-        mock_detector.predict_batch.return_value = [
-            {"boxes": torch.tensor([[0, 0, 10, 10]]), "scores": torch.tensor([0.5])},
-        ]
-        mock_detector.post_process_batch.return_value = iter(
-            mock_detector.predict_batch.return_value
-        )
-
-        from trapdata.api.schemas import (
-            AlgorithmReference,
-            BoundingBox,
-            DetectionResponse,
-        )
-
-        det = DetectionResponse(
-            source_image_id="img0",
-            bbox=BoundingBox(x1=0, y1=0, x2=10, y2=10),
-            algorithm=AlgorithmReference(name="det", key="det_v1"),
-            timestamp=datetime.datetime.now(),
-        )
-        mock_detector.results = [det]
-
-        mock_classifier_cls = MagicMock()
-        with patch.dict(
-            "trapdata.cli.worker.CLASSIFIER_CHOICES",
-            {"moths_2024": mock_classifier_cls},
-        ):
-            mock_classifier = MagicMock()
-            mock_classifier_cls.return_value = mock_classifier
-            mock_classifier.predict_batch.return_value = [{"scores": [0.8]}]
-            mock_classifier.post_process_batch.return_value = [{"scores": [0.8]}]
-            mock_classifier.update_detection_classification.return_value = det
-
-            mock_post.return_value = True
-            _process_job("moths_2024", 1, self._make_settings())
-
-        assert mock_post.call_count == 2

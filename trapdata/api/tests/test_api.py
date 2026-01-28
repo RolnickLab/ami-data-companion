@@ -1,13 +1,11 @@
 import logging
 import pathlib
-from typing import Type
 from unittest import TestCase
 
 from fastapi.testclient import TestClient
 
 from trapdata.api.api import (
     CLASSIFIER_CHOICES,
-    APIMothClassifier,
     PipelineChoice,
     PipelineRequest,
     PipelineResponse,
@@ -15,8 +13,9 @@ from trapdata.api.api import (
     make_algorithm_response,
     make_pipeline_config_response,
 )
-from trapdata.api.schemas import PipelineConfigRequest, SourceImageRequest
+from trapdata.api.schemas import PipelineConfigRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
+from trapdata.api.tests.utils import get_test_images, get_pipeline_class
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 logging.basicConfig(level=logging.INFO)
@@ -40,22 +39,10 @@ class TestInferenceAPI(TestCase):
             cls.file_server.stop()
 
     def get_test_images(self, subdir: str = "vermont", num: int = 2):
-        images_dir = self.test_images_dir / subdir
-        source_image_urls = [
-            self.file_server.get_url(f.relative_to(self.test_images_dir))
-            for f in images_dir.glob("*.jpg")
-        ][:num]
-        source_images = [
-            SourceImageRequest(id=str(i), url=url)
-            for i, url in enumerate(source_image_urls)
-        ]
-        return source_images
+        return get_test_images(self.file_server, self.test_images_dir, subdir, num)
 
-    def get_test_pipeline(
-        self, slug: str = "quebec_vermont_moths_2023"
-    ) -> Type[APIMothClassifier]:
-        pipeline = CLASSIFIER_CHOICES[slug]
-        return pipeline
+    def get_test_pipeline(self, slug: str = "quebec_vermont_moths_2023"):
+        return get_pipeline_class(slug)
 
     def test_pipeline_request(self):
         """
