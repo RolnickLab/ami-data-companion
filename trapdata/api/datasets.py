@@ -1,5 +1,4 @@
 import os
-import time
 import typing
 from io import BytesIO
 
@@ -10,6 +9,7 @@ import torchvision
 from PIL import Image
 
 from trapdata.common.logs import logger
+from trapdata.common.utils import get_http_session
 
 from .schemas import (
     AntennaPipelineProcessingTask,
@@ -127,6 +127,8 @@ class RESTDataset(torch.utils.data.IterableDataset):
         batch_size: int = 1,
         image_transforms: typing.Optional[torchvision.transforms.Compose] = None,
         auth_token: typing.Optional[str] = None,
+        retry_max: int = 3,
+        retry_backoff: float = 0.5,
     ):
         """
         Initialize the REST dataset.
@@ -137,6 +139,8 @@ class RESTDataset(torch.utils.data.IterableDataset):
             batch_size: Number of tasks to request per batch
             image_transforms: Optional transforms to apply to loaded images
             auth_token: API authentication token
+            retry_max: Maximum number of retry attempts for failed HTTP requests
+            retry_backoff: Exponential backoff factor for retries (seconds)
         """
         super().__init__()
         self.base_url = base_url
@@ -144,6 +148,9 @@ class RESTDataset(torch.utils.data.IterableDataset):
         self.batch_size = batch_size
         self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
         self.auth_token = auth_token or os.environ.get("ANTENNA_API_TOKEN")
+        self.session = get_http_session(
+            max_retries=retry_max, backoff_factor=retry_backoff
+        )
 
     def _fetch_tasks(self) -> list[AntennaPipelineProcessingTask]:
         """
@@ -162,7 +169,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
         if self.auth_token:
             headers["Authorization"] = f"Token {self.auth_token}"
 
-        response = requests.get(
+        response = self.session.get(
             url,
             params=params,
             timeout=30,
@@ -185,7 +192,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
             Image as a PyTorch tensor, or None if loading failed
         """
         try:
-            response = requests.get(image_url, timeout=30)
+            response = self.session.get(image_url, timeout=30)
             response.raise_for_status()
             image = Image.open(BytesIO(response.content))
 
@@ -226,12 +233,11 @@ class RESTDataset(torch.utils.data.IterableDataset):
                 try:
                     tasks = self._fetch_tasks()
                 except requests.RequestException as e:
-                    # Fetch failed - retry after delay
-                    logger.warning(
-                        f"Worker {worker_id}: Fetch failed ({e}), retrying in 5s"
+                    # Fetch failed after retries - log and stop
+                    logger.error(
+                        f"Worker {worker_id}: Fetch failed after retries ({e}), stopping"
                     )
-                    time.sleep(5)
-                    continue
+                    break
 
                 if not tasks:
                     # Queue is empty - job complete
@@ -350,6 +356,8 @@ def get_rest_dataloader(
         job_id=job_id,
         batch_size=settings.antenna_api_batch_size,
         auth_token=settings.antenna_api_auth_token,
+        retry_max=settings.antenna_api_retry_max,
+        retry_backoff=settings.antenna_api_retry_backoff,
     )
 
     return torch.utils.data.DataLoader(

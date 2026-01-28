@@ -7,6 +7,10 @@ import string
 import time
 from typing import Any, Callable, Tuple, Union
 
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 
 def get_sequential_sample(direction, images, last_sample=None):
     if not images:
@@ -147,3 +151,46 @@ def log_time(start: float = 0, msg: str | None = None) -> Tuple[float, Callable]
         logger.info(f"{msg}: {dur:.3f}s")
     new_start = time.perf_counter()
     return dur, functools.partial(log_time, new_start)
+
+
+def get_http_session(
+    max_retries: int = 3,
+    backoff_factor: float = 0.5,
+    status_forcelist: tuple[int, ...] = (500, 502, 503, 504),
+) -> requests.Session:
+    """
+    Create an HTTP session with retry logic for transient failures.
+
+    Configures a requests.Session with HTTPAdapter and urllib3.Retry to automatically
+    retry failed requests with exponential backoff. Only retries on server errors (5XX)
+    and network failures, NOT on client errors (4XX).
+
+    Args:
+        max_retries: Maximum number of retry attempts (default: 3)
+        backoff_factor: Exponential backoff multiplier in seconds (default: 0.5)
+                       Delays will be: backoff_factor * (2 ** retry_number)
+                       e.g., 0.5s, 1s, 2s for default settings
+        status_forcelist: HTTP status codes that trigger a retry (default: 500, 502, 503, 504)
+
+    Returns:
+        Configured requests.Session with retry adapter mounted
+
+    Example:
+        >>> session = get_http_session(max_retries=3, backoff_factor=0.5)
+        >>> response = session.get("https://api.example.com/data")
+    """
+    session = requests.Session()
+
+    retry_strategy = Retry(
+        total=max_retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=status_forcelist,
+        allowed_methods=["GET", "POST"],
+        raise_on_status=False,  # Don't raise exception, let caller handle status codes
+    )
+
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+
+    return session

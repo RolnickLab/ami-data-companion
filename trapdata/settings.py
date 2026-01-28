@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     antenna_api_base_url: str = "http://localhost:8000/api/v2"
     antenna_api_auth_token: str = ""
     antenna_api_batch_size: int = 4
+    antenna_api_retry_max: int = 3
+    antenna_api_retry_backoff: float = 0.5
 
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
@@ -163,6 +165,18 @@ class Settings(BaseSettings):
             "antenna_api_batch_size": {
                 "title": "Antenna API Batch Size",
                 "description": "Number of tasks to fetch from Antenna per batch",
+                "kivy_type": "numeric",
+                "kivy_section": "antenna",
+            },
+            "antenna_api_retry_max": {
+                "title": "Antenna API Max Retries",
+                "description": "Maximum number of retry attempts for failed HTTP requests (5XX errors, network failures)",
+                "kivy_type": "numeric",
+                "kivy_section": "antenna",
+            },
+            "antenna_api_retry_backoff": {
+                "title": "Antenna API Retry Backoff Factor",
+                "description": "Exponential backoff factor for retries (seconds). Delays will be 0.5s, 1s, 2s, etc.",
                 "kivy_type": "numeric",
                 "kivy_section": "antenna",
             },
