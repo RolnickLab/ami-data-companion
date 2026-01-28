@@ -14,6 +14,8 @@ from trapdata.api.schemas import (
     AntennaTaskResult,
     AntennaTaskResults,
     AntennaTasksListResponse,
+    AsyncPipelineRegistrationRequest,
+    AsyncPipelineRegistrationResponse,
 )
 
 app = FastAPI()
@@ -21,6 +23,8 @@ app = FastAPI()
 # State management for tests
 _jobs_queue: dict[int, list[AntennaPipelineProcessingTask]] = {}
 _posted_results: dict[int, list[AntennaTaskResult]] = {}
+_projects: list[dict] = []
+_registered_pipelines: dict[int, list[str]] = {}  # project_id -> pipeline slugs
 
 
 @app.get("/api/v2/jobs")
@@ -84,6 +88,52 @@ def post_results(job_id: int, payload: list[dict]):
     return {"status": "ok"}
 
 
+@app.get("/api/v2/projects/")
+def get_projects():
+    """Return list of projects the user has access to.
+
+    Returns:
+        Paginated response with list of projects
+    """
+    return {"results": _projects}
+
+
+@app.post("/api/v2/projects/{project_id}/pipelines/")
+def register_pipelines(project_id: int, payload: dict):
+    """Register pipelines for a project.
+
+    Args:
+        project_id: Project ID to register pipelines for
+        payload: AsyncPipelineRegistrationRequest as dict
+
+    Returns:
+        AsyncPipelineRegistrationResponse
+    """
+    # Validate request
+    request = AsyncPipelineRegistrationRequest(**payload)
+
+    # Check if project exists
+    project_ids = [p["id"] for p in _projects]
+    if project_id not in project_ids:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Track registered pipelines
+    if project_id not in _registered_pipelines:
+        _registered_pipelines[project_id] = []
+
+    created = []
+    for pipeline in request.pipelines:
+        if pipeline.slug not in _registered_pipelines[project_id]:
+            _registered_pipelines[project_id].append(pipeline.slug)
+            created.append(pipeline.slug)
+
+    return AsyncPipelineRegistrationResponse(
+        pipelines_created=created,
+        pipelines_updated=[],
+        processing_service_id=1,
+    )
+
+
 # Test helper methods
 
 
@@ -109,7 +159,31 @@ def get_posted_results(job_id: int) -> list[AntennaTaskResult]:
     return _posted_results.get(job_id, [])
 
 
+def setup_projects(projects: list[dict]):
+    """Setup projects for testing.
+
+    Args:
+        projects: List of project dicts with 'id' and 'name' fields
+    """
+    _projects.clear()
+    _projects.extend(projects)
+
+
+def get_registered_pipelines(project_id: int) -> list[str]:
+    """Get list of pipeline slugs registered for a project.
+
+    Args:
+        project_id: Project ID to get pipelines for
+
+    Returns:
+        List of pipeline slugs
+    """
+    return _registered_pipelines.get(project_id, [])
+
+
 def reset():
     """Clear all state between tests."""
     _jobs_queue.clear()
     _posted_results.clear()
+    _projects.clear()
+    _registered_pipelines.clear()
