@@ -258,6 +258,14 @@ class TestRESTDatasetIteration:
 class TestGetJobs:
     """Tests for _get_jobs() which fetches job IDs from the API."""
 
+    def _make_settings(self):
+        settings = MagicMock()
+        settings.antenna_api_base_url = "http://api.test/api/v2"
+        settings.antenna_api_auth_token = "mytoken"
+        settings.antenna_api_retry_max = 3
+        settings.antenna_api_retry_backoff = 0.5
+        return settings
+
     @patch("trapdata.cli.worker.get_http_session")
     def test_returns_job_ids(self, mock_get_session):
         response = MagicMock()
@@ -266,9 +274,11 @@ class TestGetJobs:
 
         mock_session = MagicMock()
         mock_session.get.return_value = response
-        mock_get_session.return_value = mock_session
+        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
 
-        result = _get_jobs("http://api.test/api/v2", "mytoken", "moths_2024")
+        settings = self._make_settings()
+        result = _get_jobs(settings, "moths_2024")
         assert result == [10, 20, 30]
 
     @patch("trapdata.cli.worker.get_http_session")
@@ -279,9 +289,12 @@ class TestGetJobs:
 
         mock_session = MagicMock()
         mock_session.get.return_value = response
-        mock_get_session.return_value = mock_session
+        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
 
-        _get_jobs("http://api.test/api/v2", "secret-token", "pipeline1")
+        settings = self._make_settings()
+        settings.antenna_api_auth_token = "secret-token"
+        _get_jobs(settings, "pipeline1")
 
         # Verify auth_token was passed to get_http_session
         mock_get_session.assert_called_once()
@@ -296,9 +309,11 @@ class TestGetJobs:
 
         mock_session = MagicMock()
         mock_session.get.return_value = response
-        mock_get_session.return_value = mock_session
+        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
 
-        _get_jobs("http://api.test/api/v2", "tok", "my_pipeline")
+        settings = self._make_settings()
+        _get_jobs(settings, "my_pipeline")
 
         call_kwargs = mock_session.get.call_args[1]
         params = call_kwargs["params"]
@@ -310,9 +325,11 @@ class TestGetJobs:
     def test_network_error(self, mock_get_session):
         mock_session = MagicMock()
         mock_session.get.side_effect = requests.RequestException("timeout")
-        mock_get_session.return_value = mock_session
+        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
 
-        result = _get_jobs("http://api.test/api/v2", "tok", "pipeline1")
+        settings = self._make_settings()
+        result = _get_jobs(settings, "pipeline1")
         assert result == []
 
     @patch("trapdata.cli.worker.get_http_session")
@@ -323,9 +340,11 @@ class TestGetJobs:
 
         mock_session = MagicMock()
         mock_session.get.return_value = response
-        mock_get_session.return_value = mock_session
+        mock_get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_get_session.return_value.__exit__ = MagicMock(return_value=False)
 
-        result = _get_jobs("http://api.test/api/v2", "tok", "pipeline1")
+        settings = self._make_settings()
+        result = _get_jobs(settings, "pipeline1")
         assert result == []
 
 
@@ -342,6 +361,8 @@ class TestProcessJob:
         settings.antenna_api_base_url = "http://api.test/api/v2"
         settings.antenna_api_auth_token = "test-token"
         settings.antenna_api_batch_size = 4
+        settings.antenna_api_retry_max = 3
+        settings.antenna_api_retry_backoff = 0.5
         settings.num_workers = 0
         return settings
 
