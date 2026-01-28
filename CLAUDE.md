@@ -13,8 +13,9 @@ This file helps AI agents (like Claude) work efficiently with the AMI Data Compa
 3. **Always prefer command line tools** to avoid expensive API requests (e.g., use git and jq instead of reading whole files)
 4. **Use bulk operations and prefetch patterns** to minimize database queries
 5. **Commit often** - Small, focused commits make debugging easier
-6. **Use TDD whenever possible** - Tests prevent regressions and document expected behavior
-7. **Keep it simple** - Always think hard and evaluate more complex approaches and alternative approaches before moving forward
+6. **Use `git add -p` for staging** - Interactive staging to add only relevant changes, creating logical commits
+7. **Use TDD whenever possible** - Tests prevent regressions and document expected behavior
+8. **Keep it simple** - Always think hard and evaluate more complex approaches and alternative approaches before moving forward
 
 ### Think Holistically
 
