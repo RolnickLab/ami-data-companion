@@ -125,8 +125,8 @@ class RESTDataset(torch.utils.data.IterableDataset):
         base_url: str,
         job_id: int,
         batch_size: int = 1,
-        image_transforms: typing.Optional[torchvision.transforms.Compose] = None,
-        auth_token: typing.Optional[str] = None,
+        image_transforms: torchvision.transforms.Compose | None = None,
+        auth_token: str | None = None,
         retry_max: int = 3,
         retry_backoff: float = 0.5,
     ):
@@ -151,6 +151,25 @@ class RESTDataset(torch.utils.data.IterableDataset):
         self.retry_max = retry_max
         self.retry_backoff = retry_backoff
 
+        # Create persistent sessions for connection pooling
+        self.api_session = get_http_session(
+            auth_token=self.auth_token,
+            max_retries=self.retry_max,
+            backoff_factor=self.retry_backoff,
+        )
+        self.image_fetch_session = get_http_session(
+            auth_token=None,  # External image URLs don't need API auth
+            max_retries=self.retry_max,
+            backoff_factor=self.retry_backoff,
+        )
+
+    def __del__(self):
+        """Clean up HTTP sessions on dataset destruction."""
+        if hasattr(self, "api_session"):
+            self.api_session.close()
+        if hasattr(self, "image_fetch_session"):
+            self.image_fetch_session.close()
+
     def _fetch_tasks(self) -> list[AntennaPipelineProcessingTask]:
         """
         Fetch a batch of tasks from the REST API.
@@ -164,19 +183,14 @@ class RESTDataset(torch.utils.data.IterableDataset):
         url = f"{self.base_url.rstrip('/')}/jobs/{self.job_id}/tasks"
         params = {"batch": self.batch_size}
 
-        # Create session with auth for API call
-        response = get_http_session(
-            auth_token=self.auth_token,
-            max_retries=self.retry_max,
-            backoff_factor=self.retry_backoff,
-        ).get(url, params=params, timeout=30)
+        response = self.api_session.get(url, params=params, timeout=30)
         response.raise_for_status()
 
         # Parse and validate response with Pydantic
         tasks_response = AntennaTasksListResponse.model_validate(response.json())
         return tasks_response.tasks  # Empty list is valid (queue drained)
 
-    def _load_image(self, image_url: str) -> typing.Optional[torch.Tensor]:
+    def _load_image(self, image_url: str) -> torch.Tensor | None:
         """
         Load an image from a URL and convert it to a PyTorch tensor.
 
@@ -187,8 +201,8 @@ class RESTDataset(torch.utils.data.IterableDataset):
             Image as a PyTorch tensor, or None if loading failed
         """
         try:
-            # External image URLs - don't send API auth token
-            response = get_http_session().get(image_url, timeout=30)
+            # Use dedicated session without auth for external images
+            response = self.image_fetch_session.get(image_url, timeout=30)
             response.raise_for_status()
             image = Image.open(BytesIO(response.content))
 
