@@ -131,8 +131,8 @@ class TestRESTDatasetIteration:
         defaults.update(kwargs)
         return RESTDataset(**defaults)
 
-    @patch("trapdata.api.datasets.requests.get")
-    def test_normal_iteration(self, mock_get):
+    @patch("trapdata.api.datasets.get_http_session")
+    def test_normal_iteration(self, mock_get_session):
         """Fetch tasks, load images, yield rows, then empty stops iteration."""
         # First call: return tasks; second call: image download; etc.
         tasks_response = MagicMock()
@@ -168,8 +168,10 @@ class TestRESTDatasetIteration:
         empty_response.json.return_value = {"tasks": []}
         empty_response.raise_for_status = MagicMock()
 
-        # tasks fetch -> image download -> empty tasks fetch
-        mock_get.side_effect = [tasks_response, image_response, empty_response]
+        # Create a mock session
+        mock_session = MagicMock()
+        mock_session.get.side_effect = [tasks_response, image_response, empty_response]
+        mock_get_session.return_value = mock_session
 
         ds = self._make_dataset()
         rows = list(ds)
@@ -179,8 +181,8 @@ class TestRESTDatasetIteration:
         assert rows[0]["image"] is not None
         assert isinstance(rows[0]["image"], torch.Tensor)
 
-    @patch("trapdata.api.datasets.requests.get")
-    def test_image_failure(self, mock_get):
+    @patch("trapdata.api.datasets.get_http_session")
+    def test_image_failure(self, mock_get_session):
         """Image download returns 404 → row has error, image is None."""
         tasks_response = MagicMock()
         tasks_response.json.return_value = {
@@ -202,7 +204,10 @@ class TestRESTDatasetIteration:
         empty_response.json.return_value = {"tasks": []}
         empty_response.raise_for_status = MagicMock()
 
-        mock_get.side_effect = [tasks_response, image_response, empty_response]
+        # Create a mock session
+        mock_session = MagicMock()
+        mock_session.get.side_effect = [tasks_response, image_response, empty_response]
+        mock_get_session.return_value = mock_session
 
         ds = self._make_dataset()
         rows = list(ds)
@@ -211,67 +216,38 @@ class TestRESTDatasetIteration:
         assert rows[0]["image"] is None
         assert "error" in rows[0]
 
-    @patch("trapdata.api.datasets.requests.get")
-    def test_empty_queue(self, mock_get):
+    @patch("trapdata.api.datasets.get_http_session")
+    def test_empty_queue(self, mock_get_session):
         """First fetch returns empty → iterator stops immediately."""
         empty_response = MagicMock()
         empty_response.json.return_value = {"tasks": []}
         empty_response.raise_for_status = MagicMock()
 
-        mock_get.return_value = empty_response
+        # Create a mock session
+        mock_session = MagicMock()
+        mock_session.get.return_value = empty_response
+        mock_get_session.return_value = mock_session
 
         ds = self._make_dataset()
         rows = list(ds)
 
         assert rows == []
 
-    @patch("trapdata.api.datasets.time.sleep", return_value=None)
-    @patch("trapdata.api.datasets.requests.get")
-    def test_fetch_retry_on_error(self, mock_get, mock_sleep):
-        """First fetch raises RequestException, second succeeds → continues."""
-        import io
-
-        from PIL import Image
-
-        buf = io.BytesIO()
-        Image.new("RGB", (32, 32), color="blue").save(buf, format="PNG")
-        image_bytes = buf.getvalue()
-
-        tasks_response = MagicMock()
-        tasks_response.json.return_value = {
-            "tasks": [
-                {
-                    "id": "t1",
-                    "image_id": "img1",
-                    "image_url": "http://images.test/1.jpg",
-                    "reply_subject": "reply1",
-                },
-            ]
-        }
-        tasks_response.raise_for_status = MagicMock()
-
-        image_response = MagicMock()
-        image_response.content = image_bytes
-        image_response.raise_for_status = MagicMock()
-
-        empty_response = MagicMock()
-        empty_response.json.return_value = {"tasks": []}
-        empty_response.raise_for_status = MagicMock()
-
-        # First fetch fails, second succeeds, then image download, then empty
-        mock_get.side_effect = [
-            requests.RequestException("connection reset"),
-            tasks_response,
-            image_response,
-            empty_response,
-        ]
+    @patch("trapdata.api.datasets.get_http_session")
+    def test_fetch_failure_stops_iteration(self, mock_get_session):
+        """After max retries exhausted, iterator stops (no infinite loop)."""
+        # Create a mock session that always fails
+        mock_session = MagicMock()
+        mock_session.get.side_effect = requests.RequestException("connection failed")
+        mock_get_session.return_value = mock_session
 
         ds = self._make_dataset()
         rows = list(ds)
 
-        assert len(rows) == 1
-        assert rows[0]["image_id"] == "img1"
-        mock_sleep.assert_called_once_with(5)
+        # Iterator should stop after failure (not infinite loop)
+        assert rows == []
+        # Verify fetch was attempted
+        assert mock_session.get.called
 
 
 # ---------------------------------------------------------------------------
@@ -282,56 +258,70 @@ class TestRESTDatasetIteration:
 class TestGetJobs:
     """Tests for _get_jobs() which fetches job IDs from the API."""
 
-    @patch("trapdata.cli.worker.requests.get")
-    def test_returns_job_ids(self, mock_get):
+    @patch("trapdata.cli.worker.get_http_session")
+    def test_returns_job_ids(self, mock_get_session):
         response = MagicMock()
         response.json.return_value = {"results": [{"id": 10}, {"id": 20}, {"id": 30}]}
         response.raise_for_status = MagicMock()
-        mock_get.return_value = response
+
+        mock_session = MagicMock()
+        mock_session.get.return_value = response
+        mock_get_session.return_value = mock_session
 
         result = _get_jobs("http://api.test/api/v2", "mytoken", "moths_2024")
         assert result == [10, 20, 30]
 
-    @patch("trapdata.cli.worker.requests.get")
-    def test_auth_header(self, mock_get):
+    @patch("trapdata.cli.worker.get_http_session")
+    def test_auth_header(self, mock_get_session):
         response = MagicMock()
         response.json.return_value = {"results": []}
         response.raise_for_status = MagicMock()
-        mock_get.return_value = response
+
+        mock_session = MagicMock()
+        mock_session.get.return_value = response
+        mock_get_session.return_value = mock_session
 
         _get_jobs("http://api.test/api/v2", "secret-token", "pipeline1")
 
-        call_kwargs = mock_get.call_args[1]
+        call_kwargs = mock_session.get.call_args[1]
         assert call_kwargs["headers"]["Authorization"] == "Token secret-token"
 
-    @patch("trapdata.cli.worker.requests.get")
-    def test_query_params(self, mock_get):
+    @patch("trapdata.cli.worker.get_http_session")
+    def test_query_params(self, mock_get_session):
         response = MagicMock()
         response.json.return_value = {"results": []}
         response.raise_for_status = MagicMock()
-        mock_get.return_value = response
+
+        mock_session = MagicMock()
+        mock_session.get.return_value = response
+        mock_get_session.return_value = mock_session
 
         _get_jobs("http://api.test/api/v2", "tok", "my_pipeline")
 
-        call_kwargs = mock_get.call_args[1]
+        call_kwargs = mock_session.get.call_args[1]
         params = call_kwargs["params"]
         assert params["pipeline__slug"] == "my_pipeline"
         assert params["ids_only"] == 1
         assert params["incomplete_only"] == 1
 
-    @patch("trapdata.cli.worker.requests.get")
-    def test_network_error(self, mock_get):
-        mock_get.side_effect = requests.RequestException("timeout")
+    @patch("trapdata.cli.worker.get_http_session")
+    def test_network_error(self, mock_get_session):
+        mock_session = MagicMock()
+        mock_session.get.side_effect = requests.RequestException("timeout")
+        mock_get_session.return_value = mock_session
 
         result = _get_jobs("http://api.test/api/v2", "tok", "pipeline1")
         assert result == []
 
-    @patch("trapdata.cli.worker.requests.get")
-    def test_invalid_response(self, mock_get):
+    @patch("trapdata.cli.worker.get_http_session")
+    def test_invalid_response(self, mock_get_session):
         response = MagicMock()
         response.raise_for_status = MagicMock()
         response.json.return_value = {"unexpected": "format"}
-        mock_get.return_value = response
+
+        mock_session = MagicMock()
+        mock_session.get.return_value = response
+        mock_get_session.return_value = mock_session
 
         result = _get_jobs("http://api.test/api/v2", "tok", "pipeline1")
         assert result == []
