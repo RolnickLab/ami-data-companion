@@ -257,15 +257,6 @@ class TestGetJobsIntegration(TestCase):
     def setUp(self):
         antenna_api_server.reset()
 
-    def _make_settings(self):
-        """Create mock settings for _get_jobs."""
-        settings = MagicMock()
-        settings.antenna_api_base_url = "http://testserver/api/v2"
-        settings.antenna_api_auth_token = "test-token"
-        settings.antenna_api_retry_max = 3
-        settings.antenna_api_retry_backoff = 0.5
-        return settings
-
     def test_returns_job_ids(self):
         """Successfully fetches list of job IDs."""
         # Setup jobs in queue
@@ -274,14 +265,14 @@ class TestGetJobsIntegration(TestCase):
         antenna_api_server.setup_job(30, [])
 
         with patch_antenna_api_requests(self.antenna_client):
-            result = _get_jobs(self._make_settings(), "moths_2024")
+            result = _get_jobs("http://testserver/api/v2", "test-token", "moths_2024")
 
         assert result == [10, 20, 30]
 
     def test_empty_queue(self):
         """Empty job queue returns empty list."""
         with patch_antenna_api_requests(self.antenna_client):
-            result = _get_jobs(self._make_settings(), "moths_2024")
+            result = _get_jobs("http://testserver/api/v2", "test-token", "moths_2024")
 
         assert result == []
 
@@ -292,7 +283,7 @@ class TestGetJobsIntegration(TestCase):
         antenna_api_server.setup_job(1, [])
 
         with patch_antenna_api_requests(self.antenna_client):
-            result = _get_jobs(self._make_settings(), "my_pipeline")
+            result = _get_jobs("http://testserver/api/v2", "test-token", "my_pipeline")
 
         assert isinstance(result, list)
 
@@ -503,7 +494,8 @@ class TestWorkerEndToEnd(TestCase):
         # Step 1: Get jobs
         with patch_antenna_api_requests(self.antenna_client):
             job_ids = _get_jobs(
-                self._make_settings(),
+                "http://testserver/api/v2",
+                "test-token",
                 "quebec_vermont_moths_2023",
             )
 

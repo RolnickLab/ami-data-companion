@@ -61,27 +61,33 @@ def post_batch_results(
 
 
 def _get_jobs(
-    settings: Settings,
+    base_url: str,
+    auth_token: str,
     pipeline_slug: str,
+    retry_max: int = 3,
+    retry_backoff: float = 0.5,
 ) -> list[int]:
     """Fetch job ids from the API for the given pipeline.
 
     Calls: GET {base_url}/jobs?pipeline__slug=<pipeline>&ids_only=1
 
     Args:
-        settings: Settings object with antenna_api_* configuration
+        base_url: Antenna API base URL (e.g., "http://localhost:8000/api/v2")
+        auth_token: API authentication token
         pipeline_slug: Pipeline slug to filter jobs
+        retry_max: Maximum retry attempts for failed requests
+        retry_backoff: Exponential backoff factor in seconds
 
     Returns:
         List of job ids (possibly empty) on success or error.
     """
     with get_http_session(
-        auth_token=settings.antenna_api_auth_token,
-        max_retries=settings.antenna_api_retry_max,
-        backoff_factor=settings.antenna_api_retry_backoff,
+        auth_token=auth_token,
+        max_retries=retry_max,
+        backoff_factor=retry_backoff,
     ) as session:
         try:
-            url = f"{settings.antenna_api_base_url.rstrip('/')}/jobs"
+            url = f"{base_url.rstrip('/')}/jobs"
             params = {
                 "pipeline__slug": pipeline_slug,
                 "ids_only": 1,
@@ -95,9 +101,7 @@ def _get_jobs(
             jobs_response = AntennaJobsListResponse.model_validate(resp.json())
             return [job.id for job in jobs_response.results]
         except requests.RequestException as e:
-            logger.error(
-                f"Failed to fetch jobs from {settings.antenna_api_base_url}: {e}"
-            )
+            logger.error(f"Failed to fetch jobs from {base_url}: {e}")
             return []
         except Exception as e:
             logger.error(f"Failed to parse jobs response: {e}")
@@ -122,7 +126,11 @@ def run_worker(pipelines: list[str]):
         any_jobs = False
         for pipeline in pipelines:
             logger.info(f"Checking for jobs for pipeline {pipeline}")
-            jobs = _get_jobs(settings=settings, pipeline_slug=pipeline)
+            jobs = _get_jobs(
+                base_url=settings.antenna_api_base_url,
+                auth_token=settings.antenna_api_auth_token,
+                pipeline_slug=pipeline,
+            )
             for job_id in jobs:
                 logger.info(f"Processing job {job_id} with pipeline {pipeline}")
                 any_work_done = _process_job(
