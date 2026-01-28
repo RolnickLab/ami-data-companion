@@ -69,7 +69,10 @@ def post_batch_results(
 
 
 def _get_jobs(
-    base_url: str, auth_token: str, pipeline_slug: str, session: requests.Session | None = None
+    base_url: str,
+    auth_token: str,
+    pipeline_slug: str,
+    session: requests.Session | None = None,
 ) -> list[int]:
     """Fetch job ids from the API for the given pipeline.
 
@@ -158,7 +161,10 @@ def run_worker(pipelines: List[str]):
 
 @torch.no_grad()
 def _process_job(
-    pipeline: str, job_id: int, settings: Settings, session: requests.Session | None = None
+    pipeline: str,
+    job_id: int,
+    settings: Settings,
+    session: requests.Session | None = None,
 ) -> bool:
     """Run the worker to process images from the REST API queue.
 
