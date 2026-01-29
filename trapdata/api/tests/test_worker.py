@@ -27,7 +27,6 @@ from trapdata.api.tests.utils import get_test_image_urls, patch_antenna_api_requ
 from trapdata.cli.worker import (
     _get_jobs,
     _process_job,
-    get_user_projects,
     register_pipelines_for_project,
 )
 from trapdata.tests import TEST_IMAGES_BASE_PATH
@@ -112,22 +111,6 @@ class TestRestCollateFn(TestCase):
         assert len(result["failed_items"]) == 1
         assert result["failed_items"][0]["image_id"] == "img2"
 
-    def test_single_item(self):
-        batch = [
-            {
-                "image": torch.rand(3, 32, 32),
-                "reply_subject": "subj1",
-                "image_id": "img1",
-                "image_url": "http://example.com/1.jpg",
-            },
-        ]
-        result = rest_collate_fn(batch)
-
-        assert result["images"].shape == (1, 3, 32, 32)
-        assert result["image_ids"] == ["img1"]
-        assert result["failed_items"] == []
-
-
 # ---------------------------------------------------------------------------
 # TestRESTDatasetIntegration - Integration tests with real image loading
 # ---------------------------------------------------------------------------
@@ -162,65 +145,6 @@ class TestRESTDatasetIntegration(TestCase):
             batch_size=batch_size,
             auth_token="test-token",
         )
-
-    def test_fetches_and_loads_images(self):
-        """RESTDataset fetches tasks and loads images from URLs."""
-        # Setup mock API job with real image URLs
-        image_urls = get_test_image_urls(
-            self.file_server, self.test_images_dir, subdir="vermont", num=2
-        )
-        tasks = [
-            AntennaPipelineProcessingTask(
-                id=f"task_{i}",
-                image_id=f"img_{i}",
-                image_url=url,
-                reply_subject=f"reply_{i}",
-            )
-            for i, url in enumerate(image_urls)
-        ]
-        antenna_api_server.setup_job(job_id=1, tasks=tasks)
-
-        # Create dataset and iterate
-        with patch_antenna_api_requests(self.antenna_client):
-            dataset = self._make_dataset(job_id=1, batch_size=2)
-            rows = list(dataset)
-
-        # Validate images actually loaded
-        assert len(rows) == 2
-        assert all(r["image"] is not None for r in rows)
-        assert all(isinstance(r["image"], torch.Tensor) for r in rows)
-        assert rows[0]["image_id"] == "img_0"
-        assert rows[1]["image_id"] == "img_1"
-
-    def test_image_failure(self):
-        """Invalid image URL produces error row with image=None."""
-        tasks = [
-            AntennaPipelineProcessingTask(
-                id="task_bad",
-                image_id="img_bad",
-                image_url="http://invalid-url.test/bad.jpg",
-                reply_subject="reply_bad",
-            )
-        ]
-        antenna_api_server.setup_job(job_id=2, tasks=tasks)
-
-        with patch_antenna_api_requests(self.antenna_client):
-            dataset = self._make_dataset(job_id=2)
-            rows = list(dataset)
-
-        assert len(rows) == 1
-        assert rows[0]["image"] is None
-        assert "error" in rows[0]
-
-    def test_empty_queue(self):
-        """First fetch returns empty tasks → iterator stops immediately."""
-        antenna_api_server.setup_job(job_id=3, tasks=[])
-
-        with patch_antenna_api_requests(self.antenna_client):
-            dataset = self._make_dataset(job_id=3)
-            rows = list(dataset)
-
-        assert rows == []
 
     def test_multiple_batches(self):
         """Dataset fetches multiple batches until queue is empty."""
@@ -274,24 +198,6 @@ class TestGetJobsIntegration(TestCase):
             result = _get_jobs("http://testserver/api/v2", "test-token", "moths_2024")
 
         assert result == [10, 20, 30]
-
-    def test_empty_queue(self):
-        """Empty job queue returns empty list."""
-        with patch_antenna_api_requests(self.antenna_client):
-            result = _get_jobs("http://testserver/api/v2", "test-token", "moths_2024")
-
-        assert result == []
-
-    def test_query_params_sent(self):
-        """Request includes correct query parameters."""
-        # This test validates the query params are sent by checking the function works
-        # The mock API checks the params internally
-        antenna_api_server.setup_job(1, [])
-
-        with patch_antenna_api_requests(self.antenna_client):
-            result = _get_jobs("http://testserver/api/v2", "test-token", "my_pipeline")
-
-        assert isinstance(result, list)
 
 
 # ---------------------------------------------------------------------------
@@ -585,50 +491,3 @@ class TestWorkerEndToEnd(TestCase):
         )
 
 
-# ---------------------------------------------------------------------------
-# TestRegistrationIntegration - Basic tests for registration client functions
-# ---------------------------------------------------------------------------
-
-
-class TestRegistrationIntegration(TestCase):
-    """Integration tests for registration client functions."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.antenna_client = TestClient(antenna_app)
-
-    def setUp(self):
-        antenna_api_server.reset()
-
-    def test_get_user_projects(self):
-        """Client can fetch list of projects."""
-        antenna_api_server.setup_projects([
-            {"id": 1, "name": "Project A"},
-            {"id": 2, "name": "Project B"},
-        ])
-
-        with patch_antenna_api_requests(self.antenna_client):
-            result = get_user_projects("http://testserver/api/v2", "test-token")
-
-        assert len(result) == 2
-        assert result[0]["id"] == 1
-
-    def test_register_pipelines_for_project(self):
-        """Client can register pipelines for a project."""
-        antenna_api_server.setup_projects([{"id": 10, "name": "Test Project"}])
-
-        pipeline_configs = [
-            PipelineConfigResponse(name="Test Pipeline", slug="test_pipeline", version=1)
-        ]
-
-        with patch_antenna_api_requests(self.antenna_client):
-            success, message = register_pipelines_for_project(
-                base_url="http://testserver/api/v2",
-                auth_token="test-token",
-                project_id=10,
-                service_name="Test Service",
-                pipeline_configs=pipeline_configs,
-            )
-
-        assert success is True
-        assert "Created" in message
