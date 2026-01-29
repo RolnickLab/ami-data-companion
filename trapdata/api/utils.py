@@ -40,8 +40,8 @@ def get_crop_fname(source_image: SourceImage, bbox: BoundingBox) -> str:
 
 def get_http_session(
     auth_token: str | None = None,
-    max_retries: int = 3,
-    backoff_factor: float = 0.5,
+    max_retries: int | None = None,
+    backoff_factor: float | None = None,
     status_forcelist: tuple[int, ...] = (500, 502, 503, 504),
 ) -> requests.Session:
     """
@@ -53,8 +53,8 @@ def get_http_session(
 
     Args:
         auth_token: Optional authentication token (adds "Token {token}" to Authorization header)
-        max_retries: Maximum number of retry attempts (default: 3)
-        backoff_factor: Exponential backoff multiplier in seconds (default: 0.5)
+        max_retries: Maximum number of retry attempts (default: from settings.antenna_api_retry_max)
+        backoff_factor: Exponential backoff multiplier in seconds (default: from settings.antenna_api_retry_backoff)
                        Delays will be: backoff_factor * (2 ** retry_number)
                        e.g., 0.5s, 1s, 2s for default settings
         status_forcelist: HTTP status codes that trigger a retry (default: 500, 502, 503, 504)
@@ -69,6 +69,16 @@ def get_http_session(
         >>> session = get_http_session(auth_token="abc123")
         >>> response = session.get("https://api.example.com/data")
     """
+    # Read defaults from settings if not explicitly provided
+    if max_retries is None or backoff_factor is None:
+        from trapdata.settings import read_settings
+
+        settings = read_settings()
+        if max_retries is None:
+            max_retries = settings.antenna_api_retry_max
+        if backoff_factor is None:
+            backoff_factor = settings.antenna_api_retry_backoff
+
     session = requests.Session()
 
     retry_strategy = Retry(

@@ -17,13 +17,19 @@ from trapdata.api.schemas import (
     AntennaPipelineProcessingTask,
     AntennaTaskResult,
     AntennaTaskResultError,
+    PipelineConfigResponse,
     PipelineResultsResponse,
 )
 from trapdata.api.tests import antenna_api_server
 from trapdata.api.tests.antenna_api_server import app as antenna_app
 from trapdata.api.tests.image_server import StaticFileTestServer
 from trapdata.api.tests.utils import get_test_image_urls, patch_antenna_api_requests
-from trapdata.cli.worker import _get_jobs, _process_job
+from trapdata.cli.worker import (
+    _get_jobs,
+    _process_job,
+    get_user_projects,
+    register_pipelines_for_project,
+)
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 # ---------------------------------------------------------------------------
@@ -473,10 +479,13 @@ class TestWorkerEndToEnd(TestCase):
 
     def test_full_workflow_with_real_inference(self):
         """
-        Complete workflow: fetch jobs → fetch tasks → load images →
+        Complete workflow: register → fetch jobs → fetch tasks → load images →
         run detection → run classification → post results.
         """
-        # Setup job with 2 test images
+        pipeline_slug = "quebec_vermont_moths_2023"
+
+        # Setup project and job with 2 test images
+        antenna_api_server.setup_projects([{"id": 1, "name": "Test Project"}])
         image_urls = get_test_image_urls(
             self.file_server, self.test_images_dir, subdir="vermont", num=2
         )
@@ -491,25 +500,33 @@ class TestWorkerEndToEnd(TestCase):
         ]
         antenna_api_server.setup_job(job_id=200, tasks=tasks)
 
-        # Step 1: Get jobs
         with patch_antenna_api_requests(self.antenna_client):
+            # Step 1: Register pipeline
+            pipeline_configs = [
+                PipelineConfigResponse(name="Vermont Moths", slug=pipeline_slug, version=1)
+            ]
+            success, _ = register_pipelines_for_project(
+                base_url="http://testserver/api/v2",
+                auth_token="test-token",
+                project_id=1,
+                service_name="Test Worker",
+                pipeline_configs=pipeline_configs,
+            )
+            assert success is True
+
+            # Step 2: Get jobs
             job_ids = _get_jobs(
                 "http://testserver/api/v2",
                 "test-token",
-                "quebec_vermont_moths_2023",
+                pipeline_slug,
             )
+            assert 200 in job_ids
 
-        assert 200 in job_ids
+            # Step 3: Process job
+            result = _process_job(pipeline_slug, 200, self._make_settings())
+            assert result is True
 
-        # Step 2: Process job
-        with patch_antenna_api_requests(self.antenna_client):
-            result = _process_job(
-                "quebec_vermont_moths_2023", 200, self._make_settings()
-            )
-
-        assert result is True
-
-        # Step 3: Validate results posted
+        # Step 4: Validate results posted
         posted_results = antenna_api_server.get_posted_results(200)
         assert len(posted_results) == 2
 
@@ -566,3 +583,52 @@ class TestWorkerEndToEnd(TestCase):
         assert all(
             isinstance(r.result, PipelineResultsResponse) for r in posted_results
         )
+
+
+# ---------------------------------------------------------------------------
+# TestRegistrationIntegration - Basic tests for registration client functions
+# ---------------------------------------------------------------------------
+
+
+class TestRegistrationIntegration(TestCase):
+    """Integration tests for registration client functions."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.antenna_client = TestClient(antenna_app)
+
+    def setUp(self):
+        antenna_api_server.reset()
+
+    def test_get_user_projects(self):
+        """Client can fetch list of projects."""
+        antenna_api_server.setup_projects([
+            {"id": 1, "name": "Project A"},
+            {"id": 2, "name": "Project B"},
+        ])
+
+        with patch_antenna_api_requests(self.antenna_client):
+            result = get_user_projects("http://testserver/api/v2", "test-token")
+
+        assert len(result) == 2
+        assert result[0]["id"] == 1
+
+    def test_register_pipelines_for_project(self):
+        """Client can register pipelines for a project."""
+        antenna_api_server.setup_projects([{"id": 10, "name": "Test Project"}])
+
+        pipeline_configs = [
+            PipelineConfigResponse(name="Test Pipeline", slug="test_pipeline", version=1)
+        ]
+
+        with patch_antenna_api_requests(self.antenna_client):
+            success, message = register_pipelines_for_project(
+                base_url="http://testserver/api/v2",
+                auth_token="test-token",
+                project_id=10,
+                service_name="Test Service",
+                pipeline_configs=pipeline_configs,
+            )
+
+        assert success is True
+        assert "Created" in message

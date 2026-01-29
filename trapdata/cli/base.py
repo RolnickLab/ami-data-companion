@@ -128,5 +128,38 @@ def worker(
     run_worker(pipelines=pipelines)
 
 
+@cli.command("register")
+def register(
+    name: Annotated[
+        str,
+        typer.Argument(
+            help="Name for the processing service registration (e.g., 'AMI Data Companion on DRAC gpu-03'). "
+            "Hostname will be added automatically.",
+        ),
+    ],
+    project: Annotated[
+        list[int] | None,
+        typer.Option(
+            help="Specific project IDs to register pipelines for. "
+            "If not specified, registers for all accessible projects.",
+        ),
+    ] = None,
+):
+    """
+    Register available pipelines with the Antenna platform for specified projects.
+
+    This command registers all available pipeline configurations with the Antenna platform
+    for the specified projects (or all accessible projects if none specified).
+
+    Examples:
+        ami register --name "AMI Data Companion on DRAC gpu-03" --project 1 --project 2
+        ami register --name "My Processing Service"  # registers for all accessible projects
+    """
+    from trapdata.cli.worker import register_pipelines
+
+    project_ids = project if project else []
+    register_pipelines(project_ids=project_ids, service_name=name)
+
+
 if __name__ == "__main__":
     cli()
