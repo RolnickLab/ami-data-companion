@@ -12,7 +12,6 @@ from trapdata.api.schemas import (
     AntennaJobsListResponse,
     AntennaPipelineProcessingTask,
     AntennaTaskResult,
-    AntennaTaskResults,
     AntennaTasksListResponse,
     AsyncPipelineRegistrationRequest,
     AsyncPipelineRegistrationResponse,

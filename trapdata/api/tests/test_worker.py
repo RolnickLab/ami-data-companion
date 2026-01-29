@@ -37,7 +37,7 @@ from trapdata.tests import TEST_IMAGES_BASE_PATH
 # ---------------------------------------------------------------------------
 
 
-class TestRestCollateFn:
+class TestRestCollateFn(TestCase):
     """Tests for rest_collate_fn which separates successful/failed items."""
 
     def test_all_successful(self):

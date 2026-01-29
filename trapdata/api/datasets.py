@@ -229,6 +229,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
                 - job_id: Job ID
                 - image_id: Image ID
         """
+        worker_id = 0  # Initialize before try block to avoid UnboundLocalError
         try:
             # Get worker info for debugging
             worker_info = torch.utils.data.get_worker_info()

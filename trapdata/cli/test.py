@@ -46,7 +46,7 @@ def pipeline():
 @cli.command()
 def species_by_track(
     event_day: Annotated[
-        datetime.datetime, typer.Argument(formats=["%Y-%m-%d"])  # noqa: F722
+        datetime.datetime, typer.Argument(formats=["%Y-%m-%d"])
     ]
 ):
     """Get unique species by track for a specific event day."""
