@@ -43,6 +43,7 @@ def get_http_session(
     max_retries: int | None = None,
     backoff_factor: float | None = None,
     status_forcelist: tuple[int, ...] = (500, 502, 503, 504),
+    retry_methods: tuple[str, ...] = ("GET",),
 ) -> requests.Session:
     """
     Create an HTTP session with retry logic for transient failures.
@@ -58,6 +59,9 @@ def get_http_session(
                        Delays will be: backoff_factor * (2 ** retry_number)
                        e.g., 0.5s, 1s, 2s for default settings
         status_forcelist: HTTP status codes that trigger a retry (default: 500, 502, 503, 504)
+        retry_methods: HTTP methods that will be retried (default: ("GET",) only)
+                      POST/PUT/PATCH should only be retried if the endpoint is idempotent
+                      or uses idempotency keys to prevent duplicate operations
 
     Returns:
         Configured requests.Session with retry adapter mounted
@@ -68,6 +72,9 @@ def get_http_session(
         >>> # With authentication:
         >>> session = get_http_session(auth_token="abc123")
         >>> response = session.get("https://api.example.com/data")
+        >>> # Allow POST retries for idempotent endpoint:
+        >>> session = get_http_session(retry_methods=("GET", "POST"))
+        >>> response = session.post("https://api.example.com/idempotent")
     """
     # Read defaults from settings if not explicitly provided
     if max_retries is None or backoff_factor is None:
@@ -85,7 +92,7 @@ def get_http_session(
         total=max_retries,
         backoff_factor=backoff_factor,
         status_forcelist=status_forcelist,
-        allowed_methods=["GET", "POST"],
+        allowed_methods=list(retry_methods),
         raise_on_status=False,  # Don't raise exception, let caller handle status codes
     )
 
