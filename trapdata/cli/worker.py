@@ -1,7 +1,6 @@
 """Worker to process images from the REST API queue."""
 
 import datetime
-import os
 import socket
 import time
 
@@ -311,8 +310,6 @@ def _process_job(
 def get_user_projects(
     base_url: str,
     auth_token: str,
-    retry_max: int = 3,
-    retry_backoff: float = 0.5,
 ) -> list[dict]:
     """
     Fetch all projects the user has access to.
@@ -320,17 +317,11 @@ def get_user_projects(
     Args:
         base_url: Base URL for the API (should NOT include /api/v2)
         auth_token: API authentication token
-        retry_max: Maximum retry attempts for failed requests
-        retry_backoff: Exponential backoff factor in seconds
 
     Returns:
         List of project dictionaries with 'id' and 'name' fields
     """
-    with get_http_session(
-        auth_token=auth_token,
-        max_retries=retry_max,
-        backoff_factor=retry_backoff,
-    ) as session:
+    with get_http_session(auth_token=auth_token) as session:
         try:
             url = f"{base_url.rstrip('/')}/projects/"
             response = session.get(url, timeout=30)
@@ -354,8 +345,6 @@ def register_pipelines_for_project(
     project_id: int,
     service_name: str,
     pipeline_configs: list,
-    retry_max: int = 3,
-    retry_backoff: float = 0.5,
 ) -> tuple[bool, str]:
     """
     Register all available pipelines for a specific project.
@@ -366,17 +355,11 @@ def register_pipelines_for_project(
         project_id: Project ID to register pipelines for
         service_name: Name of the processing service
         pipeline_configs: Pre-built pipeline configuration objects
-        retry_max: Maximum retry attempts for failed requests
-        retry_backoff: Exponential backoff factor in seconds
 
     Returns:
         Tuple of (success: bool, message: str)
     """
-    with get_http_session(
-        auth_token=auth_token,
-        max_retries=retry_max,
-        backoff_factor=retry_backoff,
-    ) as session:
+    with get_http_session(auth_token=auth_token) as session:
         try:
             registration_request = AsyncPipelineRegistrationRequest(
                 processing_service_name=service_name, pipelines=pipeline_configs
@@ -410,26 +393,25 @@ def register_pipelines_for_project(
 def register_pipelines(
     project_ids: list[int],
     service_name: str,
-    base_url: str | None = None,
-    auth_token: str | None = None,
+    settings: Settings | None = None,
 ) -> None:
     """
     Register pipelines for specified projects or all accessible projects.
 
     Args:
-        project_ids: List of specific project IDs to register for. If None, registers for all accessible projects.
+        project_ids: List of specific project IDs to register for. If empty, registers for all accessible projects.
         service_name: Name of the processing service
-        base_url: Base URL for the API (defaults to ANTENNA_API_BASE_URL env var)
-        auth_token: API authentication token (defaults to ANTENNA_API_TOKEN env var)
+        settings: Settings object with antenna_api_* configuration (defaults to read_settings())
     """
-    # Set up defaults from environment
-    if base_url is None:
-        base_url = os.environ.get("ANTENNA_API_BASE_URL", "http://localhost:8000/api/v2")
-    if auth_token is None:
-        auth_token = os.environ.get("ANTENNA_API_TOKEN", "")
+    # Get settings from parameter or read from environment
+    if settings is None:
+        settings = read_settings()
+
+    base_url = settings.antenna_api_base_url
+    auth_token = settings.antenna_api_auth_token
 
     if not auth_token:
-        logger.error("ANTENNA_API_TOKEN environment variable not set")
+        logger.error("AMI_ANTENNA_API_AUTH_TOKEN environment variable not set")
         return
 
     if service_name is None:
