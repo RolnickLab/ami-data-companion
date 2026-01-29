@@ -71,7 +71,7 @@ def post_results(job_id: int, payload: list[dict]):
 
     Args:
         job_id: Job ID to post results for
-        payload: List of task result dicts (not wrapped in AntennaTaskResults)
+        payload: List of AntennaTaskResult dicts
 
     Returns:
         Success status

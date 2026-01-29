@@ -201,6 +201,17 @@ def _process_job(
         reply_subjects = batch.get("reply_subjects", [None] * len(images))
         image_urls = batch.get("image_urls", [None] * len(images))
 
+        # Validate all arrays have same length before zipping
+        if len(image_ids) != len(images):
+            raise ValueError(
+                f"Length mismatch: image_ids ({len(image_ids)}) != images ({len(images)})"
+            )
+        if len(image_ids) != len(reply_subjects) or len(image_ids) != len(image_urls):
+            raise ValueError(
+                f"Length mismatch: image_ids ({len(image_ids)}), "
+                f"reply_subjects ({len(reply_subjects)}), image_urls ({len(image_urls)})"
+            )
+
         # Track start time for this batch
         batch_start_time = datetime.datetime.now()
 
@@ -231,7 +242,7 @@ def _process_job(
         image_detections: dict[str, list[DetectionResponse]] = {
             img_id: [] for img_id in image_ids
         }
-        image_tensors = dict(zip(image_ids, images))
+        image_tensors = dict(zip(image_ids, images, strict=True))
 
         classifier.reset(detector.results)
 
@@ -264,7 +275,7 @@ def _process_job(
         # Post results back to the API with PipelineResponse for each image
         batch_results: list[AntennaTaskResult] = []
         for reply_subject, image_id, image_url in zip(
-            reply_subjects, image_ids, image_urls
+            reply_subjects, image_ids, image_urls, strict=True
         ):
             # Create SourceImageResponse for this image
             source_image = SourceImageResponse(id=image_id, url=image_url)

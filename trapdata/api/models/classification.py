@@ -154,7 +154,11 @@ class APIMothClassifier(
         predictions: ClassifierResult,
     ) -> DetectionResponse:
         detection = self.detections[detection_idx]
-        assert detection.source_image_id == image_id
+        if detection.source_image_id != image_id:
+            raise ValueError(
+                f"Detection index {detection_idx} has mismatched image_id: "
+                f"expected '{image_id}', got '{detection.source_image_id}'"
+            )
 
         classification = ClassificationResponse(
             classification=self.get_best_label(predictions),
