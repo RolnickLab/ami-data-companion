@@ -6,6 +6,9 @@ import time
 import numpy as np
 import torch
 
+from trapdata.antenna.client import get_jobs, post_batch_results
+from trapdata.antenna.datasets import get_rest_dataloader
+from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
 from trapdata.api.api import CLASSIFIER_CHOICES
 from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
@@ -13,9 +16,6 @@ from trapdata.api.schemas import (
     PipelineResultsResponse,
     SourceImageResponse,
 )
-from trapdata.antenna.client import get_jobs, post_batch_results
-from trapdata.antenna.datasets import get_rest_dataloader
-from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
 from trapdata.common.logs import logger
 from trapdata.common.utils import log_time
 from trapdata.settings import Settings, read_settings

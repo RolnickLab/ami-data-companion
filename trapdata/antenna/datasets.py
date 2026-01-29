@@ -2,20 +2,20 @@
 
 import os
 import typing
+from io import BytesIO
 
 import requests
 import torch
 import torch.utils.data
 import torchvision
-from io import BytesIO
 from PIL import Image
 
-from trapdata.api.utils import get_http_session
-from trapdata.common.logs import logger
 from trapdata.antenna.schemas import (
     AntennaPipelineProcessingTask,
     AntennaTasksListResponse,
 )
+from trapdata.api.utils import get_http_session
+from trapdata.common.logs import logger
 
 if typing.TYPE_CHECKING:
     from trapdata.settings import Settings

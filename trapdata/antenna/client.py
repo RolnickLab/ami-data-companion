@@ -2,11 +2,8 @@
 
 import requests
 
+from trapdata.antenna.schemas import AntennaJobsListResponse, AntennaTaskResult
 from trapdata.api.utils import get_http_session
-from trapdata.antenna.schemas import (
-    AntennaJobsListResponse,
-    AntennaTaskResult,
-)
 from trapdata.common.logs import logger
 from trapdata.settings import Settings
 

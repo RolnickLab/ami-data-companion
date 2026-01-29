@@ -6,10 +6,7 @@ import torchvision
 
 from trapdata.common.logs import logger
 
-from .schemas import (
-    DetectionResponse,
-    SourceImage,
-)
+from .schemas import DetectionResponse, SourceImage
 
 
 class LocalizationImageDataset(torch.utils.data.Dataset):

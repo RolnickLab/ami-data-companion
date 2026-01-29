@@ -4,12 +4,12 @@ import socket
 
 import requests
 
-from trapdata.api.api import CLASSIFIER_CHOICES, initialize_service_info
-from trapdata.api.utils import get_http_session
 from trapdata.antenna.schemas import (
     AsyncPipelineRegistrationRequest,
     AsyncPipelineRegistrationResponse,
 )
+from trapdata.api.api import CLASSIFIER_CHOICES, initialize_service_info
+from trapdata.api.utils import get_http_session
 from trapdata.common.logs import logger
 from trapdata.settings import Settings, read_settings
 
