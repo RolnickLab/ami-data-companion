@@ -7,7 +7,7 @@ requiring an actual Antenna server.
 
 from fastapi import FastAPI, HTTPException
 
-from trapdata.api.schemas import (
+from trapdata.antenna.schemas import (
     AntennaJobListItem,
     AntennaJobsListResponse,
     AntennaPipelineProcessingTask,
