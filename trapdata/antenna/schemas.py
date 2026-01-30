@@ -2,11 +2,9 @@
 
 import pydantic
 
-from trapdata.api.schemas import (
-    PipelineConfigResponse,
-    PipelineResultsResponse,
-    ProcessingServiceInfoResponse,
-)
+from trapdata.api.schemas import PipelineConfigResponse, PipelineResultsResponse
+
+# @TODO move more schemas here that are Antenna-specific from api/schemas.py
 
 
 class AntennaPipelineProcessingTask(pydantic.BaseModel):
