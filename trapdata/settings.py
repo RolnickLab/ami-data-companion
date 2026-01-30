@@ -41,8 +41,6 @@ class Settings(BaseSettings):
     antenna_api_base_url: str = "http://localhost:8000/api/v2"
     antenna_api_auth_token: str = ""
     antenna_api_batch_size: int = 4
-    antenna_api_retry_max: int = 3
-    antenna_api_retry_backoff: float = 0.5
 
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
@@ -168,9 +166,6 @@ class Settings(BaseSettings):
                 "kivy_type": "numeric",
                 "kivy_section": "antenna",
             },
-            # Note: antenna_api_retry_max and antenna_api_retry_backoff are intentionally
-            # not exposed in Kivy settings - they're implementation details configurable
-            # via environment variables for ops/debugging purposes only.
         }
 
         @classmethod

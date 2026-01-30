@@ -219,7 +219,12 @@ def _process_job(
                     )
                 )
 
-        post_batch_results(settings, job_id, batch_results)
+        post_batch_results(
+            settings.antenna_api_base_url,
+            settings.antenna_api_auth_token,
+            job_id,
+            batch_results,
+        )
         st, t = t("Finished posting results")
         total_save_time += st
 

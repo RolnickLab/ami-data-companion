@@ -227,8 +227,6 @@ class TestProcessJobIntegration(TestCase):
         settings.antenna_api_base_url = "http://testserver/api/v2"
         settings.antenna_api_auth_token = "test-token"
         settings.antenna_api_batch_size = 2
-        settings.antenna_api_retry_max = 3
-        settings.antenna_api_retry_backoff = 0.5
         settings.num_workers = 0  # Disable multiprocessing for tests
         settings.localization_batch_size = 2  # Real integer for batch processing
         return settings
@@ -376,8 +374,6 @@ class TestWorkerEndToEnd(TestCase):
         settings.antenna_api_base_url = "http://testserver/api/v2"
         settings.antenna_api_auth_token = "test-token"
         settings.antenna_api_batch_size = 2
-        settings.antenna_api_retry_max = 3
-        settings.antenna_api_retry_backoff = 0.5
         settings.num_workers = 0
         settings.localization_batch_size = 2  # Real integer for batch processing
         return settings

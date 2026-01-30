@@ -5,15 +5,12 @@ import requests
 from trapdata.antenna.schemas import AntennaJobsListResponse, AntennaTaskResult
 from trapdata.api.utils import get_http_session
 from trapdata.common.logs import logger
-from trapdata.settings import Settings
 
 
 def get_jobs(
     base_url: str,
     auth_token: str,
     pipeline_slug: str,
-    retry_max: int = 3,
-    retry_backoff: float = 0.5,
 ) -> list[int]:
     """Fetch job ids from the API for the given pipeline.
 
@@ -23,17 +20,11 @@ def get_jobs(
         base_url: Antenna API base URL (e.g., "http://localhost:8000/api/v2")
         auth_token: API authentication token
         pipeline_slug: Pipeline slug to filter jobs
-        retry_max: Maximum retry attempts for failed requests
-        retry_backoff: Exponential backoff factor in seconds
 
     Returns:
         List of job ids (possibly empty) on success or error.
     """
-    with get_http_session(
-        auth_token=auth_token,
-        max_retries=retry_max,
-        backoff_factor=retry_backoff,
-    ) as session:
+    with get_http_session(auth_token) as session:
         try:
             url = f"{base_url.rstrip('/')}/jobs"
             params = {
@@ -57,7 +48,8 @@ def get_jobs(
 
 
 def post_batch_results(
-    settings: Settings,
+    base_url: str,
+    auth_token: str,
     job_id: int,
     results: list[AntennaTaskResult],
 ) -> bool:
@@ -65,21 +57,18 @@ def post_batch_results(
     Post batch results back to the API.
 
     Args:
-        settings: Settings object with antenna_api_* configuration
+        base_url: Antenna API base URL (e.g., "http://localhost:8000/api/v2")
+        auth_token: API authentication token
         job_id: Job ID
         results: List of AntennaTaskResult objects
 
     Returns:
         True if successful, False otherwise
     """
-    url = f"{settings.antenna_api_base_url.rstrip('/')}/jobs/{job_id}/result/"
+    url = f"{base_url.rstrip('/')}/jobs/{job_id}/result/"
     payload = [r.model_dump(mode="json") for r in results]
 
-    with get_http_session(
-        auth_token=settings.antenna_api_auth_token,
-        max_retries=settings.antenna_api_retry_max,
-        backoff_factor=settings.antenna_api_retry_backoff,
-    ) as session:
+    with get_http_session(auth_token) as session:
         try:
             response = session.post(url, json=payload, timeout=60)
             response.raise_for_status()
@@ -90,10 +79,7 @@ def post_batch_results(
             return False
 
 
-def get_user_projects(
-    base_url: str,
-    auth_token: str,
-) -> list[dict]:
+def get_user_projects(base_url: str, auth_token: str) -> list[dict]:
     """
     Fetch all projects the user has access to.
 
@@ -104,7 +90,7 @@ def get_user_projects(
     Returns:
         List of project dictionaries with 'id' and 'name' fields
     """
-    with get_http_session(auth_token=auth_token) as session:
+    with get_http_session(auth_token) as session:
         try:
             url = f"{base_url.rstrip('/')}/projects/"
             response = session.get(url, timeout=30)

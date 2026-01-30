@@ -1,6 +1,5 @@
 """Dataset classes for streaming tasks from the Antenna API."""
 
-import os
 import typing
 from io import BytesIO
 
@@ -42,45 +41,30 @@ class RESTDataset(torch.utils.data.IterableDataset):
     def __init__(
         self,
         base_url: str,
+        auth_token: str,
         job_id: int,
         batch_size: int = 1,
         image_transforms: torchvision.transforms.Compose | None = None,
-        auth_token: str | None = None,
-        retry_max: int = 3,
-        retry_backoff: float = 0.5,
     ):
         """
         Initialize the REST dataset.
 
         Args:
             base_url: Base URL for the API including /api/v2 (e.g., "http://localhost:8000/api/v2")
+            auth_token: API authentication token
             job_id: The job ID to fetch tasks for
             batch_size: Number of tasks to request per batch
             image_transforms: Optional transforms to apply to loaded images
-            auth_token: API authentication token
-            retry_max: Maximum number of retry attempts for failed HTTP requests
-            retry_backoff: Exponential backoff factor for retries (seconds)
         """
         super().__init__()
         self.base_url = base_url
         self.job_id = job_id
         self.batch_size = batch_size
         self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
-        self.auth_token = auth_token or os.environ.get("AMI_ANTENNA_API_AUTH_TOKEN")
-        self.retry_max = retry_max
-        self.retry_backoff = retry_backoff
 
         # Create persistent sessions for connection pooling
-        self.api_session = get_http_session(
-            auth_token=self.auth_token,
-            max_retries=self.retry_max,
-            backoff_factor=self.retry_backoff,
-        )
-        self.image_fetch_session = get_http_session(
-            auth_token=None,  # External image URLs don't need API auth
-            max_retries=self.retry_max,
-            backoff_factor=self.retry_backoff,
-        )
+        self.api_session = get_http_session(auth_token)
+        self.image_fetch_session = get_http_session()  # No auth for external image URLs
 
     def __del__(self):
         """Clean up HTTP sessions on dataset destruction."""
@@ -283,11 +267,9 @@ def get_rest_dataloader(
     """
     dataset = RESTDataset(
         base_url=settings.antenna_api_base_url,
+        auth_token=settings.antenna_api_auth_token,
         job_id=job_id,
         batch_size=settings.antenna_api_batch_size,
-        auth_token=settings.antenna_api_auth_token,
-        retry_max=settings.antenna_api_retry_max,
-        retry_backoff=settings.antenna_api_retry_backoff,
     )
 
     return torch.utils.data.DataLoader(

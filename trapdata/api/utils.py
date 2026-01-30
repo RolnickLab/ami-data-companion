@@ -38,69 +38,37 @@ def get_crop_fname(source_image: SourceImage, bbox: BoundingBox) -> str:
     return f"{source_name}/{bbox_name}-{timestamp}.jpg"
 
 
-def get_http_session(
-    auth_token: str | None = None,
-    max_retries: int | None = None,
-    backoff_factor: float | None = None,
-    status_forcelist: tuple[int, ...] = (500, 502, 503, 504),
-    retry_methods: tuple[str, ...] = ("GET",),
-) -> requests.Session:
+def get_http_session(auth_token: str | None = None) -> requests.Session:
     """
     Create an HTTP session with retry logic for transient failures.
 
     Configures a requests.Session with HTTPAdapter and urllib3.Retry to automatically
     retry failed requests with exponential backoff. Only retries on server errors (5XX)
-    and network failures, NOT on client errors (4XX).
+    and network failures, NOT on client errors (4XX). Only GET requests are retried.
+
+    TODO: This will likely become part of an AntennaClient class that encapsulates
+    base_url, auth_token, and session management. See docs/claude/planning/antenna-client.md
 
     Args:
-        auth_token: Optional authentication token (adds "Token {token}" to Authorization header)
-        max_retries: Maximum number of retry attempts (default: from settings.antenna_api_retry_max)
-        backoff_factor: Exponential backoff multiplier in seconds (default: from settings.antenna_api_retry_backoff)
-                       Delays will be: backoff_factor * (2 ** retry_number)
-                       e.g., 0.5s, 1s, 2s for default settings
-        status_forcelist: HTTP status codes that trigger a retry (default: 500, 502, 503, 504)
-        retry_methods: HTTP methods that will be retried (default: ("GET",) only)
-                      POST/PUT/PATCH should only be retried if the endpoint is idempotent
-                      or uses idempotency keys to prevent duplicate operations
+        auth_token: Optional API token. If provided, adds "Token {auth_token}" header.
 
     Returns:
         Configured requests.Session with retry adapter mounted
-
-    Example:
-        >>> session = get_http_session(max_retries=3, backoff_factor=0.5)
-        >>> response = session.get("https://api.example.com/data")
-        >>> # With authentication:
-        >>> session = get_http_session(auth_token="abc123")
-        >>> response = session.get("https://api.example.com/data")
-        >>> # Allow POST retries for idempotent endpoint:
-        >>> session = get_http_session(retry_methods=("GET", "POST"))
-        >>> response = session.post("https://api.example.com/idempotent")
     """
-    # Read defaults from settings if not explicitly provided
-    if max_retries is None or backoff_factor is None:
-        from trapdata.settings import read_settings
-
-        settings = read_settings()
-        if max_retries is None:
-            max_retries = settings.antenna_api_retry_max
-        if backoff_factor is None:
-            backoff_factor = settings.antenna_api_retry_backoff
-
     session = requests.Session()
 
     retry_strategy = Retry(
-        total=max_retries,
-        backoff_factor=backoff_factor,
-        status_forcelist=status_forcelist,
-        allowed_methods=list(retry_methods),
-        raise_on_status=False,  # Don't raise exception, let caller handle status codes
+        total=3,
+        backoff_factor=0.5,
+        status_forcelist=(500, 502, 503, 504),
+        allowed_methods=["GET"],
+        raise_on_status=False,
     )
 
     adapter = HTTPAdapter(max_retries=retry_strategy)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
 
-    # Add auth header if token provided
     if auth_token:
         session.headers["Authorization"] = f"Token {auth_token}"
 
