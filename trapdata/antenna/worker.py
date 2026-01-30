@@ -220,13 +220,22 @@ def _process_job(
                     )
                 )
 
-        post_batch_results(
+        success = post_batch_results(
             settings.antenna_api_base_url,
             settings.antenna_api_auth_token,
             job_id,
             batch_results,
         )
         st, t = t("Finished posting results")
+
+        if not success:
+            error_msg = (
+                f"Failed to post {len(batch_results)} results for job {job_id} to "
+                f"{settings.antenna_api_base_url}. Batch processing data lost."
+            )
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
         total_save_time += st
 
     logger.info(
