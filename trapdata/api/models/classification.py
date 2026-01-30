@@ -54,6 +54,10 @@ class APIMothClassifier(
             "detections"
         )
 
+    def reset(self, detections: typing.Iterable[DetectionResponse]):
+        self.detections = list(detections)
+        self.results = []
+
     def get_dataset(self):
         return ClassificationImageDataset(
             source_images=self.source_images,
@@ -117,19 +121,12 @@ class APIMothClassifier(
         for image_id, detection_idx, predictions in zip(
             image_ids, detection_idxes, batch_output
         ):
-            detection = self.detections[detection_idx]
-            assert detection.source_image_id == image_id
-
-            classification = ClassificationResponse(
-                classification=self.get_best_label(predictions),
-                scores=predictions.scores,
-                logits=predictions.logit,
-                inference_time=seconds_per_item,
-                algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
-                timestamp=datetime.datetime.now(),
-                terminal=self.terminal,
+            self.update_detection_classification(
+                seconds_per_item,
+                image_id,
+                detection_idx,
+                predictions,
             )
-            self.update_classification(detection, classification)
 
         self.results = self.detections
         logger.info(f"Saving {len(self.results)} detections with classifications")
@@ -148,6 +145,32 @@ class APIMothClassifier(
             f"Updated classification for detection {detection.bbox}. "
             f"Total classifications: {len(detection.classifications)}"
         )
+
+    def update_detection_classification(
+        self,
+        seconds_per_item: float,
+        image_id: str,
+        detection_idx: int,
+        predictions: ClassifierResult,
+    ) -> DetectionResponse:
+        detection = self.detections[detection_idx]
+        if detection.source_image_id != image_id:
+            raise ValueError(
+                f"Detection index {detection_idx} has mismatched image_id: "
+                f"expected '{image_id}', got '{detection.source_image_id}'"
+            )
+
+        classification = ClassificationResponse(
+            classification=self.get_best_label(predictions),
+            scores=predictions.scores,
+            logits=predictions.logit,
+            inference_time=seconds_per_item,
+            algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
+            timestamp=datetime.datetime.now(),
+            terminal=self.terminal,
+        )
+        self.update_classification(detection, classification)
+        return detection
 
     def run(self) -> list[DetectionResponse]:
         logger.info(

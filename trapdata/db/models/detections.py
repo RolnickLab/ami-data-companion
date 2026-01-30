@@ -323,7 +323,7 @@ def save_detected_objects(
 
         # CRITICAL PERFORMANCE FIX: Batch fetch all previous images at once
         # This eliminates the N+1 query problem where previous_image was called for each detection
-        all_image_ids = [img.id for img in images]
+        _ = [img.id for img in images]
 
         # Create a mapping of image_id to previous_image_id
         image_to_previous = {}
@@ -404,9 +404,7 @@ def save_classified_objects(db_path, object_ids, classified_objects_data):
     # Use a single session for all operations
     with db.get_session(db_path) as sesh:
         # Batch fetch all objects at once
-        objects = (
-            sesh.query(DetectedObject).filter(DetectedObject.id.in_(object_ids)).all()
-        )
+        _ = sesh.query(DetectedObject).filter(DetectedObject.id.in_(object_ids)).all()
 
         timestamp = datetime.datetime.now()
         update_data = []

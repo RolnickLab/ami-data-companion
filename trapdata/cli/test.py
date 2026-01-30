@@ -24,7 +24,7 @@ def all():
     # return_code = pytest.main(["--doctest-modules", "-v", "."])
     # return_code = pytest.main(["-v", "."])
 
-    return_code = subprocess.call(["pytest", "-v", "."])
+    return_code = subprocess.call([sys.executable, "-m", "pytest", "-v"])
     sys.exit(return_code)
 
 

@@ -1,15 +1,17 @@
 import pathlib
-from typing import Optional
+from typing import Annotated, Optional
 
 import typer
 
-from trapdata.cli import db, export, queue, settings, shell, show, test
+from trapdata.api.api import CLASSIFIER_CHOICES
+from trapdata.cli import db, export, queue, settings, shell, show, test, worker
 from trapdata.db.base import get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import add_monitoring_session_to_queue
 from trapdata.ml.pipeline import start_pipeline
 
-cli = typer.Typer(no_args_is_help=True)
+# don't display variable values in errors:
+cli = typer.Typer(no_args_is_help=True, pretty_exceptions_show_locals=False)
 cli.add_typer(export.cli, name="export", help="Export data in various formats")
 cli.add_typer(shell.cli, name="shell", help="Open an interactive shell")
 cli.add_typer(test.cli, name="test", help="Run tests")
@@ -18,6 +20,7 @@ cli.add_typer(db.cli, name="db", help="Create, update and manage the database")
 cli.add_typer(
     queue.cli, name="queue", help="Add and manage images in the processing queue"
 )
+cli.add_typer(worker.cli, name="worker", help="Antenna worker for remote processing")
 
 
 @cli.command()

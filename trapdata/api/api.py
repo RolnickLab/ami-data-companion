@@ -5,6 +5,7 @@ pipelines.
 
 import enum
 import time
+from contextlib import asynccontextmanager
 
 import fastapi
 import pydantic
@@ -36,7 +37,18 @@ from .schemas import PipelineRequest as PipelineRequest_
 from .schemas import PipelineResultsResponse as PipelineResponse_
 from .schemas import ProcessingServiceInfoResponse, SourceImage, SourceImageResponse
 
-app = fastapi.FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: fastapi.FastAPI):
+    # cache the service info to be built only once at startup
+    app.state.service_info = initialize_service_info()
+    logger.info("Initialized service info")
+    yield
+    # Shutdown event: Clean up resources (if necessary)
+    logger.info("Shutting down API")
+
+
+app = fastapi.FastAPI(lifespan=lifespan)
 app.add_middleware(GZipMiddleware)
 
 
@@ -91,7 +103,6 @@ def make_category_map_response(
 def make_algorithm_response(
     model: APIMothDetector | APIMothClassifier,
 ) -> AlgorithmConfigResponse:
-
     category_map = make_category_map_response(model) if model.category_map else None
     return AlgorithmConfigResponse(
         name=model.name,
@@ -155,13 +166,6 @@ def make_pipeline_config_response(
         version=1,
         algorithms=algorithms,
     )
-
-
-# @TODO This requires loading all models into memory! Can we avoid this?
-PIPELINE_CONFIGS = [
-    make_pipeline_config_response(classifier_class, slug=key)
-    for key, classifier_class in CLASSIFIER_CHOICES.items()
-]
 
 
 class PipelineRequest(PipelineRequest_):
@@ -313,17 +317,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
 @app.get("/info", tags=["services"])
 async def info() -> ProcessingServiceInfoResponse:
-    info = ProcessingServiceInfoResponse(
-        name="Antenna Inference API",
-        description=(
-            "The primary endpoint for processing images for the Antenna platform. "
-            "This API provides access to multiple detection and classification "
-            "algorithms by multiple labs for processing images of moths."
-        ),
-        pipelines=PIPELINE_CONFIGS,
-        # algorithms=list(algorithm_choices.values()),
-    )
-    return info
+    return app.state.service_info
 
 
 # Check if the server is online
@@ -359,6 +353,26 @@ async def readyz():
 # render image crops and bboxes on top of the original image
 # async def render(data: PipelineRequest) -> PipelineResponse:
 #     pass
+
+
+def initialize_service_info() -> ProcessingServiceInfoResponse:
+    # @TODO This requires loading all models into memory! Can we avoid this?
+    pipeline_configs = [
+        make_pipeline_config_response(classifier_class, slug=key)
+        for key, classifier_class in CLASSIFIER_CHOICES.items()
+    ]
+
+    _info = ProcessingServiceInfoResponse(
+        name="Antenna Inference API",
+        description=(
+            "The primary endpoint for processing images for the Antenna platform. "
+            "This API provides access to multiple detection and classification "
+            "algorithms by multiple labs for processing images of moths."
+        ),
+        pipelines=pipeline_configs,
+        # algorithms=list(algorithm_choices.values()),
+    )
+    return _info
 
 
 if __name__ == "__main__":
