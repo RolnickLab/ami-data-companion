@@ -9,18 +9,26 @@ from trapdata.api.api import CLASSIFIER_CHOICES
 cli = typer.Typer(help="Antenna worker commands for remote processing")
 
 
-@cli.command("run")
+@cli.callback(invoke_without_command=True)
 def run(
+    ctx: typer.Context,
     pipelines: Annotated[
         list[str] | None,
         typer.Option(
-            help="List of pipelines to use for processing (e.g., moth_binary, panama_moths_2024, etc.) or all if not specified."
+            "--pipeline",
+            help="Pipeline to use for processing (e.g., moth_binary, panama_moths_2024). Can be specified multiple times. Defaults to all pipelines if not specified."
         ),
     ] = None,
 ):
     """
     Run the worker to process images from the Antenna API queue.
+
+    Can be invoked as 'ami worker' or 'ami worker run'.
     """
+    # Only run the worker if no subcommand was invoked
+    if ctx.invoked_subcommand is not None:
+        return
+
     if not pipelines:
         pipelines = list(CLASSIFIER_CHOICES.keys())
 

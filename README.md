@@ -250,12 +250,25 @@ AMI_ANTENNA_API_BATCH_SIZE=4
 AMI_NUM_WORKERS=2  # Safe for REST API (atomic task dequeue)
 ```
 
+**Register pipelines (optional):**
+
+Register available ML pipelines with your Antenna projects:
+
+```sh
+ami worker register "My Worker Name" --project 1 --project 2
+# Or register for all accessible projects:
+ami worker register "My Worker Name"
+```
+
 **Run the worker:**
 
 ```sh
-ami worker --pipelines moth_binary
-# Or multiple pipelines:
-ami worker --pipelines moth_binary --pipelines panama_moths_2024
+# Process all pipelines:
+ami worker
+
+# Or specify specific pipeline(s):
+ami worker --pipeline moth_binary
+ami worker --pipeline moth_binary --pipeline panama_moths_2024
 ```
 
 The worker will:
