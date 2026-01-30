@@ -4,7 +4,7 @@ from typing import Annotated, Optional
 import typer
 
 from trapdata.api.api import CLASSIFIER_CHOICES
-from trapdata.cli import db, export, queue, settings, shell, show, test
+from trapdata.cli import db, export, queue, settings, shell, show, test, worker
 from trapdata.db.base import get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
 from trapdata.db.models.queue import add_monitoring_session_to_queue
@@ -20,6 +20,7 @@ cli.add_typer(db.cli, name="db", help="Create, update and manage the database")
 cli.add_typer(
     queue.cli, name="queue", help="Add and manage images in the processing queue"
 )
+cli.add_typer(worker.cli, name="worker", help="Antenna worker for remote processing")
 
 
 @cli.command()
@@ -96,69 +97,6 @@ def run_api(port: int = 2000):
     import uvicorn
 
     uvicorn.run("trapdata.api.api:app", host="0.0.0.0", port=port, reload=True)
-
-
-@cli.command("worker")
-def worker(
-    pipelines: Annotated[
-        list[str] | None,
-        typer.Option(
-            help="List of pipelines to use for processing (e.g., moth_binary, panama_moths_2024, etc.) or all if not specified."
-        ),
-    ] = None,
-):
-    """
-    Run the worker to process images from the REST API queue.
-    """
-    if not pipelines:
-        pipelines = list(CLASSIFIER_CHOICES.keys())
-
-    # Validate that each pipeline is in CLASSIFIER_CHOICES
-    invalid_pipelines = [
-        pipeline for pipeline in pipelines if pipeline not in CLASSIFIER_CHOICES.keys()
-    ]
-
-    if invalid_pipelines:
-        raise typer.BadParameter(
-            f"Invalid pipeline(s): {', '.join(invalid_pipelines)}. Must be one of: {', '.join(CLASSIFIER_CHOICES.keys())}"
-        )
-
-    from trapdata.cli.worker import run_worker
-
-    run_worker(pipelines=pipelines)
-
-
-@cli.command("register")
-def register(
-    name: Annotated[
-        str,
-        typer.Argument(
-            help="Name for the processing service registration (e.g., 'AMI Data Companion on DRAC gpu-03'). "
-            "Hostname will be added automatically.",
-        ),
-    ],
-    project: Annotated[
-        list[int] | None,
-        typer.Option(
-            help="Specific project IDs to register pipelines for. "
-            "If not specified, registers for all accessible projects.",
-        ),
-    ] = None,
-):
-    """
-    Register available pipelines with the Antenna platform for specified projects.
-
-    This command registers all available pipeline configurations with the Antenna platform
-    for the specified projects (or all accessible projects if none specified).
-
-    Examples:
-        ami register --name "AMI Data Companion on DRAC gpu-03" --project 1 --project 2
-        ami register --name "My Processing Service"  # registers for all accessible projects
-    """
-    from trapdata.cli.worker import register_pipelines
-
-    project_ids = project if project else []
-    register_pipelines(project_ids=project_ids, service_name=name)
 
 
 if __name__ == "__main__":

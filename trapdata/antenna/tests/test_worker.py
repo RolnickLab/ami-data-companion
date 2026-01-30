@@ -12,23 +12,21 @@ from unittest.mock import MagicMock
 import torch
 from fastapi.testclient import TestClient
 
-from trapdata.api.datasets import RESTDataset, rest_collate_fn
-from trapdata.api.schemas import (
+from trapdata.antenna.client import get_jobs
+from trapdata.antenna.datasets import RESTDataset, rest_collate_fn
+from trapdata.antenna.registration import register_pipelines_for_project
+from trapdata.antenna.schemas import (
     AntennaPipelineProcessingTask,
     AntennaTaskResult,
     AntennaTaskResultError,
     PipelineConfigResponse,
-    PipelineResultsResponse,
 )
-from trapdata.api.tests import antenna_api_server
-from trapdata.api.tests.antenna_api_server import app as antenna_app
+from trapdata.antenna.tests import antenna_api_server
+from trapdata.antenna.tests.antenna_api_server import app as antenna_app
+from trapdata.antenna.worker import _process_job
+from trapdata.api.schemas import PipelineResultsResponse
 from trapdata.api.tests.image_server import StaticFileTestServer
 from trapdata.api.tests.utils import get_test_image_urls, patch_antenna_api_requests
-from trapdata.cli.worker import (
-    _get_jobs,
-    _process_job,
-    register_pipelines_for_project,
-)
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 # ---------------------------------------------------------------------------
@@ -111,6 +109,7 @@ class TestRestCollateFn(TestCase):
         assert len(result["failed_items"]) == 1
         assert result["failed_items"][0]["image_id"] == "img2"
 
+
 # ---------------------------------------------------------------------------
 # TestRESTDatasetIntegration - Integration tests with real image loading
 # ---------------------------------------------------------------------------
@@ -178,7 +177,7 @@ class TestRESTDatasetIntegration(TestCase):
 
 
 class TestGetJobsIntegration(TestCase):
-    """Integration tests for _get_jobs() with mock Antenna API."""
+    """Integration tests for get_jobs() with mock Antenna API."""
 
     @classmethod
     def setUpClass(cls):
@@ -195,7 +194,7 @@ class TestGetJobsIntegration(TestCase):
         antenna_api_server.setup_job(30, [])
 
         with patch_antenna_api_requests(self.antenna_client):
-            result = _get_jobs("http://testserver/api/v2", "test-token", "moths_2024")
+            result = get_jobs("http://testserver/api/v2", "test-token", "moths_2024")
 
         assert result == [10, 20, 30]
 
@@ -409,7 +408,9 @@ class TestWorkerEndToEnd(TestCase):
         with patch_antenna_api_requests(self.antenna_client):
             # Step 1: Register pipeline
             pipeline_configs = [
-                PipelineConfigResponse(name="Vermont Moths", slug=pipeline_slug, version=1)
+                PipelineConfigResponse(
+                    name="Vermont Moths", slug=pipeline_slug, version=1
+                )
             ]
             success, _ = register_pipelines_for_project(
                 base_url="http://testserver/api/v2",
@@ -421,7 +422,7 @@ class TestWorkerEndToEnd(TestCase):
             assert success is True
 
             # Step 2: Get jobs
-            job_ids = _get_jobs(
+            job_ids = get_jobs(
                 "http://testserver/api/v2",
                 "test-token",
                 pipeline_slug,
@@ -489,5 +490,3 @@ class TestWorkerEndToEnd(TestCase):
         assert all(
             isinstance(r.result, PipelineResultsResponse) for r in posted_results
         )
-
-
