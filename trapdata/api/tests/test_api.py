@@ -15,7 +15,7 @@ from trapdata.api.api import (
 )
 from trapdata.api.schemas import PipelineConfigRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
-from trapdata.api.tests.utils import get_test_images, get_pipeline_class
+from trapdata.api.tests.utils import get_pipeline_class, get_test_images
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 logging.basicConfig(level=logging.INFO)

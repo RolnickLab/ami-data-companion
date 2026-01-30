@@ -16,7 +16,10 @@ def run(
         list[str] | None,
         typer.Option(
             "--pipeline",
-            help="Pipeline to use for processing (e.g., moth_binary, panama_moths_2024). Can be specified multiple times. Defaults to all pipelines if not specified."
+            help=(
+                "Pipeline to use for processing (e.g., moth_binary, panama_moths_2024). "
+                "Can be specified multiple times. Defaults to all pipelines if not specified."
+            ),
         ),
     ] = None,
 ):

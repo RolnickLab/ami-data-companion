@@ -1,9 +1,8 @@
 import pathlib
-from typing import Annotated, Optional
+from typing import Optional
 
 import typer
 
-from trapdata.api.api import CLASSIFIER_CHOICES
 from trapdata.cli import db, export, queue, settings, shell, show, test, worker
 from trapdata.db.base import get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
