@@ -80,7 +80,8 @@ def _process_job(
     classifier = None
     detector = None
 
-    torch.cuda.empty_cache()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     items = 0
 
     total_detection_time = 0.0

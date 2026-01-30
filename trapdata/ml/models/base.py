@@ -298,7 +298,8 @@ class InferenceBaseClass:
 
     @torch.no_grad()
     def run(self):
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         logger.info(f"Running inference ({self.name})\n\n")
         num_batches_total = ceil(len(self.dataloader) / self.batch_size)
         for i, batch in enumerate(self.dataloader):
