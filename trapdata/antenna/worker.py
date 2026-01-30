@@ -48,12 +48,19 @@ def run_worker(pipelines: list[str]):
             )
             for job_id in jobs:
                 logger.info(f"Processing job {job_id} with pipeline {pipeline}")
-                any_work_done = _process_job(
-                    pipeline=pipeline,
-                    job_id=job_id,
-                    settings=settings,
-                )
-                any_jobs = any_jobs or any_work_done
+                try:
+                    any_work_done = _process_job(
+                        pipeline=pipeline,
+                        job_id=job_id,
+                        settings=settings,
+                    )
+                    any_jobs = any_jobs or any_work_done
+                except Exception as e:
+                    logger.error(
+                        f"Failed to process job {job_id} with pipeline {pipeline}: {e}",
+                        exc_info=True,
+                    )
+                    # Continue to next job rather than crashing the worker
 
         if not any_jobs:
             logger.info(f"No jobs found, sleeping for {SLEEP_TIME_SECONDS} seconds")
