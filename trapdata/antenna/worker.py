@@ -6,7 +6,7 @@ import time
 import numpy as np
 import torch
 
-from trapdata.antenna.client import get_jobs, post_batch_results
+from trapdata.antenna.client import get_full_service_name, get_jobs, post_batch_results
 from trapdata.antenna.datasets import get_rest_dataloader
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
 from trapdata.api.api import CLASSIFIER_CHOICES
@@ -34,6 +34,10 @@ def run_worker(pipelines: list[str]):
             "Get your auth token from your Antenna project settings."
         )
 
+    # Build full service name with hostname
+    full_service_name = get_full_service_name(settings.antenna_service_name)
+    logger.info(f"Running worker as: {full_service_name}")
+
     while True:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
         # These should probably come from a dedicated endpoint and should preempt batch jobs under the assumption that they
@@ -45,6 +49,7 @@ def run_worker(pipelines: list[str]):
                 base_url=settings.antenna_api_base_url,
                 auth_token=settings.antenna_api_auth_token,
                 pipeline_slug=pipeline,
+                processing_service_name=full_service_name,
             )
             for job_id in jobs:
                 logger.info(f"Processing job {job_id} with pipeline {pipeline}")
@@ -53,6 +58,7 @@ def run_worker(pipelines: list[str]):
                         pipeline=pipeline,
                         job_id=job_id,
                         settings=settings,
+                        processing_service_name=full_service_name,
                     )
                     any_jobs = any_jobs or any_work_done
                 except Exception as e:
@@ -72,6 +78,7 @@ def _process_job(
     pipeline: str,
     job_id: int,
     settings: Settings,
+    processing_service_name: str,
 ) -> bool:
     """Run the worker to process images from the REST API queue.
 
@@ -79,11 +86,16 @@ def _process_job(
         pipeline: Pipeline name to use for processing (e.g., moth_binary, panama_moths_2024)
         job_id: Job ID to process
         settings: Settings object with antenna_api_* configuration
+        processing_service_name: Name of the processing service
     Returns:
         True if any work was done, False otherwise
     """
     did_work = False
-    loader = get_rest_dataloader(job_id=job_id, settings=settings)
+    loader = get_rest_dataloader(
+        job_id=job_id,
+        settings=settings,
+        processing_service_name=processing_service_name,
+    )
     classifier = None
     detector = None
 
@@ -232,6 +244,7 @@ def _process_job(
             settings.antenna_api_auth_token,
             job_id,
             batch_results,
+            processing_service_name,
         )
         st, t = t("Finished posting results")
 

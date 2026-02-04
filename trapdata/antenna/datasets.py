@@ -45,6 +45,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
         job_id: int,
         batch_size: int = 1,
         image_transforms: torchvision.transforms.Compose | None = None,
+        processing_service_name: str = "",
     ):
         """
         Initialize the REST dataset.
@@ -55,12 +56,14 @@ class RESTDataset(torch.utils.data.IterableDataset):
             job_id: The job ID to fetch tasks for
             batch_size: Number of tasks to request per batch
             image_transforms: Optional transforms to apply to loaded images
+            processing_service_name: Name of the processing service
         """
         super().__init__()
         self.base_url = base_url
         self.job_id = job_id
         self.batch_size = batch_size
         self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
+        self.processing_service_name = processing_service_name
 
         # Create persistent sessions for connection pooling
         self.api_session = get_http_session(auth_token)
@@ -84,7 +87,10 @@ class RESTDataset(torch.utils.data.IterableDataset):
             requests.RequestException: If the request fails (network error, etc.)
         """
         url = f"{self.base_url.rstrip('/')}/jobs/{self.job_id}/tasks"
-        params = {"batch": self.batch_size}
+        params = {
+            "batch": self.batch_size,
+            "processing_service_name": self.processing_service_name,
+        }
 
         response = self.api_session.get(url, params=params, timeout=30)
         response.raise_for_status()
@@ -251,6 +257,7 @@ def rest_collate_fn(batch: list[dict]) -> dict:
 def get_rest_dataloader(
     job_id: int,
     settings: "Settings",
+    processing_service_name: str,
 ) -> torch.utils.data.DataLoader:
     """
     Create a DataLoader that fetches tasks from Antenna API.
@@ -264,12 +271,14 @@ def get_rest_dataloader(
     Args:
         job_id: Job ID to fetch tasks for
         settings: Settings object with antenna_api_* configuration
+        processing_service_name: Name of the processing service
     """
     dataset = RESTDataset(
         base_url=settings.antenna_api_base_url,
         auth_token=settings.antenna_api_auth_token,
         job_id=job_id,
         batch_size=settings.antenna_api_batch_size,
+        processing_service_name=processing_service_name,
     )
 
     return torch.utils.data.DataLoader(

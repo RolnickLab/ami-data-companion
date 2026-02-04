@@ -16,7 +16,8 @@ def run(
         list[str] | None,
         typer.Option(
             "--pipeline",
-            help="Pipeline to use for processing (e.g., moth_binary, panama_moths_2024). Can be specified multiple times. Defaults to all pipelines if not specified."
+            help="Pipeline to use for processing (e.g., moth_binary, panama_moths_2024). Can be specified multiple times. "
+            "Defaults to all pipelines if not specified.",
         ),
     ] = None,
 ):
@@ -49,13 +50,6 @@ def run(
 
 @cli.command("register")
 def register(
-    name: Annotated[
-        str,
-        typer.Argument(
-            help="Name for the processing service registration (e.g., 'AMI Data Companion on DRAC gpu-03'). "
-            "Hostname will be added automatically.",
-        ),
-    ],
     project: Annotated[
         list[int] | None,
         typer.Option(
@@ -70,11 +64,18 @@ def register(
     This command registers all available pipeline configurations with the Antenna platform
     for the specified projects (or all accessible projects if none specified).
 
+    The service name is read from the AMI_ANTENNA_SERVICE_NAME configuration setting.
+    Hostname will be added automatically to the service name.
+
     Examples:
-        ami worker register "AMI Data Companion on DRAC gpu-03" --project 1 --project 2
-        ami worker register "My Processing Service"  # registers for all accessible projects
+        ami worker register --project 1 --project 2
+        ami worker register  # registers for all accessible projects
     """
     from trapdata.antenna.registration import register_pipelines
+    from trapdata.settings import read_settings
 
+    settings = read_settings()
     project_ids = project if project else []
-    register_pipelines(project_ids=project_ids, service_name=name)
+    register_pipelines(
+        project_ids=project_ids, service_name=settings.antenna_service_name
+    )
