@@ -95,8 +95,11 @@ def register_pipelines(
         logger.error("AMI_ANTENNA_API_AUTH_TOKEN environment variable not set")
         return
 
-    if service_name is None:
-        logger.error("Service name is required for registration")
+    if not service_name or not service_name.strip():
+        logger.error(
+            "Service name is required for registration. "
+            "Configure AMI_ANTENNA_SERVICE_NAME via environment variable, .env file, or Kivy settings."
+        )
         return
 
     # Add hostname to service name

@@ -34,6 +34,13 @@ def run_worker(pipelines: list[str]):
             "Get your auth token from your Antenna project settings."
         )
 
+    # Validate service name
+    if not settings.antenna_service_name or not settings.antenna_service_name.strip():
+        raise ValueError(
+            "AMI_ANTENNA_SERVICE_NAME configuration setting must be set. "
+            "Configure it via environment variable or .env file."
+        )
+
     # Build full service name with hostname
     full_service_name = get_full_service_name(settings.antenna_service_name)
     logger.info(f"Running worker as: {full_service_name}")
