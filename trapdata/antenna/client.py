@@ -1,5 +1,7 @@
 """Antenna API client for fetching jobs and posting results."""
 
+import socket
+
 import requests
 
 from trapdata.antenna.schemas import AntennaJobsListResponse, AntennaTaskResult
@@ -7,19 +9,34 @@ from trapdata.api.utils import get_http_session
 from trapdata.common.logs import logger
 
 
+def get_full_service_name(service_name: str) -> str:
+    """Build full service name with hostname.
+
+    Args:
+        service_name: Base service name
+
+    Returns:
+        Full service name with hostname appended
+    """
+    hostname = socket.gethostname()
+    return f"{service_name} ({hostname})"
+
+
 def get_jobs(
     base_url: str,
     auth_token: str,
     pipeline_slug: str,
+    processing_service_name: str,
 ) -> list[int]:
     """Fetch job ids from the API for the given pipeline.
 
-    Calls: GET {base_url}/jobs?pipeline__slug=<pipeline>&ids_only=1
+    Calls: GET {base_url}/jobs?pipeline__slug=<pipeline>&ids_only=1&processing_service_name=<name>
 
     Args:
         base_url: Antenna API base URL (e.g., "http://localhost:8000/api/v2")
         auth_token: API authentication token
         pipeline_slug: Pipeline slug to filter jobs
+        processing_service_name: Name of the processing service
 
     Returns:
         List of job ids (possibly empty) on success or error.
@@ -31,6 +48,7 @@ def get_jobs(
                 "pipeline__slug": pipeline_slug,
                 "ids_only": 1,
                 "incomplete_only": 1,
+                "processing_service_name": processing_service_name,
             }
 
             resp = session.get(url, params=params, timeout=30)
@@ -52,6 +70,7 @@ def post_batch_results(
     auth_token: str,
     job_id: int,
     results: list[AntennaTaskResult],
+    processing_service_name: str,
 ) -> bool:
     """
     Post batch results back to the API.
@@ -61,6 +80,7 @@ def post_batch_results(
         auth_token: API authentication token
         job_id: Job ID
         results: List of AntennaTaskResult objects
+        processing_service_name: Name of the processing service
 
     Returns:
         True if successful, False otherwise
@@ -70,7 +90,8 @@ def post_batch_results(
 
     with get_http_session(auth_token) as session:
         try:
-            response = session.post(url, json=payload, timeout=60)
+            params = {"processing_service_name": processing_service_name}
+            response = session.post(url, json=payload, params=params, timeout=60)
             response.raise_for_status()
             logger.info(f"Successfully posted {len(results)} results to {url}")
             return True

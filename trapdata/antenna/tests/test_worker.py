@@ -194,7 +194,9 @@ class TestGetJobsIntegration(TestCase):
         antenna_api_server.setup_job(30, [])
 
         with patch_antenna_api_requests(self.antenna_client):
-            result = get_jobs("http://testserver/api/v2", "test-token", "moths_2024")
+            result = get_jobs(
+                "http://testserver/api/v2", "test-token", "moths_2024", "Test Worker"
+            )
 
         assert result == [10, 20, 30]
 
@@ -237,7 +239,10 @@ class TestProcessJobIntegration(TestCase):
 
         with patch_antenna_api_requests(self.antenna_client):
             result = _process_job(
-                "quebec_vermont_moths_2023", 100, self._make_settings()
+                "quebec_vermont_moths_2023",
+                100,
+                self._make_settings(),
+                "Test Service",
             )
 
         assert result is False
@@ -262,7 +267,10 @@ class TestProcessJobIntegration(TestCase):
         # Run worker
         with patch_antenna_api_requests(self.antenna_client):
             result = _process_job(
-                "quebec_vermont_moths_2023", 101, self._make_settings()
+                "quebec_vermont_moths_2023",
+                101,
+                self._make_settings(),
+                "Test Service",
             )
 
         # Validate processing succeeded
@@ -297,7 +305,12 @@ class TestProcessJobIntegration(TestCase):
         antenna_api_server.setup_job(job_id=102, tasks=tasks)
 
         with patch_antenna_api_requests(self.antenna_client):
-            _process_job("quebec_vermont_moths_2023", 102, self._make_settings())
+            _process_job(
+                "quebec_vermont_moths_2023",
+                102,
+                self._make_settings(),
+                "Test Service",
+            )
 
         posted_results = antenna_api_server.get_posted_results(102)
         assert len(posted_results) == 1
@@ -329,7 +342,10 @@ class TestProcessJobIntegration(TestCase):
 
         with patch_antenna_api_requests(self.antenna_client):
             result = _process_job(
-                "quebec_vermont_moths_2023", 103, self._make_settings()
+                "quebec_vermont_moths_2023",
+                103,
+                self._make_settings(),
+                "Test Service",
             )
 
         assert result is True
@@ -419,14 +435,14 @@ class TestWorkerEndToEnd(TestCase):
 
             # Step 2: Get jobs
             job_ids = get_jobs(
-                "http://testserver/api/v2",
-                "test-token",
-                pipeline_slug,
+                "http://testserver/api/v2", "test-token", pipeline_slug, "Test Worker"
             )
             assert 200 in job_ids
 
             # Step 3: Process job
-            result = _process_job(pipeline_slug, 200, self._make_settings())
+            result = _process_job(
+                pipeline_slug, 200, self._make_settings(), "Test Worker"
+            )
             assert result is True
 
         # Step 4: Validate results posted
@@ -473,7 +489,10 @@ class TestWorkerEndToEnd(TestCase):
 
         with patch_antenna_api_requests(self.antenna_client):
             result = _process_job(
-                "quebec_vermont_moths_2023", 201, self._make_settings()
+                "quebec_vermont_moths_2023",
+                201,
+                self._make_settings(),
+                "Test Service",
             )
 
         assert result is True
