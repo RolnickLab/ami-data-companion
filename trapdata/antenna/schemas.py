@@ -85,3 +85,11 @@ class AsyncPipelineRegistrationResponse(pydantic.BaseModel):
         default=None,
         description="ID of the processing service that was created or updated",
     )
+
+class MLBackend(str):
+    """
+    Backend types for ML job execution.
+    """
+
+    SYNC_API = "sync_api"
+    ASYNC_API = "async_api"
