@@ -86,10 +86,20 @@ class AsyncPipelineRegistrationResponse(pydantic.BaseModel):
         description="ID of the processing service that was created or updated",
     )
 
-class MLBackend(str):
+
+class JobDispatchMode(str):
     """
-    Backend types for ML job execution.
+    How a job dispatches its tasks.
+
+    External processing services should only be concerned with
+    jobs with dispatch_mode=async_api
+
+    Other job types will not have any tasks to fetch from the tasks endpoint and will
+    fail if you try to post results for them.
+
+    This mirrors the JobDispatchMode enum in the Antenna server.
     """
 
+    INTERNAL = "internal"
     SYNC_API = "sync_api"
     ASYNC_API = "async_api"

@@ -2,7 +2,11 @@
 
 import requests
 
-from trapdata.antenna.schemas import AntennaJobsListResponse, AntennaTaskResult, MLBackend
+from trapdata.antenna.schemas import (
+    AntennaJobsListResponse,
+    AntennaTaskResult,
+    JobDispatchMode,
+)
 from trapdata.api.utils import get_http_session
 from trapdata.common.logs import logger
 
@@ -31,7 +35,7 @@ def get_jobs(
                 "pipeline__slug": pipeline_slug,
                 "ids_only": 1,
                 "incomplete_only": 1,
-                "backend": MLBackend.ASYNC_API,  # Only fetch jobs meant for async processing
+                "dispatch_mode": JobDispatchMode.ASYNC_API,  # Only fetch async_api jobs
             }
 
             resp = session.get(url, params=params, timeout=30)
