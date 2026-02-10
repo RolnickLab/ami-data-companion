@@ -244,11 +244,11 @@ class InferenceBaseClass:
         """
         if self.single:
             logger.info(
-                f"Preparing dataloader with batch size of {self.batch_size} in single worker mode."
+                f"Preparing {self.name} inference dataloader (batch_size={self.batch_size}, single worker mode)"
             )
         else:
             logger.info(
-                f"Preparing dataloader with batch size of {self.batch_size} and {self.num_workers} workers."
+                f"Preparing {self.name} inference dataloader (batch_size={self.batch_size}, num_workers={self.num_workers})"
             )
         dataloader_args = {
             "num_workers": 0 if self.single else self.num_workers,
