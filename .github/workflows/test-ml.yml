@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@main # Need latest version to use pyproject.toml instead of requirements.txt
         with:
