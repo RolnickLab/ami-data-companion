@@ -5,6 +5,7 @@ import time
 
 import numpy as np
 import torch
+import torch.multiprocessing as mp
 import torchvision
 
 from trapdata.antenna.client import get_jobs, post_batch_results
@@ -25,7 +26,11 @@ SLEEP_TIME_SECONDS = 5
 
 
 def run_worker(pipelines: list[str]):
-    """Run the worker to process images from the REST API queue."""
+    """Run the worker to process images from the REST API queue.
+
+    Automatically spawns one worker process per available GPU.
+    On single-GPU or CPU-only machines, runs in-process (no overhead).
+    """
     settings = read_settings()
 
     # Validate auth token
@@ -35,20 +40,57 @@ def run_worker(pipelines: list[str]):
             "Get your auth token from your Antenna project settings."
         )
 
+    gpu_count = torch.cuda.device_count()
+
+    if gpu_count > 1:
+        logger.info(f"Found {gpu_count} GPUs, spawning one worker per GPU")
+        # Don't pass settings through mp.spawn — Settings contains enums that
+        # can't be pickled. Each child process calls read_settings() itself.
+        mp.spawn(
+            _worker_loop,
+            args=(pipelines,),
+            nprocs=gpu_count,
+            join=True,
+        )
+    else:
+        if gpu_count == 1:
+            logger.info(f"Found 1 GPU: {torch.cuda.get_device_name(0)}")
+        else:
+            logger.info("No GPUs found, running on CPU")
+        _worker_loop(0, pipelines)
+
+
+def _worker_loop(gpu_id: int, pipelines: list[str]):
+    """Main polling loop for a single worker, pinned to a specific GPU.
+
+    Args:
+        gpu_id: GPU index to pin this worker to (0 for CPU-only).
+        pipelines: List of pipeline slugs to poll for jobs.
+    """
+    settings = read_settings()
+
+    if torch.cuda.is_available() and torch.cuda.device_count() > 0:
+        torch.cuda.set_device(gpu_id)
+        logger.info(
+            f"Worker {gpu_id} pinned to GPU {gpu_id}: {torch.cuda.get_device_name(gpu_id)}"
+        )
+
     while True:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
         # These should probably come from a dedicated endpoint and should preempt batch jobs under the assumption that they
         # would run on the same GPU.
         any_jobs = False
         for pipeline in pipelines:
-            logger.info(f"Checking for jobs for pipeline {pipeline}")
+            logger.info(f"[GPU {gpu_id}] Checking for jobs for pipeline {pipeline}")
             jobs = get_jobs(
                 base_url=settings.antenna_api_base_url,
                 auth_token=settings.antenna_api_auth_token,
                 pipeline_slug=pipeline,
             )
             for job_id in jobs:
-                logger.info(f"Processing job {job_id} with pipeline {pipeline}")
+                logger.info(
+                    f"[GPU {gpu_id}] Processing job {job_id} with pipeline {pipeline}"
+                )
                 try:
                     any_work_done = _process_job(
                         pipeline=pipeline,
@@ -58,13 +100,15 @@ def run_worker(pipelines: list[str]):
                     any_jobs = any_jobs or any_work_done
                 except Exception as e:
                     logger.error(
-                        f"Failed to process job {job_id} with pipeline {pipeline}: {e}",
+                        f"[GPU {gpu_id}] Failed to process job {job_id} with pipeline {pipeline}: {e}",
                         exc_info=True,
                     )
                     # Continue to next job rather than crashing the worker
 
         if not any_jobs:
-            logger.info(f"No jobs found, sleeping for {SLEEP_TIME_SECONDS} seconds")
+            logger.info(
+                f"[GPU {gpu_id}] No jobs found, sleeping for {SLEEP_TIME_SECONDS} seconds"
+            )
             time.sleep(SLEEP_TIME_SECONDS)
 
 
@@ -139,7 +183,7 @@ def _process_job(
             # Track start time for this batch
             batch_start_time = datetime.datetime.now()
 
-            logger.info(f"Processing batch {i + 1}")
+            logger.info(f"Processing worker batch {i + 1} ({len(images)} images)")
             # output is dict of "boxes", "labels", "scores"
             batch_output = []
             if len(images) > 0:
