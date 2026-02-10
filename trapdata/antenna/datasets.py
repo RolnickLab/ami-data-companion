@@ -231,7 +231,7 @@ def rest_collate_fn(batch: list[dict]) -> dict:
     # Collate successful items
     if successful:
         result = {
-            "images": torch.stack([item["image"] for item in successful]),
+            "images": [item["image"] for item in successful],
             "reply_subjects": [item["reply_subject"] for item in successful],
             "image_ids": [item["image_id"] for item in successful],
             "image_urls": [item.get("image_url") for item in successful],

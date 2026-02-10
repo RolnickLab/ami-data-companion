@@ -55,7 +55,8 @@ class TestRestCollateFn(TestCase):
         result = rest_collate_fn(batch)
 
         assert "images" in result
-        assert result["images"].shape == (2, 3, 64, 64)
+        assert len(result["images"]) == 2
+        assert result["images"][0].shape == (3, 64, 64)
         assert result["image_ids"] == ["img1", "img2"]
         assert result["reply_subjects"] == ["subj1", "subj2"]
         assert result["failed_items"] == []
@@ -104,7 +105,8 @@ class TestRestCollateFn(TestCase):
         ]
         result = rest_collate_fn(batch)
 
-        assert result["images"].shape == (1, 3, 64, 64)
+        assert len(result["images"]) == 1
+        assert result["images"][0].shape == (3, 64, 64)
         assert result["image_ids"] == ["img1"]
         assert len(result["failed_items"]) == 1
         assert result["failed_items"][0]["image_id"] == "img2"
