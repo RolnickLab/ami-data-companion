@@ -1,6 +1,7 @@
 """Dataset classes for streaming tasks from the Antenna API."""
 
 import typing
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 
 import requests
@@ -120,17 +121,55 @@ class RESTDataset(torch.utils.data.IterableDataset):
             logger.error(f"Failed to load image from {image_url}: {e}")
             return None
 
+    def _load_images_threaded(
+        self,
+        tasks: list[AntennaPipelineProcessingTask],
+    ) -> dict[str, torch.Tensor | None]:
+        """Download images for a batch of tasks using concurrent threads.
+
+        Image downloads are I/O-bound (network latency, not CPU), so threads
+        provide near-linear speedup without the overhead of extra processes.
+        The HTTP session's connection pool is thread-safe and reuses TCP
+        connections across threads.
+
+        Args:
+            tasks: List of tasks whose images should be downloaded.
+
+        Returns:
+            Mapping from image_id to tensor (or None on failure), preserving
+            the order needed by the caller.
+        """
+        results: dict[str, torch.Tensor | None] = {}
+
+        def _download(
+            task: AntennaPipelineProcessingTask,
+        ) -> tuple[str, torch.Tensor | None]:
+            tensor = self._load_image(task.image_url) if task.image_url else None
+            return (task.image_id, tensor)
+
+        max_threads = min(len(tasks), 8)
+        with ThreadPoolExecutor(max_workers=max_threads) as executor:
+            futures = {executor.submit(_download, t): t for t in tasks}
+            for future in as_completed(futures):
+                image_id, tensor = future.result()
+                results[image_id] = tensor
+
+        return results
+
     def __iter__(self):
         """
         Iterate over tasks from the REST API.
+
+        Each API fetch returns a batch of tasks. Images for the entire batch
+        are downloaded concurrently using threads (see _load_images_threaded),
+        then yielded one at a time for the DataLoader to collate.
 
         Yields:
             Dictionary containing:
                 - image: PyTorch tensor of the loaded image
                 - reply_subject: Reply subject for the task
-                - batch_index: Index of the image in the batch
-                - job_id: Job ID
                 - image_id: Image ID
+                - image_url: Source URL
         """
         worker_id = 0  # Initialize before try block to avoid UnboundLocalError
         try:
@@ -160,14 +199,12 @@ class RESTDataset(torch.utils.data.IterableDataset):
                     )
                     break
 
+                # Download all images concurrently
+                image_map = self._load_images_threaded(tasks)
+
                 for task in tasks:
+                    image_tensor = image_map.get(task.image_id)
                     errors = []
-                    # Load the image
-                    # _, t = log_time()
-                    image_tensor = (
-                        self._load_image(task.image_url) if task.image_url else None
-                    )
-                    # _, t = t(f"Loaded image from {image_url}")
 
                     if image_tensor is None:
                         errors.append("failed to load image")
