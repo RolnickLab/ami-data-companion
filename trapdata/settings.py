@@ -33,9 +33,9 @@ class Settings(BaseSettings):
         default=ml.models.DEFAULT_FEATURE_EXTRACTOR
     )
     classification_threshold: float = 0.6
-    localization_batch_size: int = 2
+    localization_batch_size: int = 8
     classification_batch_size: int = 20
-    num_workers: int = 1
+    num_workers: int = 4
 
     # Antenna API worker settings
     antenna_api_base_url: str = "http://localhost:8000/api/v2"
