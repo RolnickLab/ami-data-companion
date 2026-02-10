@@ -5,6 +5,7 @@ import time
 
 import numpy as np
 import torch
+import torchvision
 
 from trapdata.antenna.client import get_jobs, post_batch_results
 from trapdata.antenna.datasets import get_rest_dataloader
@@ -168,25 +169,44 @@ def _process_job(
             image_tensors = dict(zip(image_ids, images, strict=True))
 
             classifier.reset(detector.results)
+            to_pil = torchvision.transforms.ToPILImage()
+            classify_transforms = classifier.get_transforms()
 
+            # Collect and transform all crops for batched classification
+            crops = []
+            valid_indices = []
             for idx, dresp in enumerate(detector.results):
                 image_tensor = image_tensors[dresp.source_image_id]
                 bbox = dresp.bbox
-                # crop the image tensor using the bbox
-                crop = image_tensor[
-                    :, int(bbox.y1) : int(bbox.y2), int(bbox.x1) : int(bbox.x2)
-                ]
-                crop = crop.unsqueeze(0)  # add batch dimension
-                classifier_out = classifier.predict_batch(crop)
+                y1, y2 = int(bbox.y1), int(bbox.y2)
+                x1, x2 = int(bbox.x1), int(bbox.x2)
+                if y1 >= y2 or x1 >= x2:
+                    logger.warning(
+                        f"Skipping detection {idx} with invalid bbox: "
+                        f"({x1},{y1})->({x2},{y2})"
+                    )
+                    continue
+                crop = image_tensor[:, y1:y2, x1:x2]
+                crop_pil = to_pil(crop)
+                crop_transformed = classify_transforms(crop_pil)
+                crops.append(crop_transformed)
+                valid_indices.append(idx)
+
+            if crops:
+                batched_crops = torch.stack(crops)
+                classifier_out = classifier.predict_batch(batched_crops)
                 classifier_out = classifier.post_process_batch(classifier_out)
-                detection = classifier.update_detection_classification(
-                    seconds_per_item=0,
-                    image_id=dresp.source_image_id,
-                    detection_idx=idx,
-                    predictions=classifier_out[0],
-                )
-                image_detections[dresp.source_image_id].append(detection)
-                all_detections.append(detection)
+
+                for crop_i, idx in enumerate(valid_indices):
+                    dresp = detector.results[idx]
+                    detection = classifier.update_detection_classification(
+                        seconds_per_item=0,
+                        image_id=dresp.source_image_id,
+                        detection_idx=idx,
+                        predictions=classifier_out[crop_i],
+                    )
+                    image_detections[dresp.source_image_id].append(detection)
+                    all_detections.append(detection)
 
             ct, t = t("Finished classification")
             total_classification_time += ct
