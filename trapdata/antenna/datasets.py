@@ -33,9 +33,9 @@ class RESTDataset(torch.utils.data.IterableDataset):
     DataLoader workers are SAFE and won't process duplicate tasks. Each worker
     independently fetches different tasks from the shared queue.
 
-    With num_workers > 0:
-        Worker 1: GET /tasks → receives [1,2,3,4], removed from queue
-        Worker 2: GET /tasks → receives [5,6,7,8], removed from queue
+    With DataLoader num_workers > 0 (I/O subprocesses, not AMI instances):
+        Subprocess 1: GET /tasks → receives [1,2,3,4], removed from queue
+        Subprocess 2: GET /tasks → receives [5,6,7,8], removed from queue
         No duplicates, safe for parallel processing
     """
 
@@ -179,7 +179,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
             num_workers = worker_info.num_workers if worker_info else 1
 
             logger.info(
-                f"Worker {worker_id}/{num_workers} starting iteration for job {self.job_id}"
+                f"DataLoader subprocess {worker_id}/{num_workers} starting iteration for job {self.job_id}"
             )
 
             while True:
@@ -292,10 +292,10 @@ def get_rest_dataloader(
     """
     Create a DataLoader that fetches tasks from Antenna API.
 
-    Note: num_workers > 0 is SAFE here (unlike local file reading) because:
+    Note: DataLoader num_workers > 0 is SAFE here (unlike local file reading) because:
     - Antenna API provides atomic task dequeue (work queue pattern)
-    - No shared file handles between workers
-    - Each worker gets different tasks automatically
+    - No shared file handles between subprocesses
+    - Each subprocess gets different tasks automatically
     - Parallel downloads improve throughput for I/O-bound work
 
     Args:

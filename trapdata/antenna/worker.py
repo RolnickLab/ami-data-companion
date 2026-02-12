@@ -28,7 +28,7 @@ SLEEP_TIME_SECONDS = 5
 def run_worker(pipelines: list[str]):
     """Run the worker to process images from the REST API queue.
 
-    Automatically spawns one worker process per available GPU.
+    Automatically spawns one AMI worker instance process per available GPU.
     On single-GPU or CPU-only machines, runs in-process (no overhead).
     """
     settings = read_settings()
@@ -43,7 +43,7 @@ def run_worker(pipelines: list[str]):
     gpu_count = torch.cuda.device_count()
 
     if gpu_count > 1:
-        logger.info(f"Found {gpu_count} GPUs, spawning one worker per GPU")
+        logger.info(f"Found {gpu_count} GPUs, spawning one AMI worker instance per GPU")
         # Don't pass settings through mp.spawn — Settings contains enums that
         # can't be pickled. Each child process calls read_settings() itself.
         mp.spawn(
@@ -61,10 +61,10 @@ def run_worker(pipelines: list[str]):
 
 
 def _worker_loop(gpu_id: int, pipelines: list[str]):
-    """Main polling loop for a single worker, pinned to a specific GPU.
+    """Main polling loop for a single AMI worker instance, pinned to a specific GPU.
 
     Args:
-        gpu_id: GPU index to pin this worker to (0 for CPU-only).
+        gpu_id: GPU index to pin this AMI worker instance to (0 for CPU-only).
         pipelines: List of pipeline slugs to poll for jobs.
     """
     settings = read_settings()
@@ -72,7 +72,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
     if torch.cuda.is_available() and torch.cuda.device_count() > 0:
         torch.cuda.set_device(gpu_id)
         logger.info(
-            f"Worker {gpu_id} pinned to GPU {gpu_id}: {torch.cuda.get_device_name(gpu_id)}"
+            f"AMI worker instance {gpu_id} pinned to GPU {gpu_id}: {torch.cuda.get_device_name(gpu_id)}"
         )
 
     while True:

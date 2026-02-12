@@ -143,8 +143,11 @@ class Settings(BaseSettings):
                 "kivy_section": "performance",
             },
             "num_workers": {
-                "title": "Number of workers",
-                "description": "Number of parallel workers for the PyTorch dataloader. See https://pytorch.org/docs/stable/data.html",
+                "title": "DataLoader workers",
+                "description": (
+                    "Number of parallel subprocesses for the PyTorch DataLoader (image downloading & preprocessing). "
+                    "See https://pytorch.org/docs/stable/data.html"
+                ),
                 "kivy_type": "numeric",
                 "kivy_section": "performance",
             },
