@@ -37,16 +37,18 @@ Settings quick-reference (prefix with AMI_ as env vars):
         How many images the GPU processes at once (detection). Larger =
         more GPU memory. These are full-resolution images (~4K).
 
-    num_workers  (default 4)
+    num_workers  (default 2)
         DataLoader subprocesses. Each independently fetches tasks and
         downloads images. More workers = more images prefetched for the
         GPU, at the cost of CPU/RAM. With 0 workers, fetching and
         inference are sequential (useful for debugging).
 
-    antenna_api_batch_size  (default 4)
+    antenna_api_batch_size  (default 16)
         How many task URLs to request from Antenna per API call.
         Determines how many images are downloaded concurrently per
-        thread pool invocation.
+        thread pool invocation. Should be >= localization_batch_size
+        so one API call can fill at least one GPU batch without an
+        extra round trip.
 
     prefetch_factor  (PyTorch default: 2 when num_workers > 0)
         Batches prefetched per worker. Not overridden here — the
