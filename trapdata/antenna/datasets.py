@@ -308,14 +308,9 @@ def get_rest_dataloader(
         batch_size=settings.antenna_api_batch_size,
     )
 
-    dataloader_kwargs: dict = {
-        "batch_size": settings.localization_batch_size,
-        "num_workers": settings.num_workers,
-        "collate_fn": rest_collate_fn,
-    }
-    if settings.num_workers > 0:
-        # Prefetch more batches so the next batch is already downloading
-        # while the GPU processes the current one. Default is 2.
-        dataloader_kwargs["prefetch_factor"] = 4
-
-    return torch.utils.data.DataLoader(dataset, **dataloader_kwargs)
+    return torch.utils.data.DataLoader(
+        dataset,
+        batch_size=settings.localization_batch_size,
+        num_workers=settings.num_workers,
+        collate_fn=rest_collate_fn,
+    )
