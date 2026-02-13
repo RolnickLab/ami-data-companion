@@ -1,7 +1,7 @@
 """Dataset classes for streaming tasks from the Antenna API."""
 
 import typing
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 
 import requests
@@ -67,8 +67,13 @@ class RESTDataset(torch.utils.data.IterableDataset):
         self.api_session = get_http_session(auth_token)
         self.image_fetch_session = get_http_session()  # No auth for external image URLs
 
+        # Reusable thread pool for concurrent image downloads
+        self._executor = ThreadPoolExecutor(max_workers=8)
+
     def __del__(self):
-        """Clean up HTTP sessions on dataset destruction."""
+        """Clean up HTTP sessions and thread pool on dataset destruction."""
+        if hasattr(self, "_executor"):
+            self._executor.shutdown(wait=False)
         if hasattr(self, "api_session"):
             self.api_session.close()
         if hasattr(self, "image_fetch_session"):
@@ -129,8 +134,10 @@ class RESTDataset(torch.utils.data.IterableDataset):
 
         Image downloads are I/O-bound (network latency, not CPU), so threads
         provide near-linear speedup without the overhead of extra processes.
-        The HTTP session's connection pool is thread-safe and reuses TCP
-        connections across threads.
+        Note: ``requests.Session`` is not formally thread-safe, but the
+        underlying urllib3 connection pool handles concurrent socket access.
+        In practice shared read-only sessions work fine for GET requests;
+        if issues arise, switch to per-thread sessions.
 
         Args:
             tasks: List of tasks whose images should be downloaded.
@@ -139,7 +146,6 @@ class RESTDataset(torch.utils.data.IterableDataset):
             Mapping from image_id to tensor (or None on failure), preserving
             the order needed by the caller.
         """
-        results: dict[str, torch.Tensor | None] = {}
 
         def _download(
             task: AntennaPipelineProcessingTask,
@@ -147,14 +153,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
             tensor = self._load_image(task.image_url) if task.image_url else None
             return (task.image_id, tensor)
 
-        max_threads = min(len(tasks), 8)
-        with ThreadPoolExecutor(max_workers=max_threads) as executor:
-            futures = {executor.submit(_download, t): t for t in tasks}
-            for future in as_completed(futures):
-                image_id, tensor = future.result()
-                results[image_id] = tensor
-
-        return results
+        return dict(self._executor.map(_download, tasks))
 
     def __iter__(self):
         """
