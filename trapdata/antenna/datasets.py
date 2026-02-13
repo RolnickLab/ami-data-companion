@@ -235,7 +235,7 @@ def rest_collate_fn(batch: list[dict]) -> dict:
     Custom collate function that separates failed and successful items.
 
     Returns a dict with:
-        - images: Stacked tensor of valid images (only present if there are successful items)
+        - images: List of image tensors (only present if there are successful items)
         - reply_subjects: List of reply subjects for valid images
         - image_ids: List of image IDs for valid images
         - image_urls: List of image URLs for valid images
