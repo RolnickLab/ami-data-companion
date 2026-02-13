@@ -166,6 +166,8 @@ def _process_job(
         reply_subjects = batch.get("reply_subjects", [None] * len(images))
         image_urls = batch.get("image_urls", [None] * len(images))
 
+        batch_results: list[AntennaTaskResult] = []
+
         try:
             # Validate all arrays have same length before zipping
             if len(image_ids) != len(images):
@@ -260,7 +262,7 @@ def _process_job(
             batch_elapsed = (batch_end_time - batch_start_time).total_seconds()
 
             # Post results back to the API with PipelineResponse for each image
-            batch_results: list[AntennaTaskResult] = []
+            batch_results.clear()
             for reply_subject, image_id, image_url in zip(
                 reply_subjects, image_ids, image_urls, strict=True
             ):
@@ -286,7 +288,7 @@ def _process_job(
             logger.error(f"Batch {i + 1} failed during processing: {e}", exc_info=True)
             # Report errors back to Antenna so tasks aren't stuck in the queue
             batch_results = []
-            for reply_subject, image_id in zip(reply_subjects, image_ids):
+            for reply_subject, image_id in zip(reply_subjects, image_ids, strict=True):
                 batch_results.append(
                     AntennaTaskResult(
                         reply_subject=reply_subject,
