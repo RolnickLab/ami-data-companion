@@ -1,4 +1,64 @@
-"""Dataset classes for streaming tasks from the Antenna API."""
+"""Dataset and DataLoader for streaming tasks from the Antenna API.
+
+Data loading pipeline overview
+==============================
+
+The pipeline has three layers of concurrency. Each layer is controlled by a
+different setting and targets a different bottleneck.
+
+::
+
+    ┌──────────────────────────────────────────────────────────────────┐
+    │  GPU process  (_worker_loop in worker.py)                       │
+    │  One per GPU. Runs detection → classification on batches.       │
+    │  Controlled by: automatic (one per torch.cuda.device_count())   │
+    ├──────────────────────────────────────────────────────────────────┤
+    │  DataLoader workers  (num_workers subprocesses)                  │
+    │  Each subprocess runs its own RESTDataset.__iter__ loop:        │
+    │    1. GET /tasks  → fetch batch of task metadata from Antenna   │
+    │    2. Download images (threaded, see below)                     │
+    │    3. Yield individual (image_tensor, metadata) rows            │
+    │  The DataLoader collates rows into GPU-sized batches.           │
+    │  Controlled by: settings.num_workers  (AMI_NUM_WORKERS)         │
+    │  Default: 4.  Safe >0 because Antenna dequeues atomically.      │
+    ├──────────────────────────────────────────────────────────────────┤
+    │  Thread pool  (ThreadPoolExecutor inside each DataLoader worker) │
+    │  Downloads images concurrently *within* one API fetch batch.    │
+    │  Each thread: HTTP GET → PIL open → RGB convert → ToTensor().   │
+    │  Controlled by: ThreadPoolExecutor(max_workers=8) on the class. │
+    │  Note: RGB conversion and ToTensor are GIL-bound (CPU). Only    │
+    │  the network wait truly runs in parallel. A future optimisation  │
+    │  could move transforms out of the thread.                       │
+    └──────────────────────────────────────────────────────────────────┘
+
+Settings quick-reference (prefix with AMI_ as env vars):
+
+    localization_batch_size  (default 8)
+        How many images the GPU processes at once (detection). Larger =
+        more GPU memory. These are full-resolution images (~4K).
+
+    num_workers  (default 4)
+        DataLoader subprocesses. Each independently fetches tasks and
+        downloads images. More workers = more images prefetched for the
+        GPU, at the cost of CPU/RAM. With 0 workers, fetching and
+        inference are sequential (useful for debugging).
+
+    antenna_api_batch_size  (default 4)
+        How many task URLs to request from Antenna per API call.
+        Determines how many images are downloaded concurrently per
+        thread pool invocation.
+
+    prefetch_factor  (PyTorch default: 2 when num_workers > 0)
+        Batches prefetched per worker. Not overridden here — the
+        default was tested and no improvement was measured by
+        increasing it (it just adds memory pressure).
+
+What has NOT been benchmarked yet (as of 2026-02):
+    - Optimal num_workers / thread count combination
+    - Whether moving transforms out of threads helps throughput
+    - Whether multiple DataLoader workers + threads overlap well
+      or contend on the GIL
+"""
 
 import typing
 from concurrent.futures import ThreadPoolExecutor
@@ -100,8 +160,12 @@ class RESTDataset(torch.utils.data.IterableDataset):
         return tasks_response.tasks  # Empty list is valid (queue drained)
 
     def _load_image(self, image_url: str) -> torch.Tensor | None:
-        """
-        Load an image from a URL and convert it to a PyTorch tensor.
+        """Load an image from a URL and convert it to a PyTorch tensor.
+
+        Called from threads inside ``_load_images_threaded``. The HTTP
+        fetch is truly concurrent (network I/O releases the GIL), but
+        PIL decode, RGB conversion, and ``image_transforms`` (ToTensor)
+        are CPU-bound and serialised by the GIL.
 
         Args:
             image_url: URL of the image to load
@@ -288,18 +352,22 @@ def get_rest_dataloader(
     job_id: int,
     settings: "Settings",
 ) -> torch.utils.data.DataLoader:
-    """
-    Create a DataLoader that fetches tasks from Antenna API.
+    """Create a DataLoader that fetches tasks from Antenna API.
 
-    Note: DataLoader num_workers > 0 is SAFE here (unlike local file reading) because:
-    - Antenna API provides atomic task dequeue (work queue pattern)
-    - No shared file handles between subprocesses
-    - Each subprocess gets different tasks automatically
-    - Parallel downloads improve throughput for I/O-bound work
+    See the module docstring for an overview of the three concurrency
+    layers (GPU processes → DataLoader workers → thread pool) and which
+    settings control each.
+
+    DataLoader num_workers > 0 is safe here because Antenna dequeues
+    tasks atomically — each worker subprocess gets a unique set of tasks.
 
     Args:
         job_id: Job ID to fetch tasks for
-        settings: Settings object with antenna_api_* configuration
+        settings: Settings object. Relevant fields:
+            - antenna_api_base_url / antenna_api_auth_token
+            - antenna_api_batch_size  (tasks per API call)
+            - localization_batch_size (images per GPU batch)
+            - num_workers            (DataLoader subprocesses)
     """
     dataset = RESTDataset(
         base_url=settings.antenna_api_base_url,
