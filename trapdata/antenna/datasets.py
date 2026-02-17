@@ -20,7 +20,7 @@ different setting and targets a different bottleneck.
     │    3. Yield individual (image_tensor, metadata) rows            │
     │  The DataLoader collates rows into GPU-sized batches.           │
     │  Controlled by: settings.num_workers  (AMI_NUM_WORKERS)         │
-    │  Default: 4.  Safe >0 because Antenna dequeues atomically.      │
+    │  Default: 2.  Safe >0 because Antenna dequeues atomically.      │
     ├──────────────────────────────────────────────────────────────────┤
     │  Thread pool  (ThreadPoolExecutor inside each DataLoader worker) │
     │  Downloads images concurrently *within* one API fetch batch.    │
