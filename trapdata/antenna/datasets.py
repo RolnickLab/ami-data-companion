@@ -166,7 +166,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
         Raises:
             requests.RequestException: If the request fails (network error, etc.)
         """
-        url = f"{self.base_url.rstrip('/')}/jobs/{self.job_id}/tasks"
+        url = f"{self.base_url.rstrip('/')}/jobs/{self.job_id}/tasks/"
         params = {"batch": self.batch_size}
 
         self._ensure_sessions()

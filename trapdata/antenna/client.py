@@ -30,7 +30,7 @@ def get_jobs(
     """
     with get_http_session(auth_token) as session:
         try:
-            url = f"{base_url.rstrip('/')}/jobs"
+            url = f"{base_url.rstrip('/')}/jobs/"
             params = {
                 "pipeline__slug": pipeline_slug,
                 "ids_only": 1,
