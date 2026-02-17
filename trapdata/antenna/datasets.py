@@ -121,25 +121,40 @@ class RESTDataset(torch.utils.data.IterableDataset):
         """
         super().__init__()
         self.base_url = base_url
+        self.auth_token = auth_token
         self.job_id = job_id
         self.batch_size = batch_size
         self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
 
-        # Create persistent sessions for connection pooling
-        self.api_session = get_http_session(auth_token)
-        self.image_fetch_session = get_http_session()  # No auth for external image URLs
+        # These are created lazily in _ensure_sessions() because they contain
+        # unpicklable objects (ThreadPoolExecutor has a SimpleQueue) and
+        # PyTorch DataLoader with num_workers>0 pickles the dataset to send
+        # it to worker subprocesses.
+        self._api_session: requests.Session | None = None
+        self._image_fetch_session: requests.Session | None = None
+        self._executor: ThreadPoolExecutor | None = None
 
-        # Reusable thread pool for concurrent image downloads
-        self._executor = ThreadPoolExecutor(max_workers=8)
+    def _ensure_sessions(self) -> None:
+        """Lazily create HTTP sessions and thread pool.
+
+        Called once per worker process on first use. This avoids pickling
+        issues with num_workers > 0 (SimpleQueue, socket objects, etc.).
+        """
+        if self._api_session is None:
+            self._api_session = get_http_session(self.auth_token)
+        if self._image_fetch_session is None:
+            self._image_fetch_session = get_http_session()
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=8)
 
     def __del__(self):
         """Clean up HTTP sessions and thread pool on dataset destruction."""
-        if hasattr(self, "_executor"):
+        if self._executor is not None:
             self._executor.shutdown(wait=False)
-        if hasattr(self, "api_session"):
-            self.api_session.close()
-        if hasattr(self, "image_fetch_session"):
-            self.image_fetch_session.close()
+        if self._api_session is not None:
+            self._api_session.close()
+        if self._image_fetch_session is not None:
+            self._image_fetch_session.close()
 
     def _fetch_tasks(self) -> list[AntennaPipelineProcessingTask]:
         """
@@ -154,7 +169,9 @@ class RESTDataset(torch.utils.data.IterableDataset):
         url = f"{self.base_url.rstrip('/')}/jobs/{self.job_id}/tasks"
         params = {"batch": self.batch_size}
 
-        response = self.api_session.get(url, params=params, timeout=30)
+        self._ensure_sessions()
+        assert self._api_session is not None
+        response = self._api_session.get(url, params=params, timeout=30)
         response.raise_for_status()
 
         # Parse and validate response with Pydantic
@@ -177,7 +194,9 @@ class RESTDataset(torch.utils.data.IterableDataset):
         """
         try:
             # Use dedicated session without auth for external images
-            response = self.image_fetch_session.get(image_url, timeout=30)
+            self._ensure_sessions()
+            assert self._image_fetch_session is not None
+            response = self._image_fetch_session.get(image_url, timeout=30)
             response.raise_for_status()
             image = Image.open(BytesIO(response.content))
 
@@ -219,6 +238,8 @@ class RESTDataset(torch.utils.data.IterableDataset):
             tensor = self._load_image(task.image_url) if task.image_url else None
             return (task.image_id, tensor)
 
+        self._ensure_sessions()
+        assert self._executor is not None
         return dict(self._executor.map(_download, tasks))
 
     def __iter__(self):

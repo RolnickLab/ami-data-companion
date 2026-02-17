@@ -34,6 +34,29 @@ from trapdata.tests import TEST_IMAGES_BASE_PATH
 # ---------------------------------------------------------------------------
 
 
+class TestDataLoaderMultiWorker(TestCase):
+    """DataLoader with num_workers > 0 must be able to start workers."""
+
+    def test_dataloader_starts_with_num_workers(self):
+        """Creating an iterator pickles the dataset to send to worker subprocesses."""
+        dataset = RESTDataset(
+            base_url="http://localhost:1/api/v2",
+            auth_token="test-token",
+            job_id=1,
+            batch_size=4,
+        )
+        loader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=2,
+            num_workers=2,
+            collate_fn=rest_collate_fn,
+        )
+        # iter() pickles the dataset and spawns workers.
+        # If the dataset has unpicklable attributes this raises TypeError.
+        it = iter(loader)
+        del it
+
+
 class TestRestCollateFn(TestCase):
     """Tests for rest_collate_fn which separates successful/failed items."""
 
