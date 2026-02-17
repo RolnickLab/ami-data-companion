@@ -42,8 +42,14 @@ def get_device(device_str=None) -> torch.device:
     @TODO check Kivy settings to see if user forced use of CPU
     """
     if not device_str:
-        device_str = "cuda" if torch.cuda.is_available() else "cpu"
-    device = torch.device(device_str)
+        if torch.cuda.is_available():
+            # Use current_device() so mp.spawn workers that called
+            # torch.cuda.set_device(i) get the correct GPU index.
+            device = torch.device("cuda", torch.cuda.current_device())
+        else:
+            device = torch.device("cpu")
+    else:
+        device = torch.device(device_str)
     logger.info(f"Using device '{device}' for inference")
     return device
 
