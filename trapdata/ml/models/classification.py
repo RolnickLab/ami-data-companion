@@ -422,6 +422,19 @@ class TuringAnguillaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turi
     )
 
 
+class TuringAnguillaV02SpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
+    name = "Turing Anguilla Species Classifier v02 (160 classes)"
+    description = "Trained on 19th November 2024 by Turing team using Resnet50 model. 160 classes."
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "turing-anguilla_v02_resnet50_2024-11-19-19-17_state.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "02_anguilla_data_category_map_160cls.json"
+    )
+
+
 class TuringKenyaUgandaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
     name = "Turing Kenya and Uganda Species Classifier"
     description = "Trained on 19th November 2024 by Turing team using Resnet50 model."

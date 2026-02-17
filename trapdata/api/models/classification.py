@@ -15,6 +15,7 @@ from trapdata.ml.models.classification import (
     PanamaMothSpeciesClassifierMixedResolution2023,
     QuebecVermontMothSpeciesClassifier2024,
     TuringAnguillaSpeciesClassifier,
+    TuringAnguillaV02SpeciesClassifier,
     TuringCostaRicaSpeciesClassifier,
     TuringJapanSpeciesClassifier,
     TuringKenyaUgandaSpeciesClassifier,
@@ -220,6 +221,12 @@ class MothClassifierTuringCostaRica(
 
 
 class MothClassifierTuringAnguilla(APIMothClassifier, TuringAnguillaSpeciesClassifier):
+    pass
+
+
+class MothClassifierTuringAnguillaV02(
+    APIMothClassifier, TuringAnguillaV02SpeciesClassifier
+):
     pass
 
 
