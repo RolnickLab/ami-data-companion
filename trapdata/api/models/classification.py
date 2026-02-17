@@ -250,6 +250,7 @@ class MothClassifierTuringThailand(APIMothClassifier, TuringThailandSpeciesClass
     pass
 
 
+# Disabled: category map not available at this time
 class MothClassifierTuringSingapore(
     APIMothClassifier, TuringSingaporeSpeciesClassifier
 ):

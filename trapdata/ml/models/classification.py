@@ -469,6 +469,9 @@ class TuringJapanSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing)
     labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/01_japan_data_category_map.json"
 
 
+# NOTE: Singapore category map (02_singapore_data_category_map.json) is not available
+# in the object store. Weights are uploaded but pipeline is disabled until the
+# category map is sourced and uploaded.
 class TuringSingaporeSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
     name = "Turing Singapore Species Classifier"
     description = "Trained on 21st November 2024 by Turing team using Resnet50 model."
