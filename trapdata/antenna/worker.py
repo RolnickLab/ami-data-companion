@@ -47,12 +47,7 @@ def run_worker(pipelines: list[str]):
             "Configure it via environment variable or .env file."
         )
 
-    # Build full service name with hostname
-    full_service_name = get_full_service_name(settings.antenna_service_name)
-    logger.info(f"Running worker as: {full_service_name}")
-
     gpu_count = torch.cuda.device_count()
-
     if gpu_count > 1:
         logger.info(f"Found {gpu_count} GPUs, spawning one AMI worker instance per GPU")
         # Don't pass settings through mp.spawn — Settings contains enums that
