@@ -33,15 +33,15 @@ class Settings(BaseSettings):
         default=ml.models.DEFAULT_FEATURE_EXTRACTOR
     )
     classification_threshold: float = 0.6
-    localization_batch_size: int = 2
+    localization_batch_size: int = 8
     classification_batch_size: int = 20
-    num_workers: int = 1
+    num_workers: int = 2
 
     # Antenna API worker settings
     antenna_api_base_url: str = "http://localhost:8000/api/v2"
     antenna_api_auth_token: str = ""
-    antenna_api_batch_size: int = 4
     antenna_service_name: str = "AMI Data Companion"
+    antenna_api_batch_size: int = 16
 
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
@@ -144,8 +144,11 @@ class Settings(BaseSettings):
                 "kivy_section": "performance",
             },
             "num_workers": {
-                "title": "Number of workers",
-                "description": "Number of parallel workers for the PyTorch dataloader. See https://pytorch.org/docs/stable/data.html",
+                "title": "DataLoader workers",
+                "description": (
+                    "Number of parallel subprocesses for the PyTorch DataLoader (image downloading & preprocessing). "
+                    "See https://pytorch.org/docs/stable/data.html"
+                ),
                 "kivy_type": "numeric",
                 "kivy_section": "performance",
             },

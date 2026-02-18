@@ -4,7 +4,11 @@ import socket
 
 import requests
 
-from trapdata.antenna.schemas import AntennaJobsListResponse, AntennaTaskResult
+from trapdata.antenna.schemas import (
+    AntennaJobsListResponse,
+    AntennaTaskResult,
+    JobDispatchMode,
+)
 from trapdata.api.utils import get_http_session
 from trapdata.common.logs import logger
 
@@ -49,6 +53,7 @@ def get_jobs(
                 "ids_only": 1,
                 "incomplete_only": 1,
                 "processing_service_name": processing_service_name,
+                "dispatch_mode": JobDispatchMode.ASYNC_API,  # Only fetch async_api jobs
             }
 
             resp = session.get(url, params=params, timeout=30)
