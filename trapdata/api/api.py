@@ -13,7 +13,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from ..common.logs import logger  # noqa: F401
 from . import settings
-from .models.classification import (  # MothClassifierTuringSingapore,  # disabled: category map not available
+from .models.classification import (  # noqa: E501 (disabled: Singapore - no category map, Thailand - map/weights mismatch)
     APIMothClassifier,
     InsectOrderClassifier,
     MothClassifierBinary,
@@ -27,7 +27,6 @@ from .models.classification import (  # MothClassifierTuringSingapore,  # disabl
     MothClassifierTuringJapan,
     MothClassifierTuringKenyaUganda,
     MothClassifierTuringMadagascar,
-    MothClassifierTuringThailand,
     MothClassifierUKDenmark,
 )
 from .models.localization import APIMothDetector
@@ -65,7 +64,7 @@ CLASSIFIER_CHOICES = {
     "anguilla_moths_turing_2024": MothClassifierTuringAnguilla,
     "anguilla_moths_turing_v02_2024": MothClassifierTuringAnguillaV02,
     # "singapore_moths_turing_2024": MothClassifierTuringSingapore,  # disabled: category map not available
-    "thailand_moths_turing_2024": MothClassifierTuringThailand,
+    # "thailand_moths_turing_2024": MothClassifierTuringThailand,  # disabled: category map/weights mismatch (3822 vs 3800)
     "madagascar_moths_turing_2024": MothClassifierTuringMadagascar,
     "kenya-uganda_moths_turing_2024": MothClassifierTuringKenyaUganda,
     "japan_moths_turing_2024": MothClassifierTuringJapan,
