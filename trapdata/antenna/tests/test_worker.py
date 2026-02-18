@@ -224,6 +224,7 @@ class TestGetJobsIntegration(TestCase):
             )
 
         assert result == [10, 20, 30]
+        assert antenna_api_server.get_last_get_jobs_service_name() == "Test Worker"
 
 
 # ---------------------------------------------------------------------------
@@ -463,6 +464,7 @@ class TestWorkerEndToEnd(TestCase):
                 "http://testserver/api/v2", "test-token", pipeline_slug, "Test Worker"
             )
             assert 200 in job_ids
+            assert antenna_api_server.get_last_get_jobs_service_name() == "Test Worker"
 
             # Step 3: Process job
             result = _process_job(

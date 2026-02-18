@@ -24,20 +24,30 @@ _jobs_queue: dict[int, list[AntennaPipelineProcessingTask]] = {}
 _posted_results: dict[int, list[AntennaTaskResult]] = {}
 _projects: list[dict] = []
 _registered_pipelines: dict[int, list[str]] = {}  # project_id -> pipeline slugs
+_last_get_jobs_service_name: str = ""
 
 
 @app.get("/api/v2/jobs")
-def get_jobs(pipeline__slug: str, ids_only: int, incomplete_only: int):
+def get_jobs(
+    pipeline__slug: str,
+    ids_only: int,
+    incomplete_only: int,
+    processing_service_name: str = "",
+):
     """Return available job IDs.
 
     Args:
         pipeline__slug: Pipeline slug filter
         ids_only: If 1, return only job IDs
         incomplete_only: If 1, return only incomplete jobs
+        processing_service_name: Name of the processing service making the request
 
     Returns:
         AntennaJobsListResponse with list of job IDs
     """
+    global _last_get_jobs_service_name
+    _last_get_jobs_service_name = processing_service_name
+
     # Return all jobs in queue (for testing, we return all registered jobs)
     job_ids = list(_jobs_queue.keys())
     results = [AntennaJobListItem(id=job_id) for job_id in job_ids]
@@ -180,9 +190,21 @@ def get_registered_pipelines(project_id: int) -> list[str]:
     return _registered_pipelines.get(project_id, [])
 
 
+def get_last_get_jobs_service_name() -> str:
+    """Return the processing_service_name received by the last get_jobs call.
+
+    Returns:
+        The processing_service_name value from the most recent GET /jobs request,
+        or an empty string if no request has been made since the last reset().
+    """
+    return _last_get_jobs_service_name
+
+
 def reset():
     """Clear all state between tests."""
+    global _last_get_jobs_service_name
     _jobs_queue.clear()
     _posted_results.clear()
     _projects.clear()
     _registered_pipelines.clear()
+    _last_get_jobs_service_name = ""
