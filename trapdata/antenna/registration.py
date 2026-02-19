@@ -1,9 +1,8 @@
 """Pipeline registration with Antenna projects."""
 
-import socket
-
 import requests
 
+from trapdata.antenna.client import get_full_service_name
 from trapdata.antenna.schemas import (
     AsyncPipelineRegistrationRequest,
     AsyncPipelineRegistrationResponse,
@@ -96,13 +95,15 @@ def register_pipelines(
         logger.error("AMI_ANTENNA_API_AUTH_TOKEN environment variable not set")
         return
 
-    if service_name is None:
-        logger.error("Service name is required for registration")
+    if not service_name or not service_name.strip():
+        logger.error(
+            "Service name is required for registration. "
+            "Configure AMI_ANTENNA_SERVICE_NAME via environment variable, .env file, or Kivy settings."
+        )
         return
 
     # Add hostname to service name
-    hostname = socket.gethostname()
-    full_service_name = f"{service_name} ({hostname})"
+    full_service_name = get_full_service_name(service_name)
 
     # Get projects to register for
     projects_to_process = []

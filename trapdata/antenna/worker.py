@@ -8,7 +8,7 @@ import torch
 import torch.multiprocessing as mp
 import torchvision
 
-from trapdata.antenna.client import get_jobs, post_batch_results
+from trapdata.antenna.client import get_full_service_name, get_jobs, post_batch_results
 from trapdata.antenna.datasets import get_rest_dataloader
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
 from trapdata.api.api import CLASSIFIER_CHOICES
@@ -40,8 +40,14 @@ def run_worker(pipelines: list[str]):
             "Get your auth token from your Antenna project settings."
         )
 
-    gpu_count = torch.cuda.device_count()
+    # Validate service name
+    if not settings.antenna_service_name or not settings.antenna_service_name.strip():
+        raise ValueError(
+            "AMI_ANTENNA_SERVICE_NAME configuration setting must be set. "
+            "Configure it via environment variable or .env file."
+        )
 
+    gpu_count = torch.cuda.device_count()
     if gpu_count > 1:
         logger.info(f"Found {gpu_count} GPUs, spawning one AMI worker instance per GPU")
         # Don't pass settings through mp.spawn — Settings contains enums that
@@ -75,6 +81,10 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             f"AMI worker instance {gpu_id} pinned to GPU {gpu_id}: {torch.cuda.get_device_name(gpu_id)}"
         )
 
+    # Build full service name with hostname
+    full_service_name = get_full_service_name(settings.antenna_service_name)
+    logger.info(f"Running worker as: {full_service_name}")
+
     while True:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
         # These should probably come from a dedicated endpoint and should preempt batch jobs under the assumption that they
@@ -86,6 +96,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
                 base_url=settings.antenna_api_base_url,
                 auth_token=settings.antenna_api_auth_token,
                 pipeline_slug=pipeline,
+                processing_service_name=full_service_name,
             )
             for job_id in jobs:
                 logger.info(
@@ -96,6 +107,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
                         pipeline=pipeline,
                         job_id=job_id,
                         settings=settings,
+                        processing_service_name=full_service_name,
                     )
                     any_jobs = any_jobs or any_work_done
                 except Exception as e:
@@ -117,6 +129,7 @@ def _process_job(
     pipeline: str,
     job_id: int,
     settings: Settings,
+    processing_service_name: str,
 ) -> bool:
     """Run the worker to process images from the REST API queue.
 
@@ -124,11 +137,16 @@ def _process_job(
         pipeline: Pipeline name to use for processing (e.g., moth_binary, panama_moths_2024)
         job_id: Job ID to process
         settings: Settings object with antenna_api_* configuration
+        processing_service_name: Name of the processing service
     Returns:
         True if any work was done, False otherwise
     """
     did_work = False
-    loader = get_rest_dataloader(job_id=job_id, settings=settings)
+    loader = get_rest_dataloader(
+        job_id=job_id,
+        settings=settings,
+        processing_service_name=processing_service_name,
+    )
     classifier = None
     detector = None
 
@@ -317,6 +335,7 @@ def _process_job(
             settings.antenna_api_auth_token,
             job_id,
             batch_results,
+            processing_service_name,
         )
         st, t = t("Finished posting results")
 
