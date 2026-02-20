@@ -21,7 +21,7 @@ Usage:
 
 import threading
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from typing import Optional
 
@@ -66,8 +66,13 @@ class ResultPoster:
         poster.shutdown()
     """
 
-    def __init__(self, max_pending: int = 5):
+    def __init__(
+        self,
+        max_pending: int = 5,
+        future_timeout: float = 30.0,
+    ):
         self.max_pending = max_pending
+        self.future_timeout = future_timeout  # Timeout for individual future waits
         self.executor = ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="result_poster"
         )
@@ -100,19 +105,23 @@ class ResultPoster:
 
         # Apply backpressure: wait for pending posts to complete if we're at the limit
         while len(self.pending_futures) >= self.max_pending:
-            logger.debug(
-                f"At max pending posts ({self.max_pending}), waiting for completion..."
-            )
             # Wait for at least one future to complete
-            if self.pending_futures:
-                # Wait for the oldest pending post to complete
-                completed_future = self.pending_futures[0]
-                try:
-                    completed_future.result(timeout=30)  # 30 second timeout
-                except Exception as e:
-                    logger.warning(f"Pending result post failed: {e}")
-                finally:
-                    self._cleanup_completed_futures()
+            done_futures, _ = wait(
+                self.pending_futures,
+                return_when=FIRST_COMPLETED,
+                timeout=self.future_timeout,
+            )
+            for completed_future in done_futures:
+                self.pending_futures.remove(completed_future)
+            if not done_futures:
+                # Force cleanup by cancelling all pending futures and clearing the list
+                for future in self.pending_futures:
+                    future.cancel()
+                self.pending_futures.clear()
+                logger.warning(
+                    "Timeout waiting for pending result posts. "
+                    "Cleared pending futures to prevent blocking indefinitely."
+                )
 
         # Update queue size metric
         current_queue_size = len(self.pending_futures)

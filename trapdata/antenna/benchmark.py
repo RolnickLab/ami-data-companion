@@ -18,6 +18,7 @@ Key metrics tracked:
 
 import argparse
 import os
+import sys
 import time
 
 from trapdata.antenna.datasets import get_rest_dataloader
@@ -251,7 +252,7 @@ def run_benchmark(
     print("=" * 70)
 
 
-def main():
+def main() -> int:
     """Main entry point for the benchmark CLI."""
     # Parse command line arguments
     parser = argparse.ArgumentParser(
@@ -285,7 +286,8 @@ def main():
     # Get auth token from environment
     auth_token = os.getenv("AMI_ANTENNA_API_AUTH_TOKEN", "")
     if not auth_token:
-        print("Warning: AMI_ANTENNA_API_AUTH_TOKEN environment variable not set")
+        print("ERROR: AMI_ANTENNA_API_AUTH_TOKEN environment variable not set")
+        return 1
 
     # Run the benchmark
     run_benchmark(
@@ -297,7 +299,8 @@ def main():
         gpu_batch_size=args.gpu_batch_size,
         service_name=args.service_name,
     )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
