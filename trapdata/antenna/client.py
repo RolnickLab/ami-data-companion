@@ -98,7 +98,7 @@ def post_batch_results(
             params = {"processing_service_name": processing_service_name}
             response = session.post(url, json=payload, params=params, timeout=60)
             response.raise_for_status()
-            logger.info(f"Successfully posted {len(results)} results to {url}")
+            logger.debug(f"Successfully posted {len(results)} results to {url}")
             return True
         except requests.RequestException as e:
             logger.error(f"Failed to post results to {url}: {e}")

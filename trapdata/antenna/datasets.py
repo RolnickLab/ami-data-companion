@@ -286,7 +286,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
 
                 if not tasks:
                     # Queue is empty - job complete
-                    logger.info(
+                    logger.debug(
                         f"Worker {worker_id}: No more tasks for job {self.job_id}"
                     )
                     break
@@ -317,7 +317,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
                         row["error"] = "; ".join(errors) if errors else None
                     yield row
 
-            logger.info(f"Worker {worker_id}: Iterator finished")
+            logger.debug(f"Worker {worker_id}: Iterator finished")
         except Exception as e:
             logger.error(f"Worker {worker_id}: Exception in iterator: {e}")
             raise

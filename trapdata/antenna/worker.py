@@ -10,6 +10,7 @@ import torchvision
 
 from trapdata.antenna.client import get_full_service_name, get_jobs, post_batch_results
 from trapdata.antenna.datasets import get_rest_dataloader
+from trapdata.antenna.result_posting import ResultPoster
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
 from trapdata.api.api import CLASSIFIER_CHOICES
 from trapdata.api.models.localization import APIMothDetector
@@ -22,6 +23,7 @@ from trapdata.common.logs import logger
 from trapdata.common.utils import log_time
 from trapdata.settings import Settings, read_settings
 
+MAX_PENDING_POSTS = 5  # Maximum number of concurrent result posts before blocking
 SLEEP_TIME_SECONDS = 5
 
 
@@ -156,14 +158,17 @@ def _process_job(
 
     total_detection_time = 0.0
     total_classification_time = 0.0
-    total_save_time = 0.0
     total_dl_time = 0.0
     all_detections = []
     _, t = log_time()
 
+    result_poster = ResultPoster(max_pending=MAX_PENDING_POSTS)
+
     for i, batch in enumerate(loader):
-        dt, t = t("Finished loading batch")
-        total_dl_time += dt
+        cls_time = 0.0
+        det_time = 0.0
+        load_time, t = t()
+        total_dl_time += load_time
         if not batch:
             logger.warning(f"Batch {i + 1} is empty, skipping")
             continue
@@ -185,7 +190,6 @@ def _process_job(
         image_urls = batch.get("image_urls", [None] * len(images))
 
         batch_results: list[AntennaTaskResult] = []
-
         try:
             # Validate all arrays have same length before zipping
             if len(image_ids) != len(images):
@@ -203,14 +207,12 @@ def _process_job(
             # Track start time for this batch
             batch_start_time = datetime.datetime.now()
 
-            logger.info(f"Processing worker batch {i + 1} ({len(images)} images)")
             # output is dict of "boxes", "labels", "scores"
             batch_output = []
             if len(images) > 0:
                 batch_output = detector.predict_batch(images)
 
             items += len(batch_output)
-            logger.info(f"Total items processed so far: {items}")
             batch_output = list(detector.post_process_batch(batch_output))
 
             # Convert image_ids to list if needed
@@ -223,8 +225,8 @@ def _process_job(
                 batch_output=batch_output,
                 seconds_per_item=0,
             )
-            dt, t = t("Finished detection")
-            total_detection_time += dt
+            det_time, t = t()
+            total_detection_time += det_time
 
             # Group detections by image_id
             image_detections: dict[str, list[DetectionResponse]] = {
@@ -272,8 +274,8 @@ def _process_job(
                     image_detections[dresp.source_image_id].append(detection)
                     all_detections.append(detection)
 
-            ct, t = t("Finished classification")
-            total_classification_time += ct
+            cls_time, t = t()
+            total_classification_time += cls_time
 
             # Calculate batch processing time
             batch_end_time = datetime.datetime.now()
@@ -330,25 +332,35 @@ def _process_job(
                     )
                 )
 
-        success = post_batch_results(
+        # Post results asynchronously (non-blocking)
+        result_poster.post_async(
             settings.antenna_api_base_url,
             settings.antenna_api_auth_token,
             job_id,
             batch_results,
             processing_service_name,
         )
-        st, t = t("Finished posting results")
+        logger.info(
+            f"Finished batch {i + 1}. Total items: {items}, Classification time: {cls_time:.2f}s, Detection time: {det_time:.2f}s, Load time: {load_time:.2f}s"
+        )
 
-        if not success:
-            logger.error(
-                f"Failed to post {len(batch_results)} results for job {job_id} to "
-                f"{settings.antenna_api_base_url}. Batch processing data lost."
-            )
+    # Wait for all async posts to complete before finishing the job
+    logger.info("Waiting for all pending result posts to complete...")
+    result_poster.wait_for_all_posts(timeout=60)  # 60 second timeout for cleanup
 
-        total_save_time += st
+    # Get final metrics
+    post_metrics = result_poster.get_metrics()
+
+    # Clean up the result poster
+    result_poster.shutdown(wait=False)  # Already waited above
 
     logger.info(
-        f"Done, detections: {len(all_detections)}. Detecting time: {total_detection_time}, "
-        f"classification time: {total_classification_time}, dl time: {total_dl_time}, save time: {total_save_time}"
+        f"Done, detections: {len(all_detections)}. Detecting time: {total_detection_time:.2f}s, "
+        f"classification time: {total_classification_time:.2f}s, dl time: {total_dl_time:.2f}s, "
+        f"result posts: {post_metrics.total_posts} "
+        f"(success: {post_metrics.successful_posts}, failed: {post_metrics.failed_posts}, "
+        f"success rate: {post_metrics.success_rate:.1f}%, avg post time: "
+        f"{post_metrics.total_post_time / post_metrics.total_posts if post_metrics.total_posts > 0 else 0:.2f}s, "
+        f"max queue size: {post_metrics.max_queue_size})"
     )
     return did_work
