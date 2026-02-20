@@ -206,8 +206,6 @@ class ResultPoster:
         """Wait for all pending posts to complete before shutting down.
 
         Args:
-            timeout: Maximum time to wait for all posts to complete (seconds).
-                    If None, will be computed as max(min_timeout, pending_count * per_post_timeout)
             min_timeout: Minimum timeout regardless of pending count (default: 60)
             per_post_timeout: Additional timeout per pending post (default: 30)
         """
