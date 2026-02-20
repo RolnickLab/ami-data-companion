@@ -346,7 +346,8 @@ def _process_job(
 
     # Wait for all async posts to complete before finishing the job
     logger.info("Waiting for all pending result posts to complete...")
-    result_poster.wait_for_all_posts(timeout=60)  # 60 second timeout for cleanup
+
+    result_poster.wait_for_all_posts(min_timeout=60, per_post_timeout=30)
 
     # Get final metrics
     post_metrics = result_poster.get_metrics()

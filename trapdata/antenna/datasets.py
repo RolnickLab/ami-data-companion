@@ -37,7 +37,7 @@ Settings quick-reference (prefix with AMI_ as env vars):
         How many images the GPU processes at once (detection). Larger =
         more GPU memory. These are full-resolution images (~4K).
 
-    num_workers  (default 2)
+    num_workers  (default 4)
         DataLoader subprocesses. Each independently fetches tasks and
         downloads images. More workers = more images prefetched for the
         GPU, at the cost of CPU/RAM. With 0 workers, fetching and

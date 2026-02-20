@@ -19,6 +19,7 @@ Usage:
     poster.shutdown()
 """
 
+import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
@@ -72,6 +73,7 @@ class ResultPoster:
         )
         self.pending_futures: list[Future] = []
         self.metrics = ResultPostMetrics()
+        self._metrics_lock = threading.Lock()
 
     def post_async(
         self,
@@ -164,21 +166,22 @@ class ResultPoster:
             )
             elapsed_time = time.time() - start_time
 
-            # Update metrics (thread-safe since we're updating simple counters)
-            self.metrics.total_post_time += elapsed_time
-            if success:
-                self.metrics.successful_posts += 1
-            else:
-                self.metrics.failed_posts += 1
-                logger.warning(
-                    f"Result post failed for job {job_id} after {elapsed_time:.2f}s"
-                )
+            with self._metrics_lock:
+                self.metrics.total_post_time += elapsed_time
+                if success:
+                    self.metrics.successful_posts += 1
+                else:
+                    self.metrics.failed_posts += 1
+                    logger.warning(
+                        f"Result post failed for job {job_id} after {elapsed_time:.2f}s"
+                    )
 
             return success
         except Exception as e:
             elapsed_time = time.time() - start_time
-            self.metrics.total_post_time += elapsed_time
-            self.metrics.failed_posts += 1
+            with self._metrics_lock:
+                self.metrics.total_post_time += elapsed_time
+                self.metrics.failed_posts += 1
             logger.error(f"Exception during result post for job {job_id}: {e}")
             return False
 
@@ -186,30 +189,36 @@ class ResultPoster:
         """Remove completed futures from the pending list."""
         self.pending_futures = [f for f in self.pending_futures if not f.done()]
 
-    def wait_for_all_posts(self, timeout: Optional[float] = None) -> None:
+    def wait_for_all_posts(
+        self,
+        min_timeout: float = 60,
+        per_post_timeout: float = 30,
+    ) -> None:
         """Wait for all pending posts to complete before shutting down.
 
         Args:
-            timeout: Maximum time to wait for all posts to complete (seconds)
+            timeout: Maximum time to wait for all posts to complete (seconds).
+                    If None, will be computed as max(min_timeout, pending_count * per_post_timeout)
+            min_timeout: Minimum timeout regardless of pending count (default: 60)
+            per_post_timeout: Additional timeout per pending post (default: 30)
         """
         if not self.pending_futures:
             return
 
+        pending_count = len(self.pending_futures)
+        timeout = max(min_timeout, pending_count * per_post_timeout)
         logger.info(
-            f"Waiting for {len(self.pending_futures)} pending result posts to complete..."
+            f"Waiting for {pending_count} pending result posts with dynamic timeout {timeout}s"
         )
         start_time = time.time()
 
         for future in self.pending_futures:
             remaining_timeout = None
-            if timeout is not None:
-                elapsed = time.time() - start_time
-                remaining_timeout = max(0, timeout - elapsed)
-                if remaining_timeout == 0:
-                    logger.warning(
-                        "Timeout waiting for pending posts, some may be lost"
-                    )
-                    break
+            elapsed = time.time() - start_time
+            remaining_timeout = max(0, timeout - elapsed)
+            if remaining_timeout == 0:
+                logger.warning("Timeout waiting for pending posts, some may be lost")
+                break
 
             try:
                 future.result(timeout=remaining_timeout)
@@ -217,6 +226,20 @@ class ResultPoster:
                 logger.warning(f"Pending result post failed during shutdown: {e}")
 
         self._cleanup_completed_futures()
+
+        # Check if any posts were abandoned and emit error
+        posts_after_wait = len(self.pending_futures)
+        if posts_after_wait > 0:
+            metrics = self.metrics
+            logger.error(
+                f"Failed to complete all result posts before timeout. "
+                f"{posts_after_wait} posts were abandoned. "
+                f"Post metrics - Total: {metrics.total_posts}, "
+                f"Successful: {metrics.successful_posts}, "
+                f"Failed: {metrics.failed_posts}, "
+                f"Success rate: {metrics.success_rate:.1f}%, "
+                f"Max queue size: {metrics.max_queue_size}"
+            )
 
     def get_metrics(self) -> ResultPostMetrics:
         """Get current metrics.
@@ -235,5 +258,5 @@ class ResultPoster:
             timeout: Maximum time to wait for pending posts (seconds)
         """
         if wait:
-            self.wait_for_all_posts(timeout=timeout)
+            self.wait_for_all_posts(min_timeout=timeout)
         self.executor.shutdown(wait=wait)

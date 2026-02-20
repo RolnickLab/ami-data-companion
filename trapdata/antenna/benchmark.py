@@ -74,7 +74,7 @@ def run_benchmark(
     settings.num_workers = num_workers
 
     print(f"Starting performance test for job {job_id}")
-    print(f"Configuration:")
+    print("Configuration:")
     print(f"  Base URL: {base_url}")
     print(f"  API batch size: {batch_size}")
     print(f"  GPU batch size: {gpu_batch_size}")
@@ -113,9 +113,9 @@ def run_benchmark(
             total_batches += 1
 
             # Count images in this batch
-            batch_size = len(batch["reply_subjects"])
             batch_failed = len(batch["failed_items"])
-            batch_successful = batch_size - batch_failed
+            # Successful items are those with reply_subjects that are not in failed_items
+            batch_successful = len(batch["reply_subjects"])
 
             total_images += batch_size
             total_successful_images += batch_successful
@@ -200,7 +200,7 @@ def run_benchmark(
     finally:
         # Wait for all pending result posts to complete
         print("Waiting for pending result posts to complete...")
-        result_poster.wait_for_all_posts(timeout=30)
+        result_poster.wait_for_all_posts()
         result_poster.shutdown()
 
     # Final statistics
@@ -224,7 +224,7 @@ def run_benchmark(
         batches_per_sec = total_batches / total_elapsed
         acks_per_sec = total_acks_sent / total_elapsed
 
-        print(f"\nThroughput:")
+        print("\nThroughput:")
         print(f"  {images_per_sec:.2f} images/second (total)")
         print(f"  {successful_per_sec:.2f} images/second (successful)")
         print(f"  {batches_per_sec:.2f} batches/second")
@@ -234,7 +234,7 @@ def run_benchmark(
             success_rate = (total_successful_images / total_images) * 100
             print(f"\nSuccess rate: {success_rate:.1f}%")
 
-    print(f"\nResult Posting Metrics:")
+    print("\nResult Posting Metrics:")
     print(f"  Total posts: {final_post_metrics.total_posts}")
     print(f"  Successful posts: {final_post_metrics.successful_posts}")
     print(f"  Failed posts: {final_post_metrics.failed_posts}")
