@@ -33,10 +33,12 @@
 #   AMI_ANTENNA_API_BASE_URL=https://antenna.insectai.org/api/v2
 #   AMI_ANTENNA_API_AUTH_TOKEN=your_token_here
 #   AMI_ANTENNA_API_BATCH_SIZE=4
+#   AMI_ANTENNA_SERVICE_NAME="DRAC Worker"
 #   EOF
 #
-#   # Register worker with Antenna (once):
-#   ami worker register "DRAC Worker"
+#   # Set service name and register worker with Antenna (once):
+#   export AMI_ANTENNA_SERVICE_NAME="DRAC Worker"
+#   ami worker register
 # ──────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -57,9 +59,12 @@ if [[ ! -f .env ]]; then
 fi
 set -a; source .env; set +a
 
-# Register pipelines on each run (idempotent)
-ami worker register "DRAC Worker - $(hostname)"
+# Register pipelines on each run (idempotent).
+# Service name is read from AMI_ANTENNA_SERVICE_NAME in .env (hostname appended automatically).
+ami worker register
 
 # Run with timeout slightly shorter than SLURM --time to allow clean shutdown.
 # The worker handles SIGTERM gracefully and finishes the current batch.
-timeout --signal=SIGTERM 11h55m ami worker
+# Exit code 124 from timeout is expected (time limit reached), not an error.
+timeout --signal=SIGTERM 11h55m ami worker \
+    || { rc=$?; [[ $rc -eq 124 ]] && echo "Worker reached time limit — exiting cleanly." && exit 0; exit $rc; }
