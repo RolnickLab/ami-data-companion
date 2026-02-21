@@ -47,6 +47,8 @@ def get_jobs(
     """
     with get_http_session(auth_token) as session:
         try:
+            if not pipeline_slugs:
+                return []
             url = f"{base_url.rstrip('/')}/jobs"
             params = {
                 "pipeline__slug__in": ",".join(pipeline_slugs),
