@@ -29,27 +29,27 @@ def get_full_service_name(service_name: str) -> str:
 def get_jobs(
     base_url: str,
     auth_token: str,
-    pipeline_slug: str,
+    pipeline_slugs: list[str],
     processing_service_name: str,
-) -> list[int]:
-    """Fetch job ids from the API for the given pipeline.
+) -> list[tuple[int, str]]:
+    """Fetch job ids from the API for the given pipelines in a single request.
 
-    Calls: GET {base_url}/jobs?pipeline__slug=<pipeline>&ids_only=1&processing_service_name=<name>
+    Calls: GET {base_url}/jobs?pipeline__slug__in=<slugs>&ids_only=1&processing_service_name=<name>
 
     Args:
         base_url: Antenna API base URL (e.g., "http://localhost:8000/api/v2")
         auth_token: API authentication token
-        pipeline_slug: Pipeline slug to filter jobs
+        pipeline_slugs: List of pipeline slugs to filter jobs
         processing_service_name: Name of the processing service
 
     Returns:
-        List of job ids (possibly empty) on success or error.
+        List of (job_id, pipeline_slug) tuples (possibly empty) on success or error.
     """
     with get_http_session(auth_token) as session:
         try:
             url = f"{base_url.rstrip('/')}/jobs"
             params = {
-                "pipeline__slug": pipeline_slug,
+                "pipeline__slug__in": ",".join(pipeline_slugs),
                 "ids_only": 1,
                 "incomplete_only": 1,
                 "processing_service_name": processing_service_name,
@@ -61,7 +61,7 @@ def get_jobs(
 
             # Parse and validate response with Pydantic
             jobs_response = AntennaJobsListResponse.model_validate(resp.json())
-            return [job.id for job in jobs_response.results]
+            return [(job.id, job.pipeline_slug) for job in jobs_response.results]
         except requests.RequestException as e:
             logger.error(f"Failed to fetch jobs from {base_url}: {e}")
             return []
