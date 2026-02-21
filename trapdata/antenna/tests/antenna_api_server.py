@@ -29,15 +29,15 @@ _last_get_jobs_service_name: str = ""
 
 @app.get("/api/v2/jobs")
 def get_jobs(
-    pipeline__slug: str,
-    ids_only: int,
-    incomplete_only: int,
+    pipeline__slug__in: str = "",
+    ids_only: int = 1,
+    incomplete_only: int = 1,
     processing_service_name: str = "",
 ):
     """Return available job IDs.
 
     Args:
-        pipeline__slug: Pipeline slug filter
+        pipeline__slug__in: Comma-separated pipeline slugs filter
         ids_only: If 1, return only job IDs
         incomplete_only: If 1, return only incomplete jobs
         processing_service_name: Name of the processing service making the request
@@ -48,9 +48,17 @@ def get_jobs(
     global _last_get_jobs_service_name
     _last_get_jobs_service_name = processing_service_name
 
+    # Determine pipeline slug for response (use first slug from filter)
+    slugs = (
+        [s for s in pipeline__slug__in.split(",") if s] if pipeline__slug__in else []
+    )
+    default_slug = slugs[0] if slugs else "test_pipeline"
+
     # Return all jobs in queue (for testing, we return all registered jobs)
     job_ids = list(_jobs_queue.keys())
-    results = [AntennaJobListItem(id=job_id) for job_id in job_ids]
+    results = [
+        AntennaJobListItem(id=job_id, pipeline_slug=default_slug) for job_id in job_ids
+    ]
     return AntennaJobsListResponse(results=results)
 
 

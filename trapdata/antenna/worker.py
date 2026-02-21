@@ -90,32 +90,33 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
         # These should probably come from a dedicated endpoint and should preempt batch jobs under the assumption that they
         # would run on the same GPU.
         any_jobs = False
-        for pipeline in pipelines:
-            logger.info(f"[GPU {gpu_id}] Checking for jobs for pipeline {pipeline}")
-            jobs = get_jobs(
-                base_url=settings.antenna_api_base_url,
-                auth_token=settings.antenna_api_auth_token,
-                pipeline_slug=pipeline,
-                processing_service_name=full_service_name,
+        logger.info(
+            f"[GPU {gpu_id}] Checking for jobs for pipelines: {', '.join(pipelines)}"
+        )
+        jobs = get_jobs(
+            base_url=settings.antenna_api_base_url,
+            auth_token=settings.antenna_api_auth_token,
+            pipeline_slugs=pipelines,
+            processing_service_name=full_service_name,
+        )
+        for job_id, pipeline in jobs:
+            logger.info(
+                f"[GPU {gpu_id}] Processing job {job_id} with pipeline {pipeline}"
             )
-            for job_id in jobs:
-                logger.info(
-                    f"[GPU {gpu_id}] Processing job {job_id} with pipeline {pipeline}"
+            try:
+                any_work_done = _process_job(
+                    pipeline=pipeline,
+                    job_id=job_id,
+                    settings=settings,
+                    processing_service_name=full_service_name,
                 )
-                try:
-                    any_work_done = _process_job(
-                        pipeline=pipeline,
-                        job_id=job_id,
-                        settings=settings,
-                        processing_service_name=full_service_name,
-                    )
-                    any_jobs = any_jobs or any_work_done
-                except Exception as e:
-                    logger.error(
-                        f"[GPU {gpu_id}] Failed to process job {job_id} with pipeline {pipeline}: {e}",
-                        exc_info=True,
-                    )
-                    # Continue to next job rather than crashing the worker
+                any_jobs = any_jobs or any_work_done
+            except Exception as e:
+                logger.error(
+                    f"[GPU {gpu_id}] Failed to process job {job_id} with pipeline {pipeline}: {e}",
+                    exc_info=True,
+                )
+                # Continue to next job rather than crashing the worker
 
         if not any_jobs:
             logger.info(
