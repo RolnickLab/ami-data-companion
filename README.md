@@ -18,7 +18,7 @@ Desktop app for analyzing images from autonomous insect monitoring stations usin
 
 ## Dependencies
 
-- Requires Python 3.10 or 3.12. Use [uv](https://docs.astral.sh/uv/) (recommended), [Anaconda](https://www.anaconda.com/), or [PyEnv](https://github.com/pyenv/pyenv) to manage Python versions.
+- Requires Python >=3.10, <3.13 (tested on 3.10 and 3.12). Use [uv](https://docs.astral.sh/uv/) (recommended), [Anaconda](https://www.anaconda.com/), or [PyEnv](https://github.com/pyenv/pyenv) to manage Python versions.
 
 ## Installation (for non-developers)
 

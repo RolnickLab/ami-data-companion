@@ -2240,7 +2240,6 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "boto3" },
-    { name = "botocore" },
     { name = "fastapi" },
     { name = "gradio" },
     { name = "imagesize" },
@@ -2293,7 +2292,6 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.10.2" },
     { name = "boto3", specifier = ">=1.33" },
-    { name = "botocore", specifier = ">=1.33" },
     { name = "fastapi", specifier = ">=0.100" },
     { name = "gradio", specifier = ">=4.41" },
     { name = "imagesize", specifier = ">=1.4.1" },

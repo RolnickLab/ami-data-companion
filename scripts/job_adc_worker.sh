@@ -23,6 +23,8 @@
 #   uv venv ~/venvs/adc --python 3.12
 #   source ~/venvs/adc/bin/activate
 #   cd ~/projects/ami-data-companion
+#   # --no-deps: let the lockfile control versions; avoids conflicts with
+#   #            system packages on DRAC nodes.
 #   uv pip install --no-deps -r <(uv export --no-hashes --frozen)
 #   uv pip install --no-deps .
 #
@@ -39,10 +41,20 @@
 
 set -euo pipefail
 
+# Catch unedited placeholder in #SBATCH --account
+if [[ "${SLURM_JOB_ACCOUNT:-}" == *YOUR_ACCOUNT* ]]; then
+    echo "ERROR: Replace --account in this script with your DRAC allocation." >&2
+    exit 1
+fi
+
 module load python/3.12 cuda/12.6
 
 source ~/venvs/adc/bin/activate
 cd ~/projects/ami-data-companion
+if [[ ! -f .env ]]; then
+    echo "ERROR: .env not found in $(pwd). See one-time setup instructions in this script." >&2
+    exit 1
+fi
 set -a; source .env; set +a
 
 # Register pipelines on each run (idempotent)
