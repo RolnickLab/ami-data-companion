@@ -25,6 +25,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --no-default-groups
 
+      - name: Cache ML models
+        uses: actions/cache@v4
+        with:
+          path: ~/.config/AMI/models
+          key: ml-models-v1
+
       - name: Run ML tests
         run: |
           uv run ami test pipeline
