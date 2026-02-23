@@ -125,6 +125,75 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             time.sleep(SLEEP_TIME_SECONDS)
 
 
+def _apply_binary_classification(
+    binary_filter: "MothClassifierBinary",
+    detector_results: list[DetectionResponse],
+    image_tensors: dict[str, torch.Tensor],
+    image_detections: dict[str, list[DetectionResponse]],
+) -> tuple[list[DetectionResponse], list[DetectionResponse]]:
+    """Apply binary classification to filter moth vs non-moth detections.
+
+    Args:
+        binary_filter: The binary classifier instance
+        detector_results: List of detections from the object detector
+        image_tensors: Mapping of image IDs to tensor data
+        image_detections: Mapping to store detections by image ID
+
+    Returns:
+        Tuple of (moth_detections, non_moth_detections)
+    """
+    binary_filter.reset(detector_results)
+
+    # Process binary classification crops
+    binary_crops = []
+    binary_valid_indices = []
+    to_pil = torchvision.transforms.ToPILImage()
+    binary_transforms = binary_filter.get_transforms()
+
+    for idx, dresp in enumerate(detector_results):
+        image_tensor = image_tensors[dresp.source_image_id]
+        bbox = dresp.bbox
+        y1, y2 = int(bbox.y1), int(bbox.y2)
+        x1, x2 = int(bbox.x1), int(bbox.x2)
+        if y1 >= y2 or x1 >= x2:
+            continue
+        crop = image_tensor[:, y1:y2, x1:x2]
+        crop_pil = to_pil(crop)
+        crop_transformed = binary_transforms(crop_pil)
+        binary_crops.append(crop_transformed)
+        binary_valid_indices.append(idx)
+
+    moth_detections = []
+    non_moth_detections = []
+
+    if binary_crops:
+        batched_binary_crops = torch.stack(binary_crops)
+        binary_out = binary_filter.predict_batch(batched_binary_crops)
+        binary_out = binary_filter.post_process_batch(binary_out)
+
+        for crop_i, idx in enumerate(binary_valid_indices):
+            dresp = detector_results[idx]
+            detection = binary_filter.update_detection_classification(
+                seconds_per_item=0,
+                image_id=dresp.source_image_id,
+                detection_idx=idx,
+                predictions=binary_out[crop_i],
+            )
+
+            # Separate moth from non-moth detections
+            for classification in detection.classifications:
+                if classification.classification == binary_filter.positive_binary_label:
+                    moth_detections.append(detection)
+                elif (
+                    classification.classification == binary_filter.negative_binary_label
+                ):
+                    non_moth_detections.append(detection)
+                    image_detections[detection.source_image_id].append(detection)
+                break
+
+    return moth_detections, non_moth_detections
+
+
 @torch.no_grad()
 def _process_job(
     pipeline: str,
@@ -158,7 +227,7 @@ def _process_job(
     if use_binary_filter:
         binary_filter = MothClassifierBinary(
             source_images=[],
-            detections=detector_results,
+            detections=[],
             terminal=False,
         )
 
@@ -245,66 +314,18 @@ def _process_job(
 
             # Apply binary classification filter if needed
             detector_results = detector.results
-            detections_for_terminal_classifier = []
-            detections_to_return = []
 
             if use_binary_filter:
                 assert binary_filter is not None, "Binary filter not initialized"
-                # Create and run binary classifier
-                binary_filter.reset(detector_results)
-
-                # Process binary classification crops
-                binary_crops = []
-                binary_valid_indices = []
-                to_pil = torchvision.transforms.ToPILImage()
-                binary_transforms = binary_filter.get_transforms()
-
-                for idx, dresp in enumerate(detector_results):
-                    image_tensor = image_tensors[dresp.source_image_id]
-                    bbox = dresp.bbox
-                    y1, y2 = int(bbox.y1), int(bbox.y2)
-                    x1, x2 = int(bbox.x1), int(bbox.x2)
-                    if y1 >= y2 or x1 >= x2:
-                        continue
-                    crop = image_tensor[:, y1:y2, x1:x2]
-                    crop_pil = to_pil(crop)
-                    crop_transformed = binary_transforms(crop_pil)
-                    binary_crops.append(crop_transformed)
-                    binary_valid_indices.append(idx)
-
-                if binary_crops:
-                    batched_binary_crops = torch.stack(binary_crops)
-                    binary_out = binary_filter.predict_batch(batched_binary_crops)
-                    binary_out = binary_filter.post_process_batch(binary_out)
-
-                    for crop_i, idx in enumerate(binary_valid_indices):
-                        dresp = detector_results[idx]
-                        detection = binary_filter.update_detection_classification(
-                            seconds_per_item=0,
-                            image_id=dresp.source_image_id,
-                            detection_idx=idx,
-                            predictions=binary_out[crop_i],
-                        )
-
-                        # Separate moth from non-moth detections
-                        for classification in detection.classifications:
-                            if (
-                                classification.classification
-                                == binary_filter.positive_binary_label
-                            ):
-                                detections_for_terminal_classifier.append(detection)
-                            elif (
-                                classification.classification
-                                == binary_filter.negative_binary_label
-                            ):
-                                detections_to_return.append(detection)
-                                image_detections[detection.source_image_id].append(
-                                    detection
-                                )
-                            break
+                detections_for_terminal_classifier, detections_to_return = (
+                    _apply_binary_classification(
+                        binary_filter, detector_results, image_tensors, image_detections
+                    )
+                )
             else:
                 # No binary filtering, send all detections to terminal classifier
                 detections_for_terminal_classifier = detector_results
+                detections_to_return = []
 
             # Run terminal classifier on filtered detections
             classifier.reset(detections_for_terminal_classifier)
