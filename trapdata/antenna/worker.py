@@ -156,6 +156,10 @@ def _apply_binary_classification(
         y1, y2 = int(bbox.y1), int(bbox.y2)
         x1, x2 = int(bbox.x1), int(bbox.x2)
         if y1 >= y2 or x1 >= x2:
+            logger.warning(
+                f"Skipping binary classification {idx} with invalid bbox: "
+                f"({x1},{y1})->({x2},{y2})"
+            )
             continue
         crop = image_tensor[:, y1:y2, x1:x2]
         crop_pil = to_pil(crop)
