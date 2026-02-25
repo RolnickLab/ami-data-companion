@@ -25,6 +25,7 @@ class AntennaJobListItem(pydantic.BaseModel):
     """A single job item from the Antenna jobs list API response."""
 
     id: int
+    pipeline_slug: str
 
 
 class AntennaJobsListResponse(pydantic.BaseModel):

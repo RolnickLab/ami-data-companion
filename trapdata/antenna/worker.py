@@ -12,7 +12,8 @@ from trapdata.antenna.client import get_full_service_name, get_jobs, post_batch_
 from trapdata.antenna.datasets import get_rest_dataloader
 from trapdata.antenna.result_posting import ResultPoster
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
-from trapdata.api.api import CLASSIFIER_CHOICES
+from trapdata.api.api import CLASSIFIER_CHOICES, should_filter_detections
+from trapdata.api.models.classification import MothClassifierBinary
 from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
     DetectionResponse,
@@ -92,38 +93,112 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
         # These should probably come from a dedicated endpoint and should preempt batch jobs under the assumption that they
         # would run on the same GPU.
         any_jobs = False
-        for pipeline in pipelines:
-            logger.info(f"[GPU {gpu_id}] Checking for jobs for pipeline {pipeline}")
-            jobs = get_jobs(
-                base_url=settings.antenna_api_base_url,
-                auth_token=settings.antenna_api_auth_token,
-                pipeline_slug=pipeline,
-                processing_service_name=full_service_name,
+        logger.info(
+            f"[GPU {gpu_id}] Checking for jobs for pipelines: {', '.join(pipelines)}"
+        )
+        jobs = get_jobs(
+            base_url=settings.antenna_api_base_url,
+            auth_token=settings.antenna_api_auth_token,
+            pipeline_slugs=pipelines,
+            processing_service_name=full_service_name,
+        )
+        for job_id, pipeline in jobs:
+            logger.info(
+                f"[GPU {gpu_id}] Processing job {job_id} with pipeline {pipeline}"
             )
-            for job_id in jobs:
-                logger.info(
-                    f"[GPU {gpu_id}] Processing job {job_id} with pipeline {pipeline}"
+            try:
+                any_work_done = _process_job(
+                    pipeline=pipeline,
+                    job_id=job_id,
+                    settings=settings,
+                    processing_service_name=full_service_name,
                 )
-                try:
-                    any_work_done = _process_job(
-                        pipeline=pipeline,
-                        job_id=job_id,
-                        settings=settings,
-                        processing_service_name=full_service_name,
-                    )
-                    any_jobs = any_jobs or any_work_done
-                except Exception as e:
-                    logger.error(
-                        f"[GPU {gpu_id}] Failed to process job {job_id} with pipeline {pipeline}: {e}",
-                        exc_info=True,
-                    )
-                    # Continue to next job rather than crashing the worker
+                any_jobs = any_jobs or any_work_done
+            except Exception as e:
+                logger.error(
+                    f"[GPU {gpu_id}] Failed to process job {job_id} with pipeline {pipeline}: {e}",
+                    exc_info=True,
+                )
+                # Continue to next job rather than crashing the worker
 
         if not any_jobs:
             logger.info(
                 f"[GPU {gpu_id}] No jobs found, sleeping for {SLEEP_TIME_SECONDS} seconds"
             )
             time.sleep(SLEEP_TIME_SECONDS)
+
+
+def _apply_binary_classification(
+    binary_filter: "MothClassifierBinary",
+    detector_results: list[DetectionResponse],
+    image_tensors: dict[str, torch.Tensor],
+    image_detections: dict[str, list[DetectionResponse]],
+) -> tuple[list[DetectionResponse], list[DetectionResponse]]:
+    """Apply binary classification to filter moth vs non-moth detections.
+
+    Args:
+        binary_filter: The binary classifier instance
+        detector_results: List of detections from the object detector
+        image_tensors: Mapping of image IDs to tensor data
+        image_detections: Mapping to store detections by image ID
+
+    Returns:
+        Tuple of (moth_detections, non_moth_detections)
+    """
+    binary_filter.reset(detector_results)
+
+    # Process binary classification crops
+    binary_crops = []
+    binary_valid_indices = []
+    to_pil = torchvision.transforms.ToPILImage()
+    binary_transforms = binary_filter.get_transforms()
+
+    for idx, dresp in enumerate(detector_results):
+        image_tensor = image_tensors[dresp.source_image_id]
+        bbox = dresp.bbox
+        y1, y2 = int(bbox.y1), int(bbox.y2)
+        x1, x2 = int(bbox.x1), int(bbox.x2)
+        if y1 >= y2 or x1 >= x2:
+            logger.warning(
+                f"Skipping binary classification {idx} with invalid bbox: "
+                f"({x1},{y1})->({x2},{y2})"
+            )
+            continue
+        crop = image_tensor[:, y1:y2, x1:x2]
+        crop_pil = to_pil(crop)
+        crop_transformed = binary_transforms(crop_pil)
+        binary_crops.append(crop_transformed)
+        binary_valid_indices.append(idx)
+
+    moth_detections = []
+    non_moth_detections = []
+
+    if binary_crops:
+        batched_binary_crops = torch.stack(binary_crops)
+        binary_out = binary_filter.predict_batch(batched_binary_crops)
+        binary_out = binary_filter.post_process_batch(binary_out)
+
+        for crop_i, idx in enumerate(binary_valid_indices):
+            dresp = detector_results[idx]
+            detection = binary_filter.update_detection_classification(
+                seconds_per_item=0,
+                image_id=dresp.source_image_id,
+                detection_idx=idx,
+                predictions=binary_out[crop_i],
+            )
+
+            # Separate moth from non-moth detections
+            for classification in detection.classifications:
+                if classification.classification == binary_filter.positive_binary_label:
+                    moth_detections.append(detection)
+                elif (
+                    classification.classification == binary_filter.negative_binary_label
+                ):
+                    non_moth_detections.append(detection)
+                    image_detections[detection.source_image_id].append(detection)
+                break
+
+    return moth_detections, non_moth_detections
 
 
 @torch.no_grad()
@@ -152,6 +227,17 @@ def _process_job(
     classifier = None
     detector = None
 
+    # Check if binary filtering is needed once for the entire job
+    classifier_class = CLASSIFIER_CHOICES[pipeline]
+    use_binary_filter = should_filter_detections(classifier_class)
+    binary_filter = None
+    if use_binary_filter:
+        binary_filter = MothClassifierBinary(
+            source_images=[],
+            detections=[],
+            terminal=False,
+        )
+
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     items = 0
@@ -175,7 +261,6 @@ def _process_job(
 
         # Defer instantiation of detector and classifier until we have data
         if not classifier:
-            classifier_class = CLASSIFIER_CHOICES[pipeline]
             classifier = classifier_class(source_images=[], detections=[])
             detector = APIMothDetector([])
         assert detector is not None, "Detector not initialized"
@@ -234,14 +319,30 @@ def _process_job(
             }
             image_tensors = dict(zip(image_ids, images, strict=True))
 
-            classifier.reset(detector.results)
+            # Apply binary classification filter if needed
+            detector_results = detector.results
+
+            if use_binary_filter:
+                assert binary_filter is not None, "Binary filter not initialized"
+                detections_for_terminal_classifier, detections_to_return = (
+                    _apply_binary_classification(
+                        binary_filter, detector_results, image_tensors, image_detections
+                    )
+                )
+            else:
+                # No binary filtering, send all detections to terminal classifier
+                detections_for_terminal_classifier = detector_results
+                detections_to_return = []
+
+            # Run terminal classifier on filtered detections
+            classifier.reset(detections_for_terminal_classifier)
             to_pil = torchvision.transforms.ToPILImage()
             classify_transforms = classifier.get_transforms()
 
             # Collect and transform all crops for batched classification
             crops = []
             valid_indices = []
-            for idx, dresp in enumerate(detector.results):
+            for idx, dresp in enumerate(detections_for_terminal_classifier):
                 image_tensor = image_tensors[dresp.source_image_id]
                 bbox = dresp.bbox
                 y1, y2 = int(bbox.y1), int(bbox.y2)
@@ -264,7 +365,7 @@ def _process_job(
                 classifier_out = classifier.post_process_batch(classifier_out)
 
                 for crop_i, idx in enumerate(valid_indices):
-                    dresp = detector.results[idx]
+                    dresp = detections_for_terminal_classifier[idx]
                     detection = classifier.update_detection_classification(
                         seconds_per_item=0,
                         image_id=dresp.source_image_id,
@@ -276,6 +377,8 @@ def _process_job(
 
             cls_time, t = t()
             total_classification_time += cls_time
+            # Add non-moth detections to all_detections
+            all_detections.extend(detections_to_return)
 
             # Calculate batch processing time
             batch_end_time = datetime.datetime.now()

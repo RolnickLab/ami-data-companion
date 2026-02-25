@@ -220,10 +220,13 @@ class TestGetJobsIntegration(TestCase):
 
         with patch_antenna_api_requests(self.antenna_client):
             result = get_jobs(
-                "http://testserver/api/v2", "test-token", "moths_2024", "Test Worker"
+                "http://testserver/api/v2",
+                "test-token",
+                ["moths_2024"],
+                "Test Worker",
             )
 
-        assert result == [10, 20, 30]
+        assert [job_id for job_id, _ in result] == [10, 20, 30]
         assert antenna_api_server.get_last_get_jobs_service_name() == "Test Worker"
 
 
@@ -460,9 +463,13 @@ class TestWorkerEndToEnd(TestCase):
             assert success is True
 
             # Step 2: Get jobs
-            job_ids = get_jobs(
-                "http://testserver/api/v2", "test-token", pipeline_slug, "Test Worker"
+            jobs = get_jobs(
+                "http://testserver/api/v2",
+                "test-token",
+                [pipeline_slug],
+                "Test Worker",
             )
+            job_ids = [job_id for job_id, _ in jobs]
             assert 200 in job_ids
             assert antenna_api_server.get_last_get_jobs_service_name() == "Test Worker"
 
