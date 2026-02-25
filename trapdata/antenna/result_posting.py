@@ -257,13 +257,11 @@ class ResultPoster:
         self._cleanup_completed_futures()
         return self.metrics
 
-    def shutdown(self, wait: bool = True, timeout: Optional[float] = 30) -> None:
-        """Shutdown the executor and optionally wait for pending posts.
-
-        Args:
-            wait: Whether to wait for pending posts to complete
-            timeout: Maximum time to wait for pending posts (seconds)
-        """
-        if wait:
-            self.wait_for_all_posts(min_timeout=timeout)
+    def shutdown(self) -> None:
+        """Shutdown the executor"""
+        if self.pending_futures:
+            raise RuntimeError(
+                f"Cannot shutdown ResultPoster with {len(self.pending_futures)} pending posts. "
+                "Call wait_for_all_posts() before shutdown to ensure all posts are completed."
+            )
         self.executor.shutdown(wait=wait)

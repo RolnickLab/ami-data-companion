@@ -454,9 +454,7 @@ def _process_job(
 
     # Get final metrics
     post_metrics = result_poster.get_metrics()
-
-    # Clean up the result poster
-    result_poster.shutdown(wait=False)  # Already waited above
+    result_poster.shutdown()
 
     logger.info(
         f"Done, detections: {len(all_detections)}. Detecting time: {total_detection_time:.2f}s, "
