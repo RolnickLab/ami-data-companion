@@ -18,7 +18,7 @@ Desktop app for analyzing images from autonomous insect monitoring stations usin
 
 ## Dependencies
 
-- Requires Python 3.10. Use [Anaconda](https://www.anaconda.com/) (or [miniconda](https://docs.conda.io/en/latest/miniconda.html)) if you need to maintain multiple versions of Python or are unfamiliar with using Python and scientific packages, it is especially helpful on Windows. [PyEnv](https://github.com/pyenv/pyenv) is also a popular tool for managing multiple versions of python if you are familiar with the command line.
+- Requires Python >=3.10, <3.13 (tested on 3.10 and 3.12). Use [uv](https://docs.astral.sh/uv/) (recommended), [Anaconda](https://www.anaconda.com/), or [PyEnv](https://github.com/pyenv/pyenv) to manage Python versions.
 
 ## Installation (for non-developers)
 
@@ -36,37 +36,30 @@ ami test pipeline
 
 ## Installation (for developers)
 
-Create an environment just for AMI and the data companion using conda (or virtualenv)
-
-```sh
-conda create -n ami python=3.10 anaconda
-```
-
-Clone the repository using the command line or the GitHub desktop app.
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) then clone and sync:
 
 ```sh
 git clone git@github.com:RolnickLab/ami-data-companion.git
+cd ami-data-companion
+uv sync
 ```
 
-Install as an editable package. This will install the dependencies and install the `trapdata` console command
+To include the desktop GUI dependencies:
 
 ```sh
-cd ami-data-companion
-pip install -e .
+uv sync --extra gui
 ```
 
 Test the whole backend pipeline without the GUI using this command
 
 ```sh
-python trapdata/tests/test_pipeline.py
-# or
-ami test pipeline
+uv run ami test pipeline
 ```
 
 Run all other tests with:
 
 ```sh
-ami test all
+uv run ami test all
 ```
 
 ## GUI Usage
