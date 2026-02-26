@@ -264,4 +264,4 @@ class ResultPoster:
                 f"Cannot shutdown ResultPoster with {len(self.pending_futures)} pending posts. "
                 "Call wait_for_all_posts() before shutdown to ensure all posts are completed."
             )
-        self.executor.shutdown(wait=wait)
+        self.executor.shutdown(wait=False)
