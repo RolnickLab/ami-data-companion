@@ -37,7 +37,7 @@ Settings quick-reference (prefix with AMI_ as env vars):
         How many images the GPU processes at once (detection). Larger =
         more GPU memory. These are full-resolution images (~4K).
 
-    num_workers  (default 2)
+    num_workers  (default 4)
         DataLoader subprocesses. Each independently fetches tasks and
         downloads images. More workers = more images prefetched for the
         GPU, at the cost of CPU/RAM. With 0 workers, fetching and
@@ -286,7 +286,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
 
                 if not tasks:
                     # Queue is empty - job complete
-                    logger.info(
+                    logger.debug(
                         f"Worker {worker_id}: No more tasks for job {self.job_id}"
                     )
                     break
@@ -317,7 +317,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
                         row["error"] = "; ".join(errors) if errors else None
                     yield row
 
-            logger.info(f"Worker {worker_id}: Iterator finished")
+            logger.debug(f"Worker {worker_id}: Iterator finished")
         except Exception as e:
             logger.error(f"Worker {worker_id}: Exception in iterator: {e}")
             raise
