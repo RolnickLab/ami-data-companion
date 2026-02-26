@@ -114,7 +114,8 @@ class ResultPoster:
             for completed_future in done_futures:
                 self.pending_futures.remove(completed_future)
             if not done_futures:
-                # Force cleanup by cancelling all pending futures and clearing the list
+                # Force cleanup by cancelling all pending futures and clearing the list.
+                # This means that potentially losing some posts, but the server tasks pipeline has built-in retries.
                 for future in self.pending_futures:
                     future.cancel()
                 self.pending_futures.clear()
@@ -124,7 +125,9 @@ class ResultPoster:
                 )
 
         # Update queue size metric
-        current_queue_size = len(self.pending_futures)
+        current_queue_size = (
+            len(self.pending_futures) + 1
+        )  # +1 for the post we're about to submit
         self.metrics.max_queue_size = max(
             self.metrics.max_queue_size, current_queue_size
         )
