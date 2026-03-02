@@ -245,7 +245,7 @@ class Resnet50Classifier(InferenceBaseClass):
             ]
         )
 
-    def post_process_batch(self, output):
+    def post_process_batch(self, output: torch.Tensor) -> list[tuple[str, float, list]]:
         predictions = torch.nn.functional.softmax(output, dim=1)
         predictions = predictions.cpu().numpy()
 
@@ -253,9 +253,10 @@ class Resnet50Classifier(InferenceBaseClass):
         labels = [self.category_map[cat] for cat in categories]
         scores = predictions.max(axis=1).astype(float)
 
-        result = list(zip(labels, scores))
-        logger.debug(f"Post-processing result batch: {result}")
-        return result
+        logits = output.cpu().detach().numpy().tolist()
+        result_per_image = list(zip(labels, scores, logits))
+        logger.debug(f"Post-processing result batch: {result_per_image}")
+        return result_per_image
 
 
 class Resnet50ClassifierLowRes(Resnet50Classifier):
@@ -312,7 +313,13 @@ class BinaryClassifier(Resnet50ClassifierLowRes):
         )
         return dataset
 
-    def save_results(self, object_ids, batch_output, *args, **kwargs):
+    def save_results(
+        self,
+        object_ids,
+        batch_output: list[tuple[str, float, list]],
+        *args,
+        **kwargs,
+    ):
         # Here we are saving the moth/non-moth labels
         classified_objects_data = [
             {
@@ -321,7 +328,7 @@ class BinaryClassifier(Resnet50ClassifierLowRes):
                 "in_queue": True if label == self.positive_binary_label else False,
                 "model_name": self.name,
             }
-            for label, score in batch_output
+            for label, score, _logits in batch_output
         ]
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
 
@@ -365,16 +372,24 @@ class SpeciesClassifier(InferenceBaseClass):
         )
         return dataset
 
-    def save_results(self, object_ids, batch_output, *args, **kwargs):
+    def save_results(
+        self,
+        object_ids,
+        batch_output: tuple[list[tuple[str, float]], list],
+        *args,
+        **kwargs,
+    ):
         # Here we are saving the specific taxon labels
         classified_objects_data = [
             {
                 "specific_label": label,
-                "specific_label_score": score,
+                "specific_label_score": top_score,
+                "logits": logits,
                 "model_name": self.name,
-                "in_queue": True,  # Put back in queue for the feature extractor & tracking
+                # Put back in queue for the feature extractor & tracking
+                "in_queue": True,
             }
-            for label, score in batch_output
+            for label, top_score, logits in batch_output
         ]
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
 
