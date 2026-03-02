@@ -9,7 +9,7 @@ import torch.multiprocessing as mp
 import torchvision
 
 from trapdata.antenna.client import get_full_service_name, get_jobs, post_batch_results
-from trapdata.antenna.datasets import get_rest_dataloader
+from trapdata.antenna.datasets import CUDAPrefetcher, get_rest_dataloader
 from trapdata.antenna.result_posting import ResultPoster
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
 from trapdata.api.api import CLASSIFIER_CHOICES, should_filter_detections
@@ -150,7 +150,7 @@ def _apply_binary_classification(
     # Process binary classification crops
     binary_crops = []
     binary_valid_indices = []
-    to_pil = torchvision.transforms.ToPILImage()
+    # to_pil = torchvision.transforms.ToPILImage()
     binary_transforms = binary_filter.get_transforms()
 
     for idx, dresp in enumerate(detector_results):
@@ -165,8 +165,9 @@ def _apply_binary_classification(
             )
             continue
         crop = image_tensor[:, y1:y2, x1:x2]
-        crop_pil = to_pil(crop)
-        crop_transformed = binary_transforms(crop_pil)
+        # crop_pil = to_pil(crop)
+        # crop_transformed = binary_transforms(crop_pil)
+        crop_transformed = binary_transforms(crop)
         binary_crops.append(crop_transformed)
         binary_valid_indices.append(idx)
 
@@ -242,8 +243,13 @@ def _process_job(
     all_detections = []
     _, t = log_time()
     result_poster: ResultPoster | None = None
+    prefetcher = CUDAPrefetcher(loader)  # if torch.cuda.is_available() else None
     try:
-        for i, batch in enumerate(loader):
+        prefetcher.preload()
+        i, batch = 0, next(prefetcher)
+        _, t_total = log_time()  # reset total time for this batch
+        # for i, batch in enumerate(loader):
+        while batch is not None:
             cls_time = 0.0
             det_time = 0.0
             load_time, t = t()
@@ -300,7 +306,10 @@ def _process_job(
 
                 # output is dict of "boxes", "labels", "scores"
                 batch_output = []
+                to_gpu_time = 0.0
                 if len(images) > 0:
+                    images = images.to(detector.device)
+                    to_gpu_time, t = t()
                     batch_output = detector.predict_batch(images)
 
                 items += len(batch_output)
@@ -345,7 +354,7 @@ def _process_job(
 
                 # Run terminal classifier on filtered detections
                 classifier.reset(detections_for_terminal_classifier)
-                to_pil = torchvision.transforms.ToPILImage()
+                # to_pil = torchvision.transforms.ToPILImage()
                 classify_transforms = classifier.get_transforms()
 
                 # Collect and transform all crops for batched classification
@@ -363,8 +372,9 @@ def _process_job(
                         )
                         continue
                     crop = image_tensor[:, y1:y2, x1:x2]
-                    crop_pil = to_pil(crop)
-                    crop_transformed = classify_transforms(crop_pil)
+                    # crop_pil = to_pil(crop)
+                    # crop_transformed = classify_transforms(crop_pil)
+                    crop_transformed = classify_transforms(crop)
                     crops.append(crop_transformed)
                     valid_indices.append(idx)
 
@@ -417,9 +427,7 @@ def _process_job(
                         )
                     )
             except Exception as e:
-                logger.error(
-                    f"Batch {i + 1} failed during processing: {e}", exc_info=True
-                )
+                logger.error(f"Batch {i + 1} failed during processing: {e}")
                 # Report errors back to Antenna so tasks aren't stuck in the queue
                 batch_results = []
                 for reply_subject, image_id in zip(
@@ -457,9 +465,12 @@ def _process_job(
                 processing_service_name,
             )
             _, t = log_time()  # reset time to measure batch load time
+            batch_total, t_total = t_total()
             logger.info(
-                f"Finished batch {i + 1}. Total items: {items}, Classification time: {cls_time:.2f}s, Detection time: {det_time:.2f}s, Load time: {load_time:.2f}s"
+                f"Total: {batch_total/(len(images)):.2f}s/image, Classification time: {cls_time:.2f}s, Detection time: {det_time:.2f}s, Load time: {load_time:.2f}s, to GPU time: {to_gpu_time:.2f}s, "
             )
+            batch = next(prefetcher)
+            i += 1
 
         if result_poster:
             # Wait for all async posts to complete before finishing the job
@@ -479,6 +490,8 @@ def _process_job(
                 f"max queue size: {post_metrics.max_queue_size})"
             )
         return did_work
+    except StopIteration:
+        pass
     finally:
         if result_poster:
             result_poster.shutdown()

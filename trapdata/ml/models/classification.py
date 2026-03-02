@@ -70,7 +70,7 @@ class EfficientNetClassifier(InferenceBaseClass):
         return torchvision.transforms.Compose(
             [
                 torchvision.transforms.Resize((self.input_size, self.input_size)),
-                torchvision.transforms.ToTensor(),
+                # torchvision.transforms.ToTensor(),
                 self.normalization,
             ]
         )
@@ -150,7 +150,7 @@ class ConvNeXtOrderClassifier(InferenceBaseClass):
             [
                 # self._pad_to_square(),
                 torchvision.transforms.Resize((self.input_size, self.input_size)),
-                torchvision.transforms.ToTensor(),
+                # torchvision.transforms.ToTensor(),
                 torchvision.transforms.Normalize(mean, std),
             ]
         )
@@ -189,7 +189,7 @@ class Resnet50Classifier_Turing(InferenceBaseClass):
         return torchvision.transforms.Compose(
             [
                 torchvision.transforms.Resize((self.input_size, self.input_size)),
-                torchvision.transforms.ToTensor(),
+                # torchvision.transforms.ToTensor(),
                 torchvision.transforms.Normalize(mean, std),
             ]
         )
@@ -237,7 +237,7 @@ class Resnet50Classifier(InferenceBaseClass):
         return torchvision.transforms.Compose(
             [
                 self._pad_to_square(),
-                torchvision.transforms.ToTensor(),
+                # torchvision.transforms.ToTensor(),
                 torchvision.transforms.Resize(
                     (self.input_size, self.input_size), antialias=True  # type: ignore
                 ),
