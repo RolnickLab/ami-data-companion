@@ -15,8 +15,13 @@ from trapdata.ml.models.classification import (
     PanamaMothSpeciesClassifierMixedResolution2023,
     QuebecVermontMothSpeciesClassifier2024,
     TuringAnguillaSpeciesClassifier,
+    TuringAnguillaV02SpeciesClassifier,
     TuringCostaRicaSpeciesClassifier,
+    TuringJapanSpeciesClassifier,
     TuringKenyaUgandaSpeciesClassifier,
+    TuringMadagascarSpeciesClassifier,
+    TuringSingaporeSpeciesClassifier,
+    TuringThailandSpeciesClassifier,
     UKDenmarkMothSpeciesClassifier2024,
 )
 
@@ -219,8 +224,35 @@ class MothClassifierTuringAnguilla(APIMothClassifier, TuringAnguillaSpeciesClass
     pass
 
 
+class MothClassifierTuringAnguillaV02(
+    APIMothClassifier, TuringAnguillaV02SpeciesClassifier
+):
+    pass
+
+
+class MothClassifierTuringJapan(APIMothClassifier, TuringJapanSpeciesClassifier):
+    pass
+
+
 class MothClassifierTuringKenyaUganda(
     APIMothClassifier, TuringKenyaUgandaSpeciesClassifier
+):
+    pass
+
+
+class MothClassifierTuringMadagascar(
+    APIMothClassifier, TuringMadagascarSpeciesClassifier
+):
+    pass
+
+
+class MothClassifierTuringThailand(APIMothClassifier, TuringThailandSpeciesClassifier):
+    pass
+
+
+# Disabled: category map not available at this time
+class MothClassifierTuringSingapore(
+    APIMothClassifier, TuringSingaporeSpeciesClassifier
 ):
     pass
 
