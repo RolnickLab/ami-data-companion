@@ -376,7 +376,7 @@ def _process_batch(
                     reply_subject=reply_subject,
                     result=AntennaTaskResultError(
                         error=f"Batch processing error: {e}",
-                        image_id=image_id,
+                        image_id=str(image_id) if image_id is not None else None,
                     ),
                 )
             )
