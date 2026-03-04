@@ -456,7 +456,7 @@ class FeatureExtractor(InferenceBaseClass):
         # output = output.view(-1, output.size(0)).cpu()
         # output = output.reshape((output.shape[0],))
         batch_size = output.shape[0]
-        num_features = np.product(output.shape[1:])
+        num_features = np.prod(output.shape[1:])
 
         output = output.reshape(batch_size, num_features)
         output = output.cpu().numpy()
