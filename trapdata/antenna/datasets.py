@@ -436,9 +436,10 @@ def get_rest_dataloader(
 
 
 class CUDAPrefetcher:
-    def __init__(self, loader):
+    def __init__(self, loader: torch.utils.data.DataLoader, device: torch.device):
         self.loader = iter(loader)
         self.stream = torch.cuda.Stream()
+        self.device = device
         self.next_batch = None
         self._preload()
 
@@ -451,7 +452,11 @@ class CUDAPrefetcher:
 
         with torch.cuda.stream(self.stream):
             self.next_batch = {
-                k: v.cuda(non_blocking=True) if isinstance(v, torch.Tensor) else v
+                k: (
+                    v.to(self.device, non_blocking=True)
+                    if isinstance(v, torch.Tensor)
+                    else v
+                )
                 for k, v in batch.items()
             }
 

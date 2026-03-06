@@ -76,7 +76,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
         pipelines: List of pipeline slugs to poll for jobs.
     """
     settings = read_settings()
-
+    device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available() and torch.cuda.device_count() > 0:
         torch.cuda.set_device(gpu_id)
         logger.info(
@@ -111,6 +111,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
                     job_id=job_id,
                     settings=settings,
                     processing_service_name=full_service_name,
+                    device=device,
                 )
                 any_jobs = any_jobs or any_work_done
             except Exception as e:
@@ -204,6 +205,7 @@ def _process_job(
     job_id: int,
     settings: Settings,
     processing_service_name: str,
+    device: torch.device,
 ) -> bool:
     """Run the worker to process images from the REST API queue.
 
@@ -212,6 +214,7 @@ def _process_job(
         job_id: Job ID to process
         settings: Settings object with antenna_api_* configuration
         processing_service_name: Name of the processing service
+        device: The device to use for processing
     Returns:
         True if any work was done, False otherwise
     """
@@ -241,7 +244,9 @@ def _process_job(
     result_poster: ResultPoster | None = None
     # Conditionally use CUDA prefetcher; fall back to plain iterator on CPU
     if torch.cuda.is_available():
-        batch_source = CUDAPrefetcher(loader)  # __init__ already calls preload()
+        batch_source = CUDAPrefetcher(
+            loader, device
+        )  # __init__ already calls preload()
     else:
         batch_source = iter(loader)
 
