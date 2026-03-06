@@ -254,7 +254,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
 
         Each API fetch returns a batch of tasks. Images for the entire batch
         are downloaded concurrently using threads (see _load_images_threaded),
-        then yielded one at a time for the DataLoader to collate.
+        then as a pre-collated batch.
 
         Yields:
             Dictionary containing:
@@ -383,7 +383,7 @@ def rest_collate_fn(batch: list[dict]) -> dict:
 
 def _no_op_collate_fn(batch: list[dict]) -> dict:
     """
-    A no-op collate function that returns the batch as-is.
+    A no-op collate function that unwraps a single-element batch.
 
     This can be used when the dataset already returns batches in the desired format,
     and no further collation is needed. It simply returns the input list of dicts
