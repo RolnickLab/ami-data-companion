@@ -6,9 +6,8 @@ import time
 import numpy as np
 import torch
 import torch.multiprocessing as mp
-import torchvision
 
-from trapdata.antenna.client import get_full_service_name, get_jobs, post_batch_results
+from trapdata.antenna.client import get_full_service_name, get_jobs
 from trapdata.antenna.datasets import CUDAPrefetcher, get_rest_dataloader
 from trapdata.antenna.result_posting import ResultPoster
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
@@ -150,7 +149,6 @@ def _apply_binary_classification(
     # Process binary classification crops
     binary_crops = []
     binary_valid_indices = []
-    # to_pil = torchvision.transforms.ToPILImage()
     binary_transforms = binary_filter.get_transforms()
 
     for idx, dresp in enumerate(detector_results):
@@ -165,8 +163,6 @@ def _apply_binary_classification(
             )
             continue
         crop = image_tensor[:, y1:y2, x1:x2]
-        # crop_pil = to_pil(crop)
-        # crop_transformed = binary_transforms(crop_pil)
         crop_transformed = binary_transforms(crop)
         binary_crops.append(crop_transformed)
         binary_valid_indices.append(idx)
@@ -243,13 +239,15 @@ def _process_job(
     all_detections = []
     _, t = log_time()
     result_poster: ResultPoster | None = None
-    prefetcher = CUDAPrefetcher(loader)  # if torch.cuda.is_available() else None
+    # Conditionally use CUDA prefetcher; fall back to plain iterator on CPU
+    if torch.cuda.is_available():
+        batch_source = CUDAPrefetcher(loader)  # __init__ already calls preload()
+    else:
+        batch_source = iter(loader)
+
+    _, t_total = log_time()
     try:
-        prefetcher.preload()
-        i, batch = 0, next(prefetcher)
-        _, t_total = log_time()  # reset total time for this batch
-        # for i, batch in enumerate(loader):
-        while batch is not None:
+        for i, batch in enumerate(batch_source):
             cls_time = 0.0
             det_time = 0.0
             load_time, t = t()
@@ -339,13 +337,14 @@ def _process_job(
 
                 if use_binary_filter:
                     assert binary_filter is not None, "Binary filter not initialized"
-                    detections_for_terminal_classifier, detections_to_return = (
-                        _apply_binary_classification(
-                            binary_filter,
-                            detector_results,
-                            image_tensors,
-                            image_detections,
-                        )
+                    (
+                        detections_for_terminal_classifier,
+                        detections_to_return,
+                    ) = _apply_binary_classification(
+                        binary_filter,
+                        detector_results,
+                        image_tensors,
+                        image_detections,
                     )
                 else:
                     # No binary filtering, send all detections to terminal classifier
@@ -354,7 +353,6 @@ def _process_job(
 
                 # Run terminal classifier on filtered detections
                 classifier.reset(detections_for_terminal_classifier)
-                # to_pil = torchvision.transforms.ToPILImage()
                 classify_transforms = classifier.get_transforms()
 
                 # Collect and transform all crops for batched classification
@@ -372,8 +370,6 @@ def _process_job(
                         )
                         continue
                     crop = image_tensor[:, y1:y2, x1:x2]
-                    # crop_pil = to_pil(crop)
-                    # crop_transformed = classify_transforms(crop_pil)
                     crop_transformed = classify_transforms(crop)
                     crops.append(crop_transformed)
                     valid_indices.append(idx)
@@ -464,13 +460,15 @@ def _process_job(
                 batch_results,
                 processing_service_name,
             )
-            _, t = log_time()  # reset time to measure batch load time
             batch_total, t_total = t_total()
             logger.info(
-                f"Total: {batch_total/(len(images)):.2f}s/image, Classification time: {cls_time:.2f}s, Detection time: {det_time:.2f}s, Load time: {load_time:.2f}s, to GPU time: {to_gpu_time:.2f}s, "
+                f"Total: {batch_total/max(len(images), 1):.2f}s/image, Classification time: {cls_time:.2f}s, "
+                f"Detection time: {det_time:.2f}s, Load time: {load_time:.2f}s, to GPU time: {to_gpu_time:.2f}s, "
             )
-            batch = next(prefetcher)
-            i += 1
+            (
+                _,
+                t,
+            ) = log_time()  # reset before next() call to measure next batch's load time
 
         if result_poster:
             # Wait for all async posts to complete before finishing the job
@@ -490,8 +488,6 @@ def _process_job(
                 f"max queue size: {post_metrics.max_queue_size})"
             )
         return did_work
-    except StopIteration:
-        pass
     finally:
         if result_poster:
             result_poster.shutdown()

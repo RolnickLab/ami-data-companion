@@ -430,8 +430,8 @@ def get_rest_dataloader(
         num_workers=settings.num_workers,
         collate_fn=_no_op_collate_fn,
         pin_memory=True,
-        persistent_workers=True if settings.num_workers > 0 else False,
-        prefetch_factor=4,
+        persistent_workers=settings.num_workers > 0,
+        **({"prefetch_factor": 4} if settings.num_workers > 0 else {}),
     )
 
 
@@ -440,9 +440,9 @@ class CUDAPrefetcher:
         self.loader = iter(loader)
         self.stream = torch.cuda.Stream()
         self.next_batch = None
-        self.preload()
+        self._preload()
 
-    def preload(self):
+    def _preload(self):
         try:
             batch = next(self.loader)
         except StopIteration:
@@ -463,5 +463,5 @@ class CUDAPrefetcher:
         batch = self.next_batch
         if batch is None:
             raise StopIteration
-        self.preload()
+        self._preload()
         return batch
