@@ -33,7 +33,7 @@ class Settings(BaseSettings):
         default=ml.models.DEFAULT_FEATURE_EXTRACTOR
     )
     classification_threshold: float = 0.6
-    localization_batch_size: int = 8
+    localization_batch_size: int = 32
     classification_batch_size: int = 20
     num_workers: int = 4
 
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     antenna_api_base_url: str = "http://localhost:8000/api/v2"
     antenna_api_auth_token: str = ""
     antenna_service_name: str = "AMI Data Companion"
-    antenna_api_batch_size: int = 16
+    antenna_api_batch_size: int = 24
 
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):

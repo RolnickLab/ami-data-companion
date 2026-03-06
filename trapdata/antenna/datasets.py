@@ -254,7 +254,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
 
         Each API fetch returns a batch of tasks. Images for the entire batch
         are downloaded concurrently using threads (see _load_images_threaded),
-        then yielded one at a time for the DataLoader to collate.
+        then as a pre-collated batch.
 
         Yields:
             Dictionary containing:
@@ -293,7 +293,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
 
                 # Download all images concurrently
                 image_map = self._load_images_threaded(tasks)
-
+                pre_batch = []
                 for task in tasks:
                     image_tensor = image_map.get(task.image_id)
                     errors = []
@@ -315,7 +315,11 @@ class RESTDataset(torch.utils.data.IterableDataset):
                     }
                     if errors:
                         row["error"] = "; ".join(errors) if errors else None
-                    yield row
+                    pre_batch.append(row)
+                batch = rest_collate_fn(
+                    pre_batch
+                )  # Collate before yielding to GPU process
+                yield batch
 
             logger.debug(f"Worker {worker_id}: Iterator finished")
         except Exception as e:
@@ -360,7 +364,7 @@ def rest_collate_fn(batch: list[dict]) -> dict:
     # Collate successful items
     if successful:
         result = {
-            "images": [item["image"] for item in successful],
+            "images": torch.stack([item["image"] for item in successful]),
             "reply_subjects": [item["reply_subject"] for item in successful],
             "image_ids": [item["image_id"] for item in successful],
             "image_urls": [item.get("image_url") for item in successful],
@@ -375,6 +379,17 @@ def rest_collate_fn(batch: list[dict]) -> dict:
     result["failed_items"] = failed
 
     return result
+
+
+def _no_op_collate_fn(batch: list[dict]) -> dict:
+    """
+    A no-op collate function that unwraps a single-element batch.
+
+    This can be used when the dataset already returns batches in the desired format,
+    and no further collation is needed. It simply returns the input list of dicts
+    without modification.
+    """
+    return batch[0]
 
 
 def get_rest_dataloader(
@@ -410,7 +425,48 @@ def get_rest_dataloader(
 
     return torch.utils.data.DataLoader(
         dataset,
-        batch_size=settings.localization_batch_size,
+        # batch_size=settings.localization_batch_size,
+        batch_size=1,  # We collate manually in rest_collate_fn, so set batch_size=1 here
         num_workers=settings.num_workers,
-        collate_fn=rest_collate_fn,
+        collate_fn=_no_op_collate_fn,
+        pin_memory=True,
+        persistent_workers=settings.num_workers > 0,
+        **({"prefetch_factor": 4} if settings.num_workers > 0 else {}),
     )
+
+
+class CUDAPrefetcher:
+    def __init__(self, loader: torch.utils.data.DataLoader, device: torch.device):
+        self.loader = iter(loader)
+        self.stream = torch.cuda.Stream()
+        self.device = device
+        self.next_batch = None
+        self._preload()
+
+    def _preload(self):
+        try:
+            batch = next(self.loader)
+        except StopIteration:
+            self.next_batch = None
+            return
+
+        with torch.cuda.stream(self.stream):
+            self.next_batch = {
+                k: (
+                    v.to(self.device, non_blocking=True)
+                    if isinstance(v, torch.Tensor)
+                    else v
+                )
+                for k, v in batch.items()
+            }
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        torch.cuda.current_stream().wait_stream(self.stream)
+        batch = self.next_batch
+        if batch is None:
+            raise StopIteration
+        self._preload()
+        return batch
