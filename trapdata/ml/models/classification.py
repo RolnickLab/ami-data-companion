@@ -10,6 +10,25 @@ from trapdata.db.models.queue import DetectedObjectQueue, UnclassifiedObjectQueu
 from .base import InferenceBaseClass, imagenet_normalization
 
 
+class MaybeTensor:
+    """Convert PIL Image to tensor if the input is not already a tensor.
+
+    Allows classification transforms to be used with both PIL images
+    (e.g. ``ami api`` / database paths) and tensors (e.g. GPU pipeline in
+    antenna/worker.py) without a redundant GPU->CPU->GPU round-trip.
+    """
+
+    _to_tensor = torchvision.transforms.ToTensor()
+
+    def __call__(self, x):
+        if isinstance(x, torch.Tensor):
+            return x
+        return self._to_tensor(x)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}()"
+
+
 class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
     def __init__(self, queue, image_transforms, batch_size=4):
         super().__init__()
@@ -70,7 +89,7 @@ class EfficientNetClassifier(InferenceBaseClass):
         return torchvision.transforms.Compose(
             [
                 torchvision.transforms.Resize((self.input_size, self.input_size)),
-                # torchvision.transforms.ToTensor(),
+                MaybeTensor(),
                 self.normalization,
             ]
         )
@@ -150,7 +169,7 @@ class ConvNeXtOrderClassifier(InferenceBaseClass):
             [
                 # self._pad_to_square(),
                 torchvision.transforms.Resize((self.input_size, self.input_size)),
-                # torchvision.transforms.ToTensor(),
+                MaybeTensor(),
                 torchvision.transforms.Normalize(mean, std),
             ]
         )
@@ -189,7 +208,7 @@ class Resnet50Classifier_Turing(InferenceBaseClass):
         return torchvision.transforms.Compose(
             [
                 torchvision.transforms.Resize((self.input_size, self.input_size)),
-                # torchvision.transforms.ToTensor(),
+                MaybeTensor(),
                 torchvision.transforms.Normalize(mean, std),
             ]
         )
@@ -237,7 +256,7 @@ class Resnet50Classifier(InferenceBaseClass):
         return torchvision.transforms.Compose(
             [
                 self._pad_to_square(),
-                # torchvision.transforms.ToTensor(),
+                MaybeTensor(),
                 torchvision.transforms.Resize(
                     (self.input_size, self.input_size), antialias=True  # type: ignore
                 ),
