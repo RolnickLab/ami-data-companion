@@ -191,9 +191,11 @@ class TestRESTDatasetIntegration(TestCase):
             dataset = self._make_dataset(job_id=4, batch_size=2)
             rows = list(dataset)
 
-        # Should get all 3 images (batch1: 2 images, batch2: 1 image)
-        assert len(rows) == 3
-        assert all(r["image"] is not None for r in rows)
+        # Dataset now yields pre-collated batches: batch1 (2 images), batch2 (1 image)
+        assert len(rows) == 2
+        total_images = sum(len(r["image_ids"]) for r in rows)
+        assert total_images == 3
+        assert all(r["images"] is not None for r in rows)
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +274,7 @@ class TestProcessJobIntegration(TestCase):
                 100,
                 self._make_settings(),
                 "Test Service",
+                device=torch.device("cpu"),
             )
 
         assert result is False
@@ -300,6 +303,7 @@ class TestProcessJobIntegration(TestCase):
                 101,
                 self._make_settings(),
                 "Test Service",
+                device=torch.device("cpu"),
             )
 
         # Validate processing succeeded
@@ -339,6 +343,7 @@ class TestProcessJobIntegration(TestCase):
                 102,
                 self._make_settings(),
                 "Test Service",
+                device=torch.device("cpu"),
             )
 
         posted_results = antenna_api_server.get_posted_results(102)
@@ -375,6 +380,7 @@ class TestProcessJobIntegration(TestCase):
                 103,
                 self._make_settings(),
                 "Test Service",
+                device=torch.device("cpu"),
             )
 
         assert result is True
@@ -475,7 +481,11 @@ class TestWorkerEndToEnd(TestCase):
 
             # Step 3: Process job
             result = _process_job(
-                pipeline_slug, 200, self._make_settings(), "Test Worker"
+                pipeline_slug,
+                200,
+                self._make_settings(),
+                "Test Worker",
+                device=torch.device("cpu"),
             )
             assert result is True
 
@@ -527,6 +537,7 @@ class TestWorkerEndToEnd(TestCase):
                 201,
                 self._make_settings(),
                 "Test Service",
+                device=torch.device("cpu"),
             )
 
         assert result is True
