@@ -36,6 +36,7 @@ Settings quick-reference (prefix with AMI_ as env vars):
     localization_batch_size  (default 8)
         How many images the GPU processes at once (detection). Larger =
         more GPU memory. These are full-resolution images (~4K).
+        Async worker use antennna_api_batch_size for this.
 
     num_workers  (default 4)
         DataLoader subprocesses. Each independently fetches tasks and
@@ -410,8 +411,7 @@ def get_rest_dataloader(
         job_id: Job ID to fetch tasks for
         settings: Settings object. Relevant fields:
             - antenna_api_base_url / antenna_api_auth_token
-            - antenna_api_batch_size  (tasks per API call)
-            - localization_batch_size (images per GPU batch)
+            - antenna_api_batch_size  (tasks per API call and GPU batch size)
             - num_workers            (DataLoader subprocesses)
             - processing_service_name  (name of this worker)
     """
@@ -425,13 +425,12 @@ def get_rest_dataloader(
 
     return torch.utils.data.DataLoader(
         dataset,
-        # batch_size=settings.localization_batch_size,
         batch_size=1,  # We collate manually in rest_collate_fn, so set batch_size=1 here
         num_workers=settings.num_workers,
         collate_fn=_no_op_collate_fn,
         pin_memory=True,
         persistent_workers=settings.num_workers > 0,
-        **({"prefetch_factor": 4} if settings.num_workers > 0 else {}),
+        prefetch_factor=4 if settings.num_workers > 0 else None,
     )
 
 
