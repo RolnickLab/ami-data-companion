@@ -54,6 +54,7 @@ def run_benchmark(
     batch_size: int,
     gpu_batch_size: int,
     service_name: str,
+    send_acks: bool = True,
 ) -> None:
     """Run the benchmark with the specified parameters.
 
@@ -132,8 +133,8 @@ def run_benchmark(
                         ack_result = create_empty_result(reply_subject, image_id)
                         ack_results.append(ack_result)
 
-                logger.info(f"Sending {len(ack_results)} acknowledgment(s)")
-                if ack_results:
+                if ack_results and send_acks:
+                    logger.info(f"Sending {len(ack_results)} acknowledgment(s)")
                     # Send acknowledgments asynchronously
                     result_poster.post_async(
                         base_url=base_url,
@@ -157,7 +158,7 @@ def run_benchmark(
                     )
                     error_results.append(error_result)
 
-                if error_results:
+                if error_results and send_acks:
                     result_poster.post_async(
                         base_url=base_url,
                         auth_token=auth_token,
@@ -280,6 +281,11 @@ def main() -> int:
         default="Performance Test",
         help="Processing service name",
     )
+    parser.add_argument(
+        "--skip-acks",
+        action="store_false",
+        help="Skip sending acknowledgments for processed images",
+    )
 
     args = parser.parse_args()
 
@@ -298,6 +304,7 @@ def main() -> int:
         batch_size=args.batch_size,
         gpu_batch_size=args.gpu_batch_size,
         service_name=args.service_name,
+        send_acks=args.skip_acks,
     )
     return 0
 
