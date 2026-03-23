@@ -9,10 +9,9 @@ from collections.abc import Callable
 import numpy as np
 import torch
 import torch.multiprocessing as mp
-import torchvision
 
 from trapdata.antenna.client import get_full_service_name, get_jobs
-from trapdata.antenna.datasets import get_rest_dataloader
+from trapdata.antenna.datasets import CUDAPrefetcher, get_rest_dataloader
 from trapdata.antenna.result_posting import ResultPoster
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
 from trapdata.api.api import CLASSIFIER_CHOICES, should_filter_detections
@@ -80,7 +79,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
         pipelines: List of pipeline slugs to poll for jobs.
     """
     settings = read_settings()
-
+    device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available() and torch.cuda.device_count() > 0:
         torch.cuda.set_device(gpu_id)
         logger.info(
@@ -115,6 +114,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
                     job_id=job_id,
                     settings=settings,
                     processing_service_name=full_service_name,
+                    device=device,
                 )
                 any_jobs = any_jobs or any_work_done
             except Exception as e:
@@ -153,7 +153,6 @@ def _apply_binary_classification(
     # Process binary classification crops
     binary_crops = []
     binary_valid_indices = []
-    to_pil = torchvision.transforms.ToPILImage()
     binary_transforms = binary_filter.get_transforms()
 
     for idx, dresp in enumerate(detector_results):
@@ -168,8 +167,7 @@ def _apply_binary_classification(
             )
             continue
         crop = image_tensor[:, y1:y2, x1:x2]
-        crop_pil = to_pil(crop)
-        crop_transformed = binary_transforms(crop_pil)
+        crop_transformed = binary_transforms(crop)
         binary_crops.append(crop_transformed)
         binary_valid_indices.append(idx)
 
@@ -298,7 +296,6 @@ def _process_batch(
 
         # Run terminal classifier on filtered detections
         classifier.reset(detections_for_terminal_classifier)
-        to_pil = torchvision.transforms.ToPILImage()
         classify_transforms = classifier.get_transforms()
 
         # Collect and transform all crops for batched classification
@@ -317,8 +314,7 @@ def _process_batch(
                 )
                 continue
             crop = image_tensor[:, y1:y2, x1:x2]
-            crop_pil = to_pil(crop)
-            crop_transformed = classify_transforms(crop_pil)
+            crop_transformed = classify_transforms(crop)
             crops.append(crop_transformed)
             valid_indices.append(idx)
 
@@ -408,6 +404,7 @@ def _process_job(
     job_id: int,
     settings: Settings,
     processing_service_name: str,
+    device: torch.device | None = None,
     on_batch_complete: Callable | None = None,
 ) -> bool:
     """Run the worker to process images from the REST API queue.
@@ -417,6 +414,7 @@ def _process_job(
         job_id: Job ID to process
         settings: Settings object with antenna_api_* configuration
         processing_service_name: Name of the processing service
+        device: The device to use for processing. Auto-detected if None.
         on_batch_complete: Optional callback invoked after each batch, with kwargs
             batch_num (int) and items (int, cumulative items processed so far).
     Returns:
@@ -436,6 +434,9 @@ def _process_job(
     use_binary_filter = should_filter_detections(classifier_class)
     binary_filter = None
 
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     items = 0
@@ -446,8 +447,17 @@ def _process_job(
     total_detections = 0
     _, t = log_time()
     result_poster: ResultPoster | None = None
+    # Conditionally use CUDA prefetcher; fall back to plain iterator on CPU
+    if torch.cuda.is_available():
+        batch_source = CUDAPrefetcher(
+            loader, device
+        )  # __init__ already calls preload()
+    else:
+        batch_source = iter(loader)
+
+    _, t_total = log_time()
     try:
-        for i, batch in enumerate(loader):
+        for i, batch in enumerate(batch_source):
             cls_time = 0.0
             det_time = 0.0
             load_time, t = t()
@@ -500,12 +510,16 @@ def _process_job(
                 batch_results,
                 processing_service_name,
             )
-            _, t = log_time()  # reset time to measure batch load time
+            batch_total, t_total = t_total()
             logger.info(
-                f"Finished batch {i + 1}. Total items: {items}, "
+                f"Batch {i + 1}: {batch_total/max(n_items, 1):.2f}s/image, "
                 f"Classification time: {cls_time:.2f}s, Detection time: {det_time:.2f}s, "
                 f"Load time: {load_time:.2f}s"
             )
+            (
+                _,
+                t,
+            ) = log_time()  # reset before next() call to measure next batch's load time
 
             if on_batch_complete:
                 on_batch_complete(batch_num=i, items=items)
