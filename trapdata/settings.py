@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     antenna_service_name: str = "AMI Data Companion"
     antenna_api_batch_size: int = 16
 
+    # Feature and logits extraction settings
+    include_features: bool = False
+    include_logits: bool = False
+
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
         """
