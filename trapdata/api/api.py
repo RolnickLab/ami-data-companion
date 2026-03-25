@@ -281,6 +281,8 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         # single=True if len(filtered_detections) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
         example_config_param=data.config.example_config_param,
+        include_features=data.config.include_features,
+        include_logits=data.config.include_logits,
         terminal=True,
         # critera=data.config.criteria, # @TODO another approach to intermediate filter models
     )

@@ -8,7 +8,7 @@ import torch
 import torch.multiprocessing as mp
 import torchvision
 
-from trapdata.antenna.client import get_full_service_name, get_jobs, post_batch_results
+from trapdata.antenna.client import get_full_service_name, get_jobs
 from trapdata.antenna.datasets import get_rest_dataloader
 from trapdata.antenna.result_posting import ResultPoster
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
@@ -254,7 +254,12 @@ def _process_job(
 
             # Defer instantiation of poster, detector and classifiers until we have data
             if not classifier:
-                classifier = classifier_class(source_images=[], detections=[])
+                classifier = classifier_class(
+                    source_images=[],
+                    detections=[],
+                    include_features=settings.include_features,
+                    include_logits=settings.include_logits,
+                )
                 detector = APIMothDetector([])
                 result_poster = ResultPoster(max_pending=MAX_PENDING_POSTS)
 
@@ -330,13 +335,14 @@ def _process_job(
 
                 if use_binary_filter:
                     assert binary_filter is not None, "Binary filter not initialized"
-                    detections_for_terminal_classifier, detections_to_return = (
-                        _apply_binary_classification(
-                            binary_filter,
-                            detector_results,
-                            image_tensors,
-                            image_detections,
-                        )
+                    (
+                        detections_for_terminal_classifier,
+                        detections_to_return,
+                    ) = _apply_binary_classification(
+                        binary_filter,
+                        detector_results,
+                        image_tensors,
+                        image_detections,
                     )
                 else:
                     # No binary filtering, send all detections to terminal classifier
@@ -458,7 +464,9 @@ def _process_job(
             )
             _, t = log_time()  # reset time to measure batch load time
             logger.info(
-                f"Finished batch {i + 1}. Total items: {items}, Classification time: {cls_time:.2f}s, Detection time: {det_time:.2f}s, Load time: {load_time:.2f}s"
+                f"Finished batch {i + 1}. Total items: {items}, "
+                f"Classification time: {cls_time:.2f}s, Detection time: {det_time:.2f}s, "
+                f"Load time: {load_time:.2f}s"
             )
 
         if result_poster:
