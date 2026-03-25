@@ -85,6 +85,7 @@ class APIMothClassifier(
         """
         logits = batch_output
         features = self._last_features
+        self._last_features = None  # Release GPU tensor reference
         predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
         logits_cpu = logits.cpu()

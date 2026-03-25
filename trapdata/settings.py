@@ -180,6 +180,18 @@ class Settings(BaseSettings):
                 "kivy_type": "string",
                 "kivy_section": "antenna",
             },
+            "include_features": {
+                "title": "Include feature vectors",
+                "description": "Include 2048-dim feature vectors (embeddings) from the classifier backbone in API/worker responses. Increases response size.",
+                "kivy_type": "bool",
+                "kivy_section": "antenna",
+            },
+            "include_logits": {
+                "title": "Include logits",
+                "description": "Include raw logits (unnormalized model outputs) in API/worker responses. Increases response size.",
+                "kivy_type": "bool",
+                "kivy_section": "antenna",
+            },
         }
 
         @classmethod
