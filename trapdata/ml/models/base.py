@@ -201,13 +201,12 @@ class InferenceBaseClass:
         """
         raise NotImplementedError
 
-    def get_features(
-        self, batch_input: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Default get_features method for models that don't implement  feature extraction.
-        """
+    def get_features(self, batch_input: torch.Tensor) -> torch.Tensor | None:
+        """Extract feature vectors from the model backbone.
 
+        Override in subclasses that support feature extraction.
+        Returns None by default for models that don't implement it.
+        """
         return None
 
     def get_transforms(self) -> torchvision.transforms.Compose:
@@ -351,3 +350,4 @@ class ClassifierResult:
     labels: list[str] | None
     logit: list[float] | None
     scores: list[float]
+    features: list[float] | None = None
