@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     antenna_api_base_url: str = "http://localhost:8000/api/v2"
     antenna_api_auth_token: str = ""
     antenna_service_name: str = "AMI Data Companion"
-    antenna_api_batch_size: int = 16
+    antenna_api_batch_size: int = 24
 
     # Feature and logits extraction settings
     include_features: bool = False
