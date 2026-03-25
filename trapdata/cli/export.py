@@ -4,7 +4,7 @@ import enum
 import pathlib
 import shutil
 import time
-from typing import Optional, Union
+from typing import Annotated, Optional, Union
 
 import pandas as pd
 import typer
@@ -213,7 +213,7 @@ def sessions(
 
 @cli.command()
 def captures(
-    date: datetime.datetime,
+    date: Annotated[datetime.datetime, typer.Argument(formats=["%Y-%m-%d"])],
     format: ExportFormat = ExportFormat.json,
     outfile: Optional[pathlib.Path] = None,
 ) -> Optional[str]:
@@ -227,7 +227,7 @@ def captures(
     events = get_monitoring_session_by_date(
         db_path=settings.database_url,
         base_directory=settings.image_base_path,
-        event_dates=[str(date.date())],
+        event_dates=[date.date()],
     )
     if not len(events):
         raise Exception(f"No Monitoring Event with date: {date.date()}")

@@ -33,9 +33,15 @@ class Settings(BaseSettings):
         default=ml.models.DEFAULT_FEATURE_EXTRACTOR
     )
     classification_threshold: float = 0.6
-    localization_batch_size: int = 2
+    localization_batch_size: int = 8
     classification_batch_size: int = 20
-    num_workers: int = 1
+    num_workers: int = 4
+
+    # Antenna API worker settings
+    antenna_api_base_url: str = "http://localhost:8000/api/v2"
+    antenna_api_auth_token: str = ""
+    antenna_service_name: str = "AMI Data Companion"
+    antenna_api_batch_size: int = 16
 
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
@@ -138,10 +144,37 @@ class Settings(BaseSettings):
                 "kivy_section": "performance",
             },
             "num_workers": {
-                "title": "Number of workers",
-                "description": "Number of parallel workers for the PyTorch dataloader. See https://pytorch.org/docs/stable/data.html",
+                "title": "DataLoader workers",
+                "description": (
+                    "Number of parallel subprocesses for the PyTorch DataLoader (image downloading & preprocessing). "
+                    "See https://pytorch.org/docs/stable/data.html"
+                ),
                 "kivy_type": "numeric",
                 "kivy_section": "performance",
+            },
+            "antenna_api_base_url": {
+                "title": "Antenna API Base URL",
+                "description": "URL to the Antenna platform API for worker processing (should include /api/v2)",
+                "kivy_type": "string",
+                "kivy_section": "antenna",
+            },
+            "antenna_api_auth_token": {
+                "title": "Antenna API Token",
+                "description": "Authentication token for your Antenna project",
+                "kivy_type": "string",
+                "kivy_section": "antenna",
+            },
+            "antenna_api_batch_size": {
+                "title": "Antenna API Batch Size",
+                "description": "Number of tasks to fetch from Antenna per batch",
+                "kivy_type": "numeric",
+                "kivy_section": "antenna",
+            },
+            "antenna_service_name": {
+                "title": "Antenna Service Name",
+                "description": "Name for the processing service registration (hostname will be added automatically)",
+                "kivy_type": "string",
+                "kivy_section": "antenna",
             },
         }
 

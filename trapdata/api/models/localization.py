@@ -1,4 +1,3 @@
-import concurrent.futures
 import datetime
 import typing
 
@@ -16,6 +15,10 @@ class APIMothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_2023)
         self.source_images = source_images
         self.results: list[DetectionResponse] = []
         super().__init__(*args, **kwargs)
+
+    def reset(self, source_images: typing.Iterable[SourceImage]):
+        self.source_images = source_images
+        self.results = []
 
     def get_dataset(self):
         return LocalizationImageDataset(
@@ -43,15 +46,9 @@ class APIMothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_2023)
             )
             return detection
 
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = []
-            for image_id, image_output in zip(item_ids, batch_output):
-                for coords in image_output:
-                    future = executor.submit(save_detection, image_id, coords)
-                    futures.append(future)
-
-            for future in concurrent.futures.as_completed(futures):
-                detection = future.result()
+        for image_id, image_output in zip(item_ids, batch_output):
+            for coords in image_output:
+                detection = save_detection(image_id, coords)
                 detections.append(detection)
 
         self.results += detections

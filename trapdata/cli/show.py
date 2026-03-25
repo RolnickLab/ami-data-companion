@@ -1,6 +1,6 @@
 import datetime
 import pathlib
-from typing import Optional
+from typing import Annotated, Optional
 
 import typer
 from rich import print
@@ -174,7 +174,10 @@ def sessions():
 
 @cli.command()
 def detections(
-    session_day: Optional[datetime.datetime] = None,
+    session_day: Annotated[
+        Optional[datetime.datetime],
+        typer.Option(formats=["%Y-%m-%d"], help="Session day in YYYY-MM-DD format"),
+    ] = None,
     limit: Optional[int] = 100,
     offset: int = 0,
 ):
@@ -185,7 +188,7 @@ def detections(
         sessions = get_monitoring_session_by_date(
             db_path=settings.database_url,
             base_directory=settings.image_base_path,
-            event_dates=[session_day],
+            event_dates=[session_day.date()],
         )
         session = sessions[0] if sessions else None
     else:

@@ -1,9 +1,11 @@
 import csv
 import datetime
+import functools
 import pathlib
 import random
 import string
-from typing import Any, Union
+import time
+from typing import Any, Callable, Tuple, Union
 
 
 def get_sequential_sample(direction, images, last_sample=None):
@@ -119,3 +121,29 @@ def random_color():
     color = [random.random() for _ in range(3)]
     color.append(0.8)  # alpha
     return color
+
+
+def log_time(start: float = 0, msg: str | None = None) -> Tuple[float, Callable]:
+    """
+    Small helper to measure time between calls.
+
+    Returns: elapsed time since the last call, and a partial function to measure from the current call
+    Usage:
+
+    _, tlog = log_time()
+    # do something
+    _, tlog = tlog("Did something") # will log the time taken by 'something'
+    # do something else
+    t, tlog = tlog("Did something else") # will log the time taken by 'something else', returned as 't'
+    """
+    from trapdata.common.logs import logger
+
+    end = time.perf_counter()
+    if start == 0:
+        dur = 0.0
+    else:
+        dur = end - start
+    if msg and start > 0:
+        logger.info(f"{msg}: {dur:.3f}s")
+    new_start = time.perf_counter()
+    return dur, functools.partial(log_time, new_start)

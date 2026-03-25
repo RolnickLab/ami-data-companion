@@ -3,11 +3,9 @@ import typing
 
 import numpy as np
 import torch
-import torch.utils.data
-from sentry_sdk import start_transaction
 
-from trapdata import logger
 from trapdata.common.logs import logger
+from trapdata.ml.models.base import ClassifierResult
 from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
     InferenceBaseClass,
@@ -18,9 +16,9 @@ from trapdata.ml.models.classification import (
     QuebecVermontMothSpeciesClassifier2024,
     TuringAnguillaSpeciesClassifier,
     TuringCostaRicaSpeciesClassifier,
+    TuringKenyaUgandaSpeciesClassifier,
     UKDenmarkMothSpeciesClassifier2024,
 )
-from trapdata.ml.utils import StopWatch
 
 from ..datasets import ClassificationImageDataset
 from ..schemas import (
@@ -56,6 +54,10 @@ class APIMothClassifier(
             "detections"
         )
 
+    def reset(self, detections: typing.Iterable[DetectionResponse]):
+        self.detections = list(detections)
+        self.results = []
+
     def get_dataset(self):
         return ClassificationImageDataset(
             source_images=self.source_images,
@@ -64,42 +66,35 @@ class APIMothClassifier(
             batch_size=self.batch_size,
         )
 
-    def post_process_batch(
-        self, logits: torch.Tensor, features: torch.Tensor | None = None
-    ):
+    def post_process_batch(self, logits: torch.Tensor):
         """
         Return the labels, softmax/calibrated scores, and the original logits for
-        each image in the batch, along with optional feature vectors.
+        each image in the batch.
+
+        Almost like the base class method, but we need to return the logits as well.
         """
         predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
+        logits = logits.cpu()
 
-        features = features.cpu() if features is not None else None
         batch_results = []
+
         for i, pred in enumerate(predictions):
             class_indices = np.arange(len(pred))
-            scores = pred
             labels = [self.category_map[i] for i in class_indices]
-            preds = list(zip(labels, scores, pred))
+            logit = logits[i].tolist()
 
-            if features is not None:
-                batch_results.append((preds, features[i].tolist()))
-            else:
-                batch_results.append((preds, None))
+            result = ClassifierResult(
+                labels=labels,
+                logit=logit,
+                scores=pred.tolist(),
+            )
 
-        logger.debug(f"Post-processing result batch with {len(batch_results)} entries.")
+            batch_results.append(result)
+
+        logger.debug(f"Post-processing result batch: {batch_results}")
+
         return batch_results
-
-    def predict_batch(self, batch, return_features: bool = False):
-        batch_input = batch.to(self.device, non_blocking=True)
-
-        if return_features:
-            features = self.get_features(batch_input)
-            logits = self.model(batch_input)
-            return logits, features
-
-        logits = self.model(batch_input)
-        return logits, None
 
     def get_best_label(self, predictions):
         """
@@ -115,8 +110,7 @@ class APIMothClassifier(
             ...
         ]
         """
-        best_pred = max(predictions, key=lambda x: x[1])
-        best_label = best_pred[0]
+        best_label = predictions.labels[np.argmax(predictions.scores)]
         return best_label
 
     def save_results(
@@ -124,24 +118,15 @@ class APIMothClassifier(
     ) -> list[DetectionResponse]:
         image_ids = metadata[0]
         detection_idxes = metadata[1]
-        for image_id, detection_idx, (predictions, features_vec) in zip(
+        for image_id, detection_idx, predictions in zip(
             image_ids, detection_idxes, batch_output
         ):
-            detection = self.detections[detection_idx]
-            assert detection.source_image_id == image_id
-            _labels, scores, logits = zip(*predictions)
-
-            classification = ClassificationResponse(
-                classification=self.get_best_label(predictions),
-                scores=scores,
-                logits=logits,
-                features=features_vec,
-                inference_time=seconds_per_item,
-                algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
-                timestamp=datetime.datetime.now(),
-                terminal=self.terminal,
+            self.update_detection_classification(
+                seconds_per_item,
+                image_id,
+                detection_idx,
+                predictions,
             )
-            self.update_classification(detection, classification)
 
         self.results = self.detections
         logger.info(f"Saving {len(self.results)} detections with classifications")
@@ -161,45 +146,38 @@ class APIMothClassifier(
             f"Total classifications: {len(detection.classifications)}"
         )
 
-    @torch.no_grad()
-    def run(self):
+    def update_detection_classification(
+        self,
+        seconds_per_item: float,
+        image_id: str,
+        detection_idx: int,
+        predictions: ClassifierResult,
+    ) -> DetectionResponse:
+        detection = self.detections[detection_idx]
+        if detection.source_image_id != image_id:
+            raise ValueError(
+                f"Detection index {detection_idx} has mismatched image_id: "
+                f"expected '{image_id}', got '{detection.source_image_id}'"
+            )
+
+        classification = ClassificationResponse(
+            classification=self.get_best_label(predictions),
+            scores=predictions.scores,
+            logits=predictions.logit,
+            inference_time=seconds_per_item,
+            algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
+            timestamp=datetime.datetime.now(),
+            terminal=self.terminal,
+        )
+        self.update_classification(detection, classification)
+        return detection
+
+    def run(self) -> list[DetectionResponse]:
         logger.info(
             f"Starting {self.__class__.__name__} run with {len(self.results)} "
             "detections"
         )
-        torch.cuda.empty_cache()
-
-        for i, batch in enumerate(self.dataloader):
-            if not batch:
-                logger.info(f"Batch {i+1} is empty, skipping")
-                continue
-
-            item_ids, batch_input = batch
-
-            logger.info(
-                f"Processing batch {i+1}, about {len(self.dataloader)} remaining"
-            )
-
-            with StopWatch() as batch_time:
-                with start_transaction(op="inference_batch", name=self.name):
-                    logits, features = self.predict_batch(
-                        batch_input, return_features=True
-                    )
-
-            seconds_per_item = batch_time.duration / len(logits)
-
-            batch_output = list(self.post_process_batch(logits, features=features))
-            if isinstance(item_ids, (np.ndarray, torch.Tensor)):
-                item_ids = item_ids.tolist()
-
-            logger.info(f"Saving results from {len(item_ids)} items")
-            self.save_results(
-                item_ids,
-                batch_output,
-                seconds_per_item=seconds_per_item,
-            )
-            logger.info(f"{self.name} Batch -- Done")
-
+        super().run()
         logger.info(
             f"Finished {self.__class__.__name__} run. "
             f"Processed {len(self.results)} detections"
@@ -238,6 +216,12 @@ class MothClassifierTuringCostaRica(
 
 
 class MothClassifierTuringAnguilla(APIMothClassifier, TuringAnguillaSpeciesClassifier):
+    pass
+
+
+class MothClassifierTuringKenyaUganda(
+    APIMothClassifier, TuringKenyaUgandaSpeciesClassifier
+):
     pass
 
 

@@ -142,3 +142,6 @@ db_data/
 # Test files
 sample_images
 bak
+
+# Local scratch for moving untracked files
+scratch/

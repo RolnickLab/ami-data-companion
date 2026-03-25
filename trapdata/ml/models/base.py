@@ -1,4 +1,6 @@
 import json
+from dataclasses import dataclass
+from math import ceil
 from typing import Union
 
 import numpy as np
@@ -251,11 +253,11 @@ class InferenceBaseClass:
         """
         if self.single:
             logger.info(
-                f"Preparing dataloader with batch size of {self.batch_size} in single worker mode."
+                f"Preparing {self.name} inference dataloader (batch_size={self.batch_size}, single worker mode)"
             )
         else:
             logger.info(
-                f"Preparing dataloader with batch size of {self.batch_size} and {self.num_workers} workers."
+                f"Preparing {self.name} inference dataloader (batch_size={self.batch_size}, dataloader_workers={self.num_workers})"
             )
         dataloader_args = {
             "num_workers": 0 if self.single else self.num_workers,
@@ -305,8 +307,10 @@ class InferenceBaseClass:
 
     @torch.no_grad()
     def run(self):
-        torch.cuda.empty_cache()
-
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        logger.info(f"Running inference ({self.name})\n\n")
+        num_batches_total = ceil(len(self.dataloader) / self.batch_size)
         for i, batch in enumerate(self.dataloader):
             if not batch:
                 # @TODO review this once we switch to streaming IterableDataset
@@ -316,7 +320,7 @@ class InferenceBaseClass:
             item_ids, batch_input = batch
 
             logger.info(
-                f"Processing batch {i+1}, about {len(self.dataloader)} remaining"
+                f"Processing batch {i+1}, about {num_batches_total-i} batches remaining ({self.name})"
             )
 
             # @TODO the StopWatch doesn't seem to work when there are multiple workers,
@@ -337,6 +341,13 @@ class InferenceBaseClass:
             logger.info(f"Saving results from {len(item_ids)} items")
 
             self.save_results(item_ids, batch_output, seconds_per_item=seconds_per_item)
-            logger.info(f"{self.name} Batch -- Done")
+            logger.info(f"{self.name} Batch {i+1} -- Done\n\n")
 
         logger.info(f"{self.name} -- Done")
+
+
+@dataclass
+class ClassifierResult:
+    labels: list[str] | None
+    logit: list[float] | None
+    scores: list[float]

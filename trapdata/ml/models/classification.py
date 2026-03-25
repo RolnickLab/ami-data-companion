@@ -24,7 +24,9 @@ class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
         return queue_count
 
     def __iter__(self):
-        while len(self):
+        logger.debug("Checking for records to classify...")
+        are_records = len(self) > 0
+        while are_records:
             worker_info = torch.utils.data.get_worker_info()
             logger.info(f"Using worker: {worker_info}")
 
@@ -37,6 +39,9 @@ class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
                     [self.transform(record.cropped_image_data()) for record in records]
                 )
                 yield (item_ids, batch_data)
+            else:
+                are_records = False
+        logger.debug("No records left to classify")
 
     def transform(self, cropped_image):
         return self.image_transforms(cropped_image)
@@ -269,6 +274,7 @@ class Resnet50ClassifierLowRes(Resnet50Classifier):
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model.eval()
+        logger.debug(f"Loaded model ({self.name}) onto device {self.device}")
         return model
 
 
@@ -416,8 +422,27 @@ class TuringCostaRicaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Tur
 class TuringAnguillaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
     name = "Turing Anguilla Species Classifier"
     description = "Trained on 28th June 2024 by Turing team using Resnet50 model."
-    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/turing-anguilla_v01_resnet50_2024-06-28-17-01_state.pt"
-    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/01_anguilla_data_category_map.json"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "turing-anguilla_v01_resnet50_2024-06-28-17-01_state.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "01_anguilla_data_category_map.json"
+    )
+
+
+class TuringKenyaUgandaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
+    name = "Turing Kenya and Uganda Species Classifier"
+    description = "Trained on 19th November 2024 by Turing team using Resnet50 model."
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "turing-kenya-uganda_v01_resnet50_2024-11-19-18-44_state.pt"
+    )
+    labels_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "01_kenya-uganda_data_category_map.json"
+    )
 
 
 class TuringUKSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
