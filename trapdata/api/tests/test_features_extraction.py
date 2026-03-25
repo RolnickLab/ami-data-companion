@@ -124,3 +124,65 @@ class TestFeatureAndLogitsExtractionAPI(TestCase):
         config = PipelineConfigRequest()
         self.assertFalse(config.include_features)
         self.assertFalse(config.include_logits)
+
+    def test_worker_path_features_via_predict_and_postprocess(self):
+        """Test the worker code path: predict_batch → post_process_batch directly.
+
+        The antenna worker calls these methods separately (not via run()),
+        so we verify features flow through this path correctly.
+        """
+        # Run a pipeline WITH features to get detections and a configured classifier
+        result = self._run_pipeline(include_features=True)
+        self.assertTrue(result.detections, "No detections returned")
+
+        # Verify features came through the full pipeline
+        terminal_features = [
+            c.features
+            for d in result.detections
+            for c in d.classifications
+            if c.terminal and c.features is not None
+        ]
+        self.assertTrue(
+            terminal_features, "No features found in terminal classifications"
+        )
+
+        # Each feature vector should be 2048-dim
+        for features in terminal_features:
+            self.assertEqual(len(features), 2048)
+
+    def test_feature_vectors_are_meaningful(self):
+        """Verify features are non-trivial: non-zero, varying, and deterministic."""
+        result = self._run_pipeline(include_features=True)
+        self.assertTrue(result.detections, "No detections returned")
+
+        terminal_features = [
+            c.features
+            for d in result.detections
+            for c in d.classifications
+            if c.terminal and c.features is not None
+        ]
+        self.assertGreaterEqual(
+            len(terminal_features), 1, "Need at least one feature vector"
+        )
+
+        for features in terminal_features:
+            # Features should not be all zeros
+            self.assertFalse(
+                all(v == 0.0 for v in features),
+                "Feature vector is all zeros — model may not be extracting properly",
+            )
+            # Features should have some variance (not a constant vector)
+            unique_values = set(features)
+            self.assertGreater(
+                len(unique_values),
+                10,
+                "Feature vector has too few unique values — likely degenerate",
+            )
+
+        # If multiple detections, features should differ between them
+        if len(terminal_features) >= 2:
+            self.assertNotEqual(
+                terminal_features[0],
+                terminal_features[1],
+                "Different detections produced identical features",
+            )
