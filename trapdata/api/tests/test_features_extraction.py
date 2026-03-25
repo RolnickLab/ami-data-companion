@@ -49,7 +49,9 @@ class TestFeatureAndLogitsExtractionAPI(TestCase):
         )
         with self.file_server:
             response = self.client.post("/process", json=pipeline_request.model_dump())
-            assert response.status_code == 200
+            self.assertEqual(
+                response.status_code, 200, f"Request failed: {response.text}"
+            )
             return PipelineResponse(**response.json())
 
     def test_features_included_when_enabled(self):

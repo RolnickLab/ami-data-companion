@@ -73,17 +73,18 @@ class APIMothClassifier(
     def predict_batch(self, batch):
         batch_input = batch.to(self.device, non_blocking=True)
         logits = self.model(batch_input)
-        features = None
+        self._last_features = None
         if self.include_features:
-            features = self.get_features(batch_input)
-        return logits, features
+            self._last_features = self.get_features(batch_input)
+        return logits
 
     def post_process_batch(self, batch_output):
         """
         Return ClassifierResult objects with labels, scores, and
         optional logits and feature vectors for each image in the batch.
         """
-        logits, features = batch_output
+        logits = batch_output
+        features = self._last_features
         predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
         logits_cpu = logits.cpu()
