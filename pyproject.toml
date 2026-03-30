@@ -21,7 +21,7 @@ pydantic = "^2.5.0"
 rich = "^13.3.3"
 pandas = "^1.5.3"
 sqlalchemy = ">2.0"
-sqlalchemy-utils = "^0.40.0"
+sqlalchemy-utils = "^0.42.1"
 alembic = "^1.10.2"
 psycopg2-binary = { version = "^2.9.5", optional = true }
 sentry-sdk = "^1.18.0"
