@@ -49,14 +49,14 @@ class TestRestCollateFnMixedSizes:
 
     def test_two_different_sizes(self):
         batch = [
-            _make_item(h=2160, w=4096, image_id="big"),
-            _make_item(h=2464, w=3280, image_id="small"),
+            _make_item(h=10, w=11, image_id="big"),
+            _make_item(h=12, w=13, image_id="small"),
         ]
         result = rest_collate_fn(batch)
         assert isinstance(result["images"], list)
         assert len(result["images"]) == 2
-        assert result["images"][0].shape == (3, 2160, 4096)
-        assert result["images"][1].shape == (3, 2464, 3280)
+        assert result["images"][0].shape == (3, 10, 11)
+        assert result["images"][1].shape == (3, 12, 13)
 
     def test_three_different_sizes(self):
         batch = [
