@@ -78,6 +78,8 @@ class TestRestCollateFnMixedSizes:
         assert result["reply_subjects"] == ["r1", "r2"]
 
     def test_warns_on_mixed_sizes(self, capsys):
+        # capsys (not caplog) because structlog writes to stdout, bypassing
+        # the stdlib logging handler that caplog captures.
         batch = [
             _make_item(h=100, w=200, image_id="a"),
             _make_item(h=300, w=400, image_id="b"),
