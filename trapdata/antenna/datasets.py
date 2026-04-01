@@ -333,7 +333,8 @@ def rest_collate_fn(batch: list[dict]) -> dict:
     Custom collate function that separates failed and successful items.
 
     Returns a dict with:
-        - images: List of image tensors (only present if there are successful items)
+        - images: Stacked tensor when all images share the same shape, or a list
+          of tensors when sizes differ (only present if there are successful items)
         - reply_subjects: List of reply subjects for valid images
         - image_ids: List of image IDs for valid images
         - image_urls: List of image URLs for valid images
@@ -364,8 +365,21 @@ def rest_collate_fn(batch: list[dict]) -> dict:
 
     # Collate successful items
     if successful:
+        image_tensors = [item["image"] for item in successful]
+        # Stack into a single tensor when all images are the same size (fast path).
+        # Fall back to a list of tensors for mixed sizes — the detector handles both
+        # but the list path is slower (individual GPU transfers instead of one bulk copy).
+        # To avoid this, sort source images by resolution or request same-size batches.
+        shapes = {t.shape for t in image_tensors}
+        if len(shapes) > 1:
+            logger.warning(
+                f"Batch contains {len(shapes)} different image sizes: {shapes}. "
+                "Falling back to per-image GPU transfer (slower). "
+                "Consider sorting source images by resolution."
+            )
+        images = torch.stack(image_tensors) if len(shapes) == 1 else image_tensors
         result = {
-            "images": torch.stack([item["image"] for item in successful]),
+            "images": images,
             "reply_subjects": [item["reply_subject"] for item in successful],
             "image_ids": [item["image_id"] for item in successful],
             "image_urls": [item.get("image_url") for item in successful],
