@@ -364,8 +364,21 @@ def rest_collate_fn(batch: list[dict]) -> dict:
 
     # Collate successful items
     if successful:
+        image_tensors = [item["image"] for item in successful]
+        # Stack into a single tensor when all images are the same size (fast path).
+        # Fall back to a list of tensors for mixed sizes — the detector handles both
+        # but the list path is slower (individual GPU transfers instead of one bulk copy).
+        # To avoid this, sort source images by resolution or request same-size batches.
+        shapes = {t.shape for t in image_tensors}
+        if len(shapes) > 1:
+            logger.warning(
+                f"Batch contains {len(shapes)} different image sizes: {shapes}. "
+                "Falling back to per-image GPU transfer (slower). "
+                "Consider sorting source images by resolution."
+            )
+        images = torch.stack(image_tensors) if len(shapes) == 1 else image_tensors
         result = {
-            "images": torch.stack([item["image"] for item in successful]),
+            "images": images,
             "reply_subjects": [item["reply_subject"] for item in successful],
             "image_ids": [item["image_id"] for item in successful],
             "image_urls": [item.get("image_url") for item in successful],
