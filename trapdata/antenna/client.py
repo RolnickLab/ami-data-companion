@@ -6,7 +6,9 @@ import requests
 
 from trapdata.antenna.schemas import (
     AntennaJobsListResponse,
+    AntennaResultPostResponse,
     AntennaTaskResult,
+    AntennaTaskResults,
     JobDispatchMode,
 )
 from trapdata.api.utils import get_http_session
@@ -93,14 +95,18 @@ def post_batch_results(
         True if successful, False otherwise
     """
     url = f"{base_url.rstrip('/')}/jobs/{job_id}/result/"
-    payload = [r.model_dump(mode="json") for r in results]
+    payload = AntennaTaskResults(results=results)
 
     with get_http_session(auth_token) as session:
         try:
-            params = {"processing_service_name": processing_service_name}
-            response = session.post(url, json=payload, params=params, timeout=60)
+            response = session.post(
+                url, json=payload.model_dump(mode="json"), timeout=60
+            )
             response.raise_for_status()
-            logger.debug(f"Successfully posted {len(results)} results to {url}")
+            result = AntennaResultPostResponse.model_validate(response.json())
+            logger.debug(
+                f"Posted {len(results)} results to job {job_id}: {result.results_queued} queued"
+            )
             return True
         except requests.RequestException as e:
             logger.error(f"Failed to post results to {url}: {e}")

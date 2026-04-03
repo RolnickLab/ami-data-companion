@@ -15,7 +15,7 @@ different setting and targets a different bottleneck.
     ├──────────────────────────────────────────────────────────────────┤
     │  DataLoader workers  (num_workers subprocesses)                  │
     │  Each subprocess runs its own RESTDataset.__iter__ loop:        │
-    │    1. GET /tasks  → fetch batch of task metadata from Antenna   │
+    │    1. POST /tasks  → fetch batch of task metadata from Antenna   │
     │    2. Download images (threaded, see below)                     │
     │    3. Yield individual (image_tensor, metadata) rows            │
     │  The DataLoader collates rows into GPU-sized batches.           │
@@ -76,6 +76,7 @@ from PIL import Image
 from trapdata.antenna.schemas import (
     AntennaPipelineProcessingTask,
     AntennaTasksListResponse,
+    AntennaTasksRequest,
 )
 from trapdata.api.utils import get_http_session
 from trapdata.common.logs import logger
@@ -97,8 +98,8 @@ class RESTDataset(torch.utils.data.IterableDataset):
     independently fetches different tasks from the shared queue.
 
     With DataLoader num_workers > 0 (I/O subprocesses, not AMI instances):
-        Subprocess 1: GET /tasks → receives [1,2,3,4], removed from queue
-        Subprocess 2: GET /tasks → receives [5,6,7,8], removed from queue
+        Subprocess 1: POST /tasks → receives [1,2,3,4], removed from queue
+        Subprocess 2: POST /tasks → receives [5,6,7,8], removed from queue
         No duplicates, safe for parallel processing
     """
 
@@ -170,15 +171,14 @@ class RESTDataset(torch.utils.data.IterableDataset):
         Raises:
             requests.RequestException: If the request fails (network error, etc.)
         """
-        url = f"{self.base_url.rstrip('/')}/jobs/{self.job_id}/tasks"
-        params = {
-            "batch": self.batch_size,
-            "processing_service_name": self.processing_service_name,
-        }
+        url = f"{self.base_url.rstrip('/')}/jobs/{self.job_id}/tasks/"
+        request_body = AntennaTasksRequest(batch_size=self.batch_size)
 
         self._ensure_sessions()
         assert self._api_session is not None
-        response = self._api_session.get(url, params=params, timeout=30)
+        response = self._api_session.post(
+            url, json=request_body.model_dump(), timeout=30
+        )
         response.raise_for_status()
 
         # Parse and validate response with Pydantic

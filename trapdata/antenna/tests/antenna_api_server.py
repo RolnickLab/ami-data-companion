@@ -11,8 +11,11 @@ from trapdata.antenna.schemas import (
     AntennaJobListItem,
     AntennaJobsListResponse,
     AntennaPipelineProcessingTask,
+    AntennaResultPostResponse,
     AntennaTaskResult,
+    AntennaTaskResults,
     AntennaTasksListResponse,
+    AntennaTasksRequest,
     AsyncPipelineRegistrationRequest,
     AsyncPipelineRegistrationResponse,
 )
@@ -62,13 +65,13 @@ def get_jobs(
     return AntennaJobsListResponse(results=results)
 
 
-@app.get("/api/v2/jobs/{job_id}/tasks")
-def get_tasks(job_id: int, batch: int):
+@app.post("/api/v2/jobs/{job_id}/tasks")
+def get_tasks(job_id: int, payload: AntennaTasksRequest):
     """Return batch of tasks (atomically remove from queue).
 
     Args:
         job_id: Job ID to fetch tasks for
-        batch: Number of tasks to return
+        payload: Request body with batch_size
 
     Returns:
         AntennaTasksListResponse with batch of tasks
@@ -76,33 +79,34 @@ def get_tasks(job_id: int, batch: int):
     if job_id not in _jobs_queue:
         return AntennaTasksListResponse(tasks=[])
 
-    # Get up to `batch` tasks and remove them from queue
-    tasks = _jobs_queue[job_id][:batch]
-    _jobs_queue[job_id] = _jobs_queue[job_id][batch:]
+    # Get up to `batch_size` tasks and remove them from queue
+    tasks = _jobs_queue[job_id][: payload.batch_size]
+    _jobs_queue[job_id] = _jobs_queue[job_id][payload.batch_size :]
 
     return AntennaTasksListResponse(tasks=tasks)
 
 
 @app.post("/api/v2/jobs/{job_id}/result/")
-def post_results(job_id: int, payload: list[dict]):
+def post_results(job_id: int, payload: AntennaTaskResults) -> AntennaResultPostResponse:
     """Store posted results for test validation.
 
     Args:
         job_id: Job ID to post results for
-        payload: List of AntennaTaskResult dicts
+        payload: Validated batch of task results
 
     Returns:
-        Success status
+        AntennaResultPostResponse acknowledgment
     """
     if job_id not in _posted_results:
         _posted_results[job_id] = []
 
-    # Parse each result dict into AntennaTaskResult
-    for result_dict in payload:
-        task_result = AntennaTaskResult(**result_dict)
-        _posted_results[job_id].append(task_result)
+    _posted_results[job_id].extend(payload.results)
 
-    return {"status": "ok"}
+    return AntennaResultPostResponse(
+        status="accepted",
+        job_id=job_id,
+        results_queued=len(payload.results),
+    )
 
 
 @app.get("/api/v2/projects/")
