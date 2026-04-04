@@ -14,7 +14,7 @@ Key features:
 
 Usage:
     poster = ResultPoster(max_pending=5)
-    poster.post_async(base_url, auth_token, job_id, results, service_name)
+    poster.post_async(base_url, auth_token, job_id, results)
     metrics = poster.get_metrics()
     poster.shutdown()
 """
@@ -60,7 +60,7 @@ class ResultPoster:
 
     Example:
         poster = ResultPoster(max_pending=10)
-        poster.post_async(base_url, auth_token, job_id, results, service_name)
+        poster.post_async(base_url, auth_token, job_id, results)
         metrics = poster.get_metrics()
         poster.shutdown()
     """

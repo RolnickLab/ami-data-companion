@@ -53,7 +53,6 @@ def run_benchmark(
     num_workers: int,
     batch_size: int,
     gpu_batch_size: int,
-    service_name: str,
     send_acks: bool = True,
 ) -> None:
     """Run the benchmark with the specified parameters.
@@ -65,7 +64,6 @@ def run_benchmark(
         num_workers: Number of DataLoader workers
         batch_size: Batch size for API requests
         gpu_batch_size: GPU batch size for DataLoader
-        service_name: Processing service name
     """
     # Create settings object
     settings = Settings()
@@ -81,7 +79,6 @@ def run_benchmark(
     print(f"  API batch size: {batch_size}")
     print(f"  GPU batch size: {gpu_batch_size}")
     print(f"  Num workers: {num_workers}")
-    print(f"  Service name: {service_name}")
     print()
 
     # Create dataloader
@@ -273,12 +270,6 @@ def main() -> int:
         "--gpu-batch-size", type=int, default=16, help="GPU batch size for DataLoader"
     )
     parser.add_argument(
-        "--service-name",
-        type=str,
-        default="Performance Test",
-        help="Processing service name",
-    )
-    parser.add_argument(
         "--skip-acks",
         action="store_false",
         help="Skip sending acknowledgments for processed images",
@@ -300,7 +291,6 @@ def main() -> int:
         num_workers=args.num_workers,
         batch_size=args.batch_size,
         gpu_batch_size=args.gpu_batch_size,
-        service_name=args.service_name,
         send_acks=args.skip_acks,
     )
     return 0
