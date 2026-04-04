@@ -110,7 +110,6 @@ class RESTDataset(torch.utils.data.IterableDataset):
         job_id: int,
         batch_size: int = 1,
         image_transforms: torchvision.transforms.Compose | None = None,
-        processing_service_name: str = "",
     ):
         """
         Initialize the REST dataset.
@@ -121,7 +120,6 @@ class RESTDataset(torch.utils.data.IterableDataset):
             job_id: The job ID to fetch tasks for
             batch_size: Number of tasks to request per batch
             image_transforms: Optional transforms to apply to loaded images
-            processing_service_name: Name of the processing service
         """
         super().__init__()
         self.base_url = base_url
@@ -129,7 +127,6 @@ class RESTDataset(torch.utils.data.IterableDataset):
         self.job_id = job_id
         self.batch_size = batch_size
         self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
-        self.processing_service_name = processing_service_name
 
         # These are created lazily in _ensure_sessions() because they contain
         # unpicklable objects (ThreadPoolExecutor has a SimpleQueue) and
@@ -410,7 +407,6 @@ def _no_op_collate_fn(batch: list[dict]) -> dict:
 def get_rest_dataloader(
     job_id: int,
     settings: "Settings",
-    processing_service_name: str,
 ) -> torch.utils.data.DataLoader:
     """Create a DataLoader that fetches tasks from Antenna API.
 
@@ -427,14 +423,12 @@ def get_rest_dataloader(
             - antenna_api_base_url / antenna_api_auth_token
             - antenna_api_batch_size  (tasks per API call and GPU batch size)
             - num_workers            (DataLoader subprocesses)
-            - processing_service_name  (name of this worker)
     """
     dataset = RESTDataset(
         base_url=settings.antenna_api_base_url,
         auth_token=settings.antenna_api_auth_token,
         job_id=job_id,
         batch_size=settings.antenna_api_batch_size,
-        processing_service_name=processing_service_name,
     )
 
     return torch.utils.data.DataLoader(

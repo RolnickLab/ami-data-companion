@@ -95,7 +95,6 @@ class TestMemoryLeak(TestCase):
                 "quebec_vermont_moths_2023",
                 999,
                 self._make_settings(),
-                processing_service_name="test-service",
                 on_batch_complete=on_batch,
             )
 

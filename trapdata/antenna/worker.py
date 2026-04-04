@@ -113,7 +113,6 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
                     pipeline=pipeline,
                     job_id=job_id,
                     settings=settings,
-                    processing_service_name=full_service_name,
                     device=device,
                 )
                 any_jobs = any_jobs or any_work_done
@@ -403,7 +402,6 @@ def _process_job(
     pipeline: str,
     job_id: int,
     settings: Settings,
-    processing_service_name: str,
     device: torch.device | None = None,
     on_batch_complete: Callable | None = None,
 ) -> bool:
@@ -413,7 +411,6 @@ def _process_job(
         pipeline: Pipeline name to use for processing (e.g., moth_binary, panama_moths_2024)
         job_id: Job ID to process
         settings: Settings object with antenna_api_* configuration
-        processing_service_name: Name of the processing service
         device: The device to use for processing. Auto-detected if None.
         on_batch_complete: Optional callback invoked after each batch, with kwargs
             batch_num (int) and items (int, cumulative items processed so far).
@@ -424,7 +421,6 @@ def _process_job(
     loader = get_rest_dataloader(
         job_id=job_id,
         settings=settings,
-        processing_service_name=processing_service_name,
     )
     classifier = None
     detector = None
@@ -508,7 +504,6 @@ def _process_job(
                 settings.antenna_api_auth_token,
                 job_id,
                 batch_results,
-                processing_service_name,
             )
             batch_total, t_total = t_total()
             logger.info(

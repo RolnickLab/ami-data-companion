@@ -88,7 +88,6 @@ def run_benchmark(
     dataloader = get_rest_dataloader(
         job_id=job_id,
         settings=settings,
-        processing_service_name=service_name,
     )
 
     # Initialize ResultPoster for sending acknowledgments
@@ -141,7 +140,6 @@ def run_benchmark(
                         auth_token=auth_token,
                         job_id=job_id,
                         results=ack_results,
-                        processing_service_name=service_name,
                     )
                     total_acks_sent += len(ack_results)
 
@@ -164,7 +162,6 @@ def run_benchmark(
                         auth_token=auth_token,
                         job_id=job_id,
                         results=error_results,
-                        processing_service_name=service_name,
                     )
                     total_acks_sent += len(error_results)
 

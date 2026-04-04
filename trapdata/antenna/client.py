@@ -79,7 +79,6 @@ def post_batch_results(
     auth_token: str,
     job_id: int,
     results: list[AntennaTaskResult],
-    processing_service_name: str,
 ) -> bool:
     """
     Post batch results back to the API.
@@ -89,7 +88,6 @@ def post_batch_results(
         auth_token: API authentication token
         job_id: Job ID
         results: List of AntennaTaskResult objects
-        processing_service_name: Name of the processing service
 
     Returns:
         True if successful, False otherwise

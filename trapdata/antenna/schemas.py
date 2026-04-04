@@ -37,7 +37,7 @@ class AntennaJobsListResponse(pydantic.BaseModel):
 class AntennaTasksRequest(pydantic.BaseModel):
     """Request body for POST /api/v2/jobs/{job_id}/tasks/."""
 
-    batch_size: int
+    batch_size: int = pydantic.Field(gt=0)
 
 
 class AntennaTasksListResponse(pydantic.BaseModel):
