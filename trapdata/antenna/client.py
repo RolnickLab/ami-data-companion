@@ -6,7 +6,9 @@ import requests
 
 from trapdata.antenna.schemas import (
     AntennaJobsListResponse,
+    AntennaResultPostResponse,
     AntennaTaskResult,
+    AntennaTaskResults,
     JobDispatchMode,
 )
 from trapdata.api.utils import get_http_session
@@ -30,17 +32,15 @@ def get_jobs(
     base_url: str,
     auth_token: str,
     pipeline_slugs: list[str],
-    processing_service_name: str,
 ) -> list[tuple[int, str]]:
     """Fetch job ids from the API for the given pipelines in a single request.
 
-    Calls: GET {base_url}/jobs?pipeline__slug__in=<slugs>&ids_only=1&processing_service_name=<name>
+    Calls: GET {base_url}/jobs?pipeline__slug__in=<slugs>&ids_only=1
 
     Args:
         base_url: Antenna API base URL (e.g., "http://localhost:8000/api/v2")
         auth_token: API authentication token
         pipeline_slugs: List of pipeline slugs to filter jobs
-        processing_service_name: Name of the processing service
 
     Returns:
         List of (job_id, pipeline_slug) tuples (possibly empty) on success or error.
@@ -54,7 +54,6 @@ def get_jobs(
                 "pipeline__slug__in": ",".join(pipeline_slugs),
                 "ids_only": 1,
                 "incomplete_only": 1,
-                "processing_service_name": processing_service_name,
                 "dispatch_mode": JobDispatchMode.ASYNC_API,  # Only fetch async_api jobs
             }
 
@@ -77,7 +76,6 @@ def post_batch_results(
     auth_token: str,
     job_id: int,
     results: list[AntennaTaskResult],
-    processing_service_name: str,
 ) -> bool:
     """
     Post batch results back to the API.
@@ -87,20 +85,23 @@ def post_batch_results(
         auth_token: API authentication token
         job_id: Job ID
         results: List of AntennaTaskResult objects
-        processing_service_name: Name of the processing service
 
     Returns:
         True if successful, False otherwise
     """
     url = f"{base_url.rstrip('/')}/jobs/{job_id}/result/"
-    payload = [r.model_dump(mode="json") for r in results]
+    payload = AntennaTaskResults(results=results)
 
     with get_http_session(auth_token) as session:
         try:
-            params = {"processing_service_name": processing_service_name}
-            response = session.post(url, json=payload, params=params, timeout=60)
+            response = session.post(
+                url, json=payload.model_dump(mode="json"), timeout=60
+            )
             response.raise_for_status()
-            logger.debug(f"Successfully posted {len(results)} results to {url}")
+            result = AntennaResultPostResponse.model_validate(response.json())
+            logger.debug(
+                f"Posted {len(results)} results to job {job_id}: {result.results_queued} queued"
+            )
             return True
         except requests.RequestException as e:
             logger.error(f"Failed to post results to {url}: {e}")

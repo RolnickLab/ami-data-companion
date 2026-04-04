@@ -34,8 +34,14 @@ class AntennaJobsListResponse(pydantic.BaseModel):
     results: list[AntennaJobListItem]
 
 
+class AntennaTasksRequest(pydantic.BaseModel):
+    """Request body for POST /api/v2/jobs/{job_id}/tasks/."""
+
+    batch_size: int = pydantic.Field(gt=0)
+
+
 class AntennaTasksListResponse(pydantic.BaseModel):
-    """Response from Antenna API GET /api/v2/jobs/{job_id}/tasks."""
+    """Response from Antenna API POST /api/v2/jobs/{job_id}/tasks/."""
 
     tasks: list[AntennaPipelineProcessingTask]
 
@@ -58,6 +64,23 @@ class AntennaTaskResults(pydantic.BaseModel):
     """Batch of task results to post back to Antenna API."""
 
     results: list[AntennaTaskResult] = pydantic.Field(default_factory=list)
+
+
+class QueuedTaskAcknowledgment(pydantic.BaseModel):
+    """Acknowledgment for a single result queued for background processing."""
+
+    reply_subject: str
+    status: str
+    task_id: str
+
+
+class AntennaResultPostResponse(pydantic.BaseModel):
+    """Response from POST /api/v2/jobs/{job_id}/result/."""
+
+    status: str
+    job_id: int
+    results_queued: int
+    tasks: list[QueuedTaskAcknowledgment] = pydantic.Field(default_factory=list)
 
 
 class AsyncPipelineRegistrationRequest(pydantic.BaseModel):

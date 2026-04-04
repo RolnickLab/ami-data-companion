@@ -11,20 +11,22 @@ from trapdata.antenna.schemas import (
     AntennaJobListItem,
     AntennaJobsListResponse,
     AntennaPipelineProcessingTask,
+    AntennaResultPostResponse,
     AntennaTaskResult,
+    AntennaTaskResults,
     AntennaTasksListResponse,
+    AntennaTasksRequest,
     AsyncPipelineRegistrationRequest,
     AsyncPipelineRegistrationResponse,
 )
 
-app = FastAPI()
+app = FastAPI(redirect_slashes=False)
 
 # State management for tests
 _jobs_queue: dict[int, list[AntennaPipelineProcessingTask]] = {}
 _posted_results: dict[int, list[AntennaTaskResult]] = {}
 _projects: list[dict] = []
 _registered_pipelines: dict[int, list[str]] = {}  # project_id -> pipeline slugs
-_last_get_jobs_service_name: str = ""
 
 
 @app.get("/api/v2/jobs")
@@ -32,7 +34,6 @@ def get_jobs(
     pipeline__slug__in: str = "",
     ids_only: int = 1,
     incomplete_only: int = 1,
-    processing_service_name: str = "",
 ):
     """Return available job IDs.
 
@@ -40,14 +41,10 @@ def get_jobs(
         pipeline__slug__in: Comma-separated pipeline slugs filter
         ids_only: If 1, return only job IDs
         incomplete_only: If 1, return only incomplete jobs
-        processing_service_name: Name of the processing service making the request
 
     Returns:
         AntennaJobsListResponse with list of job IDs
     """
-    global _last_get_jobs_service_name
-    _last_get_jobs_service_name = processing_service_name
-
     # Determine pipeline slug for response (use first slug from filter)
     slugs = (
         [s for s in pipeline__slug__in.split(",") if s] if pipeline__slug__in else []
@@ -62,13 +59,13 @@ def get_jobs(
     return AntennaJobsListResponse(results=results)
 
 
-@app.get("/api/v2/jobs/{job_id}/tasks")
-def get_tasks(job_id: int, batch: int):
+@app.post("/api/v2/jobs/{job_id}/tasks/")
+def get_tasks(job_id: int, payload: AntennaTasksRequest):
     """Return batch of tasks (atomically remove from queue).
 
     Args:
         job_id: Job ID to fetch tasks for
-        batch: Number of tasks to return
+        payload: Request body with batch_size
 
     Returns:
         AntennaTasksListResponse with batch of tasks
@@ -76,33 +73,34 @@ def get_tasks(job_id: int, batch: int):
     if job_id not in _jobs_queue:
         return AntennaTasksListResponse(tasks=[])
 
-    # Get up to `batch` tasks and remove them from queue
-    tasks = _jobs_queue[job_id][:batch]
-    _jobs_queue[job_id] = _jobs_queue[job_id][batch:]
+    # Get up to `batch_size` tasks and remove them from queue
+    tasks = _jobs_queue[job_id][: payload.batch_size]
+    _jobs_queue[job_id] = _jobs_queue[job_id][payload.batch_size :]
 
     return AntennaTasksListResponse(tasks=tasks)
 
 
 @app.post("/api/v2/jobs/{job_id}/result/")
-def post_results(job_id: int, payload: list[dict]):
+def post_results(job_id: int, payload: AntennaTaskResults) -> AntennaResultPostResponse:
     """Store posted results for test validation.
 
     Args:
         job_id: Job ID to post results for
-        payload: List of AntennaTaskResult dicts
+        payload: Validated batch of task results
 
     Returns:
-        Success status
+        AntennaResultPostResponse acknowledgment
     """
     if job_id not in _posted_results:
         _posted_results[job_id] = []
 
-    # Parse each result dict into AntennaTaskResult
-    for result_dict in payload:
-        task_result = AntennaTaskResult(**result_dict)
-        _posted_results[job_id].append(task_result)
+    _posted_results[job_id].extend(payload.results)
 
-    return {"status": "ok"}
+    return AntennaResultPostResponse(
+        status="accepted",
+        job_id=job_id,
+        results_queued=len(payload.results),
+    )
 
 
 @app.get("/api/v2/projects/")
@@ -198,21 +196,9 @@ def get_registered_pipelines(project_id: int) -> list[str]:
     return _registered_pipelines.get(project_id, [])
 
 
-def get_last_get_jobs_service_name() -> str:
-    """Return the processing_service_name received by the last get_jobs call.
-
-    Returns:
-        The processing_service_name value from the most recent GET /jobs request,
-        or an empty string if no request has been made since the last reset().
-    """
-    return _last_get_jobs_service_name
-
-
 def reset():
     """Clear all state between tests."""
-    global _last_get_jobs_service_name
     _jobs_queue.clear()
     _posted_results.clear()
     _projects.clear()
     _registered_pipelines.clear()
-    _last_get_jobs_service_name = ""
