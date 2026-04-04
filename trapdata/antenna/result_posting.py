@@ -60,7 +60,7 @@ class ResultPoster:
 
     Example:
         poster = ResultPoster(max_pending=10)
-        poster.post_async(base_url, auth_token, job_id, results)
+        poster.post_async(base_url, api_key, job_id, results)
         metrics = poster.get_metrics()
         poster.shutdown()
     """

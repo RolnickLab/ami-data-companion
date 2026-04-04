@@ -18,10 +18,10 @@ from trapdata.settings import Settings, read_settings
 def _get_version() -> str:
     """Return the ami-data-companion package version, or 'unknown'."""
     try:
-        from importlib.metadata import version
+        from importlib.metadata import PackageNotFoundError, version
 
         return version("trapdata")
-    except Exception:
+    except PackageNotFoundError:
         return "unknown"
 
 
