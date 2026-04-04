@@ -102,7 +102,6 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             base_url=settings.antenna_api_base_url,
             auth_token=settings.antenna_api_auth_token,
             pipeline_slugs=pipelines,
-            processing_service_name=full_service_name,
         )
         for job_id, pipeline in jobs:
             logger.info(

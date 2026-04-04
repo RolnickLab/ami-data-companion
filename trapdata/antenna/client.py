@@ -32,17 +32,15 @@ def get_jobs(
     base_url: str,
     auth_token: str,
     pipeline_slugs: list[str],
-    processing_service_name: str,
 ) -> list[tuple[int, str]]:
     """Fetch job ids from the API for the given pipelines in a single request.
 
-    Calls: GET {base_url}/jobs?pipeline__slug__in=<slugs>&ids_only=1&processing_service_name=<name>
+    Calls: GET {base_url}/jobs?pipeline__slug__in=<slugs>&ids_only=1
 
     Args:
         base_url: Antenna API base URL (e.g., "http://localhost:8000/api/v2")
         auth_token: API authentication token
         pipeline_slugs: List of pipeline slugs to filter jobs
-        processing_service_name: Name of the processing service
 
     Returns:
         List of (job_id, pipeline_slug) tuples (possibly empty) on success or error.
@@ -56,7 +54,6 @@ def get_jobs(
                 "pipeline__slug__in": ",".join(pipeline_slugs),
                 "ids_only": 1,
                 "incomplete_only": 1,
-                "processing_service_name": processing_service_name,
                 "dispatch_mode": JobDispatchMode.ASYNC_API,  # Only fetch async_api jobs
             }
 
