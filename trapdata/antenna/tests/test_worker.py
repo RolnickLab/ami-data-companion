@@ -225,7 +225,6 @@ class TestGetJobsIntegration(TestCase):
                 "http://testserver/api/v2",
                 "test-token",
                 ["moths_2024"],
-                "Test Worker",
             )
 
         assert [job_id for job_id, _ in result] == [10, 20, 30]
@@ -273,7 +272,6 @@ class TestProcessJobIntegration(TestCase):
                 "quebec_vermont_moths_2023",
                 100,
                 self._make_settings(),
-                "Test Service",
                 device=torch.device("cpu"),
             )
 
@@ -302,7 +300,6 @@ class TestProcessJobIntegration(TestCase):
                 "quebec_vermont_moths_2023",
                 101,
                 self._make_settings(),
-                "Test Service",
                 device=torch.device("cpu"),
             )
 
@@ -342,7 +339,6 @@ class TestProcessJobIntegration(TestCase):
                 "quebec_vermont_moths_2023",
                 102,
                 self._make_settings(),
-                "Test Service",
                 device=torch.device("cpu"),
             )
 
@@ -379,7 +375,6 @@ class TestProcessJobIntegration(TestCase):
                 "quebec_vermont_moths_2023",
                 103,
                 self._make_settings(),
-                "Test Service",
                 device=torch.device("cpu"),
             )
 
@@ -473,7 +468,6 @@ class TestWorkerEndToEnd(TestCase):
                 "http://testserver/api/v2",
                 "test-token",
                 [pipeline_slug],
-                "Test Worker",
             )
             job_ids = [job_id for job_id, _ in jobs]
             assert 200 in job_ids
@@ -484,7 +478,6 @@ class TestWorkerEndToEnd(TestCase):
                 pipeline_slug,
                 200,
                 self._make_settings(),
-                "Test Worker",
                 device=torch.device("cpu"),
             )
             assert result is True
@@ -536,7 +529,6 @@ class TestWorkerEndToEnd(TestCase):
                 "quebec_vermont_moths_2023",
                 201,
                 self._make_settings(),
-                "Test Service",
                 device=torch.device("cpu"),
             )
 
