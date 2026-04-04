@@ -39,7 +39,7 @@ class TestMemoryLeak(TestCase):
         cls.test_images_dir = pathlib.Path(TEST_IMAGES_BASE_PATH)
         cls.file_server = StaticFileTestServer(cls.test_images_dir)
         cls.file_server.start()
-        cls.antenna_client = TestClient(antenna_app)
+        cls.antenna_client = TestClient(antenna_app, follow_redirects=False)
 
     @classmethod
     def tearDownClass(cls):
@@ -95,7 +95,6 @@ class TestMemoryLeak(TestCase):
                 "quebec_vermont_moths_2023",
                 999,
                 self._make_settings(),
-                processing_service_name="test-service",
                 on_batch_complete=on_batch,
             )
 
