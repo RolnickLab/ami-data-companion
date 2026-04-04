@@ -20,7 +20,7 @@ from trapdata.antenna.schemas import (
     AsyncPipelineRegistrationResponse,
 )
 
-app = FastAPI()
+app = FastAPI(redirect_slashes=False)
 
 # State management for tests
 _jobs_queue: dict[int, list[AntennaPipelineProcessingTask]] = {}
@@ -59,7 +59,7 @@ def get_jobs(
     return AntennaJobsListResponse(results=results)
 
 
-@app.post("/api/v2/jobs/{job_id}/tasks")
+@app.post("/api/v2/jobs/{job_id}/tasks/")
 def get_tasks(job_id: int, payload: AntennaTasksRequest):
     """Return batch of tasks (atomically remove from queue).
 

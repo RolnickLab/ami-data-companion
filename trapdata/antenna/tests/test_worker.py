@@ -151,7 +151,7 @@ class TestRESTDatasetIntegration(TestCase):
         cls.file_server.start()  # Start server and keep it running for all tests
 
         # Setup mock Antenna API
-        cls.antenna_client = TestClient(antenna_app)
+        cls.antenna_client = TestClient(antenna_app, follow_redirects=False)
 
     @classmethod
     def tearDownClass(cls):
@@ -208,7 +208,7 @@ class TestGetJobsIntegration(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.antenna_client = TestClient(antenna_app)
+        cls.antenna_client = TestClient(antenna_app, follow_redirects=False)
 
     def setUp(self):
         antenna_api_server.reset()
@@ -243,7 +243,7 @@ class TestProcessJobIntegration(TestCase):
         cls.test_images_dir = pathlib.Path(TEST_IMAGES_BASE_PATH)
         cls.file_server = StaticFileTestServer(cls.test_images_dir)
         cls.file_server.start()  # Start server and keep it running for all tests
-        cls.antenna_client = TestClient(antenna_app)
+        cls.antenna_client = TestClient(antenna_app, follow_redirects=False)
 
     @classmethod
     def tearDownClass(cls):
@@ -405,7 +405,7 @@ class TestWorkerEndToEnd(TestCase):
         cls.test_images_dir = pathlib.Path(TEST_IMAGES_BASE_PATH)
         cls.file_server = StaticFileTestServer(cls.test_images_dir)
         cls.file_server.start()  # Start server and keep it running for all tests
-        cls.antenna_client = TestClient(antenna_app)
+        cls.antenna_client = TestClient(antenna_app, follow_redirects=False)
 
     @classmethod
     def tearDownClass(cls):
