@@ -39,8 +39,7 @@ class Settings(BaseSettings):
 
     # Antenna API worker settings
     antenna_api_base_url: str = "http://localhost:8000/api/v2"
-    antenna_api_auth_token: str = ""
-    antenna_service_name: str = "AMI Data Companion"
+    antenna_api_key: str = ""
     antenna_api_batch_size: int = 24
 
     @pydantic.field_validator("image_base_path", "user_data_path")
@@ -158,9 +157,9 @@ class Settings(BaseSettings):
                 "kivy_type": "string",
                 "kivy_section": "antenna",
             },
-            "antenna_api_auth_token": {
-                "title": "Antenna API Token",
-                "description": "Authentication token for your Antenna project",
+            "antenna_api_key": {
+                "title": "Antenna API Key",
+                "description": "API key for authenticating with Antenna (format: prefix.secret)",
                 "kivy_type": "string",
                 "kivy_section": "antenna",
             },
@@ -168,12 +167,6 @@ class Settings(BaseSettings):
                 "title": "Antenna API Batch Size",
                 "description": "Number of tasks to fetch from Antenna per batch",
                 "kivy_type": "numeric",
-                "kivy_section": "antenna",
-            },
-            "antenna_service_name": {
-                "title": "Antenna Service Name",
-                "description": "Name for the processing service registration (hostname will be added automatically)",
-                "kivy_type": "string",
                 "kivy_section": "antenna",
             },
         }

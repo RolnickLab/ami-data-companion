@@ -106,7 +106,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
     def __init__(
         self,
         base_url: str,
-        auth_token: str,
+        api_key: str,
         job_id: int,
         batch_size: int = 1,
         image_transforms: torchvision.transforms.Compose | None = None,
@@ -116,14 +116,14 @@ class RESTDataset(torch.utils.data.IterableDataset):
 
         Args:
             base_url: Base URL for the API including /api/v2 (e.g., "http://localhost:8000/api/v2")
-            auth_token: API authentication token
+            api_key: API key for authentication
             job_id: The job ID to fetch tasks for
             batch_size: Number of tasks to request per batch
             image_transforms: Optional transforms to apply to loaded images
         """
         super().__init__()
         self.base_url = base_url
-        self.auth_token = auth_token
+        self.api_key = api_key
         self.job_id = job_id
         self.batch_size = batch_size
         self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
@@ -143,7 +143,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
         issues with num_workers > 0 (SimpleQueue, socket objects, etc.).
         """
         if self._api_session is None:
-            self._api_session = get_http_session(self.auth_token)
+            self._api_session = get_http_session(self.api_key)
         if self._image_fetch_session is None:
             self._image_fetch_session = get_http_session()
         if self._executor is None:
@@ -420,13 +420,13 @@ def get_rest_dataloader(
     Args:
         job_id: Job ID to fetch tasks for
         settings: Settings object. Relevant fields:
-            - antenna_api_base_url / antenna_api_auth_token
+            - antenna_api_base_url / antenna_api_key
             - antenna_api_batch_size  (tasks per API call and GPU batch size)
             - num_workers            (DataLoader subprocesses)
     """
     dataset = RESTDataset(
         base_url=settings.antenna_api_base_url,
-        auth_token=settings.antenna_api_auth_token,
+        api_key=settings.antenna_api_key,
         job_id=job_id,
         batch_size=settings.antenna_api_batch_size,
     )

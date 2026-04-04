@@ -1,8 +1,10 @@
 """Pipeline registration with Antenna projects."""
 
+import platform
+import socket
+
 import requests
 
-from trapdata.antenna.client import get_full_service_name
 from trapdata.antenna.schemas import (
     AsyncPipelineRegistrationRequest,
     AsyncPipelineRegistrationResponse,
@@ -13,11 +15,30 @@ from trapdata.common.logs import logger
 from trapdata.settings import Settings, read_settings
 
 
+def _get_version() -> str:
+    """Return the ami-data-companion package version, or 'unknown'."""
+    try:
+        from importlib.metadata import version
+
+        return version("trapdata")
+    except Exception:
+        return "unknown"
+
+
+def _build_client_info() -> dict:
+    """Build a client_info dict with hostname, software, version, and platform."""
+    return {
+        "hostname": socket.gethostname(),
+        "software": "ami-data-companion",
+        "version": _get_version(),
+        "platform": platform.platform(),
+    }
+
+
 def register_pipelines_for_project(
     base_url: str,
-    auth_token: str,
+    api_key: str,
     project_id: int,
-    service_name: str,
     pipeline_configs: list,
 ) -> tuple[bool, str]:
     """
@@ -25,18 +46,18 @@ def register_pipelines_for_project(
 
     Args:
         base_url: Base URL for the API (should NOT include /api/v2)
-        auth_token: API authentication token
+        api_key: API key for authentication
         project_id: Project ID to register pipelines for
-        service_name: Name of the processing service
         pipeline_configs: Pre-built pipeline configuration objects
 
     Returns:
         Tuple of (success: bool, message: str)
     """
-    with get_http_session(auth_token=auth_token) as session:
+    with get_http_session(api_key=api_key) as session:
         try:
             registration_request = AsyncPipelineRegistrationRequest(
-                processing_service_name=service_name, pipelines=pipeline_configs
+                pipelines=pipeline_configs,
+                client_info=_build_client_info(),
             )
 
             url = f"{base_url.rstrip('/')}/projects/{project_id}/pipelines/"
@@ -70,7 +91,6 @@ def register_pipelines_for_project(
 
 def register_pipelines(
     project_ids: list[int],
-    service_name: str,
     settings: Settings | None = None,
 ) -> None:
     """
@@ -78,7 +98,6 @@ def register_pipelines(
 
     Args:
         project_ids: List of specific project IDs to register for. If empty, registers for all accessible projects.
-        service_name: Name of the processing service
         settings: Settings object with antenna_api_* configuration (defaults to read_settings())
     """
     # Import here to avoid circular import
@@ -89,21 +108,11 @@ def register_pipelines(
         settings = read_settings()
 
     base_url = settings.antenna_api_base_url
-    auth_token = settings.antenna_api_auth_token
+    api_key = settings.antenna_api_key
 
-    if not auth_token:
-        logger.error("AMI_ANTENNA_API_AUTH_TOKEN environment variable not set")
+    if not api_key:
+        logger.error("AMI_ANTENNA_API_KEY environment variable not set")
         return
-
-    if not service_name or not service_name.strip():
-        logger.error(
-            "Service name is required for registration. "
-            "Configure AMI_ANTENNA_SERVICE_NAME via environment variable, .env file, or Kivy settings."
-        )
-        return
-
-    # Add hostname to service name
-    full_service_name = get_full_service_name(service_name)
 
     # Get projects to register for
     projects_to_process = []
@@ -116,7 +125,7 @@ def register_pipelines(
     else:
         # Fetch all accessible projects
         logger.info("Fetching all accessible projects...")
-        all_projects = get_user_projects(base_url, auth_token)
+        all_projects = get_user_projects(base_url, api_key)
         projects_to_process = all_projects
         logger.info(f"Found {len(projects_to_process)} accessible projects")
 
@@ -146,9 +155,8 @@ def register_pipelines(
 
         success, message = register_pipelines_for_project(
             base_url=base_url,
-            auth_token=auth_token,
+            api_key=api_key,
             project_id=project_id,
-            service_name=full_service_name,
             pipeline_configs=pipeline_configs,
         )
 
@@ -164,7 +172,6 @@ def register_pipelines(
 
     # Summary report
     logger.info("\n=== Registration Summary ===")
-    logger.info(f"Service name: {full_service_name}")
     logger.info(f"Total projects processed: {len(projects_to_process)}")
     logger.info(f"Successful registrations: {len(successful_registrations)}")
     logger.info(f"Failed registrations: {len(failed_registrations)}")

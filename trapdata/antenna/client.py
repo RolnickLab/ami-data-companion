@@ -1,7 +1,5 @@
 """Antenna API client for fetching jobs and posting results."""
 
-import socket
-
 import requests
 
 from trapdata.antenna.schemas import (
@@ -15,22 +13,9 @@ from trapdata.api.utils import get_http_session
 from trapdata.common.logs import logger
 
 
-def get_full_service_name(service_name: str) -> str:
-    """Build full service name with hostname.
-
-    Args:
-        service_name: Base service name
-
-    Returns:
-        Full service name with hostname appended
-    """
-    hostname = socket.gethostname()
-    return f"{service_name} ({hostname})"
-
-
 def get_jobs(
     base_url: str,
-    auth_token: str,
+    api_key: str,
     pipeline_slugs: list[str],
 ) -> list[tuple[int, str]]:
     """Fetch job ids from the API for the given pipelines in a single request.
@@ -39,13 +24,13 @@ def get_jobs(
 
     Args:
         base_url: Antenna API base URL (e.g., "http://localhost:8000/api/v2")
-        auth_token: API authentication token
+        api_key: API key for authentication
         pipeline_slugs: List of pipeline slugs to filter jobs
 
     Returns:
         List of (job_id, pipeline_slug) tuples (possibly empty) on success or error.
     """
-    with get_http_session(auth_token) as session:
+    with get_http_session(api_key) as session:
         try:
             if not pipeline_slugs:
                 return []
@@ -73,7 +58,7 @@ def get_jobs(
 
 def post_batch_results(
     base_url: str,
-    auth_token: str,
+    api_key: str,
     job_id: int,
     results: list[AntennaTaskResult],
 ) -> bool:
@@ -82,7 +67,7 @@ def post_batch_results(
 
     Args:
         base_url: Antenna API base URL (e.g., "http://localhost:8000/api/v2")
-        auth_token: API authentication token
+        api_key: API key for authentication
         job_id: Job ID
         results: List of AntennaTaskResult objects
 
@@ -92,7 +77,7 @@ def post_batch_results(
     url = f"{base_url.rstrip('/')}/jobs/{job_id}/result/"
     payload = AntennaTaskResults(results=results)
 
-    with get_http_session(auth_token) as session:
+    with get_http_session(api_key) as session:
         try:
             response = session.post(
                 url, json=payload.model_dump(mode="json"), timeout=60
@@ -108,18 +93,18 @@ def post_batch_results(
             return False
 
 
-def get_user_projects(base_url: str, auth_token: str) -> list[dict]:
+def get_user_projects(base_url: str, api_key: str) -> list[dict]:
     """
     Fetch all projects the user has access to.
 
     Args:
         base_url: Base URL for the API (should NOT include /api/v2)
-        auth_token: API authentication token
+        api_key: API key for authentication
 
     Returns:
         List of project dictionaries with 'id' and 'name' fields
     """
-    with get_http_session(auth_token) as session:
+    with get_http_session(api_key) as session:
         try:
             url = f"{base_url.rstrip('/')}/projects/"
             response = session.get(url, timeout=30)

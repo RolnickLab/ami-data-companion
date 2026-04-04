@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import torch.multiprocessing as mp
 
-from trapdata.antenna.client import get_full_service_name, get_jobs
+from trapdata.antenna.client import get_jobs
 from trapdata.antenna.datasets import CUDAPrefetcher, get_rest_dataloader
 from trapdata.antenna.result_posting import ResultPoster
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
@@ -38,18 +38,11 @@ def run_worker(pipelines: list[str]):
     """
     settings = read_settings()
 
-    # Validate auth token
-    if not settings.antenna_api_auth_token:
+    # Validate API key
+    if not settings.antenna_api_key:
         raise ValueError(
-            "AMI_ANTENNA_API_AUTH_TOKEN environment variable must be set. "
-            "Get your auth token from your Antenna project settings."
-        )
-
-    # Validate service name
-    if not settings.antenna_service_name or not settings.antenna_service_name.strip():
-        raise ValueError(
-            "AMI_ANTENNA_SERVICE_NAME configuration setting must be set. "
-            "Configure it via environment variable or .env file."
+            "AMI_ANTENNA_API_KEY environment variable must be set. "
+            "Get your API key from your Antenna project settings."
         )
 
     gpu_count = torch.cuda.device_count()
@@ -86,10 +79,6 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             f"AMI worker instance {gpu_id} pinned to GPU {gpu_id}: {torch.cuda.get_device_name(gpu_id)}"
         )
 
-    # Build full service name with hostname
-    full_service_name = get_full_service_name(settings.antenna_service_name)
-    logger.info(f"Running worker as: {full_service_name}")
-
     while True:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
         # These should probably come from a dedicated endpoint and should preempt batch jobs under the assumption that they
@@ -100,7 +89,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
         )
         jobs = get_jobs(
             base_url=settings.antenna_api_base_url,
-            auth_token=settings.antenna_api_auth_token,
+            api_key=settings.antenna_api_key,
             pipeline_slugs=pipelines,
         )
         for job_id, pipeline in jobs:
@@ -500,7 +489,7 @@ def _process_job(
             # Post results asynchronously (non-blocking)
             result_poster.post_async(
                 settings.antenna_api_base_url,
-                settings.antenna_api_auth_token,
+                settings.antenna_api_key,
                 job_id,
                 batch_results,
             )
