@@ -9,58 +9,121 @@ different setting and targets a different bottleneck.
 ::
 
     ┌──────────────────────────────────────────────────────────────────┐
-    │  GPU process  (_worker_loop in worker.py)                       │
-    │  One per GPU. Runs detection → classification on batches.       │
-    │  Controlled by: automatic (one per torch.cuda.device_count())   │
+    │  GPU process  (_worker_loop in worker.py)                        │
+    │  One per GPU. Runs detection → classification on batches.        │
+    │  Controlled by: automatic (one per torch.cuda.device_count())    │
     ├──────────────────────────────────────────────────────────────────┤
     │  DataLoader workers  (num_workers subprocesses)                  │
-    │  Each subprocess runs its own RESTDataset.__iter__ loop:        │
+    │  Each subprocess runs its own RESTDataset.__iter__ loop:         │
     │    1. POST /tasks  → fetch batch of task metadata from Antenna   │
-    │    2. Download images (threaded, see below)                     │
-    │    3. Yield individual (image_tensor, metadata) rows            │
-    │  The DataLoader collates rows into GPU-sized batches.           │
-    │  Controlled by: settings.num_workers  (AMI_NUM_WORKERS)         │
-    │  Default: 2.  Safe >0 because Antenna dequeues atomically.      │
+    │    2. Download images (threaded, see below)                      │
+    │    3. Yield individual (image_tensor, metadata) rows             │
+    │  The DataLoader collates rows into GPU-sized batches.            │
+    │  Controlled by: settings.num_workers  (AMI_NUM_WORKERS)          │
+    │  Safe >0 because Antenna dequeues atomically.                    │
     ├──────────────────────────────────────────────────────────────────┤
     │  Thread pool  (ThreadPoolExecutor inside each DataLoader worker) │
     │  Downloads images concurrently *within* one API fetch batch.    │
-    │  Each thread: HTTP GET → PIL open → RGB convert → ToTensor().   │
-    │  Controlled by: ThreadPoolExecutor(max_workers=8) on the class. │
-    │  Note: RGB conversion and ToTensor are GIL-bound (CPU). Only    │
-    │  the network wait truly runs in parallel. A future optimisation  │
-    │  could move transforms out of the thread.                       │
+    │  Each thread: HTTP GET → PIL open → RGB convert → ToTensor().    │
+    │  Controlled by: AMI_ANTENNA_API_DATALOADER_DOWNLOAD_THREADS (8). │
+    │  Note: RGB conversion and ToTensor are GIL-bound (CPU). Only     │
+    │  the network wait truly runs in parallel.                        │
     └──────────────────────────────────────────────────────────────────┘
+
+Request and memory flow (per DataLoader subprocess, one job)
+============================================================
+
+This is the flow that drives peak RAM. See issue #138 for the full analysis.
+
+::
+
+    ┌─ RESTDataset.__iter__ ────────────────────────────────────────────┐
+    │                                                                    │
+    │  loop until no more tasks:                                         │
+    │                                                                    │
+    │    ┌─ _fetch_tasks() ──────────────────────────────────────────┐   │
+    │    │  POST /api/v2/jobs/{id}/tasks/                            │   │
+    │    │  body: {"batch_size": AMI_ANTENNA_API_BATCH_SIZE}         │   │
+    │    │  → returns up to N task dicts (image_url + metadata)      │   │
+    │    └───────────────────────────────────────────────────────────┘   │
+    │                              │                                    │
+    │                              ▼                                    │
+    │    ┌─ _load_images_threaded() ────────────────────────────────┐   │
+    │    │  ThreadPoolExecutor(DOWNLOAD_THREADS) downloads N JPEGs  │   │
+    │    │  Each thread: HTTP GET → PIL decode → ToTensor (float32) │   │
+    │    │                                                           │   │
+    │    │  RAM cost at this point: N × tensor_size                 │   │
+    │    │    where tensor_size ≈ 4 × decoded_bytes                 │   │
+    │    │    (24 MB JPEG → ~144 MB float32 CHW tensor)             │   │
+    │    └───────────────────────────────────────────────────────────┘   │
+    │                              │                                    │
+    │                              ▼                                    │
+    │    yield N rows → collated into a batch of size N                 │
+    │                              │                                    │
+    └──────────────────────────────┼─────────────────────────────────────┘
+                                   │
+                                   ▼
+    ┌─ DataLoader queue (per subprocess) ────────────────────────────────┐
+    │  Holds up to PREFETCH_FACTOR batches ready for the main process.   │
+    │                                                                     │
+    │  If AMI_ANTENNA_API_DATALOADER_PIN_MEMORY=True:                    │
+    │    Each queued batch is also in pinned (unswappable) shmem for IPC │
+    │    → effective cost ≈ 2× (pageable + pinned copy)                  │
+    │                                                                     │
+    │  Peak ingest RAM per subprocess ≈                                   │
+    │    PREFETCH_FACTOR × API_BATCH_SIZE × tensor_size × (2 if pinned)  │
+    │                                                                     │
+    │  Total across worker = above × num_workers + 1 active batch on GPU │
+    └─────────────────────────────────────────────────────────────────────┘
+
+When peak RAM is the problem, the knob that scales the hardest is
+AMI_ANTENNA_API_BATCH_SIZE. Turning off AMI_ANTENNA_API_DATALOADER_PIN_MEMORY
+roughly halves the cost on HTTP-sourced workloads (where the pinned-memory
+DMA speedup is negligible compared to download time). Lowering
+AMI_ANTENNA_API_DATALOADER_PREFETCH_FACTOR trades network-latency hiding
+for lower peak RAM.
 
 Settings quick-reference (prefix with AMI_ as env vars):
 
     localization_batch_size  (default 8)
         How many images the GPU processes at once (detection). Larger =
-        more GPU memory. These are full-resolution images (~4K).
-        Async worker use antennna_api_batch_size for this.
+        more VRAM. These are full-resolution images.
+        This is a model-side knob — does NOT limit ingest RAM.
+
+    classification_batch_size  (default 20)
+        How many crops the classifier processes at once. Model-side.
 
     num_workers  (default 4)
-        DataLoader subprocesses. Each independently fetches tasks and
-        downloads images. More workers = more images prefetched for the
-        GPU, at the cost of CPU/RAM. With 0 workers, fetching and
-        inference are sequential (useful for debugging).
+        DataLoader subprocesses per AMI worker instance. Each independently
+        fetches tasks and downloads images. More workers = more images
+        prefetched, at the cost of CPU/RAM. 0 makes fetching and inference
+        sequential (useful for debugging).
 
-    antenna_api_batch_size  (default 16)
-        How many task URLs to request from Antenna per API call.
-        Determines how many images are downloaded concurrently per
-        thread pool invocation. Should be >= localization_batch_size
-        so one API call can fill at least one GPU batch without an
-        extra round trip.
+    antenna_api_batch_size  (default 24)
+        Tasks requested per POST to /api/v2/jobs/{id}/tasks/. The biggest
+        lever on peak ingest RAM. See the flow diagram above.
 
-    prefetch_factor  (PyTorch default: 2 when num_workers > 0)
-        Batches prefetched per worker. Not overridden here — the
-        default was tested and no improvement was measured by
-        increasing it (it just adds memory pressure).
+    antenna_api_dataloader_pin_memory  (default True)
+        Whether the DataLoader puts prefetched tensors in page-locked system
+        RAM. Helpful when CPU→GPU transfer is a meaningful fraction of wall
+        time, harmful when data loading dominates wall time. Affects system
+        RAM, NOT VRAM.
 
-What has NOT been benchmarked yet (as of 2026-02):
+    antenna_api_dataloader_prefetch_factor  (default 4)
+        Batches each DataLoader subprocess keeps queued ahead of the main
+        process. Hides data-loading latency; multiplies peak RAM.
+
+    antenna_api_dataloader_download_threads  (default 8)
+        ThreadPoolExecutor size for concurrent image downloads inside one
+        DataLoader subprocess.
+
+What has NOT been benchmarked yet:
     - Optimal num_workers / thread count combination
     - Whether moving transforms out of threads helps throughput
-    - Whether multiple DataLoader workers + threads overlap well
-      or contend on the GIL
+    - Whether multiple DataLoader workers + threads overlap well or
+      contend on the GIL
+    - Actual memory profile under a memory profiler (the numbers in
+      issue #138 are estimates from code reading, not measurements)
 """
 
 import typing
@@ -110,6 +173,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
         job_id: int,
         batch_size: int = 1,
         image_transforms: torchvision.transforms.Compose | None = None,
+        download_threads: int = 8,
     ):
         """
         Initialize the REST dataset.
@@ -120,6 +184,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
             job_id: The job ID to fetch tasks for
             batch_size: Number of tasks to request per batch
             image_transforms: Optional transforms to apply to loaded images
+            download_threads: ThreadPoolExecutor size for concurrent image downloads
         """
         super().__init__()
         self.base_url = base_url
@@ -127,6 +192,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
         self.job_id = job_id
         self.batch_size = batch_size
         self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
+        self.download_threads = download_threads
 
         # These are created lazily in _ensure_sessions() because they contain
         # unpicklable objects (ThreadPoolExecutor has a SimpleQueue) and
@@ -147,7 +213,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
         if self._image_fetch_session is None:
             self._image_fetch_session = get_http_session()
         if self._executor is None:
-            self._executor = ThreadPoolExecutor(max_workers=8)
+            self._executor = ThreadPoolExecutor(max_workers=self.download_threads)
 
     def __del__(self):
         """Clean up HTTP sessions and thread pool on dataset destruction."""
@@ -421,14 +487,18 @@ def get_rest_dataloader(
         job_id: Job ID to fetch tasks for
         settings: Settings object. Relevant fields:
             - antenna_api_base_url / antenna_api_auth_token
-            - antenna_api_batch_size  (tasks per API call and GPU batch size)
-            - num_workers            (DataLoader subprocesses)
+            - antenna_api_batch_size                  (tasks per API call)
+            - num_workers                             (DataLoader subprocesses)
+            - antenna_api_dataloader_pin_memory       (see issue #138)
+            - antenna_api_dataloader_prefetch_factor  (see issue #138)
+            - antenna_api_dataloader_download_threads (per-subprocess HTTP pool)
     """
     dataset = RESTDataset(
         base_url=settings.antenna_api_base_url,
         auth_token=settings.antenna_api_auth_token,
         job_id=job_id,
         batch_size=settings.antenna_api_batch_size,
+        download_threads=settings.antenna_api_dataloader_download_threads,
     )
 
     return torch.utils.data.DataLoader(
@@ -436,9 +506,13 @@ def get_rest_dataloader(
         batch_size=1,  # We collate manually in rest_collate_fn, so set batch_size=1 here
         num_workers=settings.num_workers,
         collate_fn=_no_op_collate_fn,
-        pin_memory=True,
+        pin_memory=settings.antenna_api_dataloader_pin_memory,
         persistent_workers=settings.num_workers > 0,
-        prefetch_factor=4 if settings.num_workers > 0 else None,
+        prefetch_factor=(
+            settings.antenna_api_dataloader_prefetch_factor
+            if settings.num_workers > 0
+            else None
+        ),
     )
 
 
