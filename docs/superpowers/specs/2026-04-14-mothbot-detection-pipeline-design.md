@@ -197,7 +197,16 @@ Backwards-compatible. Existing FasterRCNN detectors leave it `None`. The Mothbot
 
 `uv add ultralytics` — `pyproject.toml` gets `"ultralytics>=8.3"` in the `[project].dependencies` list (PEP 621), `uv.lock` updates. Separate commit so lockfile churn doesn't muddy the feature diffs.
 
-**AGPL-3 note:** ultralytics is AGPL-3. AMI Data Companion is also AGPL-3 as of PR #137, so this is not a license escalation. Still mentioned in the PR body for anyone skimming dep changes.
+### Licensing
+
+| Component | License | Notes |
+|---|---|---|
+| `yolo11m_4500_imgsz1600_b1_2024-01-18.pt` weights | AGPL-3.0 | Tagged in checkpoint metadata: `license: AGPL-3.0 (https://ultralytics.com/license)`. |
+| `ultralytics` library | AGPL-3.0 | Upstream. |
+| Mothbot_Process repo code | **No explicit license** | No `LICENSE` file, no license field in `pyproject.toml`, no mention in `README.md`. Defaults to "all rights reserved" under copyright law. |
+| AMI Data Companion | AGPL-3.0 | Main branch since PR #137. |
+
+**Implication:** weights and ultralytics are cleanly compatible with our AGPL-3.0 project. Mothbot's *code* is unlicensed — we will **not** verbatim-port their files. The detection wrapper is re-implemented in our codebase. The one snippet we do adapt (the PyTorch 2.6 `weights_only_load` fallback, `Mothbot_Process/pipeline/detect.py:44-97`) is boilerplate ultralytics compatibility handling; it will be attributed in a code comment as "adapted from Mothbot_Process/pipeline/detect.py — pattern is standard ultralytics PyTorch 2.6 compat".
 
 ### Weights upload (operator step, pre-merge)
 
@@ -253,7 +262,7 @@ Each commit must leave `pytest` passing on its own.
 
 - **What**: new `mothbot_insect_orders_2025` pipeline.
 - **Why**: users wanting a Mothbot-style detector paired with our order classifier.
-- **Dependency**: ultralytics 8.3+ added (AGPL-3; project is already AGPL-3 — no escalation).
+- **Dependency**: ultralytics 8.3+ added (AGPL-3; project is already AGPL-3 — no escalation). YOLO weights carry embedded AGPL-3 metadata. Mothbot's code is unlicensed, so we re-implement rather than verbatim-port; one adapted snippet is attributed in a code comment.
 - **Rotation field**: forward-looking addition; unused in this PR; proposed upgrade path outlined.
 - **Single-class detector**: model outputs only `{0: "creature"}`; taxonomic labels come from the existing ConvNeXt classifier.
 - **Rename** `CLASSIFIER_CHOICES` → `PIPELINE_CHOICES`: mechanical, one commit, reviewable alone.
