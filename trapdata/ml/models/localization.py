@@ -515,14 +515,29 @@ class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
         return self.dataloader
 
     def predict_batch(self, batch):
-        """batch is a list[PIL.Image]. Returns a list of ultralytics Results."""
-        if not isinstance(batch, list):
-            raise TypeError(
-                f"{self.name} expects a list of PIL images from the collate fn; "
-                f"got {type(batch)}"
-            )
+        """Run YOLO inference. Accepts either:
+
+        - list[PIL.Image] (from our ML-layer dataloader, which collates as lists)
+        - torch.Tensor of shape (B, C, H, W) (from the antenna REST dataloader,
+          which applies torchvision.transforms.ToTensor to each PIL image)
+        - list[torch.Tensor] of shape (C, H, W) (REST dataloader mixed-size fallback)
+
+        For tensor inputs we convert back to numpy HWC uint8 so ultralytics
+        does its own letterboxing / normalization, matching the PIL path.
+        """
+        if isinstance(batch, torch.Tensor):
+            # (B, C, H, W) in [0, 1] float -> list of (H, W, C) uint8 numpy
+            imgs = [
+                (t.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8) for t in batch
+            ]
+        elif isinstance(batch, list) and batch and isinstance(batch[0], torch.Tensor):
+            imgs = [
+                (t.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8) for t in batch
+            ]
+        else:
+            imgs = batch
         return self.model.predict(
-            batch,
+            imgs,
             imgsz=self.imgsz,
             conf=self.bbox_score_threshold,
             max_det=self.box_detections_per_img,
