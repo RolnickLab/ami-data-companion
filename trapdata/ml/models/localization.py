@@ -395,7 +395,7 @@ def _corners_to_yolo_detection(corners: np.ndarray, score: float) -> YoloDetecti
     pts = np.asarray(corners, dtype=np.float32).reshape(-1, 2)
     x1, y1 = float(pts[:, 0].min()), float(pts[:, 1].min())
     x2, y2 = float(pts[:, 0].max()), float(pts[:, 1].max())
-    rect = cv2.minAreaRect(pts.astype(np.int32))
+    rect = cv2.minAreaRect(pts)
     angle = float(rect[2])
     return YoloDetection(x1=x1, y1=y1, x2=x2, y2=y2, rotation=angle, score=float(score))
 

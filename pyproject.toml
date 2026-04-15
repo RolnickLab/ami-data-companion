@@ -3,7 +3,7 @@ name = "trapdata"
 version = "0.6.0"
 description = "Companion software for automated insect monitoring stations"
 authors = [{ name = "Michael Bunsen", email = "notbot@gmail.com" }]
-license = { text = "MIT" }
+license = { text = "AGPL-3.0" }
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 urls = { Homepage = "https://github.com/RolnickLab/ami-data-companion", Repository = "https://github.com/RolnickLab/ami-data-companion" }

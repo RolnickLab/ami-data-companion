@@ -40,7 +40,7 @@ class APIMothClassifier(
     # The detector class this pipeline pairs with. Subclasses override
     # to pair a specific classifier with a specific detector. Default is
     # the FasterRCNN 2023 detector that all existing pipelines use.
-    detector_cls: type[APIMothDetector] = APIMothDetector
+    detector_cls: type[APIInferenceBaseClass] = APIMothDetector
 
     def __init__(
         self,
