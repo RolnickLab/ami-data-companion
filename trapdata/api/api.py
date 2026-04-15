@@ -16,6 +16,7 @@ from . import settings
 from .models.classification import (
     APIMothClassifier,
     InsectOrderClassifier,
+    MothbotInsectOrderClassifier,
     MothClassifierBinary,
     MothClassifierGlobal,
     MothClassifierPanama,
@@ -63,6 +64,7 @@ PIPELINE_CHOICES = {
     "global_moths_2024": MothClassifierGlobal,
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
+    "mothbot_insect_orders_2025": MothbotInsectOrderClassifier,
 }
 _classifier_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys())))
 
@@ -71,10 +73,13 @@ PipelineChoice = enum.Enum("PipelineChoice", _classifier_choices)
 
 
 def should_filter_detections(Classifier: type[APIMothClassifier]) -> bool:
-    if Classifier in [MothClassifierBinary, InsectOrderClassifier]:
+    # Classifiers that skip the binary moth/non-moth prefilter: the binary
+    # classifier itself (there's nothing downstream to filter for), and any
+    # order-level classifier (it already distinguishes non-moth insects,
+    # so a binary prefilter would discard signal).
+    if issubclass(Classifier, (MothClassifierBinary, InsectOrderClassifier)):
         return False
-    else:
-        return True
+    return True
 
 
 def make_category_map_response(

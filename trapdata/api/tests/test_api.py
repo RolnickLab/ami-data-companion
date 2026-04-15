@@ -232,17 +232,37 @@ class TestInferenceAPI(TestCase):
                 f"number of classes ({num_classes})"
             )
 
-    def test_all_pipelines_default_to_apimothdetector(self):
-        """All pre-existing pipelines must keep using APIMothDetector."""
+    def test_existing_pipelines_default_to_apimothdetector(self):
+        """Pre-existing pipelines must keep using APIMothDetector.
+
+        New pipelines introduced with their own detector are exempt.
+        """
         from trapdata.api.api import PIPELINE_CHOICES
         from trapdata.api.models.localization import APIMothDetector
 
+        exempt = {"mothbot_insect_orders_2025"}
         for slug, Classifier in PIPELINE_CHOICES.items():
+            if slug in exempt:
+                continue
             self.assertIs(
                 Classifier.detector_cls,
                 APIMothDetector,
                 f"{slug} should default to APIMothDetector",
             )
+
+    def test_mothbot_pipeline_uses_yolo_detector(self):
+        from trapdata.api.api import PIPELINE_CHOICES
+        from trapdata.api.models.localization import APIMothDetector_YOLO11m_Mothbot
+
+        assert "mothbot_insect_orders_2025" in PIPELINE_CHOICES
+        Classifier = PIPELINE_CHOICES["mothbot_insect_orders_2025"]
+        self.assertIs(Classifier.detector_cls, APIMothDetector_YOLO11m_Mothbot)
+
+    def test_mothbot_pipeline_skips_binary_filter(self):
+        from trapdata.api.api import PIPELINE_CHOICES, should_filter_detections
+
+        Classifier = PIPELINE_CHOICES["mothbot_insect_orders_2025"]
+        self.assertFalse(should_filter_detections(Classifier))
 
     def test_detection_response_has_optional_rotation_field(self):
         """The rotation field is opt-in for detectors that produce OBB."""

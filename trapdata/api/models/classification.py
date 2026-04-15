@@ -28,7 +28,7 @@ from ..schemas import (
     SourceImage,
 )
 from .base import APIInferenceBaseClass
-from .localization import APIMothDetector
+from .localization import APIMothDetector, APIMothDetector_YOLO11m_Mothbot
 
 
 class APIMothClassifier(
@@ -237,3 +237,12 @@ class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
 
 class InsectOrderClassifier(APIMothClassifier, InsectOrderClassifier2025):
     pass
+
+
+class MothbotInsectOrderClassifier(InsectOrderClassifier):
+    """Pair the Mothbot YOLO11m detector with our existing ConvNeXt order
+    classifier. Overrides the default detector_cls inherited from
+    APIMothClassifier.
+    """
+
+    detector_cls = APIMothDetector_YOLO11m_Mothbot
