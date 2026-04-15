@@ -468,6 +468,15 @@ class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
     bbox_score_threshold = 0.25
     box_detections_per_img = 500
 
+    def get_labels(self, labels_path) -> dict[int, str]:
+        # The base class __init__ calls get_labels(labels_path) and assigns the
+        # return value to self.category_map, which would overwrite the class-level
+        # category_map with {} when labels_path is None.  Return the class-level
+        # map directly so it survives the init cycle.
+        if labels_path:
+            return super().get_labels(labels_path)
+        return type(self).category_map
+
     def get_transforms(self):
         # ultralytics handles letterboxing / normalization internally; just
         # pass the PIL image through unchanged.

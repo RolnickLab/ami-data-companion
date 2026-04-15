@@ -272,3 +272,17 @@ class TestInferenceAPI(TestCase):
             rotation=-42.5,
         )
         self.assertAlmostEqual(d2.rotation, -42.5)
+
+    def test_yolo_api_detector_instantiates(self):
+        """The new YOLO detector wrapper should construct with no source images
+        (matches the pattern the /info handler uses to read algorithm metadata).
+
+        This test exercises weight download + model load — it will be slow on
+        first run but cached thereafter.
+        """
+        from trapdata.api.models.localization import APIMothDetector_YOLO11m_Mothbot
+
+        detector = APIMothDetector_YOLO11m_Mothbot(source_images=[])
+        self.assertEqual(detector.name, "Mothbot YOLO11m Creature Detector")
+        self.assertEqual(detector.category_map, {0: "creature"})
+        self.assertEqual(detector.imgsz, 1600)
