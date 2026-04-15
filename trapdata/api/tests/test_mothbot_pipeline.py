@@ -80,6 +80,6 @@ class TestMothbotPipeline(TestCase):
             )
             self.assertEqual(
                 terminal[0].algorithm.key,
-                "insect_order_classifier",
+                "insect_order_classifier_mothbot_yolo_detector",
                 f"expected order classifier, got {terminal[0].algorithm.key}",
             )

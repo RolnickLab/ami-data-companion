@@ -243,6 +243,11 @@ class MothbotInsectOrderClassifier(InsectOrderClassifier):
     """Pair the Mothbot YOLO11m detector with our existing ConvNeXt order
     classifier. Overrides the default detector_cls inherited from
     APIMothClassifier.
+
+    The ``name`` is distinct from the parent so Antenna's pipeline registry
+    (which keys on name) treats this as a separate pipeline rather than
+    deduping against ``insect_orders_2025``.
     """
 
+    name = "Insect Order Classifier (Mothbot YOLO detector)"
     detector_cls = APIMothDetector_YOLO11m_Mothbot
