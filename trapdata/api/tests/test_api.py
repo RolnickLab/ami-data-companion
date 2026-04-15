@@ -243,3 +243,32 @@ class TestInferenceAPI(TestCase):
                 APIMothDetector,
                 f"{slug} should default to APIMothDetector",
             )
+
+    def test_detection_response_has_optional_rotation_field(self):
+        """The rotation field is opt-in for detectors that produce OBB."""
+        import datetime
+
+        from trapdata.api.schemas import (
+            AlgorithmReference,
+            BoundingBox,
+            DetectionResponse,
+        )
+
+        # Default: rotation is None
+        d = DetectionResponse(
+            source_image_id="img1",
+            bbox=BoundingBox(x1=0, y1=0, x2=10, y2=10),
+            algorithm=AlgorithmReference(name="x", key="x"),
+            timestamp=datetime.datetime.now(),
+        )
+        self.assertIsNone(d.rotation)
+
+        # Accepts a float
+        d2 = DetectionResponse(
+            source_image_id="img1",
+            bbox=BoundingBox(x1=0, y1=0, x2=10, y2=10),
+            algorithm=AlgorithmReference(name="x", key="x"),
+            timestamp=datetime.datetime.now(),
+            rotation=-42.5,
+        )
+        self.assertAlmostEqual(d2.rotation, -42.5)
