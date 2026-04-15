@@ -231,3 +231,15 @@ class TestInferenceAPI(TestCase):
                 f"Number of logits ({len(classification.logits)}) should equal "
                 f"number of classes ({num_classes})"
             )
+
+    def test_all_pipelines_default_to_apimothdetector(self):
+        """All pre-existing pipelines must keep using APIMothDetector."""
+        from trapdata.api.api import PIPELINE_CHOICES
+        from trapdata.api.models.localization import APIMothDetector
+
+        for slug, Classifier in PIPELINE_CHOICES.items():
+            self.assertIs(
+                Classifier.detector_cls,
+                APIMothDetector,
+                f"{slug} should default to APIMothDetector",
+            )

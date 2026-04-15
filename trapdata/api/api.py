@@ -135,7 +135,7 @@ def make_pipeline_config_response(
     """
     algorithms = []
 
-    detector = APIMothDetector(
+    detector = Classifier.detector_cls(
         source_images=[],
     )
     algorithms.append(make_algorithm_config_response(detector))
@@ -216,7 +216,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
     Classifier = PIPELINE_CHOICES[str(data.pipeline)]
 
-    detector = APIMothDetector(
+    detector = Classifier.detector_cls(
         source_images=source_images,
         batch_size=settings.localization_batch_size,
         num_workers=settings.num_workers,
