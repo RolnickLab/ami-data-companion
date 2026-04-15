@@ -4,7 +4,7 @@ from typing import Annotated
 
 import typer
 
-from trapdata.api.api import CLASSIFIER_CHOICES
+from trapdata.api.api import PIPELINE_CHOICES
 
 cli = typer.Typer(help="Antenna worker commands for remote processing")
 
@@ -31,16 +31,16 @@ def run(
         return
 
     if not pipelines:
-        pipelines = list(CLASSIFIER_CHOICES.keys())
+        pipelines = list(PIPELINE_CHOICES.keys())
 
-    # Validate that each pipeline is in CLASSIFIER_CHOICES
+    # Validate that each pipeline is in PIPELINE_CHOICES
     invalid_pipelines = [
-        pipeline for pipeline in pipelines if pipeline not in CLASSIFIER_CHOICES.keys()
+        pipeline for pipeline in pipelines if pipeline not in PIPELINE_CHOICES.keys()
     ]
 
     if invalid_pipelines:
         raise typer.BadParameter(
-            f"Invalid pipeline(s): {', '.join(invalid_pipelines)}. Must be one of: {', '.join(CLASSIFIER_CHOICES.keys())}"
+            f"Invalid pipeline(s): {', '.join(invalid_pipelines)}. Must be one of: {', '.join(PIPELINE_CHOICES.keys())}"
         )
 
     from trapdata.antenna.worker import run_worker

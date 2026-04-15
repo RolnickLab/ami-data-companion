@@ -5,7 +5,7 @@ from unittest import TestCase
 from fastapi.testclient import TestClient
 
 from trapdata.api.api import (
-    CLASSIFIER_CHOICES,
+    PIPELINE_CHOICES,
     PipelineChoice,
     PipelineRequest,
     PipelineResponse,
@@ -15,7 +15,7 @@ from trapdata.api.api import (
 )
 from trapdata.api.schemas import PipelineConfigRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
-from trapdata.api.tests.utils import get_test_images, get_pipeline_class
+from trapdata.api.tests.utils import get_pipeline_class, get_test_images
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 logging.basicConfig(level=logging.INFO)
@@ -62,12 +62,12 @@ class TestInferenceAPI(TestCase):
 
     def test_pipeline_config_with_binary_classifier(self):
         binary_classifier_pipeline_choice = "moth_binary"
-        BinaryClassifier = CLASSIFIER_CHOICES[binary_classifier_pipeline_choice]
+        BinaryClassifier = PIPELINE_CHOICES[binary_classifier_pipeline_choice]
         binary_classifier_instance = BinaryClassifier(source_images=[], detections=[])
         BinaryClassifierResponse = make_algorithm_response(binary_classifier_instance)
 
         species_classifier_pipeline_choice = "quebec_vermont_moths_2023"
-        SpeciesClassifier = CLASSIFIER_CHOICES[species_classifier_pipeline_choice]
+        SpeciesClassifier = PIPELINE_CHOICES[species_classifier_pipeline_choice]
         species_classifier_instance = SpeciesClassifier(source_images=[], detections=[])
         SpeciesClassifierResponse = make_algorithm_response(species_classifier_instance)
 
@@ -99,7 +99,7 @@ class TestInferenceAPI(TestCase):
     def test_processing_with_only_binary_classifier(self):
         binary_classifier_pipeline_choice = "moth_binary"
         binary_algorithm_key = "moth_nonmoth_classifier"
-        BinaryAlgorithmClass = CLASSIFIER_CHOICES[binary_classifier_pipeline_choice]
+        BinaryAlgorithmClass = PIPELINE_CHOICES[binary_classifier_pipeline_choice]
         # Create an instance to get the num_classes
         binary_algorithm = BinaryAlgorithmClass(source_images=[], detections=[])
 

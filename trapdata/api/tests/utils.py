@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from trapdata.api.api import CLASSIFIER_CHOICES, APIMothClassifier
+from trapdata.api.api import PIPELINE_CHOICES, APIMothClassifier
 from trapdata.api.schemas import SourceImageRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
 
@@ -72,7 +72,7 @@ def get_pipeline_class(
     Returns:
         APIMothClassifier class for the specified pipeline
     """
-    return CLASSIFIER_CHOICES[slug]
+    return PIPELINE_CHOICES[slug]
 
 
 @contextmanager

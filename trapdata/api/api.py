@@ -52,7 +52,7 @@ app = fastapi.FastAPI(lifespan=lifespan)
 app.add_middleware(GZipMiddleware)
 
 
-CLASSIFIER_CHOICES = {
+PIPELINE_CHOICES = {
     "panama_moths_2023": MothClassifierPanama,
     "panama_moths_2024": MothClassifierPanama2024,
     "quebec_vermont_moths_2023": MothClassifierQuebecVermont,
@@ -64,9 +64,7 @@ CLASSIFIER_CHOICES = {
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
 }
-_classifier_choices = dict(
-    zip(CLASSIFIER_CHOICES.keys(), list(CLASSIFIER_CHOICES.keys()))
-)
+_classifier_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys())))
 
 
 PipelineChoice = enum.Enum("PipelineChoice", _classifier_choices)
@@ -216,7 +214,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
     start_time = time.time()
 
-    Classifier = CLASSIFIER_CHOICES[str(data.pipeline)]
+    Classifier = PIPELINE_CHOICES[str(data.pipeline)]
 
     detector = APIMothDetector(
         source_images=source_images,
@@ -359,7 +357,7 @@ def initialize_service_info() -> ProcessingServiceInfoResponse:
     # @TODO This requires loading all models into memory! Can we avoid this?
     pipeline_configs = [
         make_pipeline_config_response(classifier_class, slug=key)
-        for key, classifier_class in CLASSIFIER_CHOICES.items()
+        for key, classifier_class in PIPELINE_CHOICES.items()
     ]
 
     _info = ProcessingServiceInfoResponse(
