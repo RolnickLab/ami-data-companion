@@ -17,6 +17,7 @@ from .models.classification import (
     APIMothClassifier,
     InsectOrderClassifier,
     MothbotInsectOrderClassifier,
+    MothbotMothClassifierPanama,
     MothClassifierBinary,
     MothClassifierGlobal,
     MothClassifierPanama,
@@ -65,6 +66,7 @@ PIPELINE_CHOICES = {
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
     "mothbot_insect_orders_2025": MothbotInsectOrderClassifier,
+    "mothbot_panama_moths_2023": MothbotMothClassifierPanama,
 }
 _classifier_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys())))
 
@@ -162,10 +164,18 @@ def make_pipeline_config_response(
     )
     algorithms.append(make_algorithm_config_response(classifier))
 
+    # Prefer a pipeline-level description when the classifier supplies one
+    # (describes the full detector+classifier combo). Otherwise fall back to
+    # the classifier's own description, which is what every other pipeline
+    # currently ships.
+    pipeline_description = (
+        getattr(classifier, "pipeline_description", None) or classifier.description
+    )
+
     return PipelineConfigResponse(
         name=classifier.name,
         slug=slug,
-        description=classifier.description,
+        description=pipeline_description,
         version=1,
         algorithms=algorithms,
     )

@@ -42,6 +42,14 @@ class APIMothClassifier(
     # the FasterRCNN 2023 detector that all existing pipelines use.
     detector_cls: type[APIInferenceBaseClass] = APIMothDetector
 
+    # Optional pipeline-level description, distinct from the classifier
+    # algorithm's own description. api.make_pipeline_config_response uses
+    # this (when set) for PipelineConfigResponse.description, while the
+    # classifier algorithm row still carries `self.description`. Lets us
+    # describe the full detector+classifier combo at the pipeline level
+    # without polluting the classifier algorithm's metadata.
+    pipeline_description: str | None = None
+
     def __init__(
         self,
         source_images: typing.Iterable[SourceImage],
@@ -240,8 +248,8 @@ class InsectOrderClassifier(APIMothClassifier, InsectOrderClassifier2025):
 
 
 class MothbotInsectOrderClassifier(InsectOrderClassifier):
-    """Pair the Mothbot YOLO11m detector with our existing ConvNeXt order
-    classifier. Overrides the default detector_cls inherited from
+    """Pair the Mothbot YOLO11m-OBB detector with our existing Mila ConvNeXt-T
+    order classifier. Overrides the default detector_cls inherited from
     APIMothClassifier.
 
     The ``name`` is distinct from the parent so Antenna's pipeline registry
@@ -249,5 +257,29 @@ class MothbotInsectOrderClassifier(InsectOrderClassifier):
     deduping against ``insect_orders_2025``.
     """
 
-    name = "Insect Order Classifier (Mothbot YOLO detector)"
+    name = "Mothbot YOLO + Insect Orders 2025"
     detector_cls = APIMothDetector_YOLO11m_Mothbot
+    pipeline_description = (
+        "Mothbot YOLO11m-OBB creature detector (Digital Naturalism "
+        "Laboratories, Jan 2024) feeding the Mila ConvNeXt-T insect order "
+        "classifier (16 orders, Jan 2025). Binary moth/non-moth prefilter "
+        "is skipped since the order classifier already distinguishes "
+        "non-moth insects."
+    )
+
+
+class MothbotMothClassifierPanama(MothClassifierPanama):
+    """Pair the Mothbot YOLO11m-OBB detector with the 2023 Panama species
+    classifier (mixed resolution). Overrides the default detector_cls
+    inherited from APIMothClassifier; retains the binary moth/non-moth
+    prefilter because the terminal classifier only covers moth species.
+    """
+
+    name = "Mothbot YOLO + Panama Moths 2023"
+    detector_cls = APIMothDetector_YOLO11m_Mothbot
+    pipeline_description = (
+        "Mothbot YOLO11m-OBB creature detector (Digital Naturalism "
+        "Laboratories, Jan 2024) -> binary moth/non-moth prefilter "
+        "(Mila, 2024) -> 2023 Panama moth species classifier "
+        "(mixed-resolution, 148 species)."
+    )
