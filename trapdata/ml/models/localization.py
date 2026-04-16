@@ -416,6 +416,13 @@ def _corners_to_yolo_detection(
     return YoloDetection(x1=x1, y1=y1, x2=x2, y2=y2, rotation=angle, score=float(score))
 
 
+def _tensor_to_bgr_numpy(t: torch.Tensor) -> np.ndarray:
+    """Convert a (C, H, W) RGB float tensor in [0, 1] to an (H, W, C) BGR uint8
+    numpy array -- the format ultralytics YOLO was trained on (via cv2.imread).
+    """
+    return (t.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)[..., ::-1]
+
+
 def _load_ultralytics_yolo(weights_path):
     """Load an ultralytics YOLO model with a PyTorch 2.6 weights_only fallback.
 
@@ -539,17 +546,17 @@ class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
         - list[torch.Tensor] of shape (C, H, W) (REST dataloader mixed-size fallback)
 
         For tensor inputs we convert back to numpy HWC uint8 so ultralytics
-        does its own letterboxing / normalization, matching the PIL path.
+        does its own letterboxing / normalization. The model was trained on
+        cv2.imread-loaded images (BGR); ultralytics does NOT convert numpy
+        inputs' channel order (see LoadPilAndNumpy._single_check docstring),
+        so we flip RGB to BGR here. Without this the detector emits large,
+        low-quality boxes because the color statistics don't match training.
         """
         if isinstance(batch, torch.Tensor):
-            # (B, C, H, W) in [0, 1] float -> list of (H, W, C) uint8 numpy
-            imgs = [
-                (t.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8) for t in batch
-            ]
+            # (B, C, H, W) RGB in [0, 1] float -> list of (H, W, C) BGR uint8
+            imgs = [_tensor_to_bgr_numpy(t) for t in batch]
         elif isinstance(batch, list) and batch and isinstance(batch[0], torch.Tensor):
-            imgs = [
-                (t.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8) for t in batch
-            ]
+            imgs = [_tensor_to_bgr_numpy(t) for t in batch]
         else:
             imgs = batch
         return self.model.predict(

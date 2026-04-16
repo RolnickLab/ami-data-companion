@@ -7,8 +7,13 @@ consumes. The model-loading path is covered by the integration test.
 """
 
 import numpy as np
+import torch
 
-from trapdata.ml.models.localization import YoloDetection, _corners_to_yolo_detection
+from trapdata.ml.models.localization import (
+    YoloDetection,
+    _corners_to_yolo_detection,
+    _tensor_to_bgr_numpy,
+)
 
 
 def test_corners_to_yolo_detection_axis_aligned_square():
@@ -95,6 +100,25 @@ def test_corners_to_yolo_detection_degenerate_flat_obb():
     det = _corners_to_yolo_detection(corners, score=0.85)
     assert det.y1 == det.y2, "Expected degenerate (H=0) detection"
     assert det.x2 > det.x1, "Width should be non-zero"
+
+
+def test_tensor_to_bgr_numpy_swaps_channel_order():
+    """Antenna's REST dataloader feeds YOLO via ToTensor(), which produces RGB.
+    Ultralytics does NOT reorder numpy inputs; it was trained on BGR (cv2.imread).
+    Without the flip, detections are large / low-quality because color stats
+    don't match training."""
+    # Pure-red RGB tensor: R=1.0, G=0, B=0 in (C, H, W) layout
+    rgb_tensor = torch.zeros((3, 4, 5))
+    rgb_tensor[0] = 1.0  # R channel
+
+    bgr_np = _tensor_to_bgr_numpy(rgb_tensor)
+
+    assert bgr_np.shape == (4, 5, 3), f"Expected (H, W, C), got {bgr_np.shape}"
+    assert bgr_np.dtype == np.uint8
+    # In BGR layout the red pixel lives in the last channel (index 2)
+    assert bgr_np[0, 0, 2] == 255, "Red channel should map to BGR index 2"
+    assert bgr_np[0, 0, 0] == 0, "Blue channel should be empty (was G=0 in RGB)"
+    assert bgr_np[0, 0, 1] == 0
 
 
 def test_corners_to_yolo_detection_clamps_negative_coords():
