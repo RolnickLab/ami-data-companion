@@ -567,9 +567,14 @@ class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
         corners_batch = result.obb.xyxyxyxy.cpu().numpy()  # (N, 4, 2)
         scores = result.obb.conf.cpu().numpy()  # (N,)
         for i in range(len(corners_batch)):
-            detections.append(
-                _corners_to_yolo_detection(corners_batch[i], float(scores[i]))
-            )
+            det = _corners_to_yolo_detection(corners_batch[i], float(scores[i]))
+            if det.x2 <= det.x1 or det.y2 <= det.y1:
+                logger.warning(
+                    f"Skipping degenerate YOLO detection (zero-area envelope): "
+                    f"x1={det.x1:.1f} y1={det.y1:.1f} x2={det.x2:.1f} y2={det.y2:.1f}"
+                )
+                continue
+            detections.append(det)
         return detections
 
     def save_results(self, item_ids, batch_output, *args, **kwargs):

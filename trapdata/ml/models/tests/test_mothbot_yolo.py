@@ -81,3 +81,55 @@ def test_yolo_detection_is_frozen_dataclass():
     det = YoloDetection(x1=0, y1=0, x2=1, y2=1, rotation=0.0, score=0.5)
     # Hash should not raise
     hash(det)
+
+
+def test_corners_to_yolo_detection_degenerate_flat_obb():
+    """All corners on same y → y1==y2 (H=0). This is the raw math output;
+    callers are responsible for filtering such degenerate detections before
+    passing them to a classifier crop/resize step."""
+    # A perfectly horizontal line: all 4 corners share y=50
+    corners = np.array(
+        [[0, 50], [1045, 50], [1045, 50], [0, 50]],
+        dtype=np.float32,
+    )
+    det = _corners_to_yolo_detection(corners, score=0.85)
+    assert det.y1 == det.y2, "Expected degenerate (H=0) detection"
+    assert det.x2 > det.x1, "Width should be non-zero"
+
+
+def test_post_process_single_filters_degenerate_detections():
+    """post_process_single must drop zero-height or zero-width detections so
+    that the downstream Resize transform never receives a 0-dimension crop."""
+    from unittest.mock import MagicMock
+
+    from trapdata.ml.models.localization import MothObjectDetector_YOLO11m_Mothbot
+
+    # Minimal detector instance (no model loaded, no weights needed)
+    detector = MothObjectDetector_YOLO11m_Mothbot.__new__(
+        MothObjectDetector_YOLO11m_Mothbot
+    )
+
+    # Build a mock ultralytics Result with two detections:
+    #   - one valid (10x10 box)
+    #   - one degenerate (H=0)
+    valid_corners = np.array([[0, 0], [10, 0], [10, 10], [0, 10]], dtype=np.float32)
+    flat_corners = np.array(
+        [[0, 50], [1045, 50], [1045, 50], [0, 50]], dtype=np.float32
+    )
+
+    mock_obb = MagicMock()
+    mock_obb.xyxyxyxy.cpu().numpy.return_value = np.stack(
+        [valid_corners, flat_corners]
+    )  # shape (2, 4, 2)
+    mock_obb.conf.cpu().numpy.return_value = np.array([0.9, 0.85])
+
+    mock_result = MagicMock()
+    mock_result.obb = mock_obb
+
+    dets = detector.post_process_single(mock_result)
+
+    assert (
+        len(dets) == 1
+    ), f"Expected 1 detection (degenerate filtered), got {len(dets)}: {dets}"
+    assert dets[0].x2 - dets[0].x1 > 0
+    assert dets[0].y2 - dets[0].y1 > 0
