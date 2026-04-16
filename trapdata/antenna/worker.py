@@ -303,12 +303,21 @@ def _process_batch(
         for idx, dresp in enumerate(detections_for_terminal_classifier):
             image_tensor = image_tensors[dresp.source_image_id]
             bbox = dresp.bbox
-            y1, y2 = int(bbox.y1), int(bbox.y2)
-            x1, x2 = int(bbox.x1), int(bbox.x2)
+            _, img_h, img_w = image_tensor.shape
+            # Clamp bbox to image bounds before using as slice indices. YOLO-OBB
+            # can produce negative coords for detections near image edges; PyTorch
+            # slicing would treat negatives as end-relative indices, yielding an
+            # empty crop and an H=0/W=0 Resize error downstream.
+            y1 = max(0, min(int(bbox.y1), img_h))
+            y2 = max(0, min(int(bbox.y2), img_h))
+            x1 = max(0, min(int(bbox.x1), img_w))
+            x2 = max(0, min(int(bbox.x2), img_w))
             if y1 >= y2 or x1 >= x2:
                 logger.warning(
-                    f"Skipping detection {idx} with invalid bbox: "
-                    f"({x1},{y1})->({x2},{y2})"
+                    f"Skipping detection {idx} with invalid bbox after clamping "
+                    f"to image {img_w}x{img_h}: ({x1},{y1})->({x2},{y2}) "
+                    f"(raw: x1={bbox.x1:.1f} y1={bbox.y1:.1f} "
+                    f"x2={bbox.x2:.1f} y2={bbox.y2:.1f})"
                 )
                 continue
             crop = image_tensor[:, y1:y2, x1:x2]
