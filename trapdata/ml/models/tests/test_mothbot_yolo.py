@@ -97,6 +97,69 @@ def test_corners_to_yolo_detection_degenerate_flat_obb():
     assert det.x2 > det.x1, "Width should be non-zero"
 
 
+def test_corners_to_yolo_detection_clamps_negative_coords():
+    """YOLO-OBB can emit corners with negative coords for detections near image
+    edges (observed live: y1=-274.39 on a 2464-tall image). Without clamping,
+    downstream PyTorch slicing treats negatives as end-relative indices and
+    produces an empty crop -- which then hard-fails the classifier's Resize."""
+    corners = np.array(
+        [[-50, -274], [2800, -274], [2800, 936], [-50, 936]],
+        dtype=np.float32,
+    )
+    det = _corners_to_yolo_detection(corners, score=0.9, image_shape=(2464, 3280))
+    assert det.x1 == 0.0, f"x1 should clamp to 0, got {det.x1}"
+    assert det.y1 == 0.0, f"y1 should clamp to 0, got {det.y1}"
+    assert det.x2 == 2800.0
+    assert det.y2 == 936.0
+
+
+def test_corners_to_yolo_detection_clamps_to_image_bounds():
+    """Corners extending past the far edge are clamped to (width, height)."""
+    corners = np.array(
+        [[3500, 2000], [3500, 2600], [4000, 2600], [4000, 2000]],
+        dtype=np.float32,
+    )
+    det = _corners_to_yolo_detection(corners, score=0.9, image_shape=(2464, 3280))
+    assert det.x2 == 3280.0, f"x2 should clamp to width, got {det.x2}"
+    assert det.y2 == 2464.0, f"y2 should clamp to height, got {det.y2}"
+    assert det.x1 == 3280.0  # whole box lies past right edge
+    assert det.y1 == 2000.0
+
+
+def test_post_process_single_clamps_using_orig_shape():
+    """post_process_single must pass result.orig_shape through to the clamp
+    so detections with negative corners become valid crops."""
+    from unittest.mock import MagicMock
+
+    from trapdata.ml.models.localization import MothObjectDetector_YOLO11m_Mothbot
+
+    detector = MothObjectDetector_YOLO11m_Mothbot.__new__(
+        MothObjectDetector_YOLO11m_Mothbot
+    )
+
+    # Negative y1 (like we see on real Panama diopsis images with YOLO-OBB)
+    neg_y_corners = np.array(
+        [[1566, -274], [2793, -274], [2793, 936], [1566, 936]], dtype=np.float32
+    )
+
+    mock_obb = MagicMock()
+    mock_obb.xyxyxyxy.cpu().numpy.return_value = np.stack([neg_y_corners])
+    mock_obb.conf.cpu().numpy.return_value = np.array([0.9])
+
+    mock_result = MagicMock()
+    mock_result.obb = mock_obb
+    mock_result.orig_shape = (2464, 3280)  # (H, W), matches ultralytics convention
+
+    dets = detector.post_process_single(mock_result)
+    assert len(dets) == 1
+    # y1 must be clamped to 0 -- otherwise worker's int() preserves the sign and
+    # PyTorch reads it as end-relative, yielding an empty crop.
+    assert dets[0].y1 >= 0
+    assert dets[0].x1 >= 0
+    assert dets[0].y2 <= 2464
+    assert dets[0].x2 <= 3280
+
+
 def test_post_process_single_filters_degenerate_detections():
     """post_process_single must drop zero-height or zero-width detections so
     that the downstream Resize transform never receives a 0-dimension crop."""
@@ -125,6 +188,7 @@ def test_post_process_single_filters_degenerate_detections():
 
     mock_result = MagicMock()
     mock_result.obb = mock_obb
+    mock_result.orig_shape = (100, 1100)  # (H, W) covers both test detections
 
     dets = detector.post_process_single(mock_result)
 

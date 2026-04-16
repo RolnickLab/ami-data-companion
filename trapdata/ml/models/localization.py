@@ -380,21 +380,37 @@ class YoloDetection:
     score: float
 
 
-def _corners_to_yolo_detection(corners: np.ndarray, score: float) -> YoloDetection:
+def _corners_to_yolo_detection(
+    corners: np.ndarray,
+    score: float,
+    image_shape: tuple[int, int] | None = None,
+) -> YoloDetection:
     """Convert 4 rotated corner points + score into a YoloDetection.
 
     Args:
         corners: shape (4, 2), xy coordinates of the OBB corners.
         score: detection confidence.
+        image_shape: (height, width) of the source image. When provided, the
+            axis-aligned envelope is clamped to [0, width] x [0, height]. YOLO-OBB
+            can emit corners outside the image when a detection touches an edge;
+            negative coords in particular are dangerous because PyTorch tensor
+            slicing treats negative indices as end-relative, yielding empty crops.
 
     Returns:
         A YoloDetection with:
-          - (x1, y1, x2, y2): min/max envelope of the 4 corners (axis-aligned).
+          - (x1, y1, x2, y2): min/max envelope of the 4 corners (axis-aligned),
+            optionally clamped to image bounds.
           - rotation: angle from cv2.minAreaRect (same convention Mothbot uses).
     """
     pts = np.asarray(corners, dtype=np.float32).reshape(-1, 2)
     x1, y1 = float(pts[:, 0].min()), float(pts[:, 1].min())
     x2, y2 = float(pts[:, 0].max()), float(pts[:, 1].max())
+    if image_shape is not None:
+        h, w = image_shape
+        x1 = max(0.0, min(x1, float(w)))
+        x2 = max(0.0, min(x2, float(w)))
+        y1 = max(0.0, min(y1, float(h)))
+        y2 = max(0.0, min(y2, float(h)))
     rect = cv2.minAreaRect(pts)
     angle = float(rect[2])
     return YoloDetection(x1=x1, y1=y1, x2=x2, y2=y2, rotation=angle, score=float(score))
@@ -566,11 +582,16 @@ class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
             return detections
         corners_batch = result.obb.xyxyxyxy.cpu().numpy()  # (N, 4, 2)
         scores = result.obb.conf.cpu().numpy()  # (N,)
+        # orig_shape is (height, width); present on ultralytics Result objects.
+        image_shape = getattr(result, "orig_shape", None)
         for i in range(len(corners_batch)):
-            det = _corners_to_yolo_detection(corners_batch[i], float(scores[i]))
+            det = _corners_to_yolo_detection(
+                corners_batch[i], float(scores[i]), image_shape=image_shape
+            )
             if det.x2 <= det.x1 or det.y2 <= det.y1:
                 logger.warning(
-                    f"Skipping degenerate YOLO detection (zero-area envelope): "
+                    f"Skipping degenerate YOLO detection (zero-area envelope "
+                    f"after clamp to image {image_shape}): "
                     f"x1={det.x1:.1f} y1={det.y1:.1f} x2={det.x2:.1f} y2={det.y2:.1f}"
                 )
                 continue
