@@ -51,7 +51,7 @@ class TestMemoryLeak(TestCase):
     def _make_settings(self):
         settings = MagicMock()
         settings.antenna_api_base_url = "http://testserver/api/v2"
-        settings.antenna_api_auth_token = "test-token"
+        settings.antenna_api_key = "test-api-key"
         settings.antenna_api_batch_size = 2
         settings.num_workers = 0
         settings.localization_batch_size = 2

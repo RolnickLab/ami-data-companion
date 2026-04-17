@@ -49,7 +49,7 @@ def create_empty_result(reply_subject: str, image_id: str) -> AntennaTaskResult:
 def run_benchmark(
     job_id: int,
     base_url: str,
-    auth_token: str,
+    api_key: str,
     num_workers: int,
     batch_size: int,
     gpu_batch_size: int,
@@ -60,7 +60,7 @@ def run_benchmark(
     Args:
         job_id: Job ID to process
         base_url: Antenna API base URL
-        auth_token: API authentication token
+        api_key: API key for authentication
         num_workers: Number of DataLoader workers
         batch_size: Batch size for API requests
         gpu_batch_size: GPU batch size for DataLoader
@@ -68,7 +68,7 @@ def run_benchmark(
     # Create settings object
     settings = Settings()
     settings.antenna_api_base_url = base_url
-    settings.antenna_api_auth_token = auth_token
+    settings.antenna_api_key = api_key
     settings.antenna_api_batch_size = batch_size
     settings.localization_batch_size = gpu_batch_size
     settings.num_workers = num_workers
@@ -134,7 +134,7 @@ def run_benchmark(
                     # Send acknowledgments asynchronously
                     result_poster.post_async(
                         base_url=base_url,
-                        auth_token=auth_token,
+                        api_key=api_key,
                         job_id=job_id,
                         results=ack_results,
                     )
@@ -156,7 +156,7 @@ def run_benchmark(
                 if error_results and send_acks:
                     result_poster.post_async(
                         base_url=base_url,
-                        auth_token=auth_token,
+                        api_key=api_key,
                         job_id=job_id,
                         results=error_results,
                     )
@@ -278,16 +278,16 @@ def main() -> int:
     args = parser.parse_args()
 
     # Get auth token from environment
-    auth_token = os.getenv("AMI_ANTENNA_API_AUTH_TOKEN", "")
-    if not auth_token:
-        print("ERROR: AMI_ANTENNA_API_AUTH_TOKEN environment variable not set")
+    api_key = os.getenv("AMI_ANTENNA_API_KEY", "")
+    if not api_key:
+        print("ERROR: AMI_ANTENNA_API_KEY environment variable not set")
         return 1
 
     # Run the benchmark
     run_benchmark(
         job_id=args.job_id,
         base_url=args.base_url,
-        auth_token=auth_token,
+        api_key=api_key,
         num_workers=args.num_workers,
         batch_size=args.batch_size,
         gpu_batch_size=args.gpu_batch_size,

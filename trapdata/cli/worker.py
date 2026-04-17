@@ -64,18 +64,13 @@ def register(
     This command registers all available pipeline configurations with the Antenna platform
     for the specified projects (or all accessible projects if none specified).
 
-    The service name is read from the AMI_ANTENNA_SERVICE_NAME configuration setting.
-    Hostname will be added automatically to the service name.
+    The processing service is identified by the API key.
 
     Examples:
         ami worker register --project 1 --project 2
         ami worker register  # registers for all accessible projects
     """
     from trapdata.antenna.registration import register_pipelines
-    from trapdata.settings import read_settings
 
-    settings = read_settings()
     project_ids = project if project else []
-    register_pipelines(
-        project_ids=project_ids, service_name=settings.antenna_service_name
-    )
+    register_pipelines(project_ids=project_ids)

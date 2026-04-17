@@ -41,7 +41,7 @@ class TestDataLoaderMultiWorker(TestCase):
         """Creating an iterator pickles the dataset to send to worker subprocesses."""
         dataset = RESTDataset(
             base_url="http://localhost:1/api/v2",
-            auth_token="test-token",
+            api_key="test-api-key",
             job_id=1,
             batch_size=4,
         )
@@ -167,7 +167,7 @@ class TestRESTDatasetIntegration(TestCase):
             base_url="http://testserver/api/v2",
             job_id=job_id,
             batch_size=batch_size,
-            auth_token="test-token",
+            api_key="test-api-key",
         )
 
     def test_multiple_batches(self):
@@ -223,7 +223,7 @@ class TestGetJobsIntegration(TestCase):
         with patch_antenna_api_requests(self.antenna_client):
             result = get_jobs(
                 "http://testserver/api/v2",
-                "test-token",
+                "test-api-key",
                 ["moths_2024"],
             )
 
@@ -256,7 +256,7 @@ class TestProcessJobIntegration(TestCase):
         """Create mock settings for worker."""
         settings = MagicMock()
         settings.antenna_api_base_url = "http://testserver/api/v2"
-        settings.antenna_api_auth_token = "test-token"
+        settings.antenna_api_key = "test-api-key"
         settings.antenna_api_batch_size = 2
         settings.num_workers = 0  # Disable multiprocessing for tests
         settings.localization_batch_size = 2  # Real integer for batch processing
@@ -417,7 +417,7 @@ class TestWorkerEndToEnd(TestCase):
     def _make_settings(self):
         settings = MagicMock()
         settings.antenna_api_base_url = "http://testserver/api/v2"
-        settings.antenna_api_auth_token = "test-token"
+        settings.antenna_api_key = "test-api-key"
         settings.antenna_api_batch_size = 2
         settings.num_workers = 0
         settings.localization_batch_size = 2  # Real integer for batch processing
@@ -455,9 +455,8 @@ class TestWorkerEndToEnd(TestCase):
             ]
             success, _ = register_pipelines_for_project(
                 base_url="http://testserver/api/v2",
-                auth_token="test-token",
+                api_key="test-api-key",
                 project_id=1,
-                service_name="Test Worker",
                 pipeline_configs=pipeline_configs,
             )
             assert success is True
@@ -465,7 +464,7 @@ class TestWorkerEndToEnd(TestCase):
             # Step 2: Get jobs
             jobs = get_jobs(
                 "http://testserver/api/v2",
-                "test-token",
+                "test-api-key",
                 [pipeline_slug],
             )
             job_ids = [job_id for job_id, _ in jobs]

@@ -85,11 +85,15 @@ class AntennaResultPostResponse(pydantic.BaseModel):
 
 class AsyncPipelineRegistrationRequest(pydantic.BaseModel):
     """
-    Request to register pipelines from an async processing service
+    Request to register pipelines from an async processing service.
+
+    The server identifies the processing service from the API key,
+    so no service name is needed. Optional client_info provides
+    metadata about the client for diagnostics.
     """
 
-    processing_service_name: str
     pipelines: list[PipelineConfigResponse] = []
+    client_info: dict | None = None
 
 
 class AsyncPipelineRegistrationResponse(pydantic.BaseModel):

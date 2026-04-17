@@ -14,7 +14,7 @@ Key features:
 
 Usage:
     poster = ResultPoster(max_pending=5)
-    poster.post_async(base_url, auth_token, job_id, results)
+    poster.post_async(base_url, api_key, job_id, results)
     metrics = poster.get_metrics()
     poster.shutdown()
 """
@@ -60,7 +60,7 @@ class ResultPoster:
 
     Example:
         poster = ResultPoster(max_pending=10)
-        poster.post_async(base_url, auth_token, job_id, results)
+        poster.post_async(base_url, api_key, job_id, results)
         metrics = poster.get_metrics()
         poster.shutdown()
     """
@@ -82,7 +82,7 @@ class ResultPoster:
     def post_async(
         self,
         base_url: str,
-        auth_token: str,
+        api_key: str,
         job_id: int,
         results: list,
     ) -> None:
@@ -93,7 +93,7 @@ class ResultPoster:
 
         Args:
             base_url: Antenna API base URL
-            auth_token: API authentication token
+            api_key: API key for authentication
             job_id: Job ID for the results
             results: List of result objects to post
         """
@@ -134,7 +134,7 @@ class ResultPoster:
         future = self.executor.submit(
             self._post_with_timing,
             base_url,
-            auth_token,
+            api_key,
             job_id,
             results,
             start_time,
@@ -149,7 +149,7 @@ class ResultPoster:
     def _post_with_timing(
         self,
         base_url: str,
-        auth_token: str,
+        api_key: str,
         job_id: int,
         results: list,
         start_time: float,
@@ -158,7 +158,7 @@ class ResultPoster:
 
         Args:
             base_url: Antenna API base URL
-            auth_token: API authentication token
+            api_key: API key for authentication
             job_id: Job ID for the results
             results: List of result objects to post
             start_time: Timestamp when the post was initiated
@@ -167,7 +167,7 @@ class ResultPoster:
             True if successful, False otherwise
         """
         try:
-            success = post_batch_results(base_url, auth_token, job_id, results)
+            success = post_batch_results(base_url, api_key, job_id, results)
             elapsed_time = time.time() - start_time
 
             with self._metrics_lock:

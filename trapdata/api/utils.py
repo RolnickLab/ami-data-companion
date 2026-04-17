@@ -38,7 +38,7 @@ def get_crop_fname(source_image: SourceImage, bbox: BoundingBox) -> str:
     return f"{source_name}/{bbox_name}-{timestamp}.jpg"
 
 
-def get_http_session(auth_token: str | None = None) -> requests.Session:
+def get_http_session(api_key: str | None = None) -> requests.Session:
     """
     Create an HTTP session with retry logic for transient failures.
 
@@ -47,10 +47,10 @@ def get_http_session(auth_token: str | None = None) -> requests.Session:
     and network failures, NOT on client errors (4XX). Only GET requests are retried.
 
     TODO: This will likely become part of an AntennaClient class that encapsulates
-    base_url, auth_token, and session management. See docs/claude/planning/antenna-client.md
+    base_url, api_key, and session management. See docs/claude/planning/antenna-client.md
 
     Args:
-        auth_token: Optional API token. If provided, adds "Token {auth_token}" header.
+        api_key: Optional API key. If provided, adds "Api-Key {api_key}" header.
 
     Returns:
         Configured requests.Session with retry adapter mounted
@@ -69,7 +69,7 @@ def get_http_session(auth_token: str | None = None) -> requests.Session:
     session.mount("http://", adapter)
     session.mount("https://", adapter)
 
-    if auth_token:
-        session.headers["Authorization"] = f"Token {auth_token}"
+    if api_key:
+        session.headers["Authorization"] = f"Api-Key {api_key}"
 
     return session
