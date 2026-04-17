@@ -30,13 +30,19 @@ MAX_PENDING_POSTS = 5  # Maximum number of concurrent result posts before blocki
 SLEEP_TIME_SECONDS = 5
 
 
-def run_worker(pipelines: list[str]):
+def run_worker(pipelines: list[str], project_ids: list[int] | None = None):
     """Run the worker to process images from the REST API queue.
 
     Automatically spawns one AMI worker instance process per available GPU.
     On single-GPU or CPU-only machines, runs in-process (no overhead).
+
+    Args:
+        pipelines: Pipeline slugs to poll for jobs.
+        project_ids: Optional project IDs to limit jobs to. If empty/None,
+            pulls jobs for all projects the auth token has access to.
     """
     settings = read_settings()
+    project_ids = project_ids or []
 
     # Validate auth token
     if not settings.antenna_api_auth_token:
@@ -59,7 +65,7 @@ def run_worker(pipelines: list[str]):
         # can't be pickled. Each child process calls read_settings() itself.
         mp.spawn(
             _worker_loop,
-            args=(pipelines,),
+            args=(pipelines, project_ids),
             nprocs=gpu_count,
             join=True,
         )
@@ -68,17 +74,21 @@ def run_worker(pipelines: list[str]):
             logger.info(f"Found 1 GPU: {torch.cuda.get_device_name(0)}")
         else:
             logger.info("No GPUs found, running on CPU")
-        _worker_loop(0, pipelines)
+        _worker_loop(0, pipelines, project_ids)
 
 
-def _worker_loop(gpu_id: int, pipelines: list[str]):
+def _worker_loop(
+    gpu_id: int, pipelines: list[str], project_ids: list[int] | None = None
+):
     """Main polling loop for a single AMI worker instance, pinned to a specific GPU.
 
     Args:
         gpu_id: GPU index to pin this AMI worker instance to (0 for CPU-only).
         pipelines: List of pipeline slugs to poll for jobs.
+        project_ids: Optional project IDs to limit jobs to.
     """
     settings = read_settings()
+    project_ids = project_ids or []
     device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available() and torch.cuda.device_count() > 0:
         torch.cuda.set_device(gpu_id)
@@ -89,6 +99,8 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
     # Build full service name with hostname
     full_service_name = get_full_service_name(settings.antenna_service_name)
     logger.info(f"Running worker as: {full_service_name}")
+    if project_ids:
+        logger.info(f"Filtering jobs to projects: {project_ids}")
 
     while True:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
@@ -102,6 +114,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             base_url=settings.antenna_api_base_url,
             auth_token=settings.antenna_api_auth_token,
             pipeline_slugs=pipelines,
+            project_ids=project_ids if project_ids else None,
         )
         for job_id, pipeline in jobs:
             logger.info(

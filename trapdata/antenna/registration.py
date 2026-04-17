@@ -7,7 +7,7 @@ from trapdata.antenna.schemas import (
     AsyncPipelineRegistrationRequest,
     AsyncPipelineRegistrationResponse,
 )
-from trapdata.api.api import PIPELINE_CHOICES, initialize_service_info
+from trapdata.api.api import initialize_service_info
 from trapdata.api.utils import get_http_session
 from trapdata.common.logs import logger
 from trapdata.settings import Settings, read_settings
@@ -48,7 +48,24 @@ def register_pipelines_for_project(
             response.raise_for_status()
 
             result = AsyncPipelineRegistrationResponse.model_validate(response.json())
-            return True, f"Created {len(result.pipelines_created)} new pipelines"
+            parts = []
+            if result.processing_service_id:
+                parts.append(f"Processing service ID {result.processing_service_id}")
+            if result.pipelines_created:
+                parts.append(
+                    f"created {len(result.pipelines_created)} pipelines "
+                    f"({', '.join(result.pipelines_created)})"
+                )
+            if result.pipelines_updated:
+                parts.append(
+                    f"updated {len(result.pipelines_updated)} pipelines "
+                    f"({', '.join(result.pipelines_updated)})"
+                )
+            if not result.pipelines_created and not result.pipelines_updated:
+                parts.append(
+                    f"all {len(pipeline_configs)} pipelines already registered"
+                )
+            return True, "; ".join(parts)
 
         except requests.RequestException as e:
             if (
@@ -72,6 +89,7 @@ def register_pipelines(
     project_ids: list[int],
     service_name: str,
     settings: Settings | None = None,
+    pipeline_slugs: list[str] | None = None,
 ) -> None:
     """
     Register pipelines for specified projects or all accessible projects.
@@ -80,6 +98,8 @@ def register_pipelines(
         project_ids: List of specific project IDs to register for. If empty, registers for all accessible projects.
         service_name: Name of the processing service
         settings: Settings object with antenna_api_* configuration (defaults to read_settings())
+        pipeline_slugs: Optional list of pipeline slugs to register. If None or empty,
+            registers all available pipelines.
     """
     # Import here to avoid circular import
     from trapdata.antenna.client import get_user_projects
@@ -128,13 +148,22 @@ def register_pipelines(
     logger.info("Initializing pipeline configurations...")
     service_info = initialize_service_info()
     pipeline_configs = service_info.pipelines
-    logger.info(f"Generated {len(pipeline_configs)} pipeline configurations")
+
+    # Filter to requested pipelines if specified
+    if pipeline_slugs:
+        slug_set = set(pipeline_slugs)
+        pipeline_configs = [p for p in pipeline_configs if p.slug in slug_set]
+        logger.info(
+            f"Filtered to {len(pipeline_configs)} pipelines: {', '.join(pipeline_slugs)}"
+        )
+    else:
+        logger.info(f"Registering all {len(pipeline_configs)} pipeline configurations")
 
     # Register pipelines for each project
     successful_registrations = []
     failed_registrations = []
 
-    logger.info(f"Available pipelines to register: {list(PIPELINE_CHOICES.keys())}")
+    logger.info(f"Pipelines to register: {[p.slug for p in pipeline_configs]}")
 
     for project in projects_to_process:
         project_id = project["id"]
@@ -164,10 +193,12 @@ def register_pipelines(
 
     # Summary report
     logger.info("\n=== Registration Summary ===")
-    logger.info(f"Service name: {full_service_name}")
-    logger.info(f"Total projects processed: {len(projects_to_process)}")
-    logger.info(f"Successful registrations: {len(successful_registrations)}")
-    logger.info(f"Failed registrations: {len(failed_registrations)}")
+    logger.info(f"Processing service: {full_service_name}")
+    logger.info(f"Pipelines advertised: {len(pipeline_configs)}")
+    logger.info(f"Projects processed: {len(projects_to_process)}")
+    logger.info(
+        f"Successful: {len(successful_registrations)}, Failed: {len(failed_registrations)}"
+    )
 
     if successful_registrations:
         logger.info("\nSuccessful registrations:")
