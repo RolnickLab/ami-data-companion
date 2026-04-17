@@ -14,7 +14,7 @@ from trapdata.antenna.client import get_full_service_name, get_jobs
 from trapdata.antenna.datasets import CUDAPrefetcher, get_rest_dataloader
 from trapdata.antenna.result_posting import ResultPoster
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
-from trapdata.api.api import CLASSIFIER_CHOICES, should_filter_detections
+from trapdata.api.api import PIPELINE_CHOICES, should_filter_detections
 from trapdata.api.models.classification import MothClassifierBinary
 from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
@@ -30,13 +30,19 @@ MAX_PENDING_POSTS = 5  # Maximum number of concurrent result posts before blocki
 SLEEP_TIME_SECONDS = 5
 
 
-def run_worker(pipelines: list[str]):
+def run_worker(pipelines: list[str], project_ids: list[int] | None = None):
     """Run the worker to process images from the REST API queue.
 
     Automatically spawns one AMI worker instance process per available GPU.
     On single-GPU or CPU-only machines, runs in-process (no overhead).
+
+    Args:
+        pipelines: Pipeline slugs to poll for jobs.
+        project_ids: Optional project IDs to limit jobs to. If empty/None,
+            pulls jobs for all projects the auth token has access to.
     """
     settings = read_settings()
+    project_ids = project_ids or []
 
     # Validate auth token
     if not settings.antenna_api_auth_token:
@@ -59,7 +65,7 @@ def run_worker(pipelines: list[str]):
         # can't be pickled. Each child process calls read_settings() itself.
         mp.spawn(
             _worker_loop,
-            args=(pipelines,),
+            args=(pipelines, project_ids),
             nprocs=gpu_count,
             join=True,
         )
@@ -68,17 +74,21 @@ def run_worker(pipelines: list[str]):
             logger.info(f"Found 1 GPU: {torch.cuda.get_device_name(0)}")
         else:
             logger.info("No GPUs found, running on CPU")
-        _worker_loop(0, pipelines)
+        _worker_loop(0, pipelines, project_ids)
 
 
-def _worker_loop(gpu_id: int, pipelines: list[str]):
+def _worker_loop(
+    gpu_id: int, pipelines: list[str], project_ids: list[int] | None = None
+):
     """Main polling loop for a single AMI worker instance, pinned to a specific GPU.
 
     Args:
         gpu_id: GPU index to pin this AMI worker instance to (0 for CPU-only).
         pipelines: List of pipeline slugs to poll for jobs.
+        project_ids: Optional project IDs to limit jobs to.
     """
     settings = read_settings()
+    project_ids = project_ids or []
     device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available() and torch.cuda.device_count() > 0:
         torch.cuda.set_device(gpu_id)
@@ -89,6 +99,8 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
     # Build full service name with hostname
     full_service_name = get_full_service_name(settings.antenna_service_name)
     logger.info(f"Running worker as: {full_service_name}")
+    if project_ids:
+        logger.info(f"Filtering jobs to projects: {project_ids}")
 
     while True:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
@@ -102,6 +114,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             base_url=settings.antenna_api_base_url,
             auth_token=settings.antenna_api_auth_token,
             pipeline_slugs=pipelines,
+            project_ids=project_ids if project_ids else None,
         )
         for job_id, pipeline in jobs:
             logger.info(
@@ -303,12 +316,21 @@ def _process_batch(
         for idx, dresp in enumerate(detections_for_terminal_classifier):
             image_tensor = image_tensors[dresp.source_image_id]
             bbox = dresp.bbox
-            y1, y2 = int(bbox.y1), int(bbox.y2)
-            x1, x2 = int(bbox.x1), int(bbox.x2)
+            _, img_h, img_w = image_tensor.shape
+            # Clamp bbox to image bounds before using as slice indices. YOLO-OBB
+            # can produce negative coords for detections near image edges; PyTorch
+            # slicing would treat negatives as end-relative indices, yielding an
+            # empty crop and an H=0/W=0 Resize error downstream.
+            y1 = max(0, min(int(bbox.y1), img_h))
+            y2 = max(0, min(int(bbox.y2), img_h))
+            x1 = max(0, min(int(bbox.x1), img_w))
+            x2 = max(0, min(int(bbox.x2), img_w))
             if y1 >= y2 or x1 >= x2:
                 logger.warning(
-                    f"Skipping detection {idx} with invalid bbox: "
-                    f"({x1},{y1})->({x2},{y2})"
+                    f"Skipping detection {idx} with invalid bbox after clamping "
+                    f"to image {img_w}x{img_h}: ({x1},{y1})->({x2},{y2}) "
+                    f"(raw: x1={bbox.x1:.1f} y1={bbox.y1:.1f} "
+                    f"x2={bbox.x2:.1f} y2={bbox.y2:.1f})"
                 )
                 continue
             crop = image_tensor[:, y1:y2, x1:x2]
@@ -425,7 +447,7 @@ def _process_job(
     detector = None
 
     # Check if binary filtering is needed once for the entire job
-    classifier_class = CLASSIFIER_CHOICES[pipeline]
+    classifier_class = PIPELINE_CHOICES[pipeline]
     use_binary_filter = should_filter_detections(classifier_class)
     binary_filter = None
 
@@ -464,7 +486,7 @@ def _process_job(
             # Defer instantiation of poster, detector and classifiers until we have data
             if not classifier:
                 classifier = classifier_class(source_images=[], detections=[])
-                detector = APIMothDetector([])
+                detector = classifier_class.detector_cls([])
                 result_poster = ResultPoster(max_pending=MAX_PENDING_POSTS)
 
                 if use_binary_filter:

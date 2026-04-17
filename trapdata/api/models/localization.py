@@ -1,7 +1,10 @@
 import datetime
 import typing
 
-from trapdata.ml.models.localization import MothObjectDetector_FasterRCNN_2023
+from trapdata.ml.models.localization import (
+    MothObjectDetector_FasterRCNN_2023,
+    MothObjectDetector_YOLO11m_Mothbot,
+)
 
 from ..datasets import LocalizationImageDataset
 from ..schemas import AlgorithmReference, BoundingBox, DetectionResponse, SourceImage
@@ -51,6 +54,56 @@ class APIMothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_2023)
                 detection = save_detection(image_id, coords)
                 detections.append(detection)
 
+        self.results += detections
+
+    def run(self) -> list[DetectionResponse]:
+        super().run()
+        return self.results
+
+
+class APIMothDetector_YOLO11m_Mothbot(
+    APIInferenceBaseClass, MothObjectDetector_YOLO11m_Mothbot
+):
+    task_type = "localization"
+
+    def __init__(self, source_images: typing.Iterable[SourceImage], *args, **kwargs):
+        self.source_images = source_images
+        self.results: list[DetectionResponse] = []
+        super().__init__(*args, **kwargs)
+
+    def reset(self, source_images: typing.Iterable[SourceImage]):
+        self.source_images = source_images
+        self.results = []
+
+    def get_dataset(self):
+        return LocalizationImageDataset(
+            self.source_images, self.get_transforms(), batch_size=self.batch_size
+        )
+
+    def get_source_image(self, source_image_id: int) -> SourceImage:
+        for source_image in self.source_images:
+            if source_image.id == source_image_id:
+                return source_image
+        raise ValueError(f"Source image with id {source_image_id} not found")
+
+    def save_results(self, item_ids, batch_output, seconds_per_item, *args, **kwargs):
+        """batch_output is a list (one per image) of list[YoloDetection]."""
+        detections: list[DetectionResponse] = []
+        for image_id, yolo_dets in zip(item_ids, batch_output):
+            for y in yolo_dets:
+                detections.append(
+                    DetectionResponse(
+                        source_image_id=image_id,
+                        bbox=BoundingBox(x1=y.x1, y1=y.y1, x2=y.x2, y2=y.y2),
+                        rotation=y.rotation,
+                        inference_time=seconds_per_item,
+                        algorithm=AlgorithmReference(
+                            name=self.name, key=self.get_key()
+                        ),
+                        timestamp=datetime.datetime.now(),
+                        crop_image_url=None,
+                    )
+                )
         self.results += detections
 
     def run(self) -> list[DetectionResponse]:

@@ -32,6 +32,7 @@ def get_jobs(
     base_url: str,
     auth_token: str,
     pipeline_slugs: list[str],
+    project_ids: list[int] | None = None,
 ) -> list[tuple[int, str]]:
     """Fetch job ids from the API for the given pipelines in a single request.
 
@@ -41,6 +42,8 @@ def get_jobs(
         base_url: Antenna API base URL (e.g., "http://localhost:8000/api/v2")
         auth_token: API authentication token
         pipeline_slugs: List of pipeline slugs to filter jobs
+        project_ids: Optional list of project IDs to limit jobs to.
+            If empty or None, pulls jobs for all projects the token has access to.
 
     Returns:
         List of (job_id, pipeline_slug) tuples (possibly empty) on success or error.
@@ -50,12 +53,14 @@ def get_jobs(
             if not pipeline_slugs:
                 return []
             url = f"{base_url.rstrip('/')}/jobs"
-            params = {
+            params: dict[str, str | int] = {
                 "pipeline__slug__in": ",".join(pipeline_slugs),
                 "ids_only": 1,
                 "incomplete_only": 1,
                 "dispatch_mode": JobDispatchMode.ASYNC_API,  # Only fetch async_api jobs
             }
+            if project_ids:
+                params["project__id__in"] = ",".join(str(pid) for pid in project_ids)
 
             resp = session.get(url, params=params, timeout=30)
             resp.raise_for_status()

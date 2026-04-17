@@ -1,5 +1,8 @@
+import dataclasses
 import pathlib
 
+import cv2
+import numpy as np
 import torch
 import torchvision
 import torchvision.models.detection.anchor_utils
@@ -341,3 +344,273 @@ class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
 
         bboxes = bboxes.cpu().numpy().astype(int).tolist()
         return bboxes
+
+
+# -----------------------------------------------------------------------------
+# Mothbot YOLO11m-OBB detector
+#
+# Single-class ("creature") detector from Digital Naturalism Laboratories'
+# Mothbot_Process project. Trained at imgsz=1600, Jan 2024. Weights are hosted
+# on Arbutus alongside our other models.
+#
+# This implementation is an independent rewrite; Mothbot's repo is unlicensed
+# (see docs/superpowers/specs/2026-04-14-mothbot-detection-pipeline-design.md).
+# The torch 2.6 weights_only fallback below is adapted from
+# Mothbot_Process/pipeline/detect.py -- the pattern is standard ultralytics
+# PyTorch 2.6 compat handling, not Mothbot-specific logic.
+# -----------------------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class YoloDetection:
+    """One detection from the YOLO-OBB post-processor.
+
+    Fields:
+        x1, y1, x2, y2: axis-aligned envelope of the rotated bounding box
+            (min/max of the 4 rotated corner points).
+        rotation: angle in degrees, cv2.minAreaRect convention.
+        score: detection confidence, in [0, 1].
+    """
+
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+    rotation: float
+    score: float
+
+
+def _corners_to_yolo_detection(
+    corners: np.ndarray,
+    score: float,
+    image_shape: tuple[int, int] | None = None,
+) -> YoloDetection:
+    """Convert 4 rotated corner points + score into a YoloDetection.
+
+    Args:
+        corners: shape (4, 2), xy coordinates of the OBB corners.
+        score: detection confidence.
+        image_shape: (height, width) of the source image. When provided, the
+            axis-aligned envelope is clamped to [0, width] x [0, height]. YOLO-OBB
+            can emit corners outside the image when a detection touches an edge;
+            negative coords in particular are dangerous because PyTorch tensor
+            slicing treats negative indices as end-relative, yielding empty crops.
+
+    Returns:
+        A YoloDetection with:
+          - (x1, y1, x2, y2): min/max envelope of the 4 corners (axis-aligned),
+            optionally clamped to image bounds.
+          - rotation: angle from cv2.minAreaRect (same convention Mothbot uses).
+    """
+    pts = np.asarray(corners, dtype=np.float32).reshape(-1, 2)
+    x1, y1 = float(pts[:, 0].min()), float(pts[:, 1].min())
+    x2, y2 = float(pts[:, 0].max()), float(pts[:, 1].max())
+    if image_shape is not None:
+        h, w = image_shape
+        x1 = max(0.0, min(x1, float(w)))
+        x2 = max(0.0, min(x2, float(w)))
+        y1 = max(0.0, min(y1, float(h)))
+        y2 = max(0.0, min(y2, float(h)))
+    rect = cv2.minAreaRect(pts)
+    angle = float(rect[2])
+    return YoloDetection(x1=x1, y1=y1, x2=x2, y2=y2, rotation=angle, score=float(score))
+
+
+def _tensor_to_bgr_numpy(t: torch.Tensor) -> np.ndarray:
+    """Convert a (C, H, W) RGB float tensor in [0, 1] to an (H, W, C) BGR uint8
+    numpy array -- the format ultralytics YOLO was trained on (via cv2.imread).
+    """
+    return (t.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)[..., ::-1]
+
+
+def _load_ultralytics_yolo(weights_path):
+    """Load an ultralytics YOLO model with a PyTorch 2.6 weights_only fallback.
+
+    Newer PyTorch defaults to torch.load(..., weights_only=True), which can
+    refuse to load Ultralytics checkpoints that embed custom model classes.
+    For local, trusted checkpoints we retry with weights_only=False.
+
+    Adapted from Mothbot_Process/pipeline/detect.py (unlicensed repo; pattern
+    is standard ultralytics PyTorch 2.6 compat handling).
+    """
+    import os
+
+    import torch as _torch
+    from ultralytics import YOLO
+
+    try:
+        return YOLO(str(weights_path))
+    except Exception as err:
+        if "Weights only load failed" not in str(err):
+            raise
+
+        logger.info(
+            "Retrying YOLO load with torch.load(weights_only=False) compatibility "
+            "(trusted local checkpoint)"
+        )
+        original_load = _torch.load
+        original_force_wo = os.environ.get("TORCH_FORCE_WEIGHTS_ONLY_LOAD")
+        original_force_no_wo = os.environ.get("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD")
+
+        def _patched_load(*args, **kwargs):
+            kwargs["weights_only"] = False
+            return original_load(*args, **kwargs)
+
+        _torch.load = _patched_load
+        try:
+            os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"] = "0"
+            os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
+            return YOLO(str(weights_path))
+        finally:
+            _torch.load = original_load
+            if original_force_wo is None:
+                os.environ.pop("TORCH_FORCE_WEIGHTS_ONLY_LOAD", None)
+            else:
+                os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"] = original_force_wo
+            if original_force_no_wo is None:
+                os.environ.pop("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", None)
+            else:
+                os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = original_force_no_wo
+
+
+class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
+    name = "Mothbot YOLO11m Creature Detector"
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/"
+        "mothbot/detection/yolo11m_4500_imgsz1600_b1_2024-01-18.pt"
+    )
+    description = (
+        "Single-class 'creature' detector from Digital Naturalism "
+        "Laboratories' Mothbot project. YOLO11m-OBB, trained at "
+        "imgsz=1600, Jan 2024."
+    )
+    # Overrides the base: we set the category map directly instead of
+    # hosting a one-entry labels.json on the object store.
+    category_map = {0: "creature"}
+    imgsz = 1600
+    bbox_score_threshold = 0.25
+    box_detections_per_img = 500
+
+    def get_labels(self, labels_path) -> dict[int, str]:
+        # The base class __init__ calls get_labels(labels_path) and assigns the
+        # return value to self.category_map, which would overwrite the class-level
+        # category_map with {} when labels_path is None.  Return the class-level
+        # map directly so it survives the init cycle.
+        if labels_path:
+            return super().get_labels(labels_path)
+        return type(self).category_map
+
+    def get_transforms(self):
+        # ultralytics handles letterboxing / normalization internally; just
+        # pass the PIL image through unchanged.
+        return lambda pil_image: pil_image
+
+    def get_model(self):
+        logger.debug(f"Loading YOLO weights: {self.weights}")
+        model = _load_ultralytics_yolo(self.weights)
+        # ultralytics manages its own device placement via the device kwarg
+        # passed to .predict(), so we don't .to(self.device) here.
+        return model
+
+    def get_dataloader(self):
+        """PIL images can't be stacked by default_collate, so we collate as
+        lists and let predict_batch hand a list of PIL images to ultralytics.
+        """
+        logger.info(
+            f"Preparing {self.name} inference dataloader "
+            f"(batch_size={self.batch_size}, single={self.single})"
+        )
+
+        def collate_as_lists(batch):
+            ids = [b[0] for b in batch]
+            imgs = [b[1] for b in batch]
+            return ids, imgs
+
+        dataloader_args = {
+            "num_workers": 0 if self.single else self.num_workers,
+            "persistent_workers": False if self.single else True,
+            "shuffle": False,
+            "pin_memory": False,
+            "batch_size": self.batch_size,
+            "collate_fn": collate_as_lists,
+        }
+        self.dataloader = torch.utils.data.DataLoader(self.dataset, **dataloader_args)
+        return self.dataloader
+
+    def predict_batch(self, batch):
+        """Run YOLO inference. Accepts either:
+
+        - list[PIL.Image] (from our ML-layer dataloader, which collates as lists)
+        - torch.Tensor of shape (B, C, H, W) (from the antenna REST dataloader,
+          which applies torchvision.transforms.ToTensor to each PIL image)
+        - list[torch.Tensor] of shape (C, H, W) (REST dataloader mixed-size fallback)
+
+        For tensor inputs we convert back to numpy HWC uint8 so ultralytics
+        does its own letterboxing / normalization. The model was trained on
+        cv2.imread-loaded images (BGR); ultralytics does NOT convert numpy
+        inputs' channel order (see LoadPilAndNumpy._single_check docstring),
+        so we flip RGB to BGR here. Without this the detector emits large,
+        low-quality boxes because the color statistics don't match training.
+        """
+        if isinstance(batch, torch.Tensor):
+            # (B, C, H, W) RGB in [0, 1] float -> list of (H, W, C) BGR uint8
+            imgs = [_tensor_to_bgr_numpy(t) for t in batch]
+        elif isinstance(batch, list) and batch and isinstance(batch[0], torch.Tensor):
+            imgs = [_tensor_to_bgr_numpy(t) for t in batch]
+        else:
+            imgs = batch
+        return self.model.predict(
+            imgs,
+            imgsz=self.imgsz,
+            conf=self.bbox_score_threshold,
+            max_det=self.box_detections_per_img,
+            device=self.device,
+            verbose=False,
+        )
+
+    def post_process_single(self, result):
+        """Flatten one ultralytics Result into a list of detection records.
+
+        Why the OBB to axis-aligned envelope:
+          YOLO11m-OBB outputs 4 rotated corner points per detection. Our
+          DetectionResponse schema carries a single axis-aligned bbox, and
+          the downstream InsectOrderClassifier reads an axis-aligned crop.
+          We therefore take the min/max envelope of the 4 corners as the
+          bbox. The rotation angle (cv2.minAreaRect convention, same as
+          Mothbot) is preserved separately so a future species classifier
+          can reuse Mothbot's rotated crop_rect() without re-running
+          detection.
+
+          Confidence filtering already happened inside model.predict(conf=...),
+          so every record here is above bbox_score_threshold.
+        """
+        detections = []
+        if result.obb is None:
+            return detections
+        corners_batch = result.obb.xyxyxyxy.cpu().numpy()  # (N, 4, 2)
+        scores = result.obb.conf.cpu().numpy()  # (N,)
+        # orig_shape is (height, width); present on ultralytics Result objects.
+        image_shape = getattr(result, "orig_shape", None)
+        for i in range(len(corners_batch)):
+            det = _corners_to_yolo_detection(
+                corners_batch[i], float(scores[i]), image_shape=image_shape
+            )
+            if det.x2 <= det.x1 or det.y2 <= det.y1:
+                logger.warning(
+                    f"Skipping degenerate YOLO detection (zero-area envelope "
+                    f"after clamp to image {image_shape}): "
+                    f"x1={det.x1:.1f} y1={det.y1:.1f} x2={det.x2:.1f} y2={det.y2:.1f}"
+                )
+                continue
+            detections.append(det)
+        return detections
+
+    def save_results(self, item_ids, batch_output, *args, **kwargs):
+        """The ML-layer base class expects a save method. The API wrapper
+        overrides this, so the DB path is never hit when used via the API.
+        Provide a no-op that logs, for symmetry with the FasterRCNN class.
+        """
+        logger.info(
+            f"{self.name} ML-layer save_results called with {len(item_ids)} items "
+            "(no-op; API wrapper handles persistence)"
+        )
