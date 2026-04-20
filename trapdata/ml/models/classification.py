@@ -1,3 +1,6 @@
+import os
+import pickle
+
 import timm
 import torch
 import torch.utils.data
@@ -265,6 +268,8 @@ class Resnet50Classifier(InferenceBaseClass):
         )
 
     def post_process_batch(self, output):
+        # Mask classes if requested
+
         predictions = torch.nn.functional.softmax(output, dim=1)
         predictions = predictions.cpu().numpy()
 
@@ -396,6 +401,11 @@ class SpeciesClassifier(InferenceBaseClass):
             for label, score in batch_output
         ]
         save_classified_objects(self.db_path, object_ids, classified_objects_data)
+
+    def get_class_masking_list(self, masking_list: str) -> list[str]:
+        with open(os.getenv(masking_list, "masking_list.pkl"), "rb") as f:
+            class_masking_list = pickle.load(f)
+            return class_masking_list
 
 
 class QuebecVermontMothSpeciesClassifierMixedResolution(
