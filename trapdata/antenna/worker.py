@@ -26,6 +26,9 @@ from trapdata.common.logs import logger
 from trapdata.common.utils import log_time
 from trapdata.settings import Settings, read_settings
 
+# Default values — operators can override via settings (AMI_ANTENNA_MAX_PENDING_POSTS,
+# AMI_ANTENNA_IDLE_SLEEP_SECONDS). These module-level constants are kept for
+# backward compatibility with any external imports.
 MAX_PENDING_POSTS = 5  # Maximum number of concurrent result posts before blocking
 SLEEP_TIME_SECONDS = 5
 
@@ -124,9 +127,9 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
 
         if not any_jobs:
             logger.info(
-                f"[GPU {gpu_id}] No jobs found, sleeping for {SLEEP_TIME_SECONDS} seconds"
+                f"[GPU {gpu_id}] No jobs found, sleeping for {settings.antenna_idle_sleep_seconds} seconds"
             )
-            time.sleep(SLEEP_TIME_SECONDS)
+            time.sleep(settings.antenna_idle_sleep_seconds)
 
 
 def _apply_binary_classification(

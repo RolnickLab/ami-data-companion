@@ -281,6 +281,36 @@ The worker will:
 
 For more information, see the [Antenna platform documentation](https://github.com/RolnickLab/antenna).
 
+### Tuning for memory-constrained or large-image workloads
+
+If your worker is OOM-killed or runs out of memory on jobs with large source images, the knob you probably want is **`AMI_ANTENNA_API_BATCH_SIZE`** — not `AMI_LOCALIZATION_BATCH_SIZE` or `AMI_CLASSIFICATION_BATCH_SIZE`, which only control model inference batch size and do not limit how much image data is loaded into RAM.
+
+Peak ingest RAM per AMI worker roughly scales as:
+
+```
+AMI_ANTENNA_API_BATCH_SIZE
+  × AMI_ANTENNA_API_DATALOADER_PREFETCH_FACTOR (default 4)
+  × avg decoded image tensor size
+  × (2 if AMI_ANTENNA_API_DATALOADER_PIN_MEMORY else 1)
+  × AMI_NUM_WORKERS
+```
+
+A 24 MB JPEG decodes to ~144 MB as a `float32` tensor; a typical ~1.5 MB JPEG decodes to ~9 MB. So the same settings that work fine on normal jobs can explode on a batch of large images.
+
+Rough starting points (please validate for your own workload):
+
+| Worker RAM | Typical (~1.5 MB) images | Large (~24 MB) images |
+|---|---|---|
+| 22 GB | `AMI_ANTENNA_API_BATCH_SIZE=24` | `AMI_ANTENNA_API_BATCH_SIZE=2` |
+| 35 GB | `AMI_ANTENNA_API_BATCH_SIZE=24` | `AMI_ANTENNA_API_BATCH_SIZE=8` |
+| 70 GB | `AMI_ANTENNA_API_BATCH_SIZE=24` | `AMI_ANTENNA_API_BATCH_SIZE=16` |
+
+For HTTP-sourced workloads where download dominates wall time (the common case for the Antenna worker), you can also set `AMI_ANTENNA_API_DATALOADER_PIN_MEMORY=false` to roughly halve peak RAM with no throughput cost. Prefetching is still useful to hide network latency, so keep `AMI_ANTENNA_API_DATALOADER_PREFETCH_FACTOR` at its default unless RAM is very tight.
+
+See issue [#138](https://github.com/RolnickLab/ami-data-companion/issues/138) for the detailed memory analysis, flow diagram in `trapdata/antenna/datasets.py`, and proposed auto-tuning directions.
+
+**Deployment note — file descriptor limit**: when running the worker under `supervisord` or `systemd`, set the soft file-descriptor limit to at least 65536. The default on many distros (Debian, Ubuntu) is 1024, which the worker can legitimately exceed during DataLoader startup (IPC pipes + SSL sockets + concurrent downloads), causing an unrelated `OSError: [Errno 24] Too many open files` crash that looks like a leak but isn't. For `supervisord`, add `minfds=65536` under `[supervisord]` in `/etc/supervisor/supervisord.conf`. For `systemd`, add `LimitNOFILE=65536` to the unit file.
+
 ## Web UI demo (Gradio)
 
 A simple web UI is also available to test the inference pipeline. This is a quick way to test models on a remote server via a web browser.

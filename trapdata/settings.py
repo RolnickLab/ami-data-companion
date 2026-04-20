@@ -43,6 +43,18 @@ class Settings(BaseSettings):
     antenna_service_name: str = "AMI Data Companion"
     antenna_api_batch_size: int = 24
 
+    # DataLoader tuning — previously hardcoded in trapdata/antenna/datasets.py.
+    # See issue #138 for the memory-scaling analysis. Defaults preserve prior
+    # behavior; lower pin_memory and/or prefetch_factor when per-image size is
+    # large relative to worker RAM.
+    antenna_api_dataloader_pin_memory: bool = True
+    antenna_api_dataloader_prefetch_factor: int = 4
+    antenna_api_dataloader_download_threads: int = 8
+
+    # Worker loop tuning — previously hardcoded in trapdata/antenna/worker.py.
+    antenna_max_pending_posts: int = 5
+    antenna_idle_sleep_seconds: int = 5
+
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
         """
