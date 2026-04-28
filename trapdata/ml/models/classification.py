@@ -312,6 +312,18 @@ class Resnet50TimmClassifier(Resnet50Classifier):
         model.eval()
         return model
 
+    @torch.no_grad()
+    def get_features(self, batch_input: torch.Tensor) -> torch.Tensor:
+        """Extract 2048-dim feature vectors from the ResNet50 backbone.
+
+        Uses timm's forward_features() which returns (B, 2048, H, W) spatial
+        feature maps for ResNet50. Pooled to (B, 2048) via adaptive avg pool.
+        """
+        features = self.model.forward_features(batch_input)
+        features = torch.nn.functional.adaptive_avg_pool2d(features, (1, 1))
+        features = features.view(features.size(0), -1)
+        return features
+
 
 class BinaryClassifier(Resnet50ClassifierLowRes):
     stage = 2

@@ -41,12 +41,16 @@ class APIMothClassifier(
         source_images: typing.Iterable[SourceImage],
         detections: typing.Iterable[DetectionResponse],
         terminal: bool = True,
+        include_features: bool = False,
+        include_logits: bool = False,
         *args,
         **kwargs,
     ):
         self.source_images = source_images
         self.detections = list(detections)
         self.terminal = terminal
+        self.include_features = include_features
+        self.include_logits = include_logits
         self.results: list[DetectionResponse] = []
         super().__init__(*args, **kwargs)
         logger.info(
@@ -66,28 +70,41 @@ class APIMothClassifier(
             batch_size=self.batch_size,
         )
 
-    def post_process_batch(self, logits: torch.Tensor):
-        """
-        Return the labels, softmax/calibrated scores, and the original logits for
-        each image in the batch.
+    def predict_batch(self, batch):
+        batch_input = batch.to(self.device, non_blocking=True)
+        logits = self.model(batch_input)
+        self._last_features = None
+        if self.include_features:
+            self._last_features = self.get_features(batch_input)
+        return logits
 
-        Almost like the base class method, but we need to return the logits as well.
+    def post_process_batch(self, batch_output):
         """
+        Return ClassifierResult objects with labels, scores, and
+        optional logits and feature vectors for each image in the batch.
+        """
+        logits = batch_output
+        features = self._last_features
+        self._last_features = None  # Release GPU tensor reference
         predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
-        logits = logits.cpu()
+        logits_cpu = logits.cpu()
+        if features is not None:
+            features = features.cpu()
 
         batch_results = []
 
         for i, pred in enumerate(predictions):
             class_indices = np.arange(len(pred))
-            labels = [self.category_map[i] for i in class_indices]
-            logit = logits[i].tolist()
+            labels = [self.category_map[idx] for idx in class_indices]
+            logit = logits_cpu[i].tolist() if self.include_logits else None
+            feature_vec = features[i].tolist() if features is not None else None
 
             result = ClassifierResult(
                 labels=labels,
                 logit=logit,
                 scores=pred.tolist(),
+                features=feature_vec,
             )
 
             batch_results.append(result)
@@ -164,6 +181,7 @@ class APIMothClassifier(
             classification=self.get_best_label(predictions),
             scores=predictions.scores,
             logits=predictions.logit,
+            features=predictions.features,
             inference_time=seconds_per_item,
             algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
             timestamp=datetime.datetime.now(),

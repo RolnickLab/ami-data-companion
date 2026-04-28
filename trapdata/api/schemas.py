@@ -92,13 +92,22 @@ class ClassificationResponse(pydantic.BaseModel):
         ),
         repr=False,  # Too long to display in the repr
     )
-    logits: list[float] = pydantic.Field(
-        default_factory=list,
+    logits: list[float] | None = pydantic.Field(
+        default=None,
         description=(
-            "The raw logits output by the model, before any calibration or "
-            "normalization."
+            "Raw logits (unnormalized model outputs) for each class. "
+            "Only included when include_logits=true in the pipeline config."
         ),
-        repr=False,  # Too long to display in the repr
+        repr=False,
+    )
+    features: list[float] | None = pydantic.Field(
+        default=None,
+        description=(
+            "Feature vector (embedding) extracted from the model backbone before "
+            "the classification head. Only included when include_features=true in "
+            "the pipeline config."
+        ),
+        repr=False,
     )
     inference_time: float | None = None
     algorithm: AlgorithmReference
@@ -238,6 +247,22 @@ class PipelineConfigRequest(pydantic.BaseModel):
         default=None,
         description="Example of a configuration parameter for a pipeline.",
         examples=[3],
+    )
+    include_features: bool = pydantic.Field(
+        default=False,
+        description=(
+            "Whether to include feature vectors (embeddings) in classification "
+            "responses. Feature vectors are 2048-dim floats extracted from the "
+            "model backbone. Disabled by default to reduce response size."
+        ),
+    )
+    include_logits: bool = pydantic.Field(
+        default=False,
+        description=(
+            "Whether to include raw logits in classification responses. "
+            "Logits are the unnormalized model outputs before softmax. "
+            "Disabled by default to reduce response size."
+        ),
     )
 
 

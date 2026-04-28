@@ -463,7 +463,12 @@ def _process_job(
 
             # Defer instantiation of poster, detector and classifiers until we have data
             if not classifier:
-                classifier = classifier_class(source_images=[], detections=[])
+                classifier = classifier_class(
+                    source_images=[],
+                    detections=[],
+                    include_features=settings.include_features,
+                    include_logits=settings.include_logits,
+                )
                 detector = APIMothDetector([])
                 result_poster = ResultPoster(max_pending=MAX_PENDING_POSTS)
 
