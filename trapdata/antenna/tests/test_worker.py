@@ -151,7 +151,7 @@ class TestRESTDatasetIntegration(TestCase):
         cls.file_server.start()  # Start server and keep it running for all tests
 
         # Setup mock Antenna API
-        cls.antenna_client = TestClient(antenna_app)
+        cls.antenna_client = TestClient(antenna_app, follow_redirects=False)
 
     @classmethod
     def tearDownClass(cls):
@@ -208,7 +208,7 @@ class TestGetJobsIntegration(TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.antenna_client = TestClient(antenna_app)
+        cls.antenna_client = TestClient(antenna_app, follow_redirects=False)
 
     def setUp(self):
         antenna_api_server.reset()
@@ -225,11 +225,9 @@ class TestGetJobsIntegration(TestCase):
                 "http://testserver/api/v2",
                 "test-token",
                 ["moths_2024"],
-                "Test Worker",
             )
 
         assert [job_id for job_id, _ in result] == [10, 20, 30]
-        assert antenna_api_server.get_last_get_jobs_service_name() == "Test Worker"
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +243,7 @@ class TestProcessJobIntegration(TestCase):
         cls.test_images_dir = pathlib.Path(TEST_IMAGES_BASE_PATH)
         cls.file_server = StaticFileTestServer(cls.test_images_dir)
         cls.file_server.start()  # Start server and keep it running for all tests
-        cls.antenna_client = TestClient(antenna_app)
+        cls.antenna_client = TestClient(antenna_app, follow_redirects=False)
 
     @classmethod
     def tearDownClass(cls):
@@ -273,7 +271,6 @@ class TestProcessJobIntegration(TestCase):
                 "quebec_vermont_moths_2023",
                 100,
                 self._make_settings(),
-                "Test Service",
                 device=torch.device("cpu"),
             )
 
@@ -302,7 +299,6 @@ class TestProcessJobIntegration(TestCase):
                 "quebec_vermont_moths_2023",
                 101,
                 self._make_settings(),
-                "Test Service",
                 device=torch.device("cpu"),
             )
 
@@ -342,7 +338,6 @@ class TestProcessJobIntegration(TestCase):
                 "quebec_vermont_moths_2023",
                 102,
                 self._make_settings(),
-                "Test Service",
                 device=torch.device("cpu"),
             )
 
@@ -379,7 +374,6 @@ class TestProcessJobIntegration(TestCase):
                 "quebec_vermont_moths_2023",
                 103,
                 self._make_settings(),
-                "Test Service",
                 device=torch.device("cpu"),
             )
 
@@ -411,7 +405,7 @@ class TestWorkerEndToEnd(TestCase):
         cls.test_images_dir = pathlib.Path(TEST_IMAGES_BASE_PATH)
         cls.file_server = StaticFileTestServer(cls.test_images_dir)
         cls.file_server.start()  # Start server and keep it running for all tests
-        cls.antenna_client = TestClient(antenna_app)
+        cls.antenna_client = TestClient(antenna_app, follow_redirects=False)
 
     @classmethod
     def tearDownClass(cls):
@@ -473,18 +467,15 @@ class TestWorkerEndToEnd(TestCase):
                 "http://testserver/api/v2",
                 "test-token",
                 [pipeline_slug],
-                "Test Worker",
             )
             job_ids = [job_id for job_id, _ in jobs]
             assert 200 in job_ids
-            assert antenna_api_server.get_last_get_jobs_service_name() == "Test Worker"
 
             # Step 3: Process job
             result = _process_job(
                 pipeline_slug,
                 200,
                 self._make_settings(),
-                "Test Worker",
                 device=torch.device("cpu"),
             )
             assert result is True
@@ -536,7 +527,6 @@ class TestWorkerEndToEnd(TestCase):
                 "quebec_vermont_moths_2023",
                 201,
                 self._make_settings(),
-                "Test Service",
                 device=torch.device("cpu"),
             )
 

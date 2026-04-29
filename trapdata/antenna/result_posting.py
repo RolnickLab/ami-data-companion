@@ -14,7 +14,7 @@ Key features:
 
 Usage:
     poster = ResultPoster(max_pending=5)
-    poster.post_async(base_url, auth_token, job_id, results, service_name)
+    poster.post_async(base_url, auth_token, job_id, results)
     metrics = poster.get_metrics()
     poster.shutdown()
 """
@@ -23,7 +23,6 @@ import threading
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
-from typing import Optional
 
 from trapdata.antenna.client import post_batch_results
 from trapdata.common.logs import logger
@@ -61,7 +60,7 @@ class ResultPoster:
 
     Example:
         poster = ResultPoster(max_pending=10)
-        poster.post_async(base_url, auth_token, job_id, results, service_name)
+        poster.post_async(base_url, auth_token, job_id, results)
         metrics = poster.get_metrics()
         poster.shutdown()
     """
@@ -86,7 +85,6 @@ class ResultPoster:
         auth_token: str,
         job_id: int,
         results: list,
-        processing_service_name: str,
     ) -> None:
         """Post results asynchronously with backpressure control.
 
@@ -98,7 +96,6 @@ class ResultPoster:
             auth_token: API authentication token
             job_id: Job ID for the results
             results: List of result objects to post
-            processing_service_name: Name of the processing service
         """
         # Clean up completed futures and update metrics
         self._cleanup_completed_futures()
@@ -140,7 +137,6 @@ class ResultPoster:
             auth_token,
             job_id,
             results,
-            processing_service_name,
             start_time,
         )
         self.pending_futures.append(future)
@@ -156,7 +152,6 @@ class ResultPoster:
         auth_token: str,
         job_id: int,
         results: list,
-        processing_service_name: str,
         start_time: float,
     ) -> bool:
         """Internal method that times the post operation and updates metrics.
@@ -166,16 +161,13 @@ class ResultPoster:
             auth_token: API authentication token
             job_id: Job ID for the results
             results: List of result objects to post
-            processing_service_name: Name of the processing service
             start_time: Timestamp when the post was initiated
 
         Returns:
             True if successful, False otherwise
         """
         try:
-            success = post_batch_results(
-                base_url, auth_token, job_id, results, processing_service_name
-            )
+            success = post_batch_results(base_url, auth_token, job_id, results)
             elapsed_time = time.time() - start_time
 
             with self._metrics_lock:
