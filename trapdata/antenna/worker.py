@@ -209,7 +209,7 @@ def _process_batch(
     pipeline: str,
     binary_filter: "MothClassifierBinary | None",
     use_binary_filter: bool,
-    pipeline_config: dict | None = None,
+    pipeline_config: PipelineConfigRequest | None = None,
 ) -> tuple[int, int, list[AntennaTaskResult], float, float]:
     """Process a single batch of images through detection and classification.
 
@@ -225,7 +225,7 @@ def _process_batch(
         pipeline: Pipeline slug for response payload
         binary_filter: Binary moth/non-moth classifier, or None
         use_binary_filter: Whether to run binary classification step
-        pipeline_config: Config dict received from Antenna task (may be None)
+        pipeline_config: Pipeline config received from Antenna task (may be None)
 
     Returns:
         (n_items, n_detections, batch_results, detect_time, classify_time)
@@ -354,7 +354,7 @@ def _process_batch(
                 source_images=[source_image],
                 detections=image_detections[image_id],
                 total_time=batch_elapsed / len(image_ids),
-                config=PipelineConfigRequest(**(pipeline_config or {})),
+                config=pipeline_config or PipelineConfigRequest(),
             )
             batch_results.append(
                 AntennaTaskResult(
