@@ -19,6 +19,7 @@ from trapdata.api.models.classification import MothClassifierBinary
 from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
     DetectionResponse,
+    PipelineConfigRequest,
     PipelineResultsResponse,
     SourceImageResponse,
 )
@@ -208,6 +209,7 @@ def _process_batch(
     pipeline: str,
     binary_filter: "MothClassifierBinary | None",
     use_binary_filter: bool,
+    pipeline_config: dict | None = None,
 ) -> tuple[int, int, list[AntennaTaskResult], float, float]:
     """Process a single batch of images through detection and classification.
 
@@ -223,6 +225,7 @@ def _process_batch(
         pipeline: Pipeline slug for response payload
         binary_filter: Binary moth/non-moth classifier, or None
         use_binary_filter: Whether to run binary classification step
+        pipeline_config: Config dict received from Antenna task (may be None)
 
     Returns:
         (n_items, n_detections, batch_results, detect_time, classify_time)
@@ -351,6 +354,7 @@ def _process_batch(
                 source_images=[source_image],
                 detections=image_detections[image_id],
                 total_time=batch_elapsed / len(image_ids),
+                config=PipelineConfigRequest(**(pipeline_config or {})),
             )
             batch_results.append(
                 AntennaTaskResult(
@@ -491,6 +495,7 @@ def _process_job(
                 pipeline,
                 binary_filter,
                 use_binary_filter,
+                pipeline_config=batch.get("config"),
             )
             items += n_items
             total_detections += n_detections
