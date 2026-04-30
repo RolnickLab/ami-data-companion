@@ -310,6 +310,7 @@ class RESTDataset(torch.utils.data.IterableDataset):
                         "reply_subject": task.reply_subject,
                         "image_id": task.image_id,
                         "image_url": task.image_url,
+                        "config": task.config,
                     }
                     if errors:
                         row["error"] = "; ".join(errors) if errors else None
@@ -380,12 +381,15 @@ def rest_collate_fn(batch: list[dict]) -> dict:
             "reply_subjects": [item["reply_subject"] for item in successful],
             "image_ids": [item["image_id"] for item in successful],
             "image_urls": [item.get("image_url") for item in successful],
+            # All tasks in a job share the same pipeline config; take the first.
+            "config": successful[0].get("config"),
         }
     else:
         # Empty batch - all failed
         result = {
             "reply_subjects": [],
             "image_ids": [],
+            "config": None,
         }
 
     result["failed_items"] = failed
