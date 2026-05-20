@@ -69,6 +69,7 @@ from io import BytesIO
 
 import requests
 import torch
+import torch.multiprocessing as mp
 import torch.utils.data
 import torchvision
 from PIL import Image
@@ -417,12 +418,21 @@ def get_rest_dataloader(
     DataLoader num_workers > 0 is safe here because Antenna dequeues
     tasks atomically — each worker subprocess gets a unique set of tasks.
 
+    Subprocess hygiene (see #140, #145): we explicitly set
+    multiprocessing_context (default ``forkserver``) and a non-zero
+    ``timeout`` to keep the DataLoader from inheriting stale parent state
+    via ``fork`` and from hanging forever when a subprocess dies
+    mid-shared-memory-cleanup. Both knobs are env-configurable so a single
+    bad pipeline can fall back without touching the others.
+
     Args:
         job_id: Job ID to fetch tasks for
         settings: Settings object. Relevant fields:
             - antenna_api_base_url / antenna_api_auth_token
             - antenna_api_batch_size  (tasks per API call and GPU batch size)
             - num_workers            (DataLoader subprocesses)
+            - antenna_api_dataloader_mp_context  (fork / spawn / forkserver / "")
+            - antenna_api_dataloader_timeout_s   (per-batch timeout, seconds)
     """
     dataset = RESTDataset(
         base_url=settings.antenna_api_base_url,
@@ -430,6 +440,31 @@ def get_rest_dataloader(
         job_id=job_id,
         batch_size=settings.antenna_api_batch_size,
     )
+
+    # Resolve multiprocessing context. Empty string / unset means "let
+    # PyTorch choose" (today: "fork" on Linux), which is the historical
+    # behavior. Anything else must be one of the multiprocessing start
+    # methods supported by the host. Only relevant when num_workers > 0
+    # because num_workers=0 runs the dataset inline in the main process.
+    mp_context = (
+        getattr(settings, "antenna_api_dataloader_mp_context", "forkserver") or ""
+    ).strip().lower()
+    if settings.num_workers > 0 and mp_context:
+        if mp_context not in ("fork", "spawn", "forkserver"):
+            raise ValueError(
+                f"antenna_api_dataloader_mp_context must be one of "
+                f"'fork', 'spawn', 'forkserver', or empty; got {mp_context!r}"
+            )
+        dataloader_mp_context: object | None = mp.get_context(mp_context)
+    else:
+        dataloader_mp_context = None
+
+    # Per-batch timeout. PyTorch interprets 0 as "wait forever" (the
+    # behavior that caused the silent hangs in #140); we treat negative or
+    # zero as "disable the guard" so an operator can opt out if needed,
+    # but the default is a 5-minute ceiling.
+    timeout_s = int(getattr(settings, "antenna_api_dataloader_timeout_s", 300) or 0)
+    dataloader_timeout = timeout_s if timeout_s > 0 and settings.num_workers > 0 else 0
 
     return torch.utils.data.DataLoader(
         dataset,
@@ -439,6 +474,8 @@ def get_rest_dataloader(
         pin_memory=True,
         persistent_workers=settings.num_workers > 0,
         prefetch_factor=4 if settings.num_workers > 0 else None,
+        multiprocessing_context=dataloader_mp_context,
+        timeout=dataloader_timeout,
     )
 
 
