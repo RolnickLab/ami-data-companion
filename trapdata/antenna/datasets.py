@@ -446,14 +446,19 @@ def get_rest_dataloader(
     # behavior. Anything else must be one of the multiprocessing start
     # methods supported by the host. Only relevant when num_workers > 0
     # because num_workers=0 runs the dataset inline in the main process.
+    # We query mp.get_all_start_methods() (rather than hardcoding the
+    # ("fork", "spawn", "forkserver") tuple) so that the validation matches
+    # what the running interpreter / platform actually supports — e.g. macOS
+    # under Python 3.13+ no longer lists "fork" by default.
     mp_context = (
         getattr(settings, "antenna_api_dataloader_mp_context", "forkserver") or ""
     ).strip().lower()
     if settings.num_workers > 0 and mp_context:
-        if mp_context not in ("fork", "spawn", "forkserver"):
+        allowed = set(mp.get_all_start_methods())
+        if mp_context not in allowed:
             raise ValueError(
                 f"antenna_api_dataloader_mp_context must be one of "
-                f"'fork', 'spawn', 'forkserver', or empty; got {mp_context!r}"
+                f"{sorted(allowed)!r} or empty; got {mp_context!r}"
             )
         dataloader_mp_context: object | None = mp.get_context(mp_context)
     else:

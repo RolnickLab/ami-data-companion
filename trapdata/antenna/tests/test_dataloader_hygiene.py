@@ -12,7 +12,6 @@ the fix can't be silently regressed by a future refactor of
 ``get_rest_dataloader``.
 """
 
-import multiprocessing
 from types import SimpleNamespace
 from unittest import TestCase
 
