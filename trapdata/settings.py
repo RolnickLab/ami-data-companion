@@ -43,6 +43,19 @@ class Settings(BaseSettings):
     antenna_service_name: str = "AMI Data Companion"
     antenna_api_batch_size: int = 24
 
+    # DataLoader subprocess hygiene (see RolnickLab/ami-data-companion#140, #145)
+    # multiprocessing context: "forkserver" (default) avoids the parent
+    # heap-inheritance behavior of "fork" that lets stale CUDA / pinned-memory
+    # state leak into DataLoader subprocesses as shared memory. Allowed values
+    # are "fork", "spawn", "forkserver", or "" (let PyTorch pick its default).
+    antenna_api_dataloader_mp_context: str = "forkserver"
+    # Per-batch timeout in seconds: if a DataLoader subprocess wedges on a
+    # shared-memory cleanup race (#140), the main thread will currently wait
+    # forever. A non-zero timeout converts that silent hang into a RuntimeError
+    # that supervisor can restart the worker from. 300s is well above any
+    # legitimate per-batch wait we have measured.
+    antenna_api_dataloader_timeout_s: int = 300
+
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
         """
