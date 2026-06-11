@@ -24,7 +24,7 @@ import time
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 
-from trapdata.antenna.client import post_batch_results
+from trapdata.antenna.client import DEFAULT_RESULT_POST_MAX_BYTES, post_batch_results
 from trapdata.common.logs import logger
 
 
@@ -69,9 +69,11 @@ class ResultPoster:
         self,
         max_pending: int = 5,
         future_timeout: float = 30.0,
+        max_post_bytes: int = DEFAULT_RESULT_POST_MAX_BYTES,
     ):
         self.max_pending = max_pending
         self.future_timeout = future_timeout  # Timeout for individual future waits
+        self.max_post_bytes = max_post_bytes  # Per-POST body size cap (bytes)
         self.executor = ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="result_poster"
         )
@@ -167,7 +169,13 @@ class ResultPoster:
             True if successful, False otherwise
         """
         try:
-            success = post_batch_results(base_url, auth_token, job_id, results)
+            success = post_batch_results(
+                base_url,
+                auth_token,
+                job_id,
+                results,
+                max_bytes=self.max_post_bytes,
+            )
             elapsed_time = time.time() - start_time
 
             with self._metrics_lock:

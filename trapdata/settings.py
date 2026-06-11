@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     antenna_api_auth_token: str = ""
     antenna_service_name: str = "AMI Data Companion"
     antenna_api_batch_size: int = 24
+    # Maximum size (in bytes) of a single result POST body to the Antenna API.
+    # The results for one processed batch are split across multiple POSTs so that
+    # no single request exceeds this limit. Wide-taxonomy classifiers (e.g. the
+    # global moths model with ~29k classes) emit ~2 MB per detection because each
+    # classification carries full-length labels/scores/logits arrays, so a dense
+    # batch can otherwise produce a 100+ MB body that reverse proxies reject (413).
+    # Default 25 MB leaves headroom under common proxy limits (typically 100 MB).
+    antenna_result_post_max_bytes: int = 25 * 1024 * 1024
 
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
@@ -167,6 +175,15 @@ class Settings(BaseSettings):
             "antenna_api_batch_size": {
                 "title": "Antenna API Batch Size",
                 "description": "Number of tasks to fetch from Antenna per batch",
+                "kivy_type": "numeric",
+                "kivy_section": "antenna",
+            },
+            "antenna_result_post_max_bytes": {
+                "title": "Antenna Result POST Max Bytes",
+                "description": (
+                    "Maximum size in bytes of a single result POST body; results "
+                    "for a batch are split across multiple POSTs to stay under it"
+                ),
                 "kivy_type": "numeric",
                 "kivy_section": "antenna",
             },
