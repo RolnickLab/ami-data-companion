@@ -1,4 +1,6 @@
 import contextlib
+import functools
+import os
 import pathlib
 import time
 from typing import Generator
@@ -92,31 +94,65 @@ def migrate(db_path: DatabaseURL) -> None:
     alembic.upgrade(alembic_cfg, "head")
 
 
-def get_db(db_path, create=False, update=False):
-    """ """
-    db_path = get_safe_db_path(db_path)
+@functools.lru_cache(maxsize=None)
+def _get_engine(db_path_str: str, dialect: str, pid: int) -> sa.engine.Engine:
+    """
+    Build (and cache) a single Engine per (db_path, dialect, pid).
 
-    dialect = get_dialect(db_path)
+    IMPORTANT: `get_db()` used to call `sa.create_engine(...)` on every
+    invocation, which meant every call to `get_session()` (there are ~90
+    call sites, including inside per-batch loops like
+    `ImageQueue.pull_n_from_queue`) spun up a brand new connection pool
+    (pool_size=20, max_overflow=30 for postgres). Old engines/pools were
+    never explicitly disposed, so connections accumulated across batches
+    until Postgres hit `max_connections` ("sorry, too many clients
+    already"). Caching the engine here means we reuse one pool for the
+    lifetime of the process instead of leaking a new one per call.
 
-    # Base engine configuration
+    Keying on `pid` makes this cache fork-safe. A process that inherits
+    this cache via fork() (e.g. a persistent DataLoader worker) will
+    compute a *different* key the first time it calls get_db(), since
+    os.getpid() differs from the parent's -- so it transparently builds
+    its own fresh Engine/pool instead of reusing (and potentially
+    corrupting, via shared sockets) connections the parent already had
+    open before the fork happened.
+
+    Arguments:
+        db_path_str: database connection string (filepath or URL)
+        dialect: database dialect (sqlite, postgresql, etc.)
+        pid: process ID (used to key the cache for fork safety)
+            Even though this is not used in the function itself,
+            lru_cache will key the cache on it, so that a forked process will
+            get a new engine instead of reusing the parent's engine.
+    """
     engine_kwargs = {
         "echo": False,
         "future": True,
         "connect_args": DIALECT_CONNECTION_ARGS.get(dialect, {}),
     }
 
-    # Add PostgreSQL-specific engine optimizations
     if dialect == "postgresql":
         engine_kwargs.update(
             {
-                "pool_size": 20,  # Connection pooling for better performance
-                "max_overflow": 30,
+                "pool_size": 5,  # Reused across all calls now, so this can be modest
+                "max_overflow": 10,
                 "pool_pre_ping": True,
                 "pool_recycle": 3600,
             }
         )
 
-    db = sa.create_engine(db_path, **engine_kwargs)
+    return sa.create_engine(db_path_str, **engine_kwargs)
+
+
+def get_db(db_path):
+    """ """
+    db_path = get_safe_db_path(db_path)
+    dialect = get_dialect(db_path)
+
+    # Reuse a single cached engine (and its connection pool) per
+    # (db_path, pid), rather than creating a new engine/pool on every
+    # call -- see _get_engine's docstring for why pid is included.
+    db = _get_engine(db_path.render_as_string(hide_password=False), dialect, os.getpid())
     return db
 
 
@@ -127,7 +163,7 @@ def get_session_class(db_path, **kwargs) -> orm.sessionmaker[orm.Session]:
     Then we don't have to pass around the db_path
     """
     Session = orm.sessionmaker(
-        bind=get_db(db_path, create=False, update=False),
+        bind=get_db(db_path),
         expire_on_commit=False,  # Currently only need this for `pull_n_from_queue`
         autoflush=False,
         autocommit=False,
