@@ -99,23 +99,11 @@ def _get_engine(db_path_str: str, dialect: str, pid: int) -> sa.engine.Engine:
     """
     Build (and cache) a single Engine per (db_path, dialect, pid).
 
-    IMPORTANT: `get_db()` used to call `sa.create_engine(...)` on every
-    invocation, which meant every call to `get_session()` (there are ~90
-    call sites, including inside per-batch loops like
-    `ImageQueue.pull_n_from_queue`) spun up a brand new connection pool
-    (pool_size=20, max_overflow=30 for postgres). Old engines/pools were
-    never explicitly disposed, so connections accumulated across batches
-    until Postgres hit `max_connections` ("sorry, too many clients
-    already"). Caching the engine here means we reuse one pool for the
-    lifetime of the process instead of leaking a new one per call.
-
-    Keying on `pid` makes this cache fork-safe. A process that inherits
-    this cache via fork() (e.g. a persistent DataLoader worker) will
-    compute a *different* key the first time it calls get_db(), since
-    os.getpid() differs from the parent's -- so it transparently builds
-    its own fresh Engine/pool instead of reusing (and potentially
-    corrupting, via shared sockets) connections the parent already had
-    open before the fork happened.
+    `get_db` calls this function to get a cached Engine for the current process. 
+    The `pid` argument is used to key the cache so that different processes 
+    (including parent/child processes after forking) will compute a
+    different cache key and each build their own Engine. This avoids reusing and 
+    potentially corrupting connections that would otherwise be shared across forks.
 
     Arguments:
         db_path_str: database connection string (filepath or URL)
