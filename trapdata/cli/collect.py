@@ -55,7 +55,7 @@ def collect_images(path, max_num=None):
 
 def count_images(path):
     with StopWatch() as t:
-        count = sum(1 for _ in find_images(path, include_timestamps=False))
+        count = sum(1 for _ in find_images(path))
     logger.info(f"Total images: {count}")
     logger.info(t)
 
