@@ -407,8 +407,8 @@ class SpeciesClassifier(InferenceBaseClass):
         # Here we are saving the specific taxon labels
         classified_objects_data = [
             {
-                "specific_label": label,
-                "specific_label_score": score,
+                "specific_label": str(label),
+                "specific_label_score": float(score),
                 "model_name": self.name,
                 "in_queue": True,  # Put back in queue for the feature extractor & tracking
             }
