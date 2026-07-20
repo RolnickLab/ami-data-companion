@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     classification_threshold: float = 0.6
     localization_batch_size: int = 8
     classification_batch_size: int = 20
+    feature_extraction_batch_size: int = 20
     num_workers: int = 4
 
     # Antenna API worker settings
@@ -136,8 +137,19 @@ class Settings(BaseSettings):
             "classification_batch_size": {
                 "title": "Classification batch size",
                 "description": (
-                    "Number of images to process per-batch during classification. "
-                    "These are small images (e.g. 50x100px), larger batch sizes are appropriate (10-200). "
+                    "Number of images to process per-batch during binary and species "
+                    "classification. These are small images (e.g. 50x100px), larger "
+                    "batch sizes are appropriate (10-200). Reduce this if you run out "
+                    "of memory."
+                ),
+                "kivy_type": "numeric",
+                "kivy_section": "performance",
+            },
+            "feature_extraction_batch_size": {
+                "title": "Feature extraction batch size",
+                "description": (
+                    "Number of images to process per-batch when extracting CNN "
+                    "feature vectors for occurrence tracking. "
                     "Reduce this if you run out of memory."
                 ),
                 "kivy_type": "numeric",

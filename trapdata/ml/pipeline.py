@@ -62,7 +62,7 @@ def start_pipeline(
         db_path=settings.database_url,
         image_base_path=image_base_path,
         user_data_path=settings.user_data_path,
-        batch_size=settings.classification_batch_size,
+        batch_size=settings.feature_extraction_batch_size,
         num_workers=settings.num_workers,
         single=single,
     )
