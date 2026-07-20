@@ -321,6 +321,21 @@ def save_detected_objects(
             .all()
         )
 
+        # Look images up by id explicitly, to ensure correct pairing
+        images_by_id = {img.id: img for img in images}
+        missing_ids = [image_id for image_id in image_ids if image_id not in images_by_id]
+        if missing_ids:
+            logger.warning(
+                f"save_detected_objects: {len(missing_ids)} image_id(s) not found "
+                f"in the database and will be skipped: {missing_ids}"
+            )
+        images = [images_by_id[image_id] for image_id in image_ids if image_id in images_by_id]
+        detected_objects_data = [
+            data
+            for image_id, data in zip(image_ids, detected_objects_data)
+            if image_id in images_by_id
+        ]
+
         # CRITICAL PERFORMANCE FIX: Batch fetch all previous images at once
         # This eliminates the N+1 query problem where previous_image was called for each detection
         _ = [img.id for img in images]
@@ -379,10 +394,6 @@ def save_detected_objects(
                     last_detected=timestamp,
                     in_queue=True,
                 )
-
-                if "bbox" in object_data:
-                    area_pixels = bbox_area(object_data["bbox"])
-                    object_data["area_pixels"] = area_pixels
 
                 for k, v in object_data.items():
                     setattr(detection, k, v)
