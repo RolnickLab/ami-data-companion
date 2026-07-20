@@ -359,7 +359,7 @@ def save_detected_objects(
 
             # sesh.add(image)
             orm_objects.append(image)
-
+            
             for object_data in detected_objects:
                 detection = DetectedObject(
                     last_detected=timestamp,
@@ -376,10 +376,15 @@ def save_detected_objects(
                 detection.monitoring_session_id = image.monitoring_session_id
                 detection.image_id = image.id
 
-                detection.save_cropped_image_data(
-                    source_image=image,
-                    base_path=user_data_path,
-                )
+                if area_pixels is not None and area_pixels > 0:
+                    detection.save_cropped_image_data(
+                        source_image=image,
+                        base_path=user_data_path,
+                    )
+                else:
+                    logger.warning(
+                        f"Detected object with bbox {detection.bbox} has area 0, skipping cropped image save."
+                    )
 
                 detection.timestamp = image.timestamp
 
