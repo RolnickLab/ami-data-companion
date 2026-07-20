@@ -44,6 +44,16 @@ def slugify(s):
     )
 
 
+def is_valid_bbox(bbox) -> bool:
+    """
+    Return True if a bounding box has positive (nonzero) width and height.
+    """
+    if bbox is None:
+        return False
+    x1, y1, x2, y2 = bbox
+    return (x2 > x1) and (y2 > y1)
+
+
 def bbox_area(bbox: tuple[float, float, float, float]) -> float:
     """
     Return the area of a bounding box.

@@ -8,6 +8,7 @@ import torchvision.models.detection.faster_rcnn
 import torchvision.models.mobilenetv3
 
 from trapdata import TrapImage, db, logger
+from trapdata.common.utils import is_valid_bbox
 from trapdata.db.models.detections import save_detected_objects
 from trapdata.db.models.queue import ImageQueue
 from trapdata.ml.models.base import InferenceBaseClass
@@ -142,6 +143,25 @@ class ObjectDetector(InferenceBaseClass):
     type = "object_detection"
     stage = 1
 
+    @staticmethod
+    def _drop_degenerate_boxes(bboxes: list) -> list:
+        """
+        Drop bounding boxes with zero (or negative) width/height.
+
+        Box coordinates come back from the model as floats and get
+        truncated to ints via `.astype(int)`, which can truncate 
+        down to a box with zero height. Remove these to avoid
+        crashing the classification.
+        """
+        valid_bboxes = [bbox for bbox in bboxes if is_valid_bbox(bbox)]
+        dropped = len(bboxes) - len(valid_bboxes)
+        if dropped:
+            logger.warning(
+                f"Dropped {dropped} degenerate (zero-size) bounding box(es) "
+                "produced by int-truncating float box coordinates"
+            )
+        return valid_bboxes
+
     def get_transforms(self):
         return torchvision.transforms.Compose(
             [
@@ -241,6 +261,7 @@ class MothObjectDetector_FasterRCNN_2021(ObjectDetector):
         )
 
         bboxes = bboxes.cpu().numpy().astype(int).tolist()
+        bboxes = self._drop_degenerate_boxes(bboxes)
         return bboxes
 
 
@@ -284,6 +305,7 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
         )
 
         bboxes = bboxes.cpu().numpy().astype(int).tolist()
+        bboxes = self._drop_degenerate_boxes(bboxes)
         return bboxes
 
 
@@ -340,4 +362,5 @@ class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
         )
 
         bboxes = bboxes.cpu().numpy().astype(int).tolist()
+        bboxes = self._drop_degenerate_boxes(bboxes)
         return bboxes

@@ -11,7 +11,7 @@ from trapdata import constants, db
 from trapdata.common.filemanagement import absolute_path, construct_exif, save_image
 from trapdata.common.logs import logger
 from trapdata.common.schemas import FilePath
-from trapdata.common.utils import bbox_area, bbox_center, export_report
+from trapdata.common.utils import bbox_area, bbox_center, export_report, is_valid_bbox
 from trapdata.db import models
 from trapdata.db.models.images import completely_classified
 
@@ -359,8 +359,22 @@ def save_detected_objects(
 
             # sesh.add(image)
             orm_objects.append(image)
-            
+
             for object_data in detected_objects:
+                bbox = object_data.get("bbox")
+
+                if bbox is not None and not is_valid_bbox(bbox):
+                    # Skip creating a row for degenerate boxes,
+                    # rather than saving one with no crop image.
+                    logger.warning(
+                        f"Skipping detection with degenerate bbox {bbox} "
+                        f"for image {image.id}"
+                    )
+                    continue
+
+                if bbox is not None:
+                    object_data["area_pixels"] = bbox_area(bbox)
+
                 detection = DetectedObject(
                     last_detected=timestamp,
                     in_queue=True,
@@ -376,15 +390,10 @@ def save_detected_objects(
                 detection.monitoring_session_id = image.monitoring_session_id
                 detection.image_id = image.id
 
-                if area_pixels is not None and area_pixels > 0:
-                    detection.save_cropped_image_data(
-                        source_image=image,
-                        base_path=user_data_path,
-                    )
-                else:
-                    logger.warning(
-                        f"Detected object with bbox {detection.bbox} has area 0, skipping cropped image save."
-                    )
+                detection.save_cropped_image_data(
+                    source_image=image,
+                    base_path=user_data_path,
+                )
 
                 detection.timestamp = image.timestamp
 

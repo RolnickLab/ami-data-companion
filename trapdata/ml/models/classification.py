@@ -51,12 +51,31 @@ class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
 
             records = self.queue.pull_n_from_queue(self.batch_size)
             if records:
+                # Transform records one at a time, so a single bad crop
+                # only drops that one record instead of crashing the whole
+                # batch of self.batch_size records.
+                valid_records = []
+                valid_transforms = []
+                for record in records:
+                    try:
+                        transformed = self.transform(record.cropped_image_data())
+                    except Exception as e:
+                        logger.warning(
+                            f"Skipping detected object {record.id} "
+                            f"(bbox={record.bbox!r}): failed to crop/transform "
+                            f"image: {e}"
+                        )
+                        continue
+                    valid_records.append(record)
+                    valid_transforms.append(transformed)
+
+                if not valid_transforms:
+                    continue
+
                 item_ids = torch.utils.data.default_collate(
-                    [record.id for record in records]
+                    [record.id for record in valid_records]
                 )
-                batch_data = torch.utils.data.default_collate(
-                    [self.transform(record.cropped_image_data()) for record in records]
-                )
+                batch_data = torch.utils.data.default_collate(valid_transforms)
                 yield (item_ids, batch_data)
             else:
                 are_records = False
