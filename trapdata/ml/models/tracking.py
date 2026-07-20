@@ -598,7 +598,7 @@ def assign_sequence(
 
     Will create a new sequence if necessary. Saves their similarity and order to the database.
     """
-    obj_current.sequence_previous_cost = final_cost
+    obj_current.sequence_previous_cost = float(final_cost) # Fix for a numpy version incompatibility issue
     obj_current.sequence_previous_id = obj_previous.id
     if obj_previous.sequence_id:
         obj_current.sequence_id = obj_previous.sequence_id
