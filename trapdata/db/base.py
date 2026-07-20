@@ -236,16 +236,30 @@ def check_db(db_path, create=True, update=True, quiet=False):
 
 def reset_db(db_path: DatabaseURL) -> None:
     db_path = get_safe_db_path(db_path)
-    if get_dialect(db_path) == "sqlite" and db_path.database:
+    dialect = get_dialect(db_path)
+
+    if dialect == "sqlite" and db_path.database:
         path = pathlib.Path(db_path.database)
         timestamp = int(time.time())
         backup_path = path.with_stem(f"{path.stem}-{timestamp}")
         path.rename(backup_path)
         logger.info(f"Backup of {path.name} saved to {backup_path}")
+        logger.info("Recreating database and tables")
+        create_db(db_path)
     else:
-        raise NotImplementedError("Only implemented for sqlite databases")
-    logger.info("Recreating database and tables")
-    create_db(db_path)
+        # Truncate every app table in place: clear all rows and reset 
+        # auto-increment sequences, but leave the schema and Alembic 
+        # migration state untouched, so migrations don't need to be re-run
+        from . import Base
+
+        engine = get_db(db_path)
+        table_names = ", ".join(f'"{t.name}"' for t in Base.metadata.sorted_tables)
+        logger.warning(f"Truncating all data in tables: {table_names}")
+        with engine.begin() as conn:
+            conn.execute(
+                sa.text(f"TRUNCATE TABLE {table_names} RESTART IDENTITY CASCADE")
+            )
+        logger.info("All tables truncated. Schema and migrations are unchanged.")
 
 
 def query(db_path, q, **kwargs):
