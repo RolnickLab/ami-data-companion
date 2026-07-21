@@ -381,6 +381,7 @@ def save_image(
     name=None,
     suffix=".jpg",
     exif_data: Optional[PIL.Image.Exif] = None,
+    shard_prefix_length: int = 2,
 ):
     """
     Accepts a PIL image, returns fpath Path object
@@ -397,8 +398,21 @@ def save_image(
     if subdir:
         base_path = base_path / subdir
 
+    # Shard into a subdirectory based on the filename's own prefix, so a
+    # single directory never accumulates millions of entries. ext4 (and
+    # several other filesystems) has a per-directory index capacity that's
+    # completely independent of overall filesystem free space/inodes --
+    # once a single directory's own index fills up, new file creation in
+    # it fails with the same ENOSPC ("No space left on device") error as
+    # genuinely running out of disk, even though `df` looks perfectly
+    # healthy. `name` defaults to an MD5 hash (uniformly distributed), so
+    # sharding by its first few hex characters spreads files evenly across
+    # 16**shard_prefix_length subdirectories.
+    if shard_prefix_length:
+        base_path = base_path / name[:shard_prefix_length]
+
     if not base_path.exists():
-        base_path.mkdir(parents=True)
+        base_path.mkdir(parents=True, exist_ok=True)
 
     fpath = (base_path / name).with_suffix(suffix)
     logger.debug(f"Saving image to {fpath}")

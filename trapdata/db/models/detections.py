@@ -150,7 +150,15 @@ class DetectedObject(db.Base):
                 source_image=source_image,
             ),
             base_path=base_path,
-            subdir="crops",
+            # NOTE: deliberately "crops_sharded", not "crops" -- the
+            # original flat "crops" directory accumulated ~9M files and
+            # hit ext4's per-directory index capacity (ENOSPC despite
+            # plenty of free bytes/inodes on the filesystem itself). New
+            # crops go into a fresh, empty, hash-sharded directory so
+            # they never have to add an entry to the already-saturated
+            # one. Existing crops under "crops/" are untouched and still
+            # resolve fine via their already-stored absolute paths.
+            subdir="crops_sharded",
             exif_data=exif_data,
         )
         self.path = str(fpath)
