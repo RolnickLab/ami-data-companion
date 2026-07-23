@@ -4,9 +4,18 @@ from typing import Annotated
 
 import typer
 
-from trapdata.api.api import CLASSIFIER_CHOICES
+from trapdata.api.api import PIPELINE_CHOICES
 
 cli = typer.Typer(help="Antenna worker commands for remote processing")
+
+
+def default_pipeline_slugs() -> list[str]:
+    """The pipelines a worker subscribes to when none are named on the command
+    line: every pipeline the service advertises. Read from PIPELINE_CHOICES, the
+    same registry /info and job dispatch use, so the worker cannot subscribe to a
+    different set than it advertises or can dispatch.
+    """
+    return list(PIPELINE_CHOICES.keys())
 
 
 @cli.callback(invoke_without_command=True)
@@ -31,16 +40,18 @@ def run(
         return
 
     if not pipelines:
-        pipelines = list(CLASSIFIER_CHOICES.keys())
+        pipelines = default_pipeline_slugs()
 
-    # Validate that each pipeline is in CLASSIFIER_CHOICES
+    # Validate against the full pipeline registry, not the legacy classifier
+    # shim, so newer pipelines (e.g. the anybug detector) can be requested.
+    valid_slugs = list(PIPELINE_CHOICES.keys())
     invalid_pipelines = [
-        pipeline for pipeline in pipelines if pipeline not in CLASSIFIER_CHOICES.keys()
+        pipeline for pipeline in pipelines if pipeline not in valid_slugs
     ]
 
     if invalid_pipelines:
         raise typer.BadParameter(
-            f"Invalid pipeline(s): {', '.join(invalid_pipelines)}. Must be one of: {', '.join(CLASSIFIER_CHOICES.keys())}"
+            f"Invalid pipeline(s): {', '.join(invalid_pipelines)}. Must be one of: {', '.join(valid_slugs)}"
         )
 
     from trapdata.antenna.worker import run_worker

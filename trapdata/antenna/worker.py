@@ -14,7 +14,7 @@ from trapdata.antenna.client import get_full_service_name, get_jobs
 from trapdata.antenna.datasets import CUDAPrefetcher, get_rest_dataloader
 from trapdata.antenna.result_posting import ResultPoster
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
-from trapdata.api.api import CLASSIFIER_CHOICES, should_filter_detections
+from trapdata.api.api import PIPELINE_CHOICES, should_filter_detections
 from trapdata.api.models.classification import MothClassifierBinary
 from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
@@ -424,9 +424,30 @@ def _process_job(
     classifier = None
     detector = None
 
-    # Check if binary filtering is needed once for the entire job
-    classifier_class = CLASSIFIER_CHOICES[pipeline]
-    use_binary_filter = should_filter_detections(classifier_class)
+    # Look the pipeline up in the full registry (the same one /info advertises
+    # and the worker subscribes to) so every advertised slug is dispatchable.
+    pipeline_def = PIPELINE_CHOICES[pipeline]
+    classifier_class = pipeline_def.terminal
+    # Check if binary filtering is needed once for the entire job.
+    use_binary_filter = should_filter_detections(pipeline_def)
+
+    # This in-process worker only executes the FasterRCNN moth detector with an
+    # optional binary moth/non-moth filter. A pipeline needing a different
+    # detector or a non-binary gate (e.g. the anybug YOLO26 detector with the
+    # Lepidoptera order gate) is advertised and dispatchable, but _process_batch
+    # cannot run its stages yet. Fail loudly rather than silently detecting with
+    # the wrong model. TODO(anybug): make _process_batch stage-aware from
+    # PIPELINE_CHOICES, then drop this guard.
+    gpu_worker_supports_pipeline = pipeline_def.detector is APIMothDetector and all(
+        stage.classifier is MothClassifierBinary for stage in pipeline_def.intermediates
+    )
+    if not gpu_worker_supports_pipeline:
+        raise NotImplementedError(
+            f"The worker cannot run pipeline '{pipeline}' yet: it needs detector "
+            f"'{pipeline_def.detector.__name__}' and gates "
+            f"{[stage.classifier.__name__ for stage in pipeline_def.intermediates]}. "
+            "This path only supports APIMothDetector with the binary moth filter."
+        )
     binary_filter = None
 
     if device is None:

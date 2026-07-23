@@ -60,6 +60,14 @@ app.add_middleware(GZipMiddleware)
 LEPIDOPTERA_ORDER_LABEL = "Lepidoptera"
 
 
+def _is_model_class(obj: object, task_type: str) -> bool:
+    """True when ``obj`` is a model class whose ``task_type`` matches, e.g.
+    "localization" for a detector or "classification" for a classifier. Used to
+    validate that each pipeline stage is filled with a model of the right role.
+    """
+    return isinstance(obj, type) and getattr(obj, "task_type", None) == task_type
+
+
 @dataclasses.dataclass(frozen=True)
 class IntermediateStage:
     """An intermediate classifier that gates detections between the detector and
@@ -74,17 +82,58 @@ class IntermediateStage:
     classifier: type[APIMothClassifier]
     pass_labels: tuple[str, ...] | None = None
 
+    def __post_init__(self) -> None:
+        # Validate the slot's role on construction rather than trusting callers:
+        # a gate must be a classification model, and pass_labels must be a tuple
+        # (or None to mean "tag every detection and let all of them pass").
+        if not _is_model_class(self.classifier, "classification"):
+            raise TypeError(
+                "IntermediateStage.classifier must be a classification model "
+                f"class, got {self.classifier!r}"
+            )
+        if self.pass_labels is not None and not isinstance(self.pass_labels, tuple):
+            raise TypeError(
+                "IntermediateStage.pass_labels must be a tuple of labels or None, "
+                f"got {self.pass_labels!r}"
+            )
+
 
 @dataclasses.dataclass(frozen=True)
 class PipelineDefinition:
     """Ordered stage definition for a pipeline: one detector, zero or more
     intermediate gate classifiers, then one terminal classifier. This is the
     single source of truth for how a pipeline slug is processed and advertised.
+
+    The fields are named by the role each stage plays (detector / intermediate
+    gate / terminal), and the shape is validated on construction: exactly one
+    localization model in ``detector``, exactly one classification model in
+    ``terminal``, and every ``intermediates`` entry an ``IntermediateStage``.
+    Because the detector and terminal are distinct single fields, "one detector
+    first, one terminal last" is enforced structurally, never by list position.
     """
 
     detector: type[APIMothDetector | APIAnyBugDetector]
     terminal: type[APIMothClassifier]
     intermediates: tuple[IntermediateStage, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not _is_model_class(self.detector, "localization"):
+            raise TypeError(
+                "PipelineDefinition.detector must be a localization model class, "
+                f"got {self.detector!r}"
+            )
+        if not _is_model_class(self.terminal, "classification"):
+            raise TypeError(
+                "PipelineDefinition.terminal must be a classification model class, "
+                f"got {self.terminal!r}"
+            )
+        if not isinstance(self.intermediates, tuple) or not all(
+            isinstance(stage, IntermediateStage) for stage in self.intermediates
+        ):
+            raise TypeError(
+                "PipelineDefinition.intermediates must be a tuple of "
+                f"IntermediateStage, got {self.intermediates!r}"
+            )
 
 
 # The binary moth/non-moth filter used by every species pipeline: only "moth"
@@ -149,18 +198,20 @@ _pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys
 PipelineChoice = enum.Enum("PipelineChoice", _pipeline_choices)
 
 
-# Backward-compatibility shim. Several call sites outside the FastAPI /process
-# path (the antenna GPU worker in antenna/worker.py, the CLI, registration, and
-# the test suite) still import CLASSIFIER_CHOICES as a {slug: terminal_classifier}
-# mapping and should_filter_detections(). Both are derived from the new
-# PIPELINE_CHOICES so those callers keep working unchanged.
+# DEPRECATED backward-compatibility projections of PIPELINE_CHOICES, kept for
+# call sites not yet migrated off the old shapes: registration, the api/tests
+# helpers, and cli/base.py still import CLASSIFIER_CHOICES as a
+# {slug: terminal_classifier} mapping. Both are DERIVED from PIPELINE_CHOICES —
+# never hand-maintained in parallel — so the two views cannot drift.
 #
-# The anybug pipeline is intentionally excluded: it uses a different detector
-# (APIAnyBugDetector) and an order gate, so the moth-detector-based GPU worker
-# must not silently run it with the wrong stages.
+# CLASSIFIER_CHOICES intentionally covers only the default-detector
+# (APIMothDetector) pipelines, matching its historical contract. The anybug
+# pipeline uses APIAnyBugDetector and so is absent here; consumers that must see
+# every pipeline (the worker's subscription, validation, and dispatch) read
+# PIPELINE_CHOICES directly.
 #
-# TODO(anybug): migrate the antenna/worker.py GPU path to consume PIPELINE_CHOICES
-# stage definitions directly, then delete this shim.
+# TODO(anybug): migrate the remaining CLASSIFIER_CHOICES / should_filter_detections
+# consumers onto PIPELINE_CHOICES stage definitions, then delete these shims.
 CLASSIFIER_CHOICES: dict[str, type[APIMothClassifier]] = {
     slug: pipeline.terminal
     for slug, pipeline in PIPELINE_CHOICES.items()
@@ -168,12 +219,17 @@ CLASSIFIER_CHOICES: dict[str, type[APIMothClassifier]] = {
 }
 
 
-def should_filter_detections(Classifier: type[APIMothClassifier]) -> bool:
-    """Deprecated: whether the FasterRCNN/GPU worker path should run the binary
-    moth filter ahead of ``Classifier``. The FastAPI path uses the explicit
-    stage config in PIPELINE_CHOICES instead. Kept for the antenna GPU worker.
+def should_filter_detections(pipeline: PipelineDefinition) -> bool:
+    """Deprecated shim for the in-process GPU worker (antenna/worker.py): whether
+    to run the binary moth/non-moth filter ahead of the terminal classifier.
+
+    Derived from the pipeline's stage list — true exactly when it contains the
+    legacy binary moth gate. The FastAPI /process path ignores this and runs the
+    explicit stage config in PIPELINE_CHOICES directly.
     """
-    return Classifier not in (MothClassifierBinary, InsectOrderClassifier)
+    return any(
+        stage.classifier is MothClassifierBinary for stage in pipeline.intermediates
+    )
 
 
 def top_label_for_algorithm(
@@ -274,6 +330,91 @@ def make_pipeline_config_response(
     )
 
 
+def run_classification_stages(
+    pipeline: PipelineDefinition,
+    source_images: list[SourceImage],
+    detector_results: list[DetectionResponse],
+    example_config_param: int | None,
+    algorithms_used: dict[str, AlgorithmConfigResponse],
+) -> list[DetectionResponse]:
+    """Run each intermediate gate, then the terminal classifier, and return every
+    detection exactly once.
+
+    A detection that fails a gate is returned tagged with that gate's prediction
+    (marked non-terminal); a detection that passes every gate is returned tagged
+    additionally with the terminal classifier's prediction (marked terminal), so
+    the platform never shows a gate label as a passing detection's best result.
+
+    The assembly is keyed on detection IDENTITY, never on list position: every
+    stage annotates the ``DetectionResponse`` objects it is handed in place, and
+    the passing/non-passing split routes each object by its own top gate label.
+    A detection a gate drops, or one whose crop the terminal classifier cannot
+    read, therefore keeps its own label instead of shifting the labels of the
+    detections that follow it. ``algorithms_used`` is populated in place.
+    """
+    num_pre_filter = len(detector_results)
+    detections_to_return: list[DetectionResponse] = []
+    # Detections that survive every gate so far and continue to the next stage.
+    detections_for_next_stage: list[DetectionResponse] = detector_results
+
+    for stage in pipeline.intermediates:
+        gate = stage.classifier(
+            source_images=source_images,
+            detections=detections_for_next_stage,
+            batch_size=settings.classification_batch_size,
+            num_workers=settings.num_workers,
+            # single=True if len(detections_for_next_stage) == 1 else False,
+            single=True,  # @TODO solve issues with reading images in multiprocessing
+            terminal=False,
+        )
+        gate.run()
+        algorithms_used[gate.get_key()] = make_algorithm_response(gate)
+
+        if stage.pass_labels is None:
+            # Tag-only stage: annotate the detections but let all of them pass.
+            detections_for_next_stage = gate.results
+            continue
+
+        # Keep detections whose top predicted label (from this gate) is one of
+        # the pass labels; return the rest tagged with this gate's prediction.
+        passing: list[DetectionResponse] = []
+        non_passing: list[DetectionResponse] = []
+        for detection in gate.results:
+            top_label = top_label_for_algorithm(detection, gate.get_key())
+            if top_label in stage.pass_labels:
+                passing.append(detection)
+            else:
+                non_passing.append(detection)
+        logger.info(
+            f"{gate.name}: {len(passing)} of {len(gate.results)} detections "
+            f"passed the {stage.pass_labels} gate"
+        )
+        detections_to_return += non_passing
+        detections_for_next_stage = passing
+
+    logger.info(
+        f"Sending {len(detections_for_next_stage)} of {num_pre_filter} "
+        "detections to the terminal classifier"
+    )
+
+    classifier: APIMothClassifier = pipeline.terminal(
+        source_images=source_images,
+        detections=detections_for_next_stage,
+        batch_size=settings.classification_batch_size,
+        num_workers=settings.num_workers,
+        # single=True if len(detections_for_next_stage) == 1 else False,
+        single=True,  # @TODO solve issues with reading images in multiprocessing
+        example_config_param=example_config_param,
+        terminal=True,
+    )
+    classifier.run()
+    algorithms_used[classifier.get_key()] = make_algorithm_response(classifier)
+
+    # Return all detections, including those a gate filtered out upstream.
+    detections_to_return += classifier.results
+    return detections_to_return
+
+
 class PipelineRequest(PipelineRequest_):
     pipeline: PipelineChoice = pydantic.Field(
         description=PipelineRequest_.model_fields["pipeline"].description,
@@ -332,70 +473,17 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         single=True,  # @TODO solve issues with reading images in multiprocessing
     )
     detector_results = detector.run()
-    num_pre_filter = len(detector_results)
     algorithms_used[detector.get_key()] = make_algorithm_response(detector)
 
-    detections_to_return: list[DetectionResponse] = []
-    # Detections that survive every gate so far and continue to the next stage.
-    detections_for_next_stage: list[DetectionResponse] = detector_results
-
-    for stage in pipeline.intermediates:
-        gate = stage.classifier(
-            source_images=source_images,
-            detections=detections_for_next_stage,
-            batch_size=settings.classification_batch_size,
-            num_workers=settings.num_workers,
-            # single=True if len(detections_for_next_stage) == 1 else False,
-            single=True,  # @TODO solve issues with reading images in multiprocessing
-            terminal=False,
-        )
-        gate.run()
-        algorithms_used[gate.get_key()] = make_algorithm_response(gate)
-
-        if stage.pass_labels is None:
-            # Tag-only stage: annotate the detections but let all of them pass.
-            detections_for_next_stage = gate.results
-            continue
-
-        # Keep detections whose top predicted label (from this gate) is one of
-        # the pass labels; return the rest tagged with this gate's prediction.
-        passing: list[DetectionResponse] = []
-        non_passing: list[DetectionResponse] = []
-        for detection in gate.results:
-            top_label = top_label_for_algorithm(detection, gate.get_key())
-            if top_label in stage.pass_labels:
-                passing.append(detection)
-            else:
-                non_passing.append(detection)
-        logger.info(
-            f"{gate.name}: {len(passing)} of {len(gate.results)} detections "
-            f"passed the {stage.pass_labels} gate"
-        )
-        detections_to_return += non_passing
-        detections_for_next_stage = passing
-
-    logger.info(
-        f"Sending {len(detections_for_next_stage)} of {num_pre_filter} "
-        "detections to the terminal classifier"
-    )
-
-    classifier: APIMothClassifier = pipeline.terminal(
+    detections_to_return = run_classification_stages(
+        pipeline=pipeline,
         source_images=source_images,
-        detections=detections_for_next_stage,
-        batch_size=settings.classification_batch_size,
-        num_workers=settings.num_workers,
-        # single=True if len(detections_for_next_stage) == 1 else False,
-        single=True,  # @TODO solve issues with reading images in multiprocessing
+        detector_results=detector_results,
         example_config_param=data.config.example_config_param,
-        terminal=True,
+        algorithms_used=algorithms_used,
     )
-    classifier.run()
     end_time = time.time()
     seconds_elapsed = float(end_time - start_time)
-    algorithms_used[classifier.get_key()] = make_algorithm_response(classifier)
-
-    # Return all detections, including those a gate filtered out upstream.
-    detections_to_return += classifier.results
 
     logger.info(
         f"Processed {len(source_images)} images in {seconds_elapsed:.2f} seconds"
