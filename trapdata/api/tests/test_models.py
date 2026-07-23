@@ -424,6 +424,69 @@ class TestAnyBugDetectorInputFormat(TestCase):
         # Still RGB here — the flip to BGR happens in predict_batch, not the helper.
         np.testing.assert_array_equal(out, _KNOWN_RGB)
 
+    # --- Asserted-contract guards: the conversion must fail loudly rather than
+    # silently corrupt when an upstream transform changes the input format. ---
+
+    def test_imagenet_normalized_float_raises(self):
+        """A mean/std standardized float tensor (values outside [0, 1]) is
+        rejected, not silently rescaled — converting it as if it were ToTensor
+        output would corrupt every pixel handed to the model."""
+        chw = torchvision.transforms.ToTensor()(
+            PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        )
+        standardized = (chw - 0.5) / 0.25  # now well outside [0, 1]
+        self.assertTrue(torch.is_floating_point(standardized))
+        with self.assertRaises(ValueError):
+            AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(standardized)
+
+    def test_already_hwc_float_raises(self):
+        """An already channels-last float array (HWC, in range) is rejected
+        rather than transposed into garbage, since its channel axis is not where
+        the ToTensor contract puts it."""
+        hwc_float = _KNOWN_RGB.astype(np.float32) / 255.0  # (2, 2, 3), in [0, 1]
+        with self.assertRaises(ValueError):
+            AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(hwc_float)
+
+    def test_integer_chw_raises(self):
+        """An integer channels-first array is rejected rather than passed through
+        in the wrong layout."""
+        chw_uint8 = np.transpose(_KNOWN_RGB, (2, 0, 1))  # (3, 2, 2) integer CHW
+        with self.assertRaises(ValueError):
+            AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(chw_uint8)
+
+    def test_unexpected_rank_raises(self):
+        """A 2D array (neither a single image nor a batch) is rejected."""
+        with self.assertRaises(ValueError):
+            AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(
+                np.zeros((5, 5), dtype=np.uint8)
+            )
+
+    def test_4d_nchw_float_batch_handled(self):
+        """A 4D NCHW float batch is converted per-image to NHWC uint8, preserving
+        the batch axis."""
+        chw = torchvision.transforms.ToTensor()(
+            PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        )
+        nchw = torch.stack([chw, chw])  # (2, 3, 2, 2)
+        out = AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(nchw)
+        self.assertEqual(out.shape, (2, 2, 2, 3))  # NHWC
+        self.assertEqual(out.dtype, np.uint8)
+        np.testing.assert_array_equal(out[0], _KNOWN_RGB)
+        np.testing.assert_array_equal(out[1], _KNOWN_RGB)
+
+    def test_float_rescale_rounds_not_truncates(self):
+        """The [0, 1]->0-255 rescale rounds (np.rint) rather than truncating.
+        The values are deliberately NOT multiples of 1/255, and their *255 lands
+        clearly above the .5 boundary, so truncation would give a different (one
+        lower) uint8 on every channel."""
+        # *255 -> 200.7, 10.6, 128.8 ; round -> 201, 11, 129 ; truncate -> 200, 10, 128
+        chw = np.array(
+            [[[200.7 / 255]], [[10.6 / 255]], [[128.8 / 255]]], dtype=np.float32
+        )  # (3, 1, 1) CHW
+        out = AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(chw)
+        self.assertEqual(out.shape, (1, 1, 3))
+        np.testing.assert_array_equal(out, np.array([[[201, 11, 129]]], dtype=np.uint8))
+
 
 class TestDetectorTransformContracts(TestCase):
     """Pin each detector's per-image transform contract so the fix cannot drift

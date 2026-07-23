@@ -346,47 +346,88 @@ class AnyBugObjectDetector_YOLO26(ObjectDetector):
         self.model = model
         return self.model
 
+    # A float image is accepted as [0, 1] within this tolerance; anything beyond
+    # it (e.g. a mean/std standardized tensor) is rejected rather than clipped.
+    _FLOAT_RANGE_EPS = 1e-3
+
     @staticmethod
     def _as_hwc_uint8_rgb(image: "np.ndarray | torch.Tensor") -> np.ndarray:
-        """Normalize one image to an HWC uint8 RGB array for Ultralytics.
+        """Convert one image (or an NCHW/NHWC batch) to HWC uint8 RGB for Ultralytics.
 
-        Two dataloaders feed this detector with different single-image formats,
-        and both must land on the same HWC uint8 RGB array before the channel
-        flip to BGR in :meth:`predict_batch`:
+        The two dataloaders feed this detector mutually exclusive formats, and the
+        conversion is an ASSERTED CONTRACT rather than a dtype guess: a future
+        change to a dataloader transform must fail loudly here instead of silently
+        handing the model corrupted pixels.
 
-        * The FastAPI ``/process`` path applies this detector's own
-          :meth:`get_transforms` (``np.asarray``), yielding an HWC uint8 RGB
-          array already in the layout Ultralytics wants.
+        * FastAPI ``/process`` applies this detector's own :meth:`get_transforms`
+          (``np.asarray``), yielding channels-last uint8 RGB (HWC or NHWC).
         * The async worker's shared dataloader hardcodes ``torchvision``
-          ``ToTensor`` — it must, because the classifier stages slice CHW crops
-          from the same tensors — yielding a CHW float32 RGB tensor scaled to
-          ``[0, 1]``. Left unconverted it would reach Ultralytics as
-          channels-first float, and the RGB->BGR flip would mirror the width
-          axis instead of swapping channels, feeding the model garbage.
+          ``ToTensor`` — it must, so the classifier stages can slice CHW crops
+          from the same tensors — yielding channels-first float32 RGB scaled to
+          ``[0, 1]`` (CHW or NCHW). Reaching Ultralytics as channels-first float,
+          the RGB->BGR flip in :meth:`predict_batch` would mirror the width axis
+          instead of swapping channels, feeding the model garbage.
 
-        Floating-point input is treated as the ``ToTensor`` contract: transposed
-        CHW->HWC and rescaled from ``[0, 1]`` back to 0-255. Integer input is
-        assumed to be HWC uint8 already and passed through unchanged, so the
-        ``/process`` path is byte-for-byte identical to before.
+        The contract, by dtype:
+
+        * Floating point must be channels-first (``shape[-3] in {1, 3}``) and
+          within ``[0, 1]``; it is transposed to channels-last and rescaled to
+          0-255 with rounding (``np.rint``), not truncation.
+        * Integer must be channels-last (``shape[-1] in {1, 3}``) and is returned
+          as uint8 unchanged, so the ``/process`` path stays byte-for-byte
+          identical.
+        * Anything else — an out-of-range float (a standardized tensor), an
+          already channels-last float, an integer channels-first array, or an
+          unexpected rank — raises :class:`ValueError` naming the offending shape,
+          dtype, and range.
         """
         if isinstance(image, torch.Tensor):
+            # One full-image copy per call: the device->host transfer here plus
+            # the rescale allocation below. Negligible for a single frame, but do
+            # not fan many large images through this blindly — the cost scales
+            # with the total pixels handed in per call.
             image = image.detach().cpu().numpy()
         image = np.asarray(image)
 
+        if image.ndim not in (3, 4):
+            raise ValueError(
+                "Expected a 3D single image or 4D batch (CHW/HWC/NCHW/NHWC), got "
+                f"shape {image.shape} dtype {image.dtype}"
+            )
+
         if np.issubdtype(image.dtype, np.floating):
-            # ToTensor output: channels-first float in [0, 1]. Guard the
-            # transpose on a channels-first shape so an already-HWC float array
-            # (not produced on either path today) is not silently mangled.
-            if (
-                image.ndim == 3
-                and image.shape[0] in (1, 3)
-                and image.shape[2] not in (1, 3)
-            ):
-                image = np.transpose(image, (1, 2, 0))
-            image = np.clip(np.rint(image * 255.0), 0, 255).astype(np.uint8)
-        else:
-            image = image.astype(np.uint8, copy=False)
-        return image
+            # ToTensor contract: channels-first float in [0, 1]. The channel axis
+            # is the third-from-last on both CHW and NCHW, so shape[-3] validates
+            # either rank.
+            low, high = float(np.min(image)), float(np.max(image))
+            eps = AnyBugObjectDetector_YOLO26._FLOAT_RANGE_EPS
+            if low < -eps or high > 1.0 + eps:
+                raise ValueError(
+                    "Floating-point image must be normalized to [0, 1] (ToTensor "
+                    f"output); got value range [{low:.4g}, {high:.4g}] for shape "
+                    f"{image.shape}. A standardized (mean/std) tensor is rejected "
+                    "rather than silently clipped."
+                )
+            if image.shape[-3] not in (1, 3):
+                raise ValueError(
+                    "Floating-point image must be channels-first (CHW or NCHW) "
+                    f"with 1 or 3 channels; got shape {image.shape}. An already "
+                    "channels-last float array is rejected rather than transposed "
+                    "into garbage."
+                )
+            axes = (0, 2, 3, 1) if image.ndim == 4 else (1, 2, 0)
+            image = np.transpose(image, axes)
+            return np.clip(np.rint(image * 255.0), 0, 255).astype(np.uint8)
+
+        # Integer input: require channels-last so an integer channels-first array
+        # cannot slip through in the wrong layout.
+        if image.shape[-1] not in (1, 3):
+            raise ValueError(
+                "Integer image must be channels-last (HWC or NHWC) with 1 or 3 "
+                f"channels; got shape {image.shape}. An integer channels-first "
+                "array is rejected rather than passed through in the wrong layout."
+            )
+        return image.astype(np.uint8, copy=False)
 
     def predict_batch(self, batch):
         # Ultralytics performs its own letterbox + normalization internally and
@@ -394,13 +435,11 @@ class AnyBugObjectDetector_YOLO26(ObjectDetector):
         # that image's pixel space. It expects NumPy inputs as HWC uint8 arrays
         # in BGR channel order (OpenCV convention).
         #
-        # Accept either format the two dataloaders produce (see
-        # _as_hwc_uint8_rgb): the /process path's HWC uint8 arrays and the async
-        # worker's CHW float ToTensor tensors. Normalize every image to HWC uint8
-        # RGB first, then flip to BGR.
-        if isinstance(batch, np.ndarray):
-            raw_images = list(batch) if batch.ndim == 4 else [batch]
-        elif isinstance(batch, torch.Tensor):
+        # Accept either format the two dataloaders produce and normalize each
+        # image to HWC uint8 RGB via the asserted _as_hwc_uint8_rgb contract, then
+        # flip RGB->BGR. A 4D batch is split into single images so Ultralytics
+        # receives the list of images it expects.
+        if isinstance(batch, (np.ndarray, torch.Tensor)):
             raw_images = list(batch) if batch.ndim == 4 else [batch]
         else:
             raw_images = list(batch)
