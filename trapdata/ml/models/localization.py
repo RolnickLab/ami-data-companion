@@ -305,27 +305,21 @@ class AnyBugObjectDetector_YOLO26(ObjectDetector):
        the model raw NumPy arrays (see :meth:`get_transforms`), which carry no
        EXIF, so no auto-rotation is applied and boxes stay in raw-pixel space.
 
-    TODO(anybug): the model weight is not in the object store yet. Replace the
-    placeholder ``weights_path`` below once ``yolo26n.pt`` is uploaded, and add
-    ``ultralytics`` to the runtime environment. Until then this detector cannot
-    be instantiated (:meth:`get_model` imports and downloads on demand).
+    The ``ultralytics`` import in :meth:`get_model` is lazy so this module stays
+    importable in environments where the (AGPL-3.0) dependency is not installed.
     """
 
     name = "AnyBug YOLO26 Detector 2024"
     key = "anybug-yolo26-detector-2024"
-    # TODO(anybug): placeholder URL — the real weight has not been uploaded yet.
-    # Intended upload target: an ami-models localization key such as
-    # s3://ami-models/moths/localization/anybug_yolo26n_2024.pt
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/"
-        "localization/TODO_anybug_yolo26n_2024.pt"
+        "localization/yolo26n-anybug-v1.pt"
     )
     description = (
         "Ultralytics YOLO26 nano 'any-bug' object detector (flatbug edge PoC). "
-        "Outputs raw-pixel xyxy boxes in the original image space. "
-        "TODO(anybug): model weight pending upload."
+        "Outputs raw-pixel xyxy boxes in the original image space."
     )
-    # TODO(anybug): tune once the real weight is available.
+    # TODO(anybug): 0.25 is a starting default; tune against validation data.
     bbox_score_threshold = 0.25
 
     def get_transforms(self):
