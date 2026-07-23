@@ -1,5 +1,6 @@
 import pathlib
 
+import numpy as np
 import torch
 import torchvision
 import torchvision.models.detection.anchor_utils
@@ -284,6 +285,93 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
         )
 
         bboxes = bboxes.cpu().numpy().astype(int).tolist()
+        return bboxes
+
+
+class AnyBugObjectDetector_YOLO26(ObjectDetector):
+    """Ultralytics YOLO26 "any-bug" object detector.
+
+    Emits bounding boxes as absolute raw-pixel ``xyxy`` in the ORIGINAL image
+    space, matching Antenna's raw-pixel contract. Two coordinate-space hazards
+    are handled explicitly:
+
+    1. Letterboxing. Ultralytics letterboxes each image for inference and maps
+       its predicted boxes back to the input array's pixel space, so the
+       ``xyxy`` values read from the result are already de-letterboxed to
+       original pixels.
+    2. EXIF auto-transpose. Ultralytics applies ``ImageOps.exif_transpose`` to
+       PIL inputs, which would rotate portrait or otherwise EXIF-tagged captures
+       and misplace boxes relative to the raw-pixel contract. The detector feeds
+       the model raw NumPy arrays (see :meth:`get_transforms`), which carry no
+       EXIF, so no auto-rotation is applied and boxes stay in raw-pixel space.
+
+    TODO(anybug): the model weight is not in the object store yet. Replace the
+    placeholder ``weights_path`` below once ``yolo26n.pt`` is uploaded, and add
+    ``ultralytics`` to the runtime environment. Until then this detector cannot
+    be instantiated (:meth:`get_model` imports and downloads on demand).
+    """
+
+    name = "AnyBug YOLO26 Detector 2024"
+    key = "anybug-yolo26-detector-2024"
+    # TODO(anybug): placeholder URL — the real weight has not been uploaded yet.
+    # Intended upload target: an ami-models localization key such as
+    # s3://ami-models/moths/localization/anybug_yolo26n_2024.pt
+    weights_path = (
+        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/"
+        "localization/TODO_anybug_yolo26n_2024.pt"
+    )
+    description = (
+        "Ultralytics YOLO26 nano 'any-bug' object detector (flatbug edge PoC). "
+        "Outputs raw-pixel xyxy boxes in the original image space. "
+        "TODO(anybug): model weight pending upload."
+    )
+    # TODO(anybug): tune once the real weight is available.
+    bbox_score_threshold = 0.25
+
+    def get_transforms(self):
+        # Convert the PIL image to a raw HWC RGB uint8 NumPy array. NumPy arrays
+        # carry no EXIF metadata, which neutralizes Ultralytics' default
+        # ImageOps.exif_transpose so predicted boxes land in raw-pixel space.
+        return torchvision.transforms.Compose([np.asarray])
+
+    def get_model(self):
+        # Imported lazily so this module stays importable without ultralytics
+        # installed (the dependency and weight are not wired up yet).
+        from ultralytics import YOLO
+
+        logger.debug(f"Loading YOLO26 weights: {self.weights}")
+        model = YOLO(self.weights)
+        model.to(self.device)
+        self.model = model
+        return self.model
+
+    def predict_batch(self, batch):
+        # Ultralytics performs its own letterbox + normalization internally and
+        # returns one Results object per image with boxes already mapped back to
+        # that image's pixel space. It expects NumPy inputs in BGR channel order
+        # (OpenCV convention), so flip our RGB arrays before inference.
+        if isinstance(batch, np.ndarray):
+            images = list(batch) if batch.ndim == 4 else [batch]
+        elif isinstance(batch, torch.Tensor):
+            images = [img.cpu().numpy() for img in batch]
+        else:
+            images = list(batch)
+        images = [np.ascontiguousarray(img[..., ::-1]) for img in images]
+        # TODO(anybug): a mixed-resolution batch cannot be default-collated into
+        # a single tensor; wire a list collate_fn for variable-size inputs when
+        # this detector goes live.
+        return self.model.predict(
+            images,
+            conf=self.bbox_score_threshold,
+            device=self.device,
+            verbose=False,
+        )
+
+    def post_process_single(self, result):
+        # result.boxes.xyxy are absolute pixel coordinates in the original image
+        # space (already de-letterboxed by Ultralytics).
+        bboxes = result.boxes.xyxy.cpu().numpy().astype(int).tolist()
+        logger.debug(f"YOLO26 detector kept {len(bboxes)} boxes")
         return bboxes
 
 

@@ -36,6 +36,13 @@ class APIMothClassifier(
 ):
     task_type = "classification"
 
+    # Multiplies the softmax scores before they are stored. A value below 1.0
+    # tempers a chronically over-confident model so the UI does not read every
+    # prediction as near-certain. This is a display stopgap only: it scales all
+    # scores by the same positive constant, so it is argmax-invariant and never
+    # changes which label is predicted or any downstream label gate.
+    score_scale: float = 1.0
+
     def __init__(
         self,
         source_images: typing.Iterable[SourceImage],
@@ -84,10 +91,12 @@ class APIMothClassifier(
             labels = [self.category_map[i] for i in class_indices]
             logit = logits[i].tolist()
 
+            # score_scale tempers over-confident models for display; it is a
+            # positive constant so the stored logits and argmax are unaffected.
             result = ClassifierResult(
                 labels=labels,
                 logit=logit,
-                scores=pred.tolist(),
+                scores=(pred * self.score_scale).tolist(),
             )
 
             batch_results.append(result)
@@ -230,4 +239,7 @@ class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
 
 
 class InsectOrderClassifier(APIMothClassifier, InsectOrderClassifier2025):
-    pass
+    # This model is chronically over-confident; halve its reported scores so the
+    # UI does not present every order prediction as near-certain. Argmax-
+    # invariant, so it does not change the Lepidoptera gate (see api.py).
+    score_scale = 0.5

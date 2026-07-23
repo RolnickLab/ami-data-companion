@@ -1,7 +1,10 @@
 import datetime
 import typing
 
-from trapdata.ml.models.localization import MothObjectDetector_FasterRCNN_2023
+from trapdata.ml.models.localization import (
+    AnyBugObjectDetector_YOLO26,
+    MothObjectDetector_FasterRCNN_2023,
+)
 
 from ..datasets import LocalizationImageDataset
 from ..schemas import AlgorithmReference, BoundingBox, DetectionResponse, SourceImage
@@ -9,6 +12,67 @@ from .base import APIInferenceBaseClass
 
 
 class APIMothDetector(APIInferenceBaseClass, MothObjectDetector_FasterRCNN_2023):
+    task_type = "localization"
+
+    def __init__(self, source_images: typing.Iterable[SourceImage], *args, **kwargs):
+        self.source_images = source_images
+        self.results: list[DetectionResponse] = []
+        super().__init__(*args, **kwargs)
+
+    def reset(self, source_images: typing.Iterable[SourceImage]):
+        self.source_images = source_images
+        self.results = []
+
+    def get_dataset(self):
+        return LocalizationImageDataset(
+            self.source_images, self.get_transforms(), batch_size=self.batch_size
+        )
+
+    def get_source_image(self, source_image_id: int) -> SourceImage:
+        for source_image in self.source_images:
+            if source_image.id == source_image_id:
+                return source_image
+        raise ValueError(f"Source image with id {source_image_id} not found")
+
+    def save_results(self, item_ids, batch_output, seconds_per_item, *args, **kwargs):
+        detections: list[DetectionResponse] = []
+
+        def save_detection(image_id, coords):
+            bbox = BoundingBox(x1=coords[0], y1=coords[1], x2=coords[2], y2=coords[3])
+            detection = DetectionResponse(
+                source_image_id=image_id,
+                bbox=bbox,
+                inference_time=seconds_per_item,
+                algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
+                timestamp=datetime.datetime.now(),
+                crop_image_url=None,
+            )
+            return detection
+
+        for image_id, image_output in zip(item_ids, batch_output):
+            for coords in image_output:
+                detection = save_detection(image_id, coords)
+                detections.append(detection)
+
+        self.results += detections
+
+    def run(self) -> list[DetectionResponse]:
+        super().run()
+        return self.results
+
+
+class APIAnyBugDetector(APIInferenceBaseClass, AnyBugObjectDetector_YOLO26):
+    """API wrapper around the YOLO26 "any-bug" detector.
+
+    Mirrors :class:`APIMothDetector`'s request/response plumbing (dataset,
+    per-image ``DetectionResponse`` assembly) while inheriting the YOLO26
+    inference, de-letterboxing, and EXIF-neutralizing behavior from
+    :class:`AnyBugObjectDetector_YOLO26`.
+
+    TODO(anybug): cannot run until ``ultralytics`` is installed and the real
+    ``weights_path`` is uploaded (see the base class).
+    """
+
     task_type = "localization"
 
     def __init__(self, source_images: typing.Iterable[SourceImage], *args, **kwargs):
