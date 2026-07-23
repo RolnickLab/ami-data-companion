@@ -349,28 +349,30 @@ def test_pipeline_definition_rejects_wrong_roles():
 # ---------------------------------------------------------------------------
 
 
-def test_worker_dispatch_rejects_pipelines_it_cannot_execute():
-    """The in-process worker looks the job's pipeline up in PIPELINE_CHOICES and
-    fails loudly when it cannot execute that pipeline's stages, instead of
-    silently detecting with the wrong model.
+def test_worker_dispatch_runs_anybug_without_notimplemented():
+    """The worker is now stage-driven, so the anybug pipeline dispatches through
+    the same path as the legacy pipelines instead of hitting a capability guard.
 
-    The anybug pipeline is dispatchable (no KeyError) but needs the YOLO26
-    detector and the order gate, which this path does not run yet, so dispatch
-    must raise rather than fall through to the moth detector.
+    With an empty job the worker completes (no work) without raising
+    NotImplementedError and without constructing any stage model — the YOLO26
+    detector and order-gate weights are only loaded when there is data to
+    process, which keeps this test weight-free. This pins that the old
+    "advertised but undispatchable" guard is gone.
     """
     from trapdata.antenna import worker
 
-    with mock.patch.object(worker, "get_rest_dataloader", return_value=[]):
-        with pytest.raises(NotImplementedError):
-            worker._process_job(
+    with mock.patch.object(worker, "get_rest_dataloader", return_value=iter([])):
+        with mock.patch("torch.cuda.is_available", return_value=False):
+            did_work = worker._process_job(
                 "anybug_global_moths_2024", job_id=1, settings=mock.Mock()
             )
+    assert did_work is False
 
 
 def test_worker_dispatch_accepts_legacy_pipeline_unchanged():
     """A legacy moth pipeline still dispatches through the migrated lookup with no
-    behavior change: the capability guard passes and, given an empty job, the
-    worker completes without loading any model weights.
+    behavior change: given an empty job the worker completes without loading any
+    model weights.
     """
     from trapdata.antenna import worker
 
@@ -380,3 +382,241 @@ def test_worker_dispatch_accepts_legacy_pipeline_unchanged():
                 "quebec_vermont_moths_2023", job_id=1, settings=mock.Mock()
             )
     assert did_work is False
+
+
+# ---------------------------------------------------------------------------
+# The worker's _process_batch is stage-driven (weight-free)
+# ---------------------------------------------------------------------------
+#
+# These stubs stand in for the pipeline's detector and classifier stages so the
+# worker's async inference core (_process_batch -> run_classification_stages)
+# runs end-to-end without loading any weights. Each stage assigns labels by
+# detection identity in update_detection_classification, so the crop tensors are
+# irrelevant to the label a detection ends up with.
+
+
+class _StubDetector:
+    """Weight-free stand-in for the pipeline's detector. Emits one full-frame
+    bounding box per image, mirroring APIMothDetector/APIAnyBugDetector's
+    predict/post-process/save contract over in-memory image tensors.
+    """
+
+    task_type = "localization"
+    name = "stub-detector"
+
+    def __init__(self, source_images=(), **kwargs):
+        self.results: list[DetectionResponse] = []
+
+    def reset(self, source_images):
+        self.results = []
+
+    def predict_batch(self, images):
+        return list(images)
+
+    def post_process_batch(self, batch_output):
+        # One box per image spanning the whole (16x16) stub tensor.
+        return [[[0, 0, 16, 16]] for _ in batch_output]
+
+    def save_results(self, item_ids, batch_output, seconds_per_item, *args, **kwargs):
+        for image_id, image_output in zip(item_ids, batch_output):
+            for coords in image_output:
+                self.results.append(
+                    DetectionResponse(
+                        source_image_id=image_id,
+                        bbox=BoundingBox(
+                            x1=coords[0], y1=coords[1], x2=coords[2], y2=coords[3]
+                        ),
+                        algorithm=AlgorithmReference(
+                            name=self.name, key="stub_detector"
+                        ),
+                        timestamp=datetime.datetime.now(),
+                    )
+                )
+
+
+class _StubTensorStage:
+    """Weight-free stand-in for an APIMothClassifier stage as the worker drives
+    it: reset -> get_transforms -> predict_batch -> post_process_batch ->
+    update_detection_classification. Labels come from ``labels`` keyed by
+    ``source_image_id`` so the assigned label does not depend on crop content.
+    """
+
+    task_type = "classification"
+    name = "stub-stage"
+    description = None
+    weights_path = None
+    category_map: dict = {}
+
+    algorithm_key = "stub_stage"
+    labels: dict[str, str] = {}
+
+    def __init__(self, source_images=(), detections=(), terminal=True, **kwargs):
+        self.detections = list(detections)
+        self.terminal = terminal
+        self.results: list[DetectionResponse] = []
+
+    def get_key(self) -> str:
+        return self.algorithm_key
+
+    def reset(self, detections):
+        self.detections = list(detections)
+        self.results = []
+
+    def get_transforms(self):
+        # Resize every crop to a fixed shape so torch.stack succeeds regardless
+        # of bbox size; the label is applied by identity, not crop content.
+        return lambda crop: torch.zeros(3, 4, 4)
+
+    def predict_batch(self, batched_crops):
+        return batched_crops
+
+    def post_process_batch(self, batch_output):
+        # One placeholder prediction per crop; the real label is applied in
+        # update_detection_classification by detection identity.
+        return [None for _ in batch_output]
+
+    def update_detection_classification(
+        self, seconds_per_item, image_id, detection_idx, predictions
+    ):
+        detection = self.detections[detection_idx]
+        detection.classifications = [
+            c for c in detection.classifications if c.algorithm.key != self.get_key()
+        ]
+        detection.classifications.append(
+            ClassificationResponse(
+                classification=self.labels[detection.source_image_id],
+                scores=[1.0],
+                logits=[0.0],
+                algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
+                terminal=self.terminal,
+                timestamp=datetime.datetime.now(),
+            )
+        )
+        return detection
+
+
+def _make_stub_batch(image_ids: list[str]) -> dict:
+    return {
+        "images": [torch.zeros(3, 16, 16) for _ in image_ids],
+        "image_ids": list(image_ids),
+        "reply_subjects": [f"reply_{i}" for i in image_ids],
+        "image_urls": [f"http://example.com/{i}.jpg" for i in image_ids],
+        "failed_items": [],
+    }
+
+
+def _classifications_by_algorithm(detection: DetectionResponse) -> dict:
+    return {
+        c.algorithm.key: (c.classification, c.terminal)
+        for c in detection.classifications
+    }
+
+
+def test_process_batch_runs_anybug_stage_list_and_posts_labels():
+    """The stage-driven worker runs the anybug stage list (detector -> order gate
+    -> terminal species) over in-memory tensors without NotImplementedError, and
+    posts each detection labelled by the stage that owns it: a gate-dropped
+    detection carries only its non-terminal order label, a passing detection
+    carries both the non-terminal order label and its terminal species label.
+    """
+    from trapdata.antenna import worker
+
+    class _OrderGate(_StubTensorStage):
+        algorithm_key = "order_gate"
+        name = "Order Gate"
+        labels = {"img0": "Lepidoptera", "img1": "Coleoptera", "img2": "Lepidoptera"}
+
+    class _Species(_StubTensorStage):
+        algorithm_key = "species"
+        name = "Species Classifier"
+        labels = {"img0": "Species A", "img2": "Species B"}  # only the passers
+
+    pipeline_def = PipelineDefinition(
+        detector=_StubDetector,
+        terminal=_Species,
+        intermediates=(
+            IntermediateStage(classifier=_OrderGate, pass_labels=("Lepidoptera",)),
+        ),
+    )
+
+    image_ids = ["img0", "img1", "img2"]
+    n_items, n_detections, batch_results, _, _ = worker._process_batch(
+        _make_stub_batch(image_ids),
+        0,
+        _StubDetector(),
+        worker._build_stage_models(pipeline_def),
+        pipeline_def,
+        "anybug_global_moths_2024",
+    )
+
+    assert n_items == 3
+    # Every detection is posted exactly once: 1 gate-dropped + 2 terminal.
+    assert n_detections == 3
+    assert len(batch_results) == 3
+
+    by_subject = {r.reply_subject: r.result for r in batch_results}
+    assert by_subject["reply_img0"].pipeline == "anybug_global_moths_2024"
+
+    # img0 passes the order gate: non-terminal Lepidoptera + terminal species.
+    [d0] = by_subject["reply_img0"].detections
+    assert _classifications_by_algorithm(d0) == {
+        "order_gate": ("Lepidoptera", False),
+        "species": ("Species A", True),
+    }
+
+    # img1 fails the order gate: only the non-terminal order label, no species.
+    [d1] = by_subject["reply_img1"].detections
+    assert _classifications_by_algorithm(d1) == {"order_gate": ("Coleoptera", False)}
+
+
+def test_process_batch_legacy_binary_split_preserved():
+    """A legacy binary pipeline still splits moth vs non-moth exactly: non-moth
+    detections are returned tagged with the non-terminal binary label and no
+    species, while moth detections carry the non-terminal binary label plus the
+    terminal species label. This is the behavior-preserving guarantee for the
+    detector+binary-gate+terminal pipelines now that they run through the shared
+    stage engine.
+    """
+    from trapdata.antenna import worker
+
+    class _Binary(_StubTensorStage):
+        algorithm_key = "binary"
+        name = "Moth / Non-Moth"
+        labels = {"img0": "moth", "img1": "nonmoth", "img2": "moth"}
+
+    class _Species(_StubTensorStage):
+        algorithm_key = "species"
+        name = "Species Classifier"
+        labels = {"img0": "Species A", "img2": "Species B"}
+
+    pipeline_def = PipelineDefinition(
+        detector=_StubDetector,
+        terminal=_Species,
+        intermediates=(IntermediateStage(classifier=_Binary, pass_labels=("moth",)),),
+    )
+
+    image_ids = ["img0", "img1", "img2"]
+    n_items, n_detections, batch_results, _, _ = worker._process_batch(
+        _make_stub_batch(image_ids),
+        0,
+        _StubDetector(),
+        worker._build_stage_models(pipeline_def),
+        pipeline_def,
+        "quebec_vermont_moths_2023",
+    )
+
+    assert n_items == 3
+    assert n_detections == 3
+    by_subject = {r.reply_subject: r.result for r in batch_results}
+
+    # Non-moth is returned tagged non-terminal binary, no species (the split is
+    # preserved: it never reaches the terminal classifier).
+    [d1] = by_subject["reply_img1"].detections
+    assert _classifications_by_algorithm(d1) == {"binary": ("nonmoth", False)}
+
+    # Moth carries the non-terminal binary label plus the terminal species label.
+    [d0] = by_subject["reply_img0"].detections
+    assert _classifications_by_algorithm(d0) == {
+        "binary": ("moth", False),
+        "species": ("Species A", True),
+    }

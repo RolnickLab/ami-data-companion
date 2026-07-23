@@ -14,10 +14,15 @@ from trapdata.antenna.client import get_full_service_name, get_jobs
 from trapdata.antenna.datasets import CUDAPrefetcher, get_rest_dataloader
 from trapdata.antenna.result_posting import ResultPoster
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
-from trapdata.api.api import PIPELINE_CHOICES, should_filter_detections
-from trapdata.api.models.classification import MothClassifierBinary
-from trapdata.api.models.localization import APIMothDetector
+from trapdata.api.api import (
+    PIPELINE_CHOICES,
+    PipelineDefinition,
+    run_classification_stages,
+)
+from trapdata.api.models.classification import APIMothClassifier
+from trapdata.api.models.localization import APIAnyBugDetector, APIMothDetector
 from trapdata.api.schemas import (
+    AlgorithmConfigResponse,
     DetectionResponse,
     PipelineResultsResponse,
     SourceImageResponse,
@@ -129,87 +134,103 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             time.sleep(SLEEP_TIME_SECONDS)
 
 
-def _apply_binary_classification(
-    binary_filter: "MothClassifierBinary",
-    detector_results: list[DetectionResponse],
-    image_tensors: dict[str, torch.Tensor],
-    image_detections: dict[str, list[DetectionResponse]],
-) -> tuple[list[DetectionResponse], list[DetectionResponse]]:
-    """Apply binary classification to filter moth vs non-moth detections.
+def _build_stage_models(
+    pipeline_def: PipelineDefinition,
+) -> dict[type[APIMothClassifier], APIMothClassifier]:
+    """Instantiate every classification stage of ``pipeline_def`` once so the
+    per-batch loop reuses the loaded weights instead of reloading a model for
+    each batch. Intermediate gates are built non-terminal and the terminal
+    classifier terminal, matching the labels the /process path assigns.
 
-    Args:
-        binary_filter: The binary classifier instance
-        detector_results: List of detections from the object detector
-        image_tensors: Mapping of image IDs to tensor data
-        image_detections: Mapping to store detections by image ID
-
-    Returns:
-        Tuple of (moth_detections, non_moth_detections)
+    Keyed by classifier class. The registry never uses one classifier as both a
+    gate and the terminal, so there is no key collision.
     """
-    binary_filter.reset(detector_results)
+    stage_models: dict[type[APIMothClassifier], APIMothClassifier] = {}
+    for stage in pipeline_def.intermediates:
+        stage_models[stage.classifier] = stage.classifier(
+            source_images=[], detections=[], terminal=False
+        )
+    stage_models[pipeline_def.terminal] = pipeline_def.terminal(
+        source_images=[], detections=[], terminal=True
+    )
+    return stage_models
 
-    # Process binary classification crops
-    binary_crops = []
-    binary_valid_indices = []
-    binary_transforms = binary_filter.get_transforms()
 
-    for idx, dresp in enumerate(detector_results):
-        image_tensor = image_tensors[dresp.source_image_id]
-        bbox = dresp.bbox
+def _classify_detections_from_tensors(
+    stage: APIMothClassifier,
+    detections: list[DetectionResponse],
+    image_tensors: dict[str, torch.Tensor],
+) -> APIMothClassifier:
+    """Run one classifier stage over crops taken from the already-loaded image
+    tensors, annotating each detection in place, and return the stage with its
+    ``results`` set to every detection it was handed.
+
+    This is the worker-side counterpart to ``APIMothClassifier.run()``: rather
+    than re-reading images by URL it slices each crop from the in-memory tensors
+    the dataloader already produced. It honors the same contract the /process
+    path relies on — ``results`` is the full input list (annotated wherever the
+    crop was readable), keyed on detection identity — so a detection whose crop
+    cannot be read keeps its own label instead of shifting its neighbours'. One
+    function now runs every gate and the terminal, replacing the old binary-only
+    crop loop, so the sync and async paths share one stage engine.
+    """
+    stage.reset(detections)
+    transforms = stage.get_transforms()
+
+    crops = []
+    valid_indices = []
+    for idx, detection in enumerate(detections):
+        image_tensor = image_tensors[detection.source_image_id]
+        bbox = detection.bbox
         y1, y2 = int(bbox.y1), int(bbox.y2)
         x1, x2 = int(bbox.x1), int(bbox.x2)
         if y1 >= y2 or x1 >= x2:
             logger.warning(
-                f"Skipping binary classification {idx} with invalid bbox: "
+                f"Skipping {stage.name} classification {idx} with invalid bbox: "
                 f"({x1},{y1})->({x2},{y2})"
             )
             continue
         crop = image_tensor[:, y1:y2, x1:x2]
-        crop_transformed = binary_transforms(crop)
-        binary_crops.append(crop_transformed)
-        binary_valid_indices.append(idx)
+        crops.append(transforms(crop))
+        valid_indices.append(idx)
 
-    moth_detections = []
-    non_moth_detections = []
-
-    if binary_crops:
-        batched_binary_crops = torch.stack(binary_crops)
-        binary_out = binary_filter.predict_batch(batched_binary_crops)
-        binary_out = binary_filter.post_process_batch(binary_out)
-
-        for crop_i, idx in enumerate(binary_valid_indices):
-            dresp = detector_results[idx]
-            detection = binary_filter.update_detection_classification(
+    if crops:
+        batched_crops = torch.stack(crops)
+        stage_out = stage.predict_batch(batched_crops)
+        stage_out = stage.post_process_batch(stage_out)
+        for crop_i, idx in enumerate(valid_indices):
+            detection = detections[idx]
+            stage.update_detection_classification(
                 seconds_per_item=0,
-                image_id=dresp.source_image_id,
+                image_id=detection.source_image_id,
                 detection_idx=idx,
-                predictions=binary_out[crop_i],
+                predictions=stage_out[crop_i],
             )
 
-            # Separate moth from non-moth detections
-            for classification in detection.classifications:
-                if classification.classification == binary_filter.positive_binary_label:
-                    moth_detections.append(detection)
-                elif (
-                    classification.classification == binary_filter.negative_binary_label
-                ):
-                    non_moth_detections.append(detection)
-                    image_detections[detection.source_image_id].append(detection)
-                break
-
-    return moth_detections, non_moth_detections
+    # Identity-keyed contract shared with the /process path: return every
+    # detection handed in, annotated in place where the crop was readable, in
+    # the same order.
+    stage.results = detections
+    return stage
 
 
 def _process_batch(
     batch: dict,
     batch_num: int,
-    detector: APIMothDetector,
-    classifier,
+    detector: APIMothDetector | APIAnyBugDetector,
+    stage_models: dict[type[APIMothClassifier], APIMothClassifier],
+    pipeline_def: PipelineDefinition,
     pipeline: str,
-    binary_filter: "MothClassifierBinary | None",
-    use_binary_filter: bool,
 ) -> tuple[int, int, list[AntennaTaskResult], float, float]:
-    """Process a single batch of images through detection and classification.
+    """Process a single batch of images through the pipeline's stages.
+
+    The inference core is stage-driven: the detector comes from
+    ``pipeline_def.detector`` (YOLO26 or FasterRCNN, whichever the pipeline
+    declares) and the intermediate gate(s) and terminal classifier run through
+    the SAME ``run_classification_stages`` engine as the FastAPI /process path,
+    so the two code paths cannot drift. Only the inference mechanism is worker-
+    specific: crops are sliced from the already-loaded image tensors instead of
+    re-read from URLs.
 
     All large intermediates (image_tensors, crops, batched_crops, image_detections)
     are local to this function and freed by Python's reference counting when it
@@ -218,11 +239,11 @@ def _process_batch(
     Args:
         batch: Dictionary with images, image_ids, reply_subjects, image_urls, failed_items
         batch_num: 0-based batch index (for logging)
-        detector: APIMothDetector instance (reset before call)
-        classifier: Terminal species classifier instance
+        detector: The pipeline's detector instance (reset before call)
+        stage_models: Preloaded classifier stage instances keyed by class, one per
+            intermediate gate plus the terminal classifier (see _build_stage_models)
+        pipeline_def: The pipeline's stage definition driving detection/classification
         pipeline: Pipeline slug for response payload
-        binary_filter: Binary moth/non-moth classifier, or None
-        use_binary_filter: Whether to run binary classification step
 
     Returns:
         (n_items, n_detections, batch_results, detect_time, classify_time)
@@ -268,74 +289,47 @@ def _process_batch(
         )
         detect_time = (datetime.datetime.now() - batch_start_time).total_seconds()
 
-        # Group detections by image_id
+        image_tensors = dict(zip(image_ids, images, strict=True))
+
+        # --- Classification stages ---
+        # Run the pipeline's intermediate gate(s) and terminal classifier through
+        # the SAME engine as the /process path, so the two cannot drift. Each
+        # stage classifies crops sliced from the already-loaded image tensors
+        # (run_stage below) rather than re-reading images by URL.
+        algorithms_used: dict[str, AlgorithmConfigResponse] = {}
+
+        def run_stage(
+            classifier_class: type[APIMothClassifier],
+            detections: list[DetectionResponse],
+            terminal: bool,
+        ) -> APIMothClassifier:
+            stage = stage_models[classifier_class]
+            stage.terminal = terminal
+            return _classify_detections_from_tensors(stage, detections, image_tensors)
+
+        classify_start = datetime.datetime.now()
+        detections_to_return = run_classification_stages(
+            pipeline=pipeline_def,
+            source_images=[],
+            detector_results=detector.results,
+            example_config_param=None,
+            algorithms_used=algorithms_used,
+            run_stage=run_stage,
+        )
+        classify_time = (datetime.datetime.now() - classify_start).total_seconds()
+
+        # Group every returned detection (gate-dropped and tagged, plus terminal-
+        # classified) by image for posting. Algorithm provenance travels on each
+        # detection's own classifications, so no separate tracking is needed.
         image_detections: dict[str, list[DetectionResponse]] = {
             img_id: [] for img_id in image_ids
         }
-        image_tensors = dict(zip(image_ids, images, strict=True))
-
-        # Apply binary classification filter if needed
-        detector_results = detector.results
-
-        if use_binary_filter:
-            assert binary_filter is not None, "Binary filter not initialized"
-            (
-                detections_for_terminal_classifier,
-                detections_to_return,
-            ) = _apply_binary_classification(
-                binary_filter,
-                detector_results,
-                image_tensors,
-                image_detections,
-            )
-        else:
-            detections_for_terminal_classifier = detector_results
-            detections_to_return = []
-
-        # Run terminal classifier on filtered detections
-        classifier.reset(detections_for_terminal_classifier)
-        classify_transforms = classifier.get_transforms()
-
-        # Collect and transform all crops for batched classification
-        crops = []
-        valid_indices = []
-        n_detections = 0
-        for idx, dresp in enumerate(detections_for_terminal_classifier):
-            image_tensor = image_tensors[dresp.source_image_id]
-            bbox = dresp.bbox
-            y1, y2 = int(bbox.y1), int(bbox.y2)
-            x1, x2 = int(bbox.x1), int(bbox.x2)
-            if y1 >= y2 or x1 >= x2:
-                logger.warning(
-                    f"Skipping detection {idx} with invalid bbox: "
-                    f"({x1},{y1})->({x2},{y2})"
-                )
-                continue
-            crop = image_tensor[:, y1:y2, x1:x2]
-            crop_transformed = classify_transforms(crop)
-            crops.append(crop_transformed)
-            valid_indices.append(idx)
-
-        classify_start = datetime.datetime.now()
-        if crops:
-            batched_crops = torch.stack(crops)
-            classifier_out = classifier.predict_batch(batched_crops)
-            classifier_out = classifier.post_process_batch(classifier_out)
-
-            for crop_i, idx in enumerate(valid_indices):
-                dresp = detections_for_terminal_classifier[idx]
-                detection = classifier.update_detection_classification(
-                    seconds_per_item=0,
-                    image_id=dresp.source_image_id,
-                    detection_idx=idx,
-                    predictions=classifier_out[crop_i],
-                )
-                image_detections[dresp.source_image_id].append(detection)
-                n_detections += 1
-
-        classify_time = (datetime.datetime.now() - classify_start).total_seconds()
-        # Count non-moth detections returned from binary filter
-        n_detections += len(detections_to_return)
+        for detection in detections_to_return:
+            image_detections[detection.source_image_id].append(detection)
+        n_detections = len(detections_to_return)
+        logger.debug(
+            f"Batch {batch_num + 1} stages used: {list(algorithms_used.keys())}"
+        )
 
         # Calculate batch processing time
         batch_end_time = datetime.datetime.now()
@@ -421,34 +415,18 @@ def _process_job(
         job_id=job_id,
         settings=settings,
     )
-    classifier = None
-    detector = None
+    detector: APIMothDetector | APIAnyBugDetector | None = None
+    stage_models: dict[type[APIMothClassifier], APIMothClassifier] = {}
 
     # Look the pipeline up in the full registry (the same one /info advertises
     # and the worker subscribes to) so every advertised slug is dispatchable.
+    # Every stage — detector, gate(s), terminal — is taken from this definition
+    # and executed by the shared stage engine, so the worker runs whatever the
+    # pipeline declares (YOLO26 + Lepidoptera order gate for anybug, FasterRCNN
+    # + binary moth gate for the legacy pipelines) with no per-pipeline branching
+    # here. No capability guard is needed: any pipeline the registry advertises
+    # is composed of stages this path can run.
     pipeline_def = PIPELINE_CHOICES[pipeline]
-    classifier_class = pipeline_def.terminal
-    # Check if binary filtering is needed once for the entire job.
-    use_binary_filter = should_filter_detections(pipeline_def)
-
-    # This in-process worker only executes the FasterRCNN moth detector with an
-    # optional binary moth/non-moth filter. A pipeline needing a different
-    # detector or a non-binary gate (e.g. the anybug YOLO26 detector with the
-    # Lepidoptera order gate) is advertised and dispatchable, but _process_batch
-    # cannot run its stages yet. Fail loudly rather than silently detecting with
-    # the wrong model. TODO(anybug): make _process_batch stage-aware from
-    # PIPELINE_CHOICES, then drop this guard.
-    gpu_worker_supports_pipeline = pipeline_def.detector is APIMothDetector and all(
-        stage.classifier is MothClassifierBinary for stage in pipeline_def.intermediates
-    )
-    if not gpu_worker_supports_pipeline:
-        raise NotImplementedError(
-            f"The worker cannot run pipeline '{pipeline}' yet: it needs detector "
-            f"'{pipeline_def.detector.__name__}' and gates "
-            f"{[stage.classifier.__name__ for stage in pipeline_def.intermediates]}. "
-            "This path only supports APIMothDetector with the binary moth filter."
-        )
-    binary_filter = None
 
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -482,25 +460,17 @@ def _process_job(
                 logger.warning(f"Batch {i + 1} is empty, skipping")
                 continue
 
-            # Defer instantiation of poster, detector and classifiers until we have data
-            if not classifier:
-                classifier = classifier_class(source_images=[], detections=[])
-                detector = APIMothDetector([])
+            # Defer instantiation of poster, detector and classifier stages until
+            # we have data, so an empty job loads no model weights. Every stage
+            # (detector, gate(s), terminal) comes from the pipeline definition and
+            # is loaded once here, then reused across batches.
+            if detector is None:
+                detector = pipeline_def.detector(source_images=[])
+                stage_models = _build_stage_models(pipeline_def)
                 result_poster = ResultPoster(max_pending=MAX_PENDING_POSTS)
 
-                if use_binary_filter:
-                    binary_filter = MothClassifierBinary(
-                        source_images=[],
-                        detections=[],
-                        terminal=False,
-                    )
-
             assert detector is not None, "Detector not initialized"
-            assert classifier is not None, "Classifier not initialized"
             assert result_poster is not None, "ResultPoster not initialized"
-            assert not (
-                use_binary_filter and binary_filter is None
-            ), "Binary filter not initialized"
             detector.reset([])
             did_work = True
 
@@ -508,10 +478,9 @@ def _process_job(
                 batch,
                 i,
                 detector,
-                classifier,
+                stage_models,
+                pipeline_def,
                 pipeline,
-                binary_filter,
-                use_binary_filter,
             )
             items += n_items
             total_detections += n_detections
