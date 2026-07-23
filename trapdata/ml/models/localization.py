@@ -301,9 +301,16 @@ class AnyBugObjectDetector_YOLO26(ObjectDetector):
        original pixels.
     2. EXIF auto-transpose. Ultralytics applies ``ImageOps.exif_transpose`` to
        PIL inputs, which would rotate portrait or otherwise EXIF-tagged captures
-       and misplace boxes relative to the raw-pixel contract. The detector feeds
-       the model raw NumPy arrays (see :meth:`get_transforms`), which carry no
+       and misplace boxes relative to the raw-pixel contract. :meth:`predict_batch`
+       always hands the model raw NumPy arrays (never PIL images), which carry no
        EXIF, so no auto-rotation is applied and boxes stay in raw-pixel space.
+
+    Two dataloaders feed this detector with different single-image formats, and
+    :meth:`predict_batch` accepts both (see :meth:`_as_hwc_uint8_rgb`): the
+    FastAPI ``/process`` path uses this detector's own :meth:`get_transforms`
+    (HWC uint8 RGB), while the async worker's shared dataloader hardcodes
+    ``ToTensor`` (CHW float32 RGB in ``[0, 1]``) because its classifier stages
+    slice CHW crops from the same tensors.
 
     The ``ultralytics`` import in :meth:`get_model` is lazy so this module stays
     importable in environments where the (AGPL-3.0) dependency is not installed.
@@ -339,17 +346,65 @@ class AnyBugObjectDetector_YOLO26(ObjectDetector):
         self.model = model
         return self.model
 
+    @staticmethod
+    def _as_hwc_uint8_rgb(image: "np.ndarray | torch.Tensor") -> np.ndarray:
+        """Normalize one image to an HWC uint8 RGB array for Ultralytics.
+
+        Two dataloaders feed this detector with different single-image formats,
+        and both must land on the same HWC uint8 RGB array before the channel
+        flip to BGR in :meth:`predict_batch`:
+
+        * The FastAPI ``/process`` path applies this detector's own
+          :meth:`get_transforms` (``np.asarray``), yielding an HWC uint8 RGB
+          array already in the layout Ultralytics wants.
+        * The async worker's shared dataloader hardcodes ``torchvision``
+          ``ToTensor`` — it must, because the classifier stages slice CHW crops
+          from the same tensors — yielding a CHW float32 RGB tensor scaled to
+          ``[0, 1]``. Left unconverted it would reach Ultralytics as
+          channels-first float, and the RGB->BGR flip would mirror the width
+          axis instead of swapping channels, feeding the model garbage.
+
+        Floating-point input is treated as the ``ToTensor`` contract: transposed
+        CHW->HWC and rescaled from ``[0, 1]`` back to 0-255. Integer input is
+        assumed to be HWC uint8 already and passed through unchanged, so the
+        ``/process`` path is byte-for-byte identical to before.
+        """
+        if isinstance(image, torch.Tensor):
+            image = image.detach().cpu().numpy()
+        image = np.asarray(image)
+
+        if np.issubdtype(image.dtype, np.floating):
+            # ToTensor output: channels-first float in [0, 1]. Guard the
+            # transpose on a channels-first shape so an already-HWC float array
+            # (not produced on either path today) is not silently mangled.
+            if (
+                image.ndim == 3
+                and image.shape[0] in (1, 3)
+                and image.shape[2] not in (1, 3)
+            ):
+                image = np.transpose(image, (1, 2, 0))
+            image = np.clip(np.rint(image * 255.0), 0, 255).astype(np.uint8)
+        else:
+            image = image.astype(np.uint8, copy=False)
+        return image
+
     def predict_batch(self, batch):
         # Ultralytics performs its own letterbox + normalization internally and
         # returns one Results object per image with boxes already mapped back to
-        # that image's pixel space. It expects NumPy inputs in BGR channel order
-        # (OpenCV convention), so flip our RGB arrays before inference.
+        # that image's pixel space. It expects NumPy inputs as HWC uint8 arrays
+        # in BGR channel order (OpenCV convention).
+        #
+        # Accept either format the two dataloaders produce (see
+        # _as_hwc_uint8_rgb): the /process path's HWC uint8 arrays and the async
+        # worker's CHW float ToTensor tensors. Normalize every image to HWC uint8
+        # RGB first, then flip to BGR.
         if isinstance(batch, np.ndarray):
-            images = list(batch) if batch.ndim == 4 else [batch]
+            raw_images = list(batch) if batch.ndim == 4 else [batch]
         elif isinstance(batch, torch.Tensor):
-            images = [img.cpu().numpy() for img in batch]
+            raw_images = list(batch) if batch.ndim == 4 else [batch]
         else:
-            images = list(batch)
+            raw_images = list(batch)
+        images = [self._as_hwc_uint8_rgb(img) for img in raw_images]
         images = [np.ascontiguousarray(img[..., ::-1]) for img in images]
         # TODO(anybug): a mixed-resolution batch cannot be default-collated into
         # a single tensor; wire a list collate_fn for variable-size inputs when

@@ -7,8 +7,11 @@ import typing
 import unittest
 from unittest import TestCase
 
+import numpy as np
 import PIL.Image
 import pytest
+import torch
+import torchvision.transforms
 
 from trapdata.api.models.classification import (
     MothClassifierBinary,
@@ -22,6 +25,10 @@ from trapdata.api.schemas import (
     SourceImage,
 )
 from trapdata.common.filemanagement import find_images
+from trapdata.ml.models.localization import (
+    AnyBugObjectDetector_YOLO26,
+    MothObjectDetector_FasterRCNN_2023,
+)
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 logging.basicConfig(level=logging.INFO)
@@ -293,6 +300,158 @@ class TestSourceImageSchema(TestCase):
     def test_base64_images(self):
         for image in TEST_BASE64_IMAGES.values():
             self._test_base64(image)
+
+
+class _StubYOLO:
+    """Minimal stand-in for the Ultralytics ``YOLO`` model.
+
+    Records the exact ``images`` argument handed to ``predict`` so a test can
+    assert on the array the detector produced, with no weights loaded and no
+    inference run.
+    """
+
+    def __init__(self) -> None:
+        self.received_images: list[np.ndarray] | None = None
+
+    def predict(self, images, **kwargs):
+        self.received_images = images
+        return []  # post-processing is not exercised in these tests
+
+
+# A known 2x2 RGB pattern with distinct per-channel values, so a wrong channel
+# order or a transposed axis is caught by exact comparison.
+_KNOWN_RGB = np.array(
+    [
+        [[10, 20, 30], [40, 50, 60]],
+        [[70, 80, 90], [100, 110, 120]],
+    ],
+    dtype=np.uint8,
+)  # HWC RGB, shape (2, 2, 3)
+
+
+class TestAnyBugDetectorInputFormat(TestCase):
+    """The YOLO26 detector must accept both dataloaders' image formats.
+
+    The async worker's shared dataloader feeds CHW float ``ToTensor`` tensors,
+    while the FastAPI ``/process`` path feeds HWC uint8 arrays. Both must reach
+    Ultralytics as HWC uint8 BGR. These tests exercise only the format
+    conversion in ``predict_batch`` (up to, but not including, the real model
+    call, which is stubbed) — no weights, no GPU, no inference.
+    """
+
+    def _make_detector(self, stub: _StubYOLO) -> AnyBugObjectDetector_YOLO26:
+        # Bypass __init__ so no weights are downloaded and ultralytics is never
+        # imported; set only the attributes predict_batch reads.
+        detector = AnyBugObjectDetector_YOLO26.__new__(AnyBugObjectDetector_YOLO26)
+        detector.model = stub  # type: ignore[assignment]
+        detector.device = "cpu"
+        detector.bbox_score_threshold = 0.25
+        return detector
+
+    def test_async_chw_float_tensor_converted_to_hwc_uint8_bgr(self):
+        """A CHW float ToTensor batch (async path) reaches Ultralytics as HWC
+        uint8 BGR, round-tripping the known pixel pattern."""
+        pil = PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        chw_float = torchvision.transforms.ToTensor()(pil)  # (3, 2, 2) float32 in [0,1]
+        self.assertEqual(tuple(chw_float.shape), (3, 2, 2))
+        self.assertTrue(torch.is_floating_point(chw_float))
+        # rest_collate_fn stacks same-size images into an NCHW tensor.
+        batch = torch.stack([chw_float])
+
+        stub = _StubYOLO()
+        self._make_detector(stub).predict_batch(batch)
+
+        assert stub.received_images is not None
+        self.assertEqual(len(stub.received_images), 1)
+        arr = stub.received_images[0]
+        self.assertEqual(arr.shape, (2, 2, 3), "must be HWC, not CHW")
+        self.assertEqual(arr.dtype, np.uint8, "must be uint8, not float")
+        # Channels reversed RGB -> BGR, pixel values recovered from [0,1] float.
+        np.testing.assert_array_equal(arr, _KNOWN_RGB[..., ::-1])
+
+    def test_async_chw_float_list_batch_converted(self):
+        """The mixed-size async fallback (a list of CHW float tensors) is also
+        converted, so predict_batch does not depend on the stacked fast path."""
+        pil = PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        chw_float = torchvision.transforms.ToTensor()(pil)
+        batch = [chw_float]  # list, as rest_collate_fn yields for mixed sizes
+
+        stub = _StubYOLO()
+        self._make_detector(stub).predict_batch(batch)
+
+        assert stub.received_images is not None
+        arr = stub.received_images[0]
+        self.assertEqual(arr.shape, (2, 2, 3))
+        self.assertEqual(arr.dtype, np.uint8)
+        np.testing.assert_array_equal(arr, _KNOWN_RGB[..., ::-1])
+
+    def test_process_hwc_uint8_tensor_unchanged(self):
+        """The /process path (HWC uint8 collated into an NHWC tensor) is passed
+        through unchanged apart from the RGB->BGR flip — the regression guard
+        for the working FastAPI path."""
+        batch = torch.from_numpy(np.stack([_KNOWN_RGB]))  # NHWC uint8
+
+        stub = _StubYOLO()
+        self._make_detector(stub).predict_batch(batch)
+
+        assert stub.received_images is not None
+        arr = stub.received_images[0]
+        self.assertEqual(arr.shape, (2, 2, 3))
+        self.assertEqual(arr.dtype, np.uint8)
+        np.testing.assert_array_equal(arr, _KNOWN_RGB[..., ::-1])
+
+    def test_process_hwc_uint8_ndarray_unchanged(self):
+        """The /process path when the batch arrives as a raw 4D ndarray."""
+        batch = np.stack([_KNOWN_RGB])  # (1, 2, 2, 3) uint8
+
+        stub = _StubYOLO()
+        self._make_detector(stub).predict_batch(batch)
+
+        assert stub.received_images is not None
+        arr = stub.received_images[0]
+        self.assertEqual(arr.shape, (2, 2, 3))
+        self.assertEqual(arr.dtype, np.uint8)
+        np.testing.assert_array_equal(arr, _KNOWN_RGB[..., ::-1])
+
+    def test_helper_transposes_and_rescales_chw_float(self):
+        """_as_hwc_uint8_rgb converts a CHW float array to HWC uint8 directly."""
+        chw_float = torchvision.transforms.ToTensor()(
+            PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        )
+        out = AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(chw_float)
+        self.assertEqual(out.shape, (2, 2, 3))
+        self.assertEqual(out.dtype, np.uint8)
+        # Still RGB here — the flip to BGR happens in predict_batch, not the helper.
+        np.testing.assert_array_equal(out, _KNOWN_RGB)
+
+
+class TestDetectorTransformContracts(TestCase):
+    """Pin each detector's per-image transform contract so the fix cannot drift
+    the FasterRCNN path or the YOLO /process path."""
+
+    def test_fasterrcnn_transform_is_chw_float_tensor(self):
+        """FasterRCNN still receives CHW float ToTensor input, unchanged."""
+        detector = MothObjectDetector_FasterRCNN_2023.__new__(
+            MothObjectDetector_FasterRCNN_2023
+        )
+        transformed = detector.get_transforms()(
+            PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        )
+        self.assertIsInstance(transformed, torch.Tensor)
+        self.assertTrue(torch.is_floating_point(transformed))
+        self.assertEqual(tuple(transformed.shape), (3, 2, 2))  # CHW
+        self.assertLessEqual(float(transformed.max()), 1.0)
+
+    def test_yolo_transform_is_hwc_uint8_array(self):
+        """The YOLO26 /process transform still yields an HWC uint8 RGB array."""
+        detector = AnyBugObjectDetector_YOLO26.__new__(AnyBugObjectDetector_YOLO26)
+        transformed = detector.get_transforms()(
+            PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        )
+        self.assertIsInstance(transformed, np.ndarray)
+        self.assertEqual(transformed.dtype, np.uint8)
+        self.assertEqual(transformed.shape, (2, 2, 3))  # HWC
+        np.testing.assert_array_equal(transformed, _KNOWN_RGB)
 
 
 if __name__ == "__main__":
