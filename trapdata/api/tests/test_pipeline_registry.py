@@ -620,3 +620,77 @@ def test_process_batch_legacy_binary_split_preserved():
         "binary": ("moth", False),
         "species": ("Species A", True),
     }
+
+
+def test_process_batch_tags_uncroppable_detection_instead_of_naked():
+    """A detection whose bbox is degenerate (here zero-width) is returned TAGGED
+    with the non-terminal 'uncroppable' sentinel rather than naked, so the
+    pipeline's "every detection carries a classification" invariant holds. The
+    box never reaches the gate or terminal label, mirroring how a gate tags the
+    detections it drops.
+    """
+    from trapdata.antenna import worker
+
+    class _DegenerateDetector(_StubDetector):
+        def post_process_batch(self, batch_output):
+            # x1 == x2 -> zero-width box the crop loop cannot slice.
+            return [[[5, 5, 5, 12]] for _ in batch_output]
+
+    class _OrderGate(_StubTensorStage):
+        algorithm_key = "order_gate"
+        name = "Order Gate"
+        labels = {"img0": "Lepidoptera"}  # never applied: the crop is skipped
+
+    class _Species(_StubTensorStage):
+        algorithm_key = "species"
+        name = "Species Classifier"
+        labels: dict[str, str] = {}
+
+    pipeline_def = PipelineDefinition(
+        detector=_DegenerateDetector,
+        terminal=_Species,
+        intermediates=(
+            IntermediateStage(classifier=_OrderGate, pass_labels=("Lepidoptera",)),
+        ),
+    )
+
+    _, n_detections, batch_results, _, _ = worker._process_batch(
+        _make_stub_batch(["img0"]),
+        0,
+        _DegenerateDetector(),
+        worker._build_stage_models(pipeline_def),
+        pipeline_def,
+        "anybug_global_moths_2024",
+    )
+
+    assert n_detections == 1
+    [d0] = batch_results[0].result.detections
+    # Tagged with the non-terminal uncroppable sentinel, and NOTHING else: no
+    # gate label, no species label, and not a naked (classification-free) box.
+    assert _classifications_by_algorithm(d0) == {
+        worker.UNCROPPABLE_ALGORITHM.key: (worker.UNCROPPABLE_LABEL, False)
+    }
+
+
+def test_classifier_choices_projection_is_collision_free():
+    """CLASSIFIER_CHOICES is a DERIVED ``{slug: terminal}`` view of the
+    default-detector pipelines. Because it is keyed by the same unique slugs as
+    PIPELINE_CHOICES, deriving it can never merge two pipelines onto one slug or
+    drop one silently. Pin that so adding a pipeline keeps the projection 1:1.
+    """
+    from trapdata.api.api import CLASSIFIER_CHOICES
+
+    expected_slugs = {
+        slug
+        for slug, pipeline in PIPELINE_CHOICES.items()
+        if pipeline.detector is APIMothDetector
+    }
+    # Every default-detector pipeline appears exactly once, keyed by its slug...
+    assert set(CLASSIFIER_CHOICES) == expected_slugs
+    assert len(CLASSIFIER_CHOICES) == len(expected_slugs)
+    # ...its keys are a subset of the registry's unique slugs (no key can collide
+    # with another pipeline's)...
+    assert set(CLASSIFIER_CHOICES).issubset(PIPELINE_CHOICES)
+    # ...and each derived terminal matches its source pipeline (no cross-wiring).
+    for slug, terminal in CLASSIFIER_CHOICES.items():
+        assert terminal is PIPELINE_CHOICES[slug].terminal

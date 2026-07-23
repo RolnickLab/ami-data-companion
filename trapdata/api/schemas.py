@@ -28,6 +28,23 @@ class BoundingBox(pydantic.BaseModel):
     def to_tuple(self):
         return (self.x1, self.y1, self.x2, self.y2)
 
+    def clamp_to_bounds(self, width: int, height: int) -> tuple[int, int, int, int]:
+        """Clamp this box to an image's pixel bounds as integer ``(x1, y1, x2, y2)``.
+
+        Both crop runners go through this so they see the SAME in-bounds region
+        for a box that touches or extends past the image edge: the ``/process``
+        path's PIL ``Image.crop`` zero-pads out-of-bounds coordinates, while the
+        worker's tensor slicing wraps negative indices, so without a shared clamp
+        the two paths would return different crops for the same detection. A box
+        entirely outside the image collapses to a zero-area (degenerate) region,
+        which the caller treats as uncroppable.
+        """
+        x1 = max(0, min(int(self.x1), width))
+        x2 = max(0, min(int(self.x2), width))
+        y1 = max(0, min(int(self.y1), height))
+        y2 = max(0, min(int(self.y2), height))
+        return x1, y1, x2, y2
+
 
 class SourceImage(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="ignore", arbitrary_types_allowed=True)

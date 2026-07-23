@@ -517,5 +517,62 @@ class TestDetectorTransformContracts(TestCase):
         np.testing.assert_array_equal(transformed, _KNOWN_RGB)
 
 
+class TestBoundingBoxClampAndCropEquivalence(TestCase):
+    """The /process (PIL ``Image.crop``) and worker (tensor slice) runners must
+    crop the SAME in-bounds region for the same detection. Both clamp through
+    ``BoundingBox.clamp_to_bounds``, so a box that touches or exceeds the image
+    edge yields identical crops on both paths — PIL zero-pads out-of-bounds and
+    tensor slicing wraps negative indices otherwise.
+    """
+
+    W, H = 20, 12
+
+    def _fixture(self):
+        # Deterministic per-pixel values so a wrong crop region is caught exactly.
+        arr = np.arange(self.H * self.W * 3, dtype=np.uint8).reshape(self.H, self.W, 3)
+        pil = PIL.Image.fromarray(arr, mode="RGB")
+        chw = torch.from_numpy(arr).permute(2, 0, 1)  # worker's CHW tensor layout
+        return pil, chw
+
+    def test_clamp_to_bounds_cases(self):
+        """The clamp maps in-bounds, edge-touching, past-edge, and entirely-off
+        boxes to the expected integer region; an off-image box collapses to a
+        degenerate (zero-area) region."""
+        cases = [
+            (BoundingBox(x1=2, y1=2, x2=8, y2=6), (2, 2, 8, 6)),  # in-bounds
+            (BoundingBox(x1=10, y1=0, x2=20, y2=12), (10, 0, 20, 12)),  # edges
+            (BoundingBox(x1=15, y1=8, x2=40, y2=30), (15, 8, 20, 12)),  # past BR
+            (BoundingBox(x1=-5, y1=-4, x2=6, y2=6), (0, 0, 6, 6)),  # past TL
+            (
+                BoundingBox(x1=25, y1=2, x2=30, y2=6),
+                (20, 2, 20, 6),
+            ),  # off -> degenerate
+        ]
+        for box, expected in cases:
+            self.assertEqual(box.clamp_to_bounds(self.W, self.H), expected)
+
+    def test_pil_and_tensor_runners_crop_same_region(self):
+        """For each box, the PIL crop of the clamped coords and the tensor slice
+        of the clamped coords are pixel-identical, including the past-top-left
+        case that would otherwise diverge (PIL zero-pads vs tensor negative-index
+        wrap) and the degenerate case (both yield an empty crop)."""
+        pil, chw = self._fixture()
+        boxes = [
+            BoundingBox(x1=2, y1=2, x2=8, y2=6),  # fully in-bounds
+            BoundingBox(x1=10, y1=0, x2=20, y2=12),  # touching the edges
+            BoundingBox(x1=15, y1=8, x2=40, y2=30),  # past the bottom-right edge
+            BoundingBox(x1=-5, y1=-4, x2=6, y2=6),  # past the top-left edge
+            BoundingBox(x1=5, y1=5, x2=5, y2=10),  # degenerate (zero width)
+        ]
+        for box in boxes:
+            x1, y1, x2, y2 = box.clamp_to_bounds(self.W, self.H)
+            pil_crop = np.asarray(pil.crop((x1, y1, x2, y2)))
+            tensor_crop = chw[:, y1:y2, x1:x2].permute(1, 2, 0).numpy()
+            self.assertEqual(pil_crop.shape, tensor_crop.shape, f"shape for {box}")
+            np.testing.assert_array_equal(
+                pil_crop, tensor_crop, err_msg=f"pixels for {box}"
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
