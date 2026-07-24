@@ -35,7 +35,7 @@ from trapdata.api.models.classification import (
     InsectOrderClassifier,
     MothClassifierGlobal,
 )
-from trapdata.api.models.localization import APIMothDetector
+from trapdata.api.models.localization import APIAnyBugDetector, APIMothDetector
 from trapdata.api.schemas import (
     AlgorithmReference,
     BoundingBox,
@@ -150,6 +150,129 @@ def test_advertised_subscribed_and_dispatchable_slugs_match():
     # The regression that motivated this test: the new anybug pipeline must be in
     # all three sets, not advertised-but-undispatchable.
     assert "anybug_global_moths_2024" in advertised
+
+
+# ---------------------------------------------------------------------------
+# Advertised algorithm list: exactly one detector per pipeline
+# ---------------------------------------------------------------------------
+#
+# Antenna's save_results rejects any pipeline whose /info advertises more than one
+# localization ("detection") algorithm, so detections never save. A pre-refactor
+# builder hardcoded the FasterRCNN moth detector for every pipeline; layering the
+# anybug pipeline (which has its own YOLO26 detector) on top advertised TWO
+# detectors. The typed PipelineDefinition now sources the detector from a single
+# validated field, and make_pipeline_config_response emits one algorithm per
+# stage. These tests pin both halves so the double-detector regression cannot
+# return, and are weight-free (they read class task_types / stub the stages).
+
+
+def _advertised_stage_classes(pipeline: PipelineDefinition) -> list[type]:
+    """The model classes make_pipeline_config_response emits one algorithm for, in
+    the order it emits them: the detector, each intermediate gate, then the
+    terminal classifier.
+    """
+    return [
+        pipeline.detector,
+        *(stage.classifier for stage in pipeline.intermediates),
+        pipeline.terminal,
+    ]
+
+
+@pytest.mark.parametrize("slug", list(PIPELINE_CHOICES))
+def test_every_pipeline_advertises_exactly_one_localization_algorithm(slug):
+    """Each registered pipeline advertises exactly one localization (detector)
+    algorithm — the count Antenna's save_results allows. Advertising two is the
+    deployed regression that stopped detections from saving.
+    """
+    stages = _advertised_stage_classes(PIPELINE_CHOICES[slug])
+    localization = [c for c in stages if c.task_type == "localization"]
+    assert len(localization) == 1, (
+        f"{slug} advertises detectors {[c.__name__ for c in localization]}; "
+        "exactly one localization algorithm is allowed"
+    )
+
+
+def test_anybug_advertises_its_yolo26_detector_not_fasterrcnn():
+    """The anybug pipeline advertises its own YOLO26 detector as the sole
+    localization algorithm, not the FasterRCNN moth detector a default-detector
+    builder would inject, and keeps its two classification stages intact.
+    """
+    stages = _advertised_stage_classes(PIPELINE_CHOICES["anybug_global_moths_2024"])
+    localization = [c for c in stages if c.task_type == "localization"]
+    assert localization == [APIAnyBugDetector]
+    assert localization[0].get_key() == "anybug-yolo26-detector-2024"
+    # The spurious FasterRCNN detector must not appear anywhere in the stage list.
+    assert APIMothDetector not in stages
+    classification = [c for c in stages if c.task_type == "classification"]
+    assert len(classification) == 2
+
+
+def test_make_pipeline_config_response_emits_one_algorithm_per_stage():
+    """The /info builder emits exactly one algorithm per configured stage, in
+    stage order, and injects no extra detector of its own. This guards the builder
+    itself against re-introducing a hardcoded/default detector union (the shape of
+    the deployed regression), independently of the registry entries.
+    """
+
+    class _Detector:
+        task_type = "localization"
+        name = "Stub Detector"
+        description = "stub detector"
+        weights_path = "http://example.invalid/detector.pt"
+        labels_path = None
+        default_taxon_rank = "SPECIES"
+        category_map = {0: "object"}
+
+        def __init__(self, source_images=(), **kwargs):
+            pass
+
+        def get_key(self) -> str:
+            return "stub-detector"
+
+    class _Gate:
+        task_type = "classification"
+        name = "Stub Order Gate"
+        description = "stub gate"
+        weights_path = "http://example.invalid/gate.pt"
+        labels_path = None
+        default_taxon_rank = "ORDER"
+        category_map = {0: "Lepidoptera", 1: "Coleoptera"}
+
+        def __init__(self, source_images=(), detections=(), terminal=True, **kwargs):
+            pass
+
+        def get_key(self) -> str:
+            return "stub-order-gate"
+
+    class _Terminal:
+        task_type = "classification"
+        name = "Stub Species Classifier"
+        description = "stub terminal"
+        weights_path = "http://example.invalid/species.pt"
+        labels_path = None
+        default_taxon_rank = "SPECIES"
+        category_map = {0: "Species A", 1: "Species B"}
+
+        def __init__(self, source_images=(), detections=(), terminal=True, **kwargs):
+            pass
+
+        def get_key(self) -> str:
+            return "stub-species"
+
+    pipeline = PipelineDefinition(
+        detector=_Detector,
+        terminal=_Terminal,
+        intermediates=(
+            IntermediateStage(classifier=_Gate, pass_labels=("Lepidoptera",)),
+        ),
+    )
+
+    config = api.make_pipeline_config_response(pipeline, slug="stub_pipeline")
+
+    task_types = [algorithm.task_type for algorithm in config.algorithms]
+    assert task_types == ["localization", "classification", "classification"]
+    localization = [a for a in config.algorithms if a.task_type == "localization"]
+    assert [a.key for a in localization] == ["stub-detector"]
 
 
 # ---------------------------------------------------------------------------
