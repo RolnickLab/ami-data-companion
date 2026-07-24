@@ -239,7 +239,8 @@ class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
 
 
 class InsectOrderClassifier(APIMothClassifier, InsectOrderClassifier2025):
-    # This model is chronically over-confident; halve its reported scores so the
-    # UI does not present every order prediction as near-certain. Argmax-
-    # invariant, so it does not change the Lepidoptera gate (see api.py).
-    score_scale = 0.5
+    # Caps the reported order confidence at 0.9. The model has no "not an insect"
+    # class, so it is equally confident on non-animal crops (smudges, plant matter)
+    # as on real ones; this is a display guard, not a calibration. Argmax-invariant,
+    # so the Lepidoptera gate is unaffected. See RolnickLab/ami-ml#75.
+    score_scale = 0.9

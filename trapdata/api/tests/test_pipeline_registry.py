@@ -303,11 +303,11 @@ def test_score_scale_scales_scores_not_logits():
 
 
 def test_order_gate_keeps_product_score_scale():
-    """The Lepidoptera order gate is the over-confident InsectOrderClassifier,
-    whose reported scores are halved by an explicit product choice. Guard the
+    """The Lepidoptera order gate is the InsectOrderClassifier, whose reported
+    scores are capped below certainty by an explicit product choice. Guard the
     constant so a refactor does not quietly reset it to 1.0.
     """
-    assert InsectOrderClassifier.score_scale == 0.5
+    assert InsectOrderClassifier.score_scale == 0.9
     assert api.LEPIDOPTERA_ORDER_GATE.classifier is InsectOrderClassifier
     # The gate does not change which pipeline is terminal.
     assert PIPELINE_CHOICES["anybug_global_moths_2024"].terminal is MothClassifierGlobal
