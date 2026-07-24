@@ -68,9 +68,6 @@ class APIAnyBugDetector(APIInferenceBaseClass, AnyBugObjectDetector_YOLO26):
     per-image ``DetectionResponse`` assembly) while inheriting the YOLO26
     inference, de-letterboxing, and EXIF-neutralizing behavior from
     :class:`AnyBugObjectDetector_YOLO26`.
-
-    TODO(anybug): cannot run until ``ultralytics`` is installed and the real
-    ``weights_path`` is uploaded (see the base class).
     """
 
     task_type = "localization"

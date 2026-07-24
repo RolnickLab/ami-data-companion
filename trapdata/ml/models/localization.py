@@ -312,8 +312,9 @@ class AnyBugObjectDetector_YOLO26(ObjectDetector):
     ``ToTensor`` (CHW float32 RGB in ``[0, 1]``) because its classifier stages
     slice CHW crops from the same tensors.
 
-    The ``ultralytics`` import in :meth:`get_model` is lazy so this module stays
-    importable in environments where the (AGPL-3.0) dependency is not installed.
+    The (AGPL-3.0) ``ultralytics`` package is a required dependency, but it is
+    imported inside :meth:`get_model` rather than at module scope so the other
+    detectors here do not pay its import cost.
     """
 
     name = "AnyBug YOLO26 Detector 2024"
@@ -336,8 +337,9 @@ class AnyBugObjectDetector_YOLO26(ObjectDetector):
         return torchvision.transforms.Compose([np.asarray])
 
     def get_model(self):
-        # Imported lazily so this module stays importable without ultralytics
-        # installed (the dependency and weight are not wired up yet).
+        # Imported here rather than at module scope so that importing this module
+        # does not pull in ultralytics and its own heavy dependency chain for the
+        # detectors that never touch it.
         from ultralytics import YOLO
 
         logger.debug(f"Loading YOLO26 weights: {self.weights}")
@@ -446,8 +448,8 @@ class AnyBugObjectDetector_YOLO26(ObjectDetector):
         images = [self._as_hwc_uint8_rgb(img) for img in raw_images]
         images = [np.ascontiguousarray(img[..., ::-1]) for img in images]
         # TODO(anybug): a mixed-resolution batch cannot be default-collated into
-        # a single tensor; wire a list collate_fn for variable-size inputs when
-        # this detector goes live.
+        # a single tensor, so such batches arrive as a list and are passed through
+        # one by one; wire a list collate_fn for variable-size inputs.
         return self.model.predict(
             images,
             conf=self.bbox_score_threshold,
