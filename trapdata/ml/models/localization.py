@@ -330,6 +330,12 @@ class AnyBugObjectDetector_YOLO26(ObjectDetector):
     # TODO(anybug): 0.25 is a starting default; tune against validation data.
     bbox_score_threshold = 0.25
 
+    # Pin inference resolution. The checkpoint trains at 1024 and Ultralytics
+    # already restores that via _reset_ckpt_args, so this is a no-op today; it
+    # guards against a future release dropping that restore and silently falling
+    # back to the 640 predict default, which would cut recall on small insects.
+    imgsz = 1024
+
     def get_transforms(self):
         # Convert the PIL image to a raw HWC RGB uint8 NumPy array. NumPy arrays
         # carry no EXIF metadata, which neutralizes Ultralytics' default
@@ -453,6 +459,7 @@ class AnyBugObjectDetector_YOLO26(ObjectDetector):
         return self.model.predict(
             images,
             conf=self.bbox_score_threshold,
+            imgsz=self.imgsz,
             device=self.device,
             verbose=False,
         )
