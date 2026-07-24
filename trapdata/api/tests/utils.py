@@ -27,12 +27,17 @@ def get_test_image_urls(
         num: Number of images to return (default: 2)
 
     Returns:
-        List of image URLs from the file server
+        List of image URLs from the file server, in filename order
     """
     images_dir = test_images_dir / subdir
+    # Sort before truncating to ``num``. ``glob`` yields directory order, which
+    # varies between machines, so an unsorted selection hands different tests
+    # different images on different checkouts. The vermont set spans a whole
+    # trapping night and its dusk frame holds no insects at all, so a caller
+    # asking for one image would sometimes get a frame with nothing to detect.
     source_image_urls = [
         file_server.get_url(f.relative_to(test_images_dir))
-        for f in images_dir.glob("*.jpg")
+        for f in sorted(images_dir.glob("*.jpg"))
     ][:num]
     return source_image_urls
 
