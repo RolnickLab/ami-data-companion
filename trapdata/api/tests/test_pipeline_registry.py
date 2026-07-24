@@ -211,7 +211,7 @@ def test_anybug_advertises_its_yolo26_detector_not_fasterrcnn():
     stages = _advertised_stage_classes(PIPELINE_CHOICES["anybug_global_moths_2024"])
     localization = [c for c in stages if c.task_type == "localization"]
     assert localization == [APIAnyBugDetector]
-    assert localization[0].get_key() == "anybug-yolo26-detector-2024"
+    assert localization[0].get_key() == "anybug-yolo26x-detector-2024"
     # The spurious FasterRCNN detector must not appear anywhere in the stage list.
     assert APIMothDetector not in stages
     classification = [c for c in stages if c.task_type == "classification"]

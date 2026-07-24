@@ -317,15 +317,17 @@ class AnyBugObjectDetector_YOLO26(ObjectDetector):
     detectors here do not pay its import cost.
     """
 
-    name = "AnyBug YOLO26 Detector 2024"
-    key = "anybug-yolo26-detector-2024"
+    name = "AnyBug YOLO26x Detector 2024"
+    key = "anybug-yolo26x-detector-2024"
     weights_path = (
         "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/"
-        "localization/yolo26n-anybug-v1.pt"
+        "localization/yolo26x-anybug-v1.pt"
     )
     description = (
-        "Ultralytics YOLO26 nano 'any-bug' object detector (flatbug edge PoC). "
-        "Outputs raw-pixel xyxy boxes in the original image space."
+        "Ultralytics YOLO26x 'any-bug' object detector: the larger, server-side "
+        "flavor of the combined flat-bug + Fieldguide detector, chosen for batch "
+        "GPU accuracy over edge latency. Outputs raw-pixel xyxy boxes in the "
+        "original image space."
     )
     # TODO(anybug): 0.25 is a starting default; tune against validation data.
     bbox_score_threshold = 0.25
