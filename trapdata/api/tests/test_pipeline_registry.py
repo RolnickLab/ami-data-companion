@@ -218,72 +218,129 @@ def test_anybug_advertises_its_yolo26_detector_not_fasterrcnn():
     assert len(classification) == 2
 
 
+# Stand-in stage models, so the builder can be exercised without downloading any
+# weights. They carry only the attributes make_algorithm_config_response reads.
+
+
+class _ConfigBuilderDetector:
+    task_type = "localization"
+    name = "Stub Detector"
+    description = "stub detector"
+    weights_path = "http://example.invalid/detector.pt"
+    labels_path = None
+    default_taxon_rank = "SPECIES"
+    category_map = {0: "object"}
+
+    def __init__(self, source_images=(), **kwargs):
+        pass
+
+    def get_key(self) -> str:
+        return "stub-detector"
+
+
+class _ConfigBuilderGate:
+    task_type = "classification"
+    name = "Stub Order Gate"
+    description = "stub gate"
+    weights_path = "http://example.invalid/gate.pt"
+    labels_path = None
+    default_taxon_rank = "ORDER"
+    category_map = {0: "Lepidoptera", 1: "Coleoptera"}
+
+    def __init__(self, source_images=(), detections=(), terminal=True, **kwargs):
+        pass
+
+    def get_key(self) -> str:
+        return "stub-order-gate"
+
+
+class _ConfigBuilderTerminal:
+    task_type = "classification"
+    name = "Stub Species Classifier"
+    description = "stub terminal"
+    weights_path = "http://example.invalid/species.pt"
+    labels_path = None
+    default_taxon_rank = "SPECIES"
+    category_map = {0: "Species A", 1: "Species B"}
+
+    def __init__(self, source_images=(), detections=(), terminal=True, **kwargs):
+        pass
+
+    def get_key(self) -> str:
+        return "stub-species"
+
+
+def _stub_pipeline(**kwargs) -> PipelineDefinition:
+    """A three-stage pipeline of stub models: detector, one gate, terminal."""
+    return PipelineDefinition(
+        detector=_ConfigBuilderDetector,
+        terminal=_ConfigBuilderTerminal,
+        intermediates=(
+            IntermediateStage(
+                classifier=_ConfigBuilderGate, pass_labels=("Lepidoptera",)
+            ),
+        ),
+        **kwargs,
+    )
+
+
 def test_make_pipeline_config_response_emits_one_algorithm_per_stage():
     """The /info builder emits exactly one algorithm per configured stage, in
     stage order, and injects no extra detector of its own. This guards the builder
     itself against re-introducing a hardcoded/default detector union (the shape of
     the deployed regression), independently of the registry entries.
     """
-
-    class _Detector:
-        task_type = "localization"
-        name = "Stub Detector"
-        description = "stub detector"
-        weights_path = "http://example.invalid/detector.pt"
-        labels_path = None
-        default_taxon_rank = "SPECIES"
-        category_map = {0: "object"}
-
-        def __init__(self, source_images=(), **kwargs):
-            pass
-
-        def get_key(self) -> str:
-            return "stub-detector"
-
-    class _Gate:
-        task_type = "classification"
-        name = "Stub Order Gate"
-        description = "stub gate"
-        weights_path = "http://example.invalid/gate.pt"
-        labels_path = None
-        default_taxon_rank = "ORDER"
-        category_map = {0: "Lepidoptera", 1: "Coleoptera"}
-
-        def __init__(self, source_images=(), detections=(), terminal=True, **kwargs):
-            pass
-
-        def get_key(self) -> str:
-            return "stub-order-gate"
-
-    class _Terminal:
-        task_type = "classification"
-        name = "Stub Species Classifier"
-        description = "stub terminal"
-        weights_path = "http://example.invalid/species.pt"
-        labels_path = None
-        default_taxon_rank = "SPECIES"
-        category_map = {0: "Species A", 1: "Species B"}
-
-        def __init__(self, source_images=(), detections=(), terminal=True, **kwargs):
-            pass
-
-        def get_key(self) -> str:
-            return "stub-species"
-
-    pipeline = PipelineDefinition(
-        detector=_Detector,
-        terminal=_Terminal,
-        intermediates=(
-            IntermediateStage(classifier=_Gate, pass_labels=("Lepidoptera",)),
-        ),
-    )
-
-    config = api.make_pipeline_config_response(pipeline, slug="stub_pipeline")
+    config = api.make_pipeline_config_response(_stub_pipeline(), slug="stub_pipeline")
 
     task_types = [algorithm.task_type for algorithm in config.algorithms]
     assert task_types == ["localization", "classification", "classification"]
     localization = [a for a in config.algorithms if a.task_type == "localization"]
     assert [a.key for a in localization] == ["stub-detector"]
+
+
+# ---------------------------------------------------------------------------
+# Advertised pipeline name: distinct per pipeline
+# ---------------------------------------------------------------------------
+#
+# The platform lists pipelines by the name /info advertises, so two pipelines
+# sharing a name are indistinguishable to the operator picking one. The name
+# falls back to the terminal classifier's, which stayed unique only while every
+# pipeline had a terminal classifier to itself.
+
+
+def test_every_pipeline_advertises_a_distinct_name():
+    """No two registered pipelines advertise the same name.
+
+    Both "global_moths_2024" and "anybug_global_moths_2024" end in
+    MothClassifierGlobal, so before the anybug pipeline was given a name of its
+    own they both advertised "Global Species Classifier - Aug 2024" and appeared
+    as two identical entries. Reads class attributes only, so no weights load.
+    """
+    slug_by_name: dict[str, str] = {}
+    for slug, pipeline in PIPELINE_CHOICES.items():
+        advertised = pipeline.name or pipeline.terminal.name
+        assert advertised not in slug_by_name, (
+            f"{slug!r} and {slug_by_name[advertised]!r} both advertise the name "
+            f"{advertised!r}; set PipelineDefinition.name on one of them"
+        )
+        slug_by_name[advertised] = slug
+
+
+def test_pipeline_config_name_prefers_the_pipeline_over_its_terminal():
+    """The builder advertises the pipeline's own name and description when it has
+    them, and falls back to the terminal classifier's when it does not, so adding
+    the fields left the pipelines that omit them unchanged.
+    """
+    named = api.make_pipeline_config_response(
+        _stub_pipeline(name="Custom Name", description="Custom description"),
+        slug="stub_pipeline",
+    )
+    assert named.name == "Custom Name"
+    assert named.description == "Custom description"
+
+    unnamed = api.make_pipeline_config_response(_stub_pipeline(), slug="stub_pipeline")
+    assert unnamed.name == _ConfigBuilderTerminal.name
+    assert unnamed.description == _ConfigBuilderTerminal.description
 
 
 # ---------------------------------------------------------------------------

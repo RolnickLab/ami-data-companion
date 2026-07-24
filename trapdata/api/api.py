@@ -111,11 +111,18 @@ class PipelineDefinition:
     ``terminal``, and every ``intermediates`` entry an ``IntermediateStage``.
     Because the detector and terminal are distinct single fields, "one detector
     first, one terminal last" is enforced structurally, never by list position.
+
+    ``name`` and ``description`` are what the platform shows an operator choosing
+    a pipeline. Set them whenever two pipelines share a terminal classifier: the
+    advertised name falls back to the terminal classifier's, so without them two
+    such pipelines are indistinguishable in the picker.
     """
 
     detector: type[APIMothDetector | APIAnyBugDetector]
     terminal: type[APIMothClassifier]
     intermediates: tuple[IntermediateStage, ...] = ()
+    name: str | None = None
+    description: str | None = None
 
     def __post_init__(self) -> None:
         if not _is_model_class(self.detector, "localization"):
@@ -183,15 +190,21 @@ PIPELINE_CHOICES: dict[str, PipelineDefinition] = {
     # filter runs.
     "moth_binary": PipelineDefinition(APIMothDetector, MothClassifierBinary),
     "insect_orders_2025": PipelineDefinition(APIMothDetector, InsectOrderClassifier),
-    # NEW: YOLO26 "any-bug" detector -> Lepidoptera order gate -> global species.
-    # TODO(anybug): dormant until the yolo26n.pt weight is uploaded and
-    # `ultralytics` is installed. initialize_service_info() tolerates the build
-    # failure so this pipeline is registered without breaking /info or startup
-    # for the other pipelines. Remove that tolerance once the weight is live.
+    # YOLO26 "any-bug" detector -> Lepidoptera order gate -> global species.
+    # This pipeline shares its terminal classifier with "global_moths_2024", so it
+    # must set its own name; otherwise both advertise the terminal classifier's
+    # name and an operator sees two identical entries.
     "anybug_global_moths_2024": PipelineDefinition(
         detector=APIAnyBugDetector,
         terminal=MothClassifierGlobal,
         intermediates=(LEPIDOPTERA_ORDER_GATE,),
+        name="Global moths with Anybug detector",
+        description=(
+            "Detects any insect with the YOLO26 'any-bug' detector, keeps the "
+            "detections whose predicted order is Lepidoptera, and classifies "
+            "those to species with the global moth model. Detections of other "
+            "orders are returned tagged with the order that was predicted."
+        ),
     ),
 }
 _pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys())))
@@ -291,6 +304,10 @@ def make_pipeline_config_response(
     Create a configuration for an entire pipeline by iterating its configured
     stages: detector, any intermediate gate classifiers, then the terminal
     classifier.
+
+    The advertised name and description come from the pipeline when it sets them
+    and from the terminal classifier otherwise, so that pipelines sharing a
+    terminal classifier can still be told apart in the platform's picker.
     """
     algorithms = []
 
@@ -311,9 +328,9 @@ def make_pipeline_config_response(
     algorithms.append(make_algorithm_config_response(classifier))
 
     return PipelineConfigResponse(
-        name=classifier.name,
+        name=pipeline.name or classifier.name,
         slug=slug,
-        description=classifier.description,
+        description=pipeline.description or classifier.description,
         version=1,
         algorithms=algorithms,
     )
@@ -585,10 +602,10 @@ def initialize_service_info() -> ProcessingServiceInfoResponse:
         try:
             pipeline_configs.append(make_pipeline_config_response(pipeline, slug=slug))
         except Exception as e:
-            # Keep the rest of the service online if one pipeline cannot be
-            # built, e.g. a stage whose weight is not uploaded yet (the anybug
-            # YOLO26 detector). TODO(anybug): remove this tolerance for that
-            # pipeline once `ultralytics` and the real weight are available.
+            # One pipeline that cannot be built must not take /info down with it,
+            # because that would make every other pipeline unavailable too. The
+            # pipeline is left out of the response and the reason is logged, so a
+            # stage whose weight cannot be fetched costs only its own pipeline.
             logger.warning(f"Skipping pipeline '{slug}' in /info: {e}")
 
     _info = ProcessingServiceInfoResponse(
