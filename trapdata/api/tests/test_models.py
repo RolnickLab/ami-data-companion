@@ -267,18 +267,19 @@ class TestSourceImageSchema(TestCase):
         img.close()
 
     def test_url(self):
-        # Don't trust placeholder image services
-        # Don't trust placeholder image services
+        # Don't trust placeholder image services. Wikimedia serves thumbnails
+        # only at the widths listed on https://w.wiki/GHai and returns HTTP 400
+        # for any other width, so this width must stay on that list.
         url = (
             "https://upload.wikimedia.org/wikipedia/en/thumb/8/80/"
-            "Wikipedia-logo-v2.svg/103px-Wikipedia-logo-v2.svg.png"
+            "Wikipedia-logo-v2.svg/120px-Wikipedia-logo-v2.svg.png"
         )
         source_image = SourceImage(id="1", url=url)
         self.assertEqual(source_image.url, url)
         img = source_image.open()
         self.assertIsNotNone(img)
         assert img is not None
-        self.assertEqual(img.size, (103, 94))
+        self.assertEqual(img.size, (120, 110))
         img.close()
 
     def test_bad_base64(self):
