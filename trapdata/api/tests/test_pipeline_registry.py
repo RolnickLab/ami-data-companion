@@ -164,6 +164,10 @@ def test_advertised_subscribed_and_dispatchable_slugs_match():
 # validated field, and make_pipeline_config_response emits one algorithm per
 # stage. These tests pin both halves so the double-detector regression cannot
 # return, and are weight-free (they read class task_types / stub the stages).
+#
+# Only the builder test below exercises make_pipeline_config_response itself, so
+# it is the one that fails if a default detector is reintroduced there; the other
+# two pin what the registry declares. Each docstring says which half it covers.
 
 
 def _advertised_stage_classes(pipeline: PipelineDefinition) -> list[type]:
@@ -180,9 +184,16 @@ def _advertised_stage_classes(pipeline: PipelineDefinition) -> list[type]:
 
 @pytest.mark.parametrize("slug", list(PIPELINE_CHOICES))
 def test_every_pipeline_advertises_exactly_one_localization_algorithm(slug):
-    """Each registered pipeline advertises exactly one localization (detector)
-    algorithm — the count Antenna's save_results allows. Advertising two is the
-    deployed regression that stopped detections from saving.
+    """Each registered pipeline declares exactly one localization (detector)
+    stage — the count Antenna's save_results allows.
+
+    PipelineDefinition already enforces this by construction, since it validates
+    that ``detector`` holds a localization model and every other slot holds a
+    classification model. This test therefore guards that validation rather than
+    the registry entries: it fails if a later change relaxes the roles or adds a
+    second detector slot. The builder half of the invariant, that nothing injects
+    an extra detector while assembling the response, is covered separately by
+    test_make_pipeline_config_response_emits_one_algorithm_per_stage.
     """
     stages = _advertised_stage_classes(PIPELINE_CHOICES[slug])
     localization = [c for c in stages if c.task_type == "localization"]
