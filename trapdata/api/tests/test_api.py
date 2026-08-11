@@ -5,7 +5,6 @@ from unittest import TestCase
 from fastapi.testclient import TestClient
 
 from trapdata.api.api import (
-    CLASSIFIER_CHOICES,
     PIPELINE_CHOICES,
     PipelineChoice,
     PipelineRequest,
@@ -100,7 +99,9 @@ class TestInferenceAPI(TestCase):
     def test_processing_with_only_binary_classifier(self):
         binary_classifier_pipeline_choice = "moth_binary"
         binary_algorithm_key = "moth_nonmoth_classifier"
-        BinaryAlgorithmClass = CLASSIFIER_CHOICES[binary_classifier_pipeline_choice]
+        BinaryAlgorithmClass = PIPELINE_CHOICES[
+            binary_classifier_pipeline_choice
+        ].terminal
         # Create an instance to get the num_classes
         binary_algorithm = BinaryAlgorithmClass(source_images=[], detections=[])
 

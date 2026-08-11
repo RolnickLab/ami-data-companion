@@ -861,27 +861,3 @@ def test_process_batch_tags_uncroppable_detection_instead_of_naked():
     assert _classifications_by_algorithm(d0) == {
         worker.UNCROPPABLE_ALGORITHM.key: (worker.UNCROPPABLE_LABEL, False)
     }
-
-
-def test_classifier_choices_projection_is_collision_free():
-    """CLASSIFIER_CHOICES is a DERIVED ``{slug: terminal}`` view of the
-    default-detector pipelines. Because it is keyed by the same unique slugs as
-    PIPELINE_CHOICES, deriving it can never merge two pipelines onto one slug or
-    drop one silently. Pin that so adding a pipeline keeps the projection 1:1.
-    """
-    from trapdata.api.api import CLASSIFIER_CHOICES
-
-    expected_slugs = {
-        slug
-        for slug, pipeline in PIPELINE_CHOICES.items()
-        if pipeline.detector is APIMothDetector
-    }
-    # Every default-detector pipeline appears exactly once, keyed by its slug...
-    assert set(CLASSIFIER_CHOICES) == expected_slugs
-    assert len(CLASSIFIER_CHOICES) == len(expected_slugs)
-    # ...its keys are a subset of the registry's unique slugs (no key can collide
-    # with another pipeline's)...
-    assert set(CLASSIFIER_CHOICES).issubset(PIPELINE_CHOICES)
-    # ...and each derived terminal matches its source pipeline (no cross-wiring).
-    for slug, terminal in CLASSIFIER_CHOICES.items():
-        assert terminal is PIPELINE_CHOICES[slug].terminal
