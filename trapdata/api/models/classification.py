@@ -36,6 +36,13 @@ class APIMothClassifier(
 ):
     task_type = "classification"
 
+    # Multiplies the softmax scores before they are stored. A value below 1.0
+    # tempers a chronically over-confident model so the UI does not read every
+    # prediction as near-certain. This is a display stopgap only: it scales all
+    # scores by the same positive constant, so it is argmax-invariant and never
+    # changes which label is predicted or any downstream label gate.
+    score_scale: float = 1.0
+
     def __init__(
         self,
         source_images: typing.Iterable[SourceImage],
@@ -84,10 +91,12 @@ class APIMothClassifier(
             labels = [self.category_map[i] for i in class_indices]
             logit = logits[i].tolist()
 
+            # score_scale tempers over-confident models for display; it is a
+            # positive constant so the stored logits and argmax are unaffected.
             result = ClassifierResult(
                 labels=labels,
                 logit=logit,
-                scores=pred.tolist(),
+                scores=(pred * self.score_scale).tolist(),
             )
 
             batch_results.append(result)
@@ -230,4 +239,10 @@ class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
 
 
 class InsectOrderClassifier(APIMothClassifier, InsectOrderClassifier2025):
-    pass
+    # Scales every reported order score by a constant 0.9. The model has no "not
+    # an insect" class, so it is as confident on non-animal crops (smudges, plant
+    # matter) as on real ones; the scale keeps its output away from certainty
+    # without flattening the range. This is a display guard, not a calibration: it
+    # lowers low scores as well as high ones. Argmax-invariant, so the stored
+    # logits and the Lepidoptera gate are unaffected. See RolnickLab/ami-ml#75.
+    score_scale = 0.9

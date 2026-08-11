@@ -75,8 +75,10 @@ class ClassificationImageDataset(torch.utils.data.Dataset):
         if not image_data:
             return None
         bbox = detection.bbox
-        coords = bbox.x1, bbox.y1, bbox.x2, bbox.y2
-        assert all(coord is not None for coord in coords)
+        # Clamp to the image's pixel bounds so this PIL-crop runner and the
+        # worker's tensor-slicing runner crop the SAME in-bounds region (see
+        # BoundingBox.clamp_to_bounds); PIL otherwise zero-pads out-of-bounds.
+        coords = bbox.clamp_to_bounds(image_data.width, image_data.height)
         image_data = image_data.crop(coords)  # type: ignore
         image_data = self.image_transforms(image_data)
 

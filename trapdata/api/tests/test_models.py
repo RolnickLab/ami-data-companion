@@ -7,8 +7,11 @@ import typing
 import unittest
 from unittest import TestCase
 
+import numpy as np
 import PIL.Image
 import pytest
+import torch
+import torchvision.transforms
 
 from trapdata.api.models.classification import (
     MothClassifierBinary,
@@ -22,6 +25,10 @@ from trapdata.api.schemas import (
     SourceImage,
 )
 from trapdata.common.filemanagement import find_images
+from trapdata.ml.models.localization import (
+    AnyBugObjectDetector_YOLO26,
+    MothObjectDetector_FasterRCNN_2023,
+)
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 logging.basicConfig(level=logging.INFO)
@@ -260,18 +267,19 @@ class TestSourceImageSchema(TestCase):
         img.close()
 
     def test_url(self):
-        # Don't trust placeholder image services
-        # Don't trust placeholder image services
+        # Don't trust placeholder image services. Wikimedia serves thumbnails
+        # only at the widths listed on https://w.wiki/GHai and returns HTTP 400
+        # for any other width, so this width must stay on that list.
         url = (
             "https://upload.wikimedia.org/wikipedia/en/thumb/8/80/"
-            "Wikipedia-logo-v2.svg/103px-Wikipedia-logo-v2.svg.png"
+            "Wikipedia-logo-v2.svg/120px-Wikipedia-logo-v2.svg.png"
         )
         source_image = SourceImage(id="1", url=url)
         self.assertEqual(source_image.url, url)
         img = source_image.open()
         self.assertIsNotNone(img)
         assert img is not None
-        self.assertEqual(img.size, (103, 94))
+        self.assertEqual(img.size, (120, 110))
         img.close()
 
     def test_bad_base64(self):
@@ -293,6 +301,278 @@ class TestSourceImageSchema(TestCase):
     def test_base64_images(self):
         for image in TEST_BASE64_IMAGES.values():
             self._test_base64(image)
+
+
+class _StubYOLO:
+    """Minimal stand-in for the Ultralytics ``YOLO`` model.
+
+    Records the exact ``images`` argument handed to ``predict`` so a test can
+    assert on the array the detector produced, with no weights loaded and no
+    inference run.
+    """
+
+    def __init__(self) -> None:
+        self.received_images: list[np.ndarray] | None = None
+
+    def predict(self, images, **kwargs):
+        self.received_images = images
+        return []  # post-processing is not exercised in these tests
+
+
+# A known 2x2 RGB pattern with distinct per-channel values, so a wrong channel
+# order or a transposed axis is caught by exact comparison.
+_KNOWN_RGB = np.array(
+    [
+        [[10, 20, 30], [40, 50, 60]],
+        [[70, 80, 90], [100, 110, 120]],
+    ],
+    dtype=np.uint8,
+)  # HWC RGB, shape (2, 2, 3)
+
+
+class TestAnyBugDetectorInputFormat(TestCase):
+    """The YOLO26 detector must accept both dataloaders' image formats.
+
+    The async worker's shared dataloader feeds CHW float ``ToTensor`` tensors,
+    while the FastAPI ``/process`` path feeds HWC uint8 arrays. Both must reach
+    Ultralytics as HWC uint8 BGR. These tests exercise only the format
+    conversion in ``predict_batch`` (up to, but not including, the real model
+    call, which is stubbed) — no weights, no GPU, no inference.
+    """
+
+    def _make_detector(self, stub: _StubYOLO) -> AnyBugObjectDetector_YOLO26:
+        # Bypass __init__ so no weights are downloaded and ultralytics is never
+        # imported; set only the attributes predict_batch reads.
+        detector = AnyBugObjectDetector_YOLO26.__new__(AnyBugObjectDetector_YOLO26)
+        detector.model = stub  # type: ignore[assignment]
+        detector.device = "cpu"
+        detector.bbox_score_threshold = 0.25
+        return detector
+
+    def test_async_chw_float_tensor_converted_to_hwc_uint8_bgr(self):
+        """A CHW float ToTensor batch (async path) reaches Ultralytics as HWC
+        uint8 BGR, round-tripping the known pixel pattern."""
+        pil = PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        chw_float = torchvision.transforms.ToTensor()(pil)  # (3, 2, 2) float32 in [0,1]
+        self.assertEqual(tuple(chw_float.shape), (3, 2, 2))
+        self.assertTrue(torch.is_floating_point(chw_float))
+        # rest_collate_fn stacks same-size images into an NCHW tensor.
+        batch = torch.stack([chw_float])
+
+        stub = _StubYOLO()
+        self._make_detector(stub).predict_batch(batch)
+
+        assert stub.received_images is not None
+        self.assertEqual(len(stub.received_images), 1)
+        arr = stub.received_images[0]
+        self.assertEqual(arr.shape, (2, 2, 3), "must be HWC, not CHW")
+        self.assertEqual(arr.dtype, np.uint8, "must be uint8, not float")
+        # Channels reversed RGB -> BGR, pixel values recovered from [0,1] float.
+        np.testing.assert_array_equal(arr, _KNOWN_RGB[..., ::-1])
+
+    def test_async_chw_float_list_batch_converted(self):
+        """The mixed-size async fallback (a list of CHW float tensors) is also
+        converted, so predict_batch does not depend on the stacked fast path."""
+        pil = PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        chw_float = torchvision.transforms.ToTensor()(pil)
+        batch = [chw_float]  # list, as rest_collate_fn yields for mixed sizes
+
+        stub = _StubYOLO()
+        self._make_detector(stub).predict_batch(batch)
+
+        assert stub.received_images is not None
+        arr = stub.received_images[0]
+        self.assertEqual(arr.shape, (2, 2, 3))
+        self.assertEqual(arr.dtype, np.uint8)
+        np.testing.assert_array_equal(arr, _KNOWN_RGB[..., ::-1])
+
+    def test_process_hwc_uint8_tensor_unchanged(self):
+        """The /process path (HWC uint8 collated into an NHWC tensor) is passed
+        through unchanged apart from the RGB->BGR flip — the regression guard
+        for the working FastAPI path."""
+        batch = torch.from_numpy(np.stack([_KNOWN_RGB]))  # NHWC uint8
+
+        stub = _StubYOLO()
+        self._make_detector(stub).predict_batch(batch)
+
+        assert stub.received_images is not None
+        arr = stub.received_images[0]
+        self.assertEqual(arr.shape, (2, 2, 3))
+        self.assertEqual(arr.dtype, np.uint8)
+        np.testing.assert_array_equal(arr, _KNOWN_RGB[..., ::-1])
+
+    def test_process_hwc_uint8_ndarray_unchanged(self):
+        """The /process path when the batch arrives as a raw 4D ndarray."""
+        batch = np.stack([_KNOWN_RGB])  # (1, 2, 2, 3) uint8
+
+        stub = _StubYOLO()
+        self._make_detector(stub).predict_batch(batch)
+
+        assert stub.received_images is not None
+        arr = stub.received_images[0]
+        self.assertEqual(arr.shape, (2, 2, 3))
+        self.assertEqual(arr.dtype, np.uint8)
+        np.testing.assert_array_equal(arr, _KNOWN_RGB[..., ::-1])
+
+    def test_helper_transposes_and_rescales_chw_float(self):
+        """_as_hwc_uint8_rgb converts a CHW float array to HWC uint8 directly."""
+        chw_float = torchvision.transforms.ToTensor()(
+            PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        )
+        out = AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(chw_float)
+        self.assertEqual(out.shape, (2, 2, 3))
+        self.assertEqual(out.dtype, np.uint8)
+        # Still RGB here — the flip to BGR happens in predict_batch, not the helper.
+        np.testing.assert_array_equal(out, _KNOWN_RGB)
+
+    # --- Asserted-contract guards: the conversion must fail loudly rather than
+    # silently corrupt when an upstream transform changes the input format. ---
+
+    def test_imagenet_normalized_float_raises(self):
+        """A mean/std standardized float tensor (values outside [0, 1]) is
+        rejected, not silently rescaled — converting it as if it were ToTensor
+        output would corrupt every pixel handed to the model."""
+        chw = torchvision.transforms.ToTensor()(
+            PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        )
+        standardized = (chw - 0.5) / 0.25  # now well outside [0, 1]
+        self.assertTrue(torch.is_floating_point(standardized))
+        with self.assertRaises(ValueError):
+            AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(standardized)
+
+    def test_already_hwc_float_raises(self):
+        """An already channels-last float array (HWC, in range) is rejected
+        rather than transposed into garbage, since its channel axis is not where
+        the ToTensor contract puts it."""
+        hwc_float = _KNOWN_RGB.astype(np.float32) / 255.0  # (2, 2, 3), in [0, 1]
+        with self.assertRaises(ValueError):
+            AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(hwc_float)
+
+    def test_integer_chw_raises(self):
+        """An integer channels-first array is rejected rather than passed through
+        in the wrong layout."""
+        chw_uint8 = np.transpose(_KNOWN_RGB, (2, 0, 1))  # (3, 2, 2) integer CHW
+        with self.assertRaises(ValueError):
+            AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(chw_uint8)
+
+    def test_unexpected_rank_raises(self):
+        """A 2D array (neither a single image nor a batch) is rejected."""
+        with self.assertRaises(ValueError):
+            AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(
+                np.zeros((5, 5), dtype=np.uint8)
+            )
+
+    def test_4d_nchw_float_batch_handled(self):
+        """A 4D NCHW float batch is converted per-image to NHWC uint8, preserving
+        the batch axis."""
+        chw = torchvision.transforms.ToTensor()(
+            PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        )
+        nchw = torch.stack([chw, chw])  # (2, 3, 2, 2)
+        out = AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(nchw)
+        self.assertEqual(out.shape, (2, 2, 2, 3))  # NHWC
+        self.assertEqual(out.dtype, np.uint8)
+        np.testing.assert_array_equal(out[0], _KNOWN_RGB)
+        np.testing.assert_array_equal(out[1], _KNOWN_RGB)
+
+    def test_float_rescale_rounds_not_truncates(self):
+        """The [0, 1]->0-255 rescale rounds (np.rint) rather than truncating.
+        The values are deliberately NOT multiples of 1/255, and their *255 lands
+        clearly above the .5 boundary, so truncation would give a different (one
+        lower) uint8 on every channel."""
+        # *255 -> 200.7, 10.6, 128.8 ; round -> 201, 11, 129 ; truncate -> 200, 10, 128
+        chw = np.array(
+            [[[200.7 / 255]], [[10.6 / 255]], [[128.8 / 255]]], dtype=np.float32
+        )  # (3, 1, 1) CHW
+        out = AnyBugObjectDetector_YOLO26._as_hwc_uint8_rgb(chw)
+        self.assertEqual(out.shape, (1, 1, 3))
+        np.testing.assert_array_equal(out, np.array([[[201, 11, 129]]], dtype=np.uint8))
+
+
+class TestDetectorTransformContracts(TestCase):
+    """Pin each detector's per-image transform contract so the fix cannot drift
+    the FasterRCNN path or the YOLO /process path."""
+
+    def test_fasterrcnn_transform_is_chw_float_tensor(self):
+        """FasterRCNN still receives CHW float ToTensor input, unchanged."""
+        detector = MothObjectDetector_FasterRCNN_2023.__new__(
+            MothObjectDetector_FasterRCNN_2023
+        )
+        transformed = detector.get_transforms()(
+            PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        )
+        self.assertIsInstance(transformed, torch.Tensor)
+        self.assertTrue(torch.is_floating_point(transformed))
+        self.assertEqual(tuple(transformed.shape), (3, 2, 2))  # CHW
+        self.assertLessEqual(float(transformed.max()), 1.0)
+
+    def test_yolo_transform_is_hwc_uint8_array(self):
+        """The YOLO26 /process transform still yields an HWC uint8 RGB array."""
+        detector = AnyBugObjectDetector_YOLO26.__new__(AnyBugObjectDetector_YOLO26)
+        transformed = detector.get_transforms()(
+            PIL.Image.fromarray(_KNOWN_RGB, mode="RGB")
+        )
+        self.assertIsInstance(transformed, np.ndarray)
+        self.assertEqual(transformed.dtype, np.uint8)
+        self.assertEqual(transformed.shape, (2, 2, 3))  # HWC
+        np.testing.assert_array_equal(transformed, _KNOWN_RGB)
+
+
+class TestBoundingBoxClampAndCropEquivalence(TestCase):
+    """The /process (PIL ``Image.crop``) and worker (tensor slice) runners must
+    crop the SAME in-bounds region for the same detection. Both clamp through
+    ``BoundingBox.clamp_to_bounds``, so a box that touches or exceeds the image
+    edge yields identical crops on both paths — PIL zero-pads out-of-bounds and
+    tensor slicing wraps negative indices otherwise.
+    """
+
+    W, H = 20, 12
+
+    def _fixture(self):
+        # Deterministic per-pixel values so a wrong crop region is caught exactly.
+        arr = np.arange(self.H * self.W * 3, dtype=np.uint8).reshape(self.H, self.W, 3)
+        pil = PIL.Image.fromarray(arr, mode="RGB")
+        chw = torch.from_numpy(arr).permute(2, 0, 1)  # worker's CHW tensor layout
+        return pil, chw
+
+    def test_clamp_to_bounds_cases(self):
+        """The clamp maps in-bounds, edge-touching, past-edge, and entirely-off
+        boxes to the expected integer region; an off-image box collapses to a
+        degenerate (zero-area) region."""
+        cases = [
+            (BoundingBox(x1=2, y1=2, x2=8, y2=6), (2, 2, 8, 6)),  # in-bounds
+            (BoundingBox(x1=10, y1=0, x2=20, y2=12), (10, 0, 20, 12)),  # edges
+            (BoundingBox(x1=15, y1=8, x2=40, y2=30), (15, 8, 20, 12)),  # past BR
+            (BoundingBox(x1=-5, y1=-4, x2=6, y2=6), (0, 0, 6, 6)),  # past TL
+            (
+                BoundingBox(x1=25, y1=2, x2=30, y2=6),
+                (20, 2, 20, 6),
+            ),  # off -> degenerate
+        ]
+        for box, expected in cases:
+            self.assertEqual(box.clamp_to_bounds(self.W, self.H), expected)
+
+    def test_pil_and_tensor_runners_crop_same_region(self):
+        """For each box, the PIL crop of the clamped coords and the tensor slice
+        of the clamped coords are pixel-identical, including the past-top-left
+        case that would otherwise diverge (PIL zero-pads vs tensor negative-index
+        wrap) and the degenerate case (both yield an empty crop)."""
+        pil, chw = self._fixture()
+        boxes = [
+            BoundingBox(x1=2, y1=2, x2=8, y2=6),  # fully in-bounds
+            BoundingBox(x1=10, y1=0, x2=20, y2=12),  # touching the edges
+            BoundingBox(x1=15, y1=8, x2=40, y2=30),  # past the bottom-right edge
+            BoundingBox(x1=-5, y1=-4, x2=6, y2=6),  # past the top-left edge
+            BoundingBox(x1=5, y1=5, x2=5, y2=10),  # degenerate (zero width)
+        ]
+        for box in boxes:
+            x1, y1, x2, y2 = box.clamp_to_bounds(self.W, self.H)
+            pil_crop = np.asarray(pil.crop((x1, y1, x2, y2)))
+            tensor_crop = chw[:, y1:y2, x1:x2].permute(1, 2, 0).numpy()
+            self.assertEqual(pil_crop.shape, tensor_crop.shape, f"shape for {box}")
+            np.testing.assert_array_equal(
+                pil_crop, tensor_crop, err_msg=f"pixels for {box}"
+            )
 
 
 if __name__ == "__main__":
