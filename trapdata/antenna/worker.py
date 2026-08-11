@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime
+import os
+import signal
 import time
 from collections.abc import Callable
 
@@ -28,6 +30,81 @@ from trapdata.settings import Settings, read_settings
 
 MAX_PENDING_POSTS = 5  # Maximum number of concurrent result posts before blocking
 SLEEP_TIME_SECONDS = 5
+
+_MIB = 1024 * 1024
+
+
+class _DrainRequest:
+    """A request for the worker process to exit at the next safe point.
+
+    Set by SIGUSR1 (an operator or process supervisor asking for a recycle)
+    or by the worker itself when its resident memory, sampled between jobs,
+    exceeds the ``worker_max_rss_mb`` cap. A safe point is a batch boundary:
+    the batch in flight finishes and its results are posted before the
+    process exits with status 0, so a process supervisor restarts a fresh
+    worker (fresh memory, file descriptors, and DataLoader state) without
+    losing in-flight work.
+    """
+
+    def __init__(self) -> None:
+        self.reason: str | None = None
+
+    @property
+    def requested(self) -> bool:
+        return self.reason is not None
+
+    def request(self, reason: str) -> None:
+        # The first reason wins; later triggers change nothing.
+        if self.reason is None:
+            self.reason = reason
+
+    def handle_signal(self, signum, frame) -> None:
+        logger.info(
+            "SIGUSR1 received: will finish the batch in flight, post its "
+            "results, and exit cleanly"
+        )
+        self.request("SIGUSR1")
+
+
+def _install_drain_handler(drain: _DrainRequest) -> None:
+    """Route SIGUSR1 to ``drain`` on platforms that have the signal."""
+    if hasattr(signal, "SIGUSR1"):
+        signal.signal(signal.SIGUSR1, drain.handle_signal)
+
+
+def _current_rss_bytes() -> int | None:
+    """Resident set size of this process, or None where /proc is unavailable."""
+    try:
+        with open("/proc/self/status") as status:
+            for line in status:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError):
+        return None
+    return None
+
+
+def _check_rss_cap(drain: _DrainRequest, max_rss_mb: int) -> None:
+    """Request a drain when resident memory exceeds the configured cap.
+
+    Called between jobs, when the working set is at its idle baseline, so a
+    reading over the cap indicates memory that survived per-job cleanup
+    rather than a job's transient working set. A cap of 0 (the default)
+    disables the check.
+    """
+    if max_rss_mb <= 0 or drain.requested:
+        return
+    rss_bytes = _current_rss_bytes()
+    if rss_bytes is None:
+        return
+    rss_mb = rss_bytes // _MIB
+    if rss_mb >= max_rss_mb:
+        logger.warning(
+            f"Resident memory {rss_mb} MiB is over the {max_rss_mb} MiB cap "
+            "(AMI_WORKER_MAX_RSS_MB); exiting cleanly so the process "
+            "supervisor restarts a fresh worker"
+        )
+        drain.request(f"resident memory {rss_mb} MiB over the {max_rss_mb} MiB cap")
 
 
 def run_worker(pipelines: list[str]):
@@ -57,12 +134,25 @@ def run_worker(pipelines: list[str]):
         logger.info(f"Found {gpu_count} GPUs, spawning one AMI worker instance per GPU")
         # Don't pass settings through mp.spawn — Settings contains enums that
         # can't be pickled. Each child process calls read_settings() itself.
-        mp.spawn(
+        context = mp.spawn(
             _worker_loop,
             args=(pipelines,),
             nprocs=gpu_count,
-            join=True,
+            join=False,
         )
+        assert context is not None
+        # Each worker instance installs its own SIGUSR1 drain handler, but a
+        # process supervisor delivers signals to this parent process —
+        # forward them so every instance drains and the whole group exits.
+        if hasattr(signal, "SIGUSR1"):
+
+            def _forward_drain(signum, frame):
+                for pid in context.pids():
+                    os.kill(pid, signal.SIGUSR1)
+
+            signal.signal(signal.SIGUSR1, _forward_drain)
+        while not context.join():
+            pass
     else:
         if gpu_count == 1:
             logger.info(f"Found 1 GPU: {torch.cuda.get_device_name(0)}")
@@ -74,11 +164,17 @@ def run_worker(pipelines: list[str]):
 def _worker_loop(gpu_id: int, pipelines: list[str]):
     """Main polling loop for a single AMI worker instance, pinned to a specific GPU.
 
+    The loop runs until a drain is requested — by SIGUSR1 or by the
+    between-jobs resident-memory cap — and then returns so the process exits
+    with status 0 for its supervisor to restart.
+
     Args:
         gpu_id: GPU index to pin this AMI worker instance to (0 for CPU-only).
         pipelines: List of pipeline slugs to poll for jobs.
     """
     settings = read_settings()
+    drain = _DrainRequest()
+    _install_drain_handler(drain)
     device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available() and torch.cuda.device_count() > 0:
         torch.cuda.set_device(gpu_id)
@@ -90,7 +186,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
     full_service_name = get_full_service_name(settings.antenna_service_name)
     logger.info(f"Running worker as: {full_service_name}")
 
-    while True:
+    while not drain.requested:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
         # These should probably come from a dedicated endpoint and should preempt batch jobs under the assumption that they
         # would run on the same GPU.
@@ -104,6 +200,8 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             pipeline_slugs=pipelines,
         )
         for job_id, pipeline in jobs:
+            if drain.requested:
+                break
             logger.info(
                 f"[GPU {gpu_id}] Processing job {job_id} with pipeline {pipeline}"
             )
@@ -113,6 +211,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
                     job_id=job_id,
                     settings=settings,
                     device=device,
+                    should_stop=lambda: drain.requested,
                 )
                 any_jobs = any_jobs or any_work_done
             except Exception as e:
@@ -121,12 +220,20 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
                     exc_info=True,
                 )
                 # Continue to next job rather than crashing the worker
+            # Between jobs the working set is at its baseline, so this is
+            # where leaked memory is distinguishable from a busy working set.
+            _check_rss_cap(drain, settings.worker_max_rss_mb)
 
-        if not any_jobs:
+        if not any_jobs and not drain.requested:
             logger.info(
                 f"[GPU {gpu_id}] No jobs found, sleeping for {SLEEP_TIME_SECONDS} seconds"
             )
             time.sleep(SLEEP_TIME_SECONDS)
+
+    logger.info(
+        f"[GPU {gpu_id}] Drain complete ({drain.reason}); exiting cleanly for "
+        "the process supervisor to restart a fresh worker"
+    )
 
 
 def _apply_binary_classification(
@@ -403,6 +510,7 @@ def _process_job(
     settings: Settings,
     device: torch.device | None = None,
     on_batch_complete: Callable | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> bool:
     """Run the worker to process images from the REST API queue.
 
@@ -413,6 +521,10 @@ def _process_job(
         device: The device to use for processing. Auto-detected if None.
         on_batch_complete: Optional callback invoked after each batch, with kwargs
             batch_num (int) and items (int, cumulative items processed so far).
+        should_stop: Optional callable checked at every batch boundary. When
+            it returns True the job stops before starting another batch:
+            results for completed batches are still posted, and the job's
+            remaining tasks stay queued for the next worker to claim.
     Returns:
         True if any work was done, False otherwise
     """
@@ -453,6 +565,13 @@ def _process_job(
     _, t_total = log_time()
     try:
         for i, batch in enumerate(batch_source):
+            if should_stop and should_stop():
+                logger.info(
+                    f"Stop requested; leaving job {job_id} at a batch "
+                    "boundary. Remaining tasks stay queued for the next "
+                    "worker to claim."
+                )
+                break
             cls_time = 0.0
             det_time = 0.0
             load_time, t = t()
@@ -506,7 +625,7 @@ def _process_job(
             )
             batch_total, t_total = t_total()
             logger.info(
-                f"Batch {i + 1}: {batch_total/max(n_items, 1):.2f}s/image, "
+                f"Batch {i + 1}: {batch_total / max(n_items, 1):.2f}s/image, "
                 f"Classification time: {cls_time:.2f}s, Detection time: {det_time:.2f}s, "
                 f"Load time: {load_time:.2f}s"
             )
