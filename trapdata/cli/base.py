@@ -1,5 +1,5 @@
 import pathlib
-from typing import Annotated, Optional
+from typing import Optional
 
 import typer
 
