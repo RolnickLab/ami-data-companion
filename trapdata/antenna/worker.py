@@ -23,8 +23,6 @@ from trapdata.api.models.classification import APIMothClassifier
 from trapdata.api.models.localization import APIAnyBugDetector, APIMothDetector
 from trapdata.api.schemas import (
     AlgorithmConfigResponse,
-    AlgorithmReference,
-    ClassificationResponse,
     DetectionResponse,
     PipelineResultsResponse,
     SourceImageResponse,
@@ -35,41 +33,6 @@ from trapdata.settings import Settings, read_settings
 
 MAX_PENDING_POSTS = 5  # Maximum number of concurrent result posts before blocking
 SLEEP_TIME_SECONDS = 5
-
-# Sentinel classification for a detection whose bounding box cannot be cropped —
-# degenerate after clamping to the image (zero width/height, or a box entirely
-# outside the frame). Tagging it keeps every returned detection carrying a
-# classification, the pipeline's invariant, instead of a naked box. It is marked
-# non-terminal and carries its own algorithm reference so the platform never
-# mistakes it for a real stage result, mirroring how a gate tags the detections
-# it drops.
-UNCROPPABLE_LABEL = "uncroppable"
-UNCROPPABLE_ALGORITHM = AlgorithmReference(
-    name="Uncroppable detection", key="uncroppable"
-)
-
-
-def _tag_uncroppable(detection: DetectionResponse) -> None:
-    """Attach the non-terminal ``uncroppable`` sentinel to a detection whose bbox
-    cannot yield a crop, so it is returned tagged rather than naked. Idempotent:
-    re-tagging replaces the prior sentinel instead of stacking duplicates.
-    """
-    detection.classifications = [
-        c
-        for c in detection.classifications
-        if c.algorithm.key != UNCROPPABLE_ALGORITHM.key
-    ]
-    detection.classifications.append(
-        ClassificationResponse(
-            classification=UNCROPPABLE_LABEL,
-            scores=[1.0],
-            logits=[0.0],
-            inference_time=0,
-            algorithm=UNCROPPABLE_ALGORITHM,
-            terminal=False,
-            timestamp=datetime.datetime.now(),
-        )
-    )
 
 
 def run_worker(pipelines: list[str]):
@@ -212,9 +175,11 @@ def _classify_detections_from_tensors(
     crop loop, so the sync and async paths share one stage engine.
 
     A detection whose bbox is degenerate after clamping to the image (zero-area
-    or entirely off-frame) is tagged with the non-terminal ``uncroppable``
-    sentinel (see :func:`_tag_uncroppable`) rather than left un-annotated, so
-    every returned detection carries a classification.
+    or entirely off-frame) is returned with no classification from this stage,
+    and logged. It must not be given a placeholder classification: the platform
+    rejects any classification whose algorithm key is absent from the pipeline's
+    ``/info`` config, and it raises after the batch's detections are already
+    written, so one degenerate box would cost every other detection its labels.
     """
     stage.reset(detections)
     transforms = stage.get_transforms()
@@ -230,14 +195,14 @@ def _classify_detections_from_tensors(
         # negative coordinate while PIL zero-pads, diverging the two paths.
         x1, y1, x2, y2 = detection.bbox.clamp_to_bounds(width, height)
         if y1 >= y2 or x1 >= x2:
-            # Degenerate after clamping (zero-area or entirely off-image). Tag it
-            # uncroppable so it is returned carrying a classification rather than
-            # naked, then skip the crop.
+            # Degenerate after clamping (zero-area or entirely off-image), so there
+            # is no crop to classify. Skip it and leave the detection unannotated by
+            # this stage; see the note in this function's docstring on why a
+            # placeholder classification is not safe here.
             logger.warning(
-                f"Tagging {stage.name} detection {idx} uncroppable; bbox is "
-                f"degenerate after clamping to the image: ({x1},{y1})->({x2},{y2})"
+                f"Skipping {stage.name} for detection {idx}; bbox is degenerate "
+                f"after clamping to the image: ({x1},{y1})->({x2},{y2})"
             )
-            _tag_uncroppable(detection)
             continue
         crop = image_tensor[:, y1:y2, x1:x2]
         crops.append(transforms(crop))

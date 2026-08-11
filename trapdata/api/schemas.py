@@ -37,7 +37,7 @@ class BoundingBox(pydantic.BaseModel):
         worker's tensor slicing wraps negative indices, so without a shared clamp
         the two paths would return different crops for the same detection. A box
         entirely outside the image collapses to a zero-area (degenerate) region,
-        which the caller treats as uncroppable.
+        which the caller skips instead of cropping.
         """
         x1 = max(0, min(int(self.x1), width))
         x2 = max(0, min(int(self.x2), width))

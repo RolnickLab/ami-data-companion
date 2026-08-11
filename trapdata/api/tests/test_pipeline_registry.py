@@ -813,12 +813,12 @@ def test_process_batch_legacy_binary_split_preserved():
     }
 
 
-def test_process_batch_tags_uncroppable_detection_instead_of_naked():
-    """A detection whose bbox is degenerate (here zero-width) is returned TAGGED
-    with the non-terminal 'uncroppable' sentinel rather than naked, so the
-    pipeline's "every detection carries a classification" invariant holds. The
-    box never reaches the gate or terminal label, mirroring how a gate tags the
-    detections it drops.
+def test_process_batch_leaves_a_degenerate_detection_unclassified():
+    """A detection whose bbox is degenerate (here zero-width) is still returned,
+    carrying no classification from any stage. It must not receive a placeholder
+    label: the platform rejects a classification whose algorithm key it was never
+    told about, and it does so after the batch's detections are already written,
+    so a placeholder would cost every other detection in the batch its labels.
     """
     from trapdata.antenna import worker
 
@@ -854,13 +854,76 @@ def test_process_batch_tags_uncroppable_detection_instead_of_naked():
         "anybug_global_moths_2024",
     )
 
+    # The detection survives the batch; it simply has no label from any stage.
     assert n_detections == 1
     [d0] = batch_results[0].result.detections
-    # Tagged with the non-terminal uncroppable sentinel, and NOTHING else: no
-    # gate label, no species label, and not a naked (classification-free) box.
-    assert _classifications_by_algorithm(d0) == {
-        worker.UNCROPPABLE_ALGORITHM.key: (worker.UNCROPPABLE_LABEL, False)
+    assert _classifications_by_algorithm(d0) == {}
+
+
+def test_process_batch_emits_only_algorithm_keys_the_pipeline_declares():
+    """Every algorithm key the worker attaches to a detection belongs to one of the
+    pipeline's declared stages. The platform raises on a classification whose key is
+    absent from the pipeline's ``/info`` config, so any key invented at run time
+    (a sentinel or placeholder) loses the whole batch's classifications.
+
+    Paired with test_make_pipeline_config_response_emits_one_algorithm_per_stage,
+    which pins that the config advertises exactly the declared stages: that test
+    covers what is advertised, this one covers what is emitted.
+    """
+    from trapdata.antenna import worker
+
+    class _MixedDetector(_StubDetector):
+        def post_process_batch(self, batch_output):
+            # One degenerate box (x1 == x2, unclassifiable) and one usable box, so
+            # the batch exercises the skip path and the normal path together.
+            return [[[5, 5, 5, 12], [0, 0, 16, 16]] for _ in batch_output]
+
+    class _OrderGate(_StubTensorStage):
+        algorithm_key = "order_gate"
+        name = "Order Gate"
+        labels = {"img0": "Lepidoptera"}
+
+    class _Species(_StubTensorStage):
+        algorithm_key = "species"
+        name = "Species Classifier"
+        labels = {"img0": "Species A"}
+
+    pipeline_def = PipelineDefinition(
+        detector=_MixedDetector,
+        terminal=_Species,
+        intermediates=(
+            IntermediateStage(classifier=_OrderGate, pass_labels=("Lepidoptera",)),
+        ),
+    )
+
+    _, _, batch_results, _, _ = worker._process_batch(
+        _make_stub_batch(["img0"]),
+        0,
+        _MixedDetector(),
+        worker._build_stage_models(pipeline_def),
+        pipeline_def,
+        "anybug_global_moths_2024",
+    )
+
+    # The keys the config builder would advertise, taken from the same declared
+    # stages it iterates: the gate classifiers and the terminal classifier.
+    declared_keys = {
+        stage.classifier(detections=[], terminal=False).get_key()
+        for stage in pipeline_def.intermediates
+    } | {pipeline_def.terminal(detections=[]).get_key()}
+
+    emitted_keys = {
+        classification.algorithm.key
+        for batch_result in batch_results
+        for detection in batch_result.result.detections
+        for classification in detection.classifications
     }
+
+    assert emitted_keys, "the batch produced no classifications to check"
+    assert emitted_keys <= declared_keys, (
+        f"worker emitted algorithm keys the pipeline never declares: "
+        f"{sorted(emitted_keys - declared_keys)}"
+    )
 
 
 def test_classifier_choices_projection_is_collision_free():
