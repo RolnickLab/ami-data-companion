@@ -1,11 +1,13 @@
 """Unit tests for the worker's drain-and-exit machinery.
 
 The worker exits at a batch boundary — never mid-batch — when an operator
-sends SIGUSR1 or when its resident memory, sampled between jobs, exceeds the
-``AMI_WORKER_MAX_RSS_MB`` cap. These tests cover the drain state and signal
-handler, the memory-cap check, that ``_process_job`` stops cleanly at a batch
-boundary while flushing pending result posts, and that the polling loop exits
-after a drain request. No models are loaded; inference is mocked out.
+sends SIGUSR1, after ``AMI_WORKER_MAX_JOBS`` jobs, or when its resident
+memory, sampled between jobs, exceeds ``AMI_WORKER_MAX_RSS_MB``. These tests
+cover the drain state and signal handler, the between-jobs recycle checks
+and their per-job memory log line, that ``_process_job`` stops cleanly at a
+batch boundary while flushing pending result posts, and that the polling
+loop exits after a drain request. No models are loaded; inference is mocked
+out.
 """
 
 import os
@@ -16,7 +18,7 @@ from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 from trapdata.antenna.worker import (
-    _check_rss_cap,
+    _after_job_check,
     _current_rss_bytes,
     _DrainRequest,
     _install_drain_handler,
@@ -58,31 +60,73 @@ class TestDrainRequest(TestCase):
             signal.signal(signal.SIGUSR1, previous)
 
 
-class TestRssCap(TestCase):
-    def test_zero_cap_disables_the_check(self):
+def _recycle_settings(max_rss_mb: int = 0, max_jobs: int = 0) -> SimpleNamespace:
+    return SimpleNamespace(worker_max_rss_mb=max_rss_mb, worker_max_jobs=max_jobs)
+
+
+class TestAfterJobCheck(TestCase):
+    """Each recycle cap must trigger only past its threshold and stay off at 0.
+
+    Both directions matter: a cap that never fires leaves memory growth
+    unbounded, and a cap that fires with the triggers disabled would recycle
+    every deployment that did not opt in.
+    """
+
+    @patch("trapdata.antenna.worker._current_rss_bytes", return_value=2 * 1024**3)
+    def test_default_caps_never_request_drain(self, _rss):
         drain = _DrainRequest()
-        _check_rss_cap(drain, 0)
+        _after_job_check(drain, _recycle_settings(), jobs_processed=100)
         assert not drain.requested
 
+    @patch("trapdata.antenna.worker._current_rss_bytes", return_value=2 * 1024**3)
+    def test_rss_per_job_line_is_always_logged(self, _rss):
+        # The log line is the instrument for answering whether memory climbs
+        # job after job in a deployment, so it must not depend on any cap
+        # being enabled.
+        with patch("trapdata.antenna.worker.logger") as mock_logger:
+            _after_job_check(_DrainRequest(), _recycle_settings(), jobs_processed=3)
+        logged = " ".join(str(c.args[0]) for c in mock_logger.info.call_args_list)
+        assert "Resident memory after job 3: 2048 MiB" in logged
+
     @patch("trapdata.antenna.worker._current_rss_bytes", return_value=9 * 1024**3)
-    def test_over_cap_requests_drain(self, _rss):
+    def test_rss_over_cap_requests_drain(self, _rss):
         drain = _DrainRequest()
-        _check_rss_cap(drain, 8192)
+        _after_job_check(drain, _recycle_settings(max_rss_mb=8192), jobs_processed=1)
         assert drain.requested
         # 9 GiB = 9216 MiB, over an 8192 MiB cap
         assert "9216" in drain.reason
 
     @patch("trapdata.antenna.worker._current_rss_bytes", return_value=2 * 1024**3)
-    def test_under_cap_does_nothing(self, _rss):
+    def test_rss_under_cap_does_nothing(self, _rss):
         drain = _DrainRequest()
-        _check_rss_cap(drain, 8192)
+        _after_job_check(drain, _recycle_settings(max_rss_mb=8192), jobs_processed=1)
         assert not drain.requested
 
     @patch("trapdata.antenna.worker._current_rss_bytes", return_value=None)
-    def test_unreadable_rss_is_skipped(self, _rss):
+    def test_unreadable_rss_skips_the_memory_cap(self, _rss):
         drain = _DrainRequest()
-        _check_rss_cap(drain, 8192)
+        _after_job_check(drain, _recycle_settings(max_rss_mb=8192), jobs_processed=1)
         assert not drain.requested
+
+    @patch("trapdata.antenna.worker._current_rss_bytes", return_value=None)
+    def test_job_cap_works_without_rss(self, _rss):
+        drain = _DrainRequest()
+        _after_job_check(drain, _recycle_settings(max_jobs=5), jobs_processed=5)
+        assert drain.requested
+        assert "cap 5" in drain.reason
+
+    @patch("trapdata.antenna.worker._current_rss_bytes", return_value=2 * 1024**3)
+    def test_job_cap_not_reached_does_nothing(self, _rss):
+        drain = _DrainRequest()
+        _after_job_check(drain, _recycle_settings(max_jobs=5), jobs_processed=4)
+        assert not drain.requested
+
+    @patch("trapdata.antenna.worker._current_rss_bytes", return_value=2 * 1024**3)
+    def test_existing_drain_reason_is_kept(self, _rss):
+        drain = _DrainRequest()
+        drain.request("SIGUSR1")
+        _after_job_check(drain, _recycle_settings(max_jobs=1), jobs_processed=1)
+        assert drain.reason == "SIGUSR1"
 
     def test_current_rss_reads_a_positive_value_where_proc_exists(self):
         rss = _current_rss_bytes()
@@ -195,6 +239,7 @@ class TestWorkerLoopExitsOnDrain(TestCase):
         settings = MagicMock()
         settings.antenna_service_name = "test-worker"
         settings.worker_max_rss_mb = 0
+        settings.worker_max_jobs = 0
         mock_read_settings.return_value = settings
 
         polls: list[int] = []

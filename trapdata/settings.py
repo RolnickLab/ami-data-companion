@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     # resident memory, sampled between jobs, exceeds this many MiB.
     # 0 disables the cap.
     worker_max_rss_mb: int = 0
+    # The worker exits cleanly after processing this many jobs. Bounds
+    # memory retained per job even when its size is not known. 0 disables.
+    worker_max_jobs: int = 0
 
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):

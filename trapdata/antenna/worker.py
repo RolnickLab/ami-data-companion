@@ -38,8 +38,8 @@ class _DrainRequest:
     """A request for the worker process to exit at the next safe point.
 
     Set by SIGUSR1 (an operator or process supervisor asking for a recycle)
-    or by the worker itself when its resident memory, sampled between jobs,
-    exceeds the ``worker_max_rss_mb`` cap. A safe point is a batch boundary:
+    or by the worker itself when a between-jobs recycle cap is hit — see
+    ``_after_job_check``. A safe point is a batch boundary:
     the batch in flight finishes and its results are posted before the
     process exits with status 0, so a process supervisor restarts a fresh
     worker (fresh memory, file descriptors, and DataLoader state) without
@@ -84,21 +84,43 @@ def _current_rss_bytes() -> int | None:
     return None
 
 
-def _check_rss_cap(drain: _DrainRequest, max_rss_mb: int) -> None:
-    """Request a drain when resident memory exceeds the configured cap.
+def _after_job_check(
+    drain: _DrainRequest, settings: Settings, jobs_processed: int
+) -> None:
+    """Log per-job memory and request a drain when a recycle cap is hit.
 
-    Called between jobs, when the working set is at its idle baseline, so a
-    reading over the cap indicates memory that survived per-job cleanup
-    rather than a job's transient working set. A cap of 0 (the default)
-    disables the check.
+    Runs between jobs, when the working set is at its idle baseline, so the
+    logged reading — and the ``worker_max_rss_mb`` comparison — reflects
+    memory retained across jobs rather than a job's transient working set.
+    The log line lets operators answer "does resident memory keep climbing
+    job after job, or plateau after the first model load?" from ordinary
+    worker logs, without instrumenting the host.
+
+    Two independent triggers, each disabled at 0 (the default):
+
+    - ``worker_max_jobs``: drain after this many jobs. Deterministic bound
+      for retention that scales with jobs processed, useful even before the
+      retained memory's size or source is known.
+    - ``worker_max_rss_mb``: drain when resident memory exceeds this many
+      MiB. Catches whatever the job cap does not predict.
     """
-    if max_rss_mb <= 0 or drain.requested:
-        return
     rss_bytes = _current_rss_bytes()
-    if rss_bytes is None:
+    rss_mb = rss_bytes // _MIB if rss_bytes is not None else None
+    if rss_mb is not None:
+        logger.info(f"Resident memory after job {jobs_processed}: {rss_mb} MiB")
+    if drain.requested:
         return
-    rss_mb = rss_bytes // _MIB
-    if rss_mb >= max_rss_mb:
+    max_jobs = settings.worker_max_jobs
+    if max_jobs > 0 and jobs_processed >= max_jobs:
+        logger.info(
+            f"Processed {jobs_processed} jobs, reaching the "
+            f"{max_jobs}-job cap (AMI_WORKER_MAX_JOBS); exiting cleanly so "
+            "the process supervisor restarts a fresh worker"
+        )
+        drain.request(f"{jobs_processed} jobs processed, cap {max_jobs}")
+        return
+    max_rss_mb = settings.worker_max_rss_mb
+    if max_rss_mb > 0 and rss_mb is not None and rss_mb >= max_rss_mb:
         logger.warning(
             f"Resident memory {rss_mb} MiB is over the {max_rss_mb} MiB cap "
             "(AMI_WORKER_MAX_RSS_MB); exiting cleanly so the process "
@@ -164,9 +186,9 @@ def run_worker(pipelines: list[str]):
 def _worker_loop(gpu_id: int, pipelines: list[str]):
     """Main polling loop for a single AMI worker instance, pinned to a specific GPU.
 
-    The loop runs until a drain is requested — by SIGUSR1 or by the
-    between-jobs resident-memory cap — and then returns so the process exits
-    with status 0 for its supervisor to restart.
+    The loop runs until a drain is requested — by SIGUSR1 or by a
+    between-jobs recycle cap (see ``_after_job_check``) — and then returns
+    so the process exits with status 0 for its supervisor to restart.
 
     Args:
         gpu_id: GPU index to pin this AMI worker instance to (0 for CPU-only).
@@ -186,6 +208,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
     full_service_name = get_full_service_name(settings.antenna_service_name)
     logger.info(f"Running worker as: {full_service_name}")
 
+    jobs_processed = 0
     while not drain.requested:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
         # These should probably come from a dedicated endpoint and should preempt batch jobs under the assumption that they
@@ -205,6 +228,11 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             logger.info(
                 f"[GPU {gpu_id}] Processing job {job_id} with pipeline {pipeline}"
             )
+            # A job that raised mid-processing still counts toward the
+            # recycle caps: it may have loaded models and run batches, so
+            # it retains memory like a completed job. Claims that yielded
+            # no work do not count.
+            work_attempted = False
             try:
                 any_work_done = _process_job(
                     pipeline=pipeline,
@@ -214,15 +242,17 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
                     should_stop=lambda: drain.requested,
                 )
                 any_jobs = any_jobs or any_work_done
+                work_attempted = any_work_done
             except Exception as e:
                 logger.error(
                     f"[GPU {gpu_id}] Failed to process job {job_id} with pipeline {pipeline}: {e}",
                     exc_info=True,
                 )
                 # Continue to next job rather than crashing the worker
-            # Between jobs the working set is at its baseline, so this is
-            # where leaked memory is distinguishable from a busy working set.
-            _check_rss_cap(drain, settings.worker_max_rss_mb)
+                work_attempted = True
+            if work_attempted:
+                jobs_processed += 1
+                _after_job_check(drain, settings, jobs_processed)
 
         if not any_jobs and not drain.requested:
             logger.info(
