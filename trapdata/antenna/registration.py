@@ -7,7 +7,7 @@ from trapdata.antenna.schemas import (
     AsyncPipelineRegistrationRequest,
     AsyncPipelineRegistrationResponse,
 )
-from trapdata.api.api import CLASSIFIER_CHOICES, initialize_service_info
+from trapdata.api.api import initialize_service_info
 from trapdata.api.utils import get_http_session
 from trapdata.common.logs import logger
 from trapdata.settings import Settings, read_settings
@@ -134,7 +134,10 @@ def register_pipelines(
     successful_registrations = []
     failed_registrations = []
 
-    logger.info(f"Available pipelines to register: {list(CLASSIFIER_CHOICES.keys())}")
+    logger.info(
+        "Available pipelines to register: "
+        f"{[f'{config.slug} ({config.name})' for config in pipeline_configs]}"
+    )
 
     for project in projects_to_process:
         project_id = project["id"]

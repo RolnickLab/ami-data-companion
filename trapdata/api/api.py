@@ -213,27 +213,6 @@ _pipeline_choices = dict(zip(PIPELINE_CHOICES.keys(), list(PIPELINE_CHOICES.keys
 PipelineChoice = enum.Enum("PipelineChoice", _pipeline_choices)
 
 
-# DEPRECATED backward-compatibility projections of PIPELINE_CHOICES, kept for
-# call sites not yet migrated off the old shapes: registration, the api/tests
-# helpers, and cli/base.py still import CLASSIFIER_CHOICES as a
-# {slug: terminal_classifier} mapping. Both are DERIVED from PIPELINE_CHOICES —
-# never hand-maintained in parallel — so the two views cannot drift.
-#
-# CLASSIFIER_CHOICES intentionally covers only the default-detector
-# (APIMothDetector) pipelines, matching its historical contract. The anybug
-# pipeline uses APIAnyBugDetector and so is absent here; consumers that must see
-# every pipeline (the worker's subscription, validation, and dispatch) read
-# PIPELINE_CHOICES directly.
-#
-# TODO(anybug): migrate the remaining CLASSIFIER_CHOICES consumers onto
-# PIPELINE_CHOICES stage definitions, then delete this shim.
-CLASSIFIER_CHOICES: dict[str, type[APIMothClassifier]] = {
-    slug: pipeline.terminal
-    for slug, pipeline in PIPELINE_CHOICES.items()
-    if pipeline.detector is APIMothDetector
-}
-
-
 def top_label_for_algorithm(
     detection: DetectionResponse, algorithm_key: str
 ) -> str | None:
