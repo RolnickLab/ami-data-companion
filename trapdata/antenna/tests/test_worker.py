@@ -260,6 +260,9 @@ class TestProcessJobIntegration(TestCase):
         settings.antenna_api_batch_size = 2
         settings.num_workers = 0  # Disable multiprocessing for tests
         settings.localization_batch_size = 2  # Real integer for batch processing
+        settings.classification_batch_size = 2  # Real integer for chunked inference
+        # Real integer; ResultPoster compares payload sizes against it
+        settings.antenna_result_post_max_bytes = 25 * 1024 * 1024
         return settings
 
     def test_empty_queue(self):
@@ -421,6 +424,9 @@ class TestWorkerEndToEnd(TestCase):
         settings.antenna_api_batch_size = 2
         settings.num_workers = 0
         settings.localization_batch_size = 2  # Real integer for batch processing
+        settings.classification_batch_size = 2  # Real integer for chunked inference
+        # Real integer; ResultPoster compares payload sizes against it
+        settings.antenna_result_post_max_bytes = 25 * 1024 * 1024
         return settings
 
     def test_full_workflow_with_real_inference(self):

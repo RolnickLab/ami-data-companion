@@ -34,9 +34,16 @@ different setting and targets a different bottleneck.
 Settings quick-reference (prefix with AMI_ as env vars):
 
     localization_batch_size  (default 8)
-        How many images the GPU processes at once (detection). Larger =
-        more GPU memory. These are full-resolution images (~4K).
-        Async worker use antennna_api_batch_size for this.
+        How many full-resolution (~4K) images go through the detector in
+        one forward pass. The worker slices each fetched batch into chunks
+        of this size before inference (``_predict_in_chunks`` in worker.py),
+        so this — not antenna_api_batch_size — bounds the detector's GPU
+        memory peak.
+
+    classification_batch_size  (default 20)
+        How many detection crops go through the binary and species
+        classifiers in one forward pass, using the same chunking mechanism
+        as above.
 
     num_workers  (default 4)
         DataLoader subprocesses. Each independently fetches tasks and
@@ -44,12 +51,14 @@ Settings quick-reference (prefix with AMI_ as env vars):
         GPU, at the cost of CPU/RAM. With 0 workers, fetching and
         inference are sequential (useful for debugging).
 
-    antenna_api_batch_size  (default 16)
+    antenna_api_batch_size  (default 24)
         How many task URLs to request from Antenna per API call.
         Determines how many images are downloaded concurrently per
-        thread pool invocation. Should be >= localization_batch_size
-        so one API call can fill at least one GPU batch without an
-        extra round trip.
+        thread pool invocation, and therefore how many decoded image
+        tensors are resident per batch (doubled while the CUDA prefetcher
+        holds the next batch). Should be >= localization_batch_size so one
+        API call can fill at least one GPU inference chunk without an
+        extra round trip; lowering it reduces GPU memory residency.
 
     prefetch_factor  (PyTorch default: 2 when num_workers > 0)
         Batches prefetched per worker. Not overridden here — the
@@ -421,7 +430,8 @@ def get_rest_dataloader(
         job_id: Job ID to fetch tasks for
         settings: Settings object. Relevant fields:
             - antenna_api_base_url / antenna_api_auth_token
-            - antenna_api_batch_size  (tasks per API call and GPU batch size)
+            - antenna_api_batch_size  (tasks per API call; GPU inference is
+              chunked separately by the batch-size settings, see worker.py)
             - num_workers            (DataLoader subprocesses)
     """
     dataset = RESTDataset(

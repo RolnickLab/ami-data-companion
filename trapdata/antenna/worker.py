@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import os
 import time
 from collections.abc import Callable
 
@@ -15,7 +16,7 @@ from trapdata.antenna.datasets import CUDAPrefetcher, get_rest_dataloader
 from trapdata.antenna.result_posting import ResultPoster
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
 from trapdata.api.api import CLASSIFIER_CHOICES, should_filter_detections
-from trapdata.api.models.classification import MothClassifierBinary
+from trapdata.api.models.classification import APIMothClassifier, MothClassifierBinary
 from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
     DetectionResponse,
@@ -86,6 +87,19 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             f"AMI worker instance {gpu_id} pinned to GPU {gpu_id}: {torch.cuda.get_device_name(gpu_id)}"
         )
 
+    # Log the allocator config once per process; PyTorch reads these env vars
+    # at the first CUDA allocation, so this line records what took effect.
+    # The worker deliberately sets no default: ``expandable_segments:True``
+    # raises ``CUDA driver error: operation not supported`` on NVIDIA vGPU,
+    # which does not expose the virtual-memory-management driver APIs it
+    # needs. Operators can still opt in via the environment on hardware that
+    # supports it.
+    logger.info(
+        "CUDA allocator config: "
+        f"PYTORCH_ALLOC_CONF={os.environ.get('PYTORCH_ALLOC_CONF', '(unset)')}, "
+        f"PYTORCH_CUDA_ALLOC_CONF={os.environ.get('PYTORCH_CUDA_ALLOC_CONF', '(unset)')}"
+    )
+
     # Build full service name with hostname
     full_service_name = get_full_service_name(settings.antenna_service_name)
     logger.info(f"Running worker as: {full_service_name}")
@@ -129,6 +143,162 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             time.sleep(SLEEP_TIME_SECONDS)
 
 
+def _is_cuda_memory_error(exc: RuntimeError) -> bool:
+    """Whether an exception is a CUDA memory-allocation failure.
+
+    Covers the caching allocator's ``torch.OutOfMemoryError`` as well as the
+    plain ``RuntimeError`` that CUDA libraries raise when their own workspace
+    allocation fails under memory pressure (for example
+    ``CUBLAS_STATUS_ALLOC_FAILED`` from a linear layer).
+    """
+    if isinstance(exc, torch.OutOfMemoryError):
+        return True
+    message = str(exc)
+    return "out of memory" in message or "ALLOC_FAILED" in message
+
+
+def _predict_in_chunks(
+    model,
+    items: torch.Tensor | list[torch.Tensor],
+) -> list:
+    """Run inference over ``items`` in chunks of ``model.batch_size``.
+
+    Caps the GPU memory peak of a forward pass. The DataLoader batch is sized
+    by ``antenna_api_batch_size``, which is a fetch/transfer concern; the
+    model's ``batch_size`` (``localization_batch_size`` for the detector)
+    reflects what fits on the GPU. Without chunking, one forward pass over an
+    entire fetch batch of full-resolution images can exhaust a GPU that is
+    shared with other worker processes.
+
+    If a chunk itself hits a CUDA memory-allocation failure (for example
+    because another process on the same GPU is spiking), the chunk size is
+    halved and the chunk retried, down to single items. The reduction lasts
+    only for the current call; the next call starts fresh from
+    ``model.batch_size``.
+
+    Args:
+        model: Inference model providing ``batch_size``, ``predict_batch``,
+            and ``post_process_batch``.
+        items: A stacked tensor, or a list of tensors. Chunks keep the same
+            form: tensor slices, or sub-lists (the detector accepts
+            variable-size image lists).
+
+    Returns:
+        Concatenated post-processed outputs, one entry per input item, in
+        input order.
+    """
+    chunk_size = max(1, int(model.batch_size))
+    results: list = []
+    i = 0
+    while i < len(items):
+        chunk = items[i : i + chunk_size]
+        try:
+            output = model.predict_batch(chunk)
+        except RuntimeError as e:
+            if not _is_cuda_memory_error(e):
+                raise
+            failed_size = len(chunk)
+            del chunk  # Release the chunk itself before clearing the cache
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            if chunk_size == 1:
+                raise
+            chunk_size = max(1, chunk_size // 2)
+            logger.warning(
+                f"CUDA memory allocation failed on a chunk of {failed_size} items; "
+                f"retrying with chunk size {chunk_size}"
+            )
+            continue
+        results.extend(model.post_process_batch(output))
+        i += len(chunk)
+    return results
+
+
+def _classify_crops_in_chunks(
+    model,
+    detections: list[DetectionResponse],
+    image_tensors: dict[str, torch.Tensor],
+) -> tuple[list, list[int]]:
+    """Crop, transform, and classify detections in chunks of ``model.batch_size``.
+
+    Owning the whole crop lifecycle here — slice, transform, stack, forward —
+    keeps at most one chunk of crop tensors alive at a time. Building every
+    crop up front and only chunking the forward pass would allocate all crops
+    (potentially hundreds per image) before inference starts, which defeats
+    the purpose of chunking on a memory-constrained GPU.
+
+    Detections with an invalid (empty) bounding box are skipped with a
+    warning; the returned index list maps each prediction back to its
+    detection.
+
+    On a CUDA memory-allocation failure the chunk size is halved and the
+    chunk retried, down to single crops, matching ``_predict_in_chunks``.
+    The reduction lasts only for the current call.
+
+    Args:
+        model: Classifier providing ``batch_size``, ``get_transforms``,
+            ``predict_batch``, and ``post_process_batch``.
+        detections: Detections whose bounding boxes select the crops.
+        image_tensors: Source-image tensors on the inference device, keyed by
+            source image id.
+
+    Returns:
+        ``(predictions, valid_indices)`` where ``predictions[i]`` is the
+        post-processed output for ``detections[valid_indices[i]]``.
+    """
+    transforms = model.get_transforms()
+    valid_indices: list[int] = []
+    for idx, dresp in enumerate(detections):
+        bbox = dresp.bbox
+        y1, y2 = int(bbox.y1), int(bbox.y2)
+        x1, x2 = int(bbox.x1), int(bbox.x2)
+        if y1 >= y2 or x1 >= x2:
+            logger.warning(
+                f"Skipping detection {idx} with invalid bbox: "
+                f"({x1},{y1})->({x2},{y2})"
+            )
+            continue
+        valid_indices.append(idx)
+
+    chunk_size = max(1, int(model.batch_size))
+    predictions: list = []
+    pos = 0
+    while pos < len(valid_indices):
+        chunk_indices = valid_indices[pos : pos + chunk_size]
+        try:
+            crops = []
+            for idx in chunk_indices:
+                dresp = detections[idx]
+                image_tensor = image_tensors[dresp.source_image_id]
+                bbox = dresp.bbox
+                crop = image_tensor[
+                    :, int(bbox.y1) : int(bbox.y2), int(bbox.x1) : int(bbox.x2)
+                ]
+                crops.append(transforms(crop))
+            batch = torch.stack(crops)
+            del crops
+            output = model.predict_batch(batch)
+            del batch
+        except RuntimeError as e:
+            if not _is_cuda_memory_error(e):
+                raise
+            # Drop any partially built chunk tensors before clearing the cache
+            crops = batch = None
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            if chunk_size == 1:
+                raise
+            chunk_size = max(1, chunk_size // 2)
+            logger.warning(
+                f"CUDA memory allocation failed on a chunk of {len(chunk_indices)} "
+                f"crops; retrying with chunk size {chunk_size}"
+            )
+            continue
+        predictions.extend(model.post_process_batch(output))
+        pos += len(chunk_indices)
+    return predictions, valid_indices
+
+
 def _apply_binary_classification(
     binary_filter: "MothClassifierBinary",
     detector_results: list[DetectionResponse],
@@ -148,54 +318,32 @@ def _apply_binary_classification(
     """
     binary_filter.reset(detector_results)
 
-    # Process binary classification crops
-    binary_crops = []
-    binary_valid_indices = []
-    binary_transforms = binary_filter.get_transforms()
-
-    for idx, dresp in enumerate(detector_results):
-        image_tensor = image_tensors[dresp.source_image_id]
-        bbox = dresp.bbox
-        y1, y2 = int(bbox.y1), int(bbox.y2)
-        x1, x2 = int(bbox.x1), int(bbox.x2)
-        if y1 >= y2 or x1 >= x2:
-            logger.warning(
-                f"Skipping binary classification {idx} with invalid bbox: "
-                f"({x1},{y1})->({x2},{y2})"
-            )
-            continue
-        crop = image_tensor[:, y1:y2, x1:x2]
-        crop_transformed = binary_transforms(crop)
-        binary_crops.append(crop_transformed)
-        binary_valid_indices.append(idx)
+    # Crop and classify chunk by chunk so only one chunk of crop tensors is
+    # on the GPU at a time.
+    binary_out, binary_valid_indices = _classify_crops_in_chunks(
+        binary_filter, detector_results, image_tensors
+    )
 
     moth_detections = []
     non_moth_detections = []
 
-    if binary_crops:
-        batched_binary_crops = torch.stack(binary_crops)
-        binary_out = binary_filter.predict_batch(batched_binary_crops)
-        binary_out = binary_filter.post_process_batch(binary_out)
+    for crop_i, idx in enumerate(binary_valid_indices):
+        dresp = detector_results[idx]
+        detection = binary_filter.update_detection_classification(
+            seconds_per_item=0,
+            image_id=dresp.source_image_id,
+            detection_idx=idx,
+            predictions=binary_out[crop_i],
+        )
 
-        for crop_i, idx in enumerate(binary_valid_indices):
-            dresp = detector_results[idx]
-            detection = binary_filter.update_detection_classification(
-                seconds_per_item=0,
-                image_id=dresp.source_image_id,
-                detection_idx=idx,
-                predictions=binary_out[crop_i],
-            )
-
-            # Separate moth from non-moth detections
-            for classification in detection.classifications:
-                if classification.classification == binary_filter.positive_binary_label:
-                    moth_detections.append(detection)
-                elif (
-                    classification.classification == binary_filter.negative_binary_label
-                ):
-                    non_moth_detections.append(detection)
-                    image_detections[detection.source_image_id].append(detection)
-                break
+        # Separate moth from non-moth detections
+        for classification in detection.classifications:
+            if classification.classification == binary_filter.positive_binary_label:
+                moth_detections.append(detection)
+            elif classification.classification == binary_filter.negative_binary_label:
+                non_moth_detections.append(detection)
+                image_detections[detection.source_image_id].append(detection)
+            break
 
     return moth_detections, non_moth_detections
 
@@ -211,9 +359,9 @@ def _process_batch(
 ) -> tuple[int, int, list[AntennaTaskResult], float, float]:
     """Process a single batch of images through detection and classification.
 
-    All large intermediates (image_tensors, crops, batched_crops, image_detections)
-    are local to this function and freed by Python's reference counting when it
-    returns, preventing memory accumulation across batches.
+    All large intermediates (image_tensors, crops, image_detections) are local
+    to this function and freed by Python's reference counting when it returns,
+    preventing memory accumulation across batches.
 
     Args:
         batch: Dictionary with images, image_ids, reply_subjects, image_urls, failed_items
@@ -248,13 +396,14 @@ def _process_batch(
 
         batch_start_time = datetime.datetime.now()
 
-        # output is dict of "boxes", "labels", "scores"
+        # Each output item is the list of bounding boxes kept for one image.
+        # Chunked so the detector's forward-pass memory peak is bounded by
+        # localization_batch_size, not by the (larger) API fetch batch.
         batch_output = []
         if len(images) > 0:
-            batch_output = detector.predict_batch(images)
+            batch_output = _predict_in_chunks(detector, images)
 
         n_items = len(batch_output)
-        batch_output = list(detector.post_process_batch(batch_output))
 
         # Convert image_ids to list if needed
         if isinstance(image_ids, (np.ndarray, torch.Tensor)):
@@ -292,46 +441,26 @@ def _process_batch(
             detections_for_terminal_classifier = detector_results
             detections_to_return = []
 
-        # Run terminal classifier on filtered detections
+        # Run terminal classifier on filtered detections. Cropping and
+        # inference are interleaved chunk by chunk so only one chunk of crop
+        # tensors is on the GPU at a time.
         classifier.reset(detections_for_terminal_classifier)
-        classify_transforms = classifier.get_transforms()
 
-        # Collect and transform all crops for batched classification
-        crops = []
-        valid_indices = []
         n_detections = 0
-        for idx, dresp in enumerate(detections_for_terminal_classifier):
-            image_tensor = image_tensors[dresp.source_image_id]
-            bbox = dresp.bbox
-            y1, y2 = int(bbox.y1), int(bbox.y2)
-            x1, x2 = int(bbox.x1), int(bbox.x2)
-            if y1 >= y2 or x1 >= x2:
-                logger.warning(
-                    f"Skipping detection {idx} with invalid bbox: "
-                    f"({x1},{y1})->({x2},{y2})"
-                )
-                continue
-            crop = image_tensor[:, y1:y2, x1:x2]
-            crop_transformed = classify_transforms(crop)
-            crops.append(crop_transformed)
-            valid_indices.append(idx)
-
         classify_start = datetime.datetime.now()
-        if crops:
-            batched_crops = torch.stack(crops)
-            classifier_out = classifier.predict_batch(batched_crops)
-            classifier_out = classifier.post_process_batch(classifier_out)
-
-            for crop_i, idx in enumerate(valid_indices):
-                dresp = detections_for_terminal_classifier[idx]
-                detection = classifier.update_detection_classification(
-                    seconds_per_item=0,
-                    image_id=dresp.source_image_id,
-                    detection_idx=idx,
-                    predictions=classifier_out[crop_i],
-                )
-                image_detections[dresp.source_image_id].append(detection)
-                n_detections += 1
+        classifier_out, valid_indices = _classify_crops_in_chunks(
+            classifier, detections_for_terminal_classifier, image_tensors
+        )
+        for crop_i, idx in enumerate(valid_indices):
+            dresp = detections_for_terminal_classifier[idx]
+            detection = classifier.update_detection_classification(
+                seconds_per_item=0,
+                image_id=dresp.source_image_id,
+                detection_idx=idx,
+                predictions=classifier_out[crop_i],
+            )
+            image_detections[dresp.source_image_id].append(detection)
+            n_detections += 1
 
         classify_time = (datetime.datetime.now() - classify_start).total_seconds()
         # Count non-moth detections returned from binary filter
@@ -394,6 +523,40 @@ def _process_batch(
 
     torch.cuda.empty_cache()
     return n_items, n_detections, batch_results, detect_time, classify_time
+
+
+def _init_job_models(
+    classifier_class: type,
+    use_binary_filter: bool,
+    settings: Settings,
+) -> tuple[APIMothClassifier, APIMothDetector, MothClassifierBinary | None]:
+    """Instantiate the models for one job, sized for chunked GPU inference.
+
+    The GPU batch-size settings are applied here, mirroring the synchronous
+    API path in ``trapdata/api/api.py``: the detector processes
+    full-resolution images in chunks of ``localization_batch_size`` and the
+    classifiers process crops in chunks of ``classification_batch_size``
+    (see ``_predict_in_chunks``).
+
+    Returns:
+        ``(classifier, detector, binary_filter)``; ``binary_filter`` is None
+        when the pipeline does not use the moth/non-moth filter.
+    """
+    classifier = classifier_class(
+        source_images=[],
+        detections=[],
+        batch_size=settings.classification_batch_size,
+    )
+    detector = APIMothDetector([], batch_size=settings.localization_batch_size)
+    binary_filter = None
+    if use_binary_filter:
+        binary_filter = MothClassifierBinary(
+            source_images=[],
+            detections=[],
+            terminal=False,
+            batch_size=settings.classification_batch_size,
+        )
+    return classifier, detector, binary_filter
 
 
 @torch.no_grad()
@@ -463,19 +626,13 @@ def _process_job(
 
             # Defer instantiation of poster, detector and classifiers until we have data
             if not classifier:
-                classifier = classifier_class(source_images=[], detections=[])
-                detector = APIMothDetector([])
+                classifier, detector, binary_filter = _init_job_models(
+                    classifier_class, use_binary_filter, settings
+                )
                 result_poster = ResultPoster(
                     max_pending=MAX_PENDING_POSTS,
                     max_post_bytes=settings.antenna_result_post_max_bytes,
                 )
-
-                if use_binary_filter:
-                    binary_filter = MothClassifierBinary(
-                        source_images=[],
-                        detections=[],
-                        terminal=False,
-                    )
 
             assert detector is not None, "Detector not initialized"
             assert classifier is not None, "Classifier not initialized"
@@ -509,7 +666,7 @@ def _process_job(
             )
             batch_total, t_total = t_total()
             logger.info(
-                f"Batch {i + 1}: {batch_total/max(n_items, 1):.2f}s/image, "
+                f"Batch {i + 1}: {batch_total / max(n_items, 1):.2f}s/image, "
                 f"Classification time: {cls_time:.2f}s, Detection time: {det_time:.2f}s, "
                 f"Load time: {load_time:.2f}s"
             )
@@ -542,3 +699,15 @@ def _process_job(
     finally:
         if result_poster:
             result_poster.shutdown()
+        # Release per-job GPU state: drop the references that keep model
+        # weights and prefetched batches alive, then return the freed blocks
+        # to the driver. Without the empty_cache() call, a process idling
+        # between jobs keeps its peak reserved memory cached, and other
+        # worker processes sharing the same GPU cannot use it.
+        if isinstance(batch_source, CUDAPrefetcher):
+            # The prefetcher's buffered next batch is a full set of images on
+            # the GPU; clear it explicitly rather than relying on the del.
+            batch_source.next_batch = None
+        del classifier, detector, binary_filter, batch_source, loader
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
