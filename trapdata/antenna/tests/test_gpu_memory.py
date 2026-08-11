@@ -1,27 +1,24 @@
 """Unit tests for the worker's GPU memory management.
 
-Covers the chunked-inference helper (``_predict_in_chunks``), the per-job
-model factory that applies the GPU batch-size settings, and the default CUDA
-allocator configuration. All tests use fake models and run on CPU; the
-out-of-memory scenarios are simulated by raising the same exception types the
-CUDA allocator raises.
+Covers the chunked-inference helpers (``_predict_in_chunks`` and
+``_classify_crops_in_chunks``) and the per-job model factory that applies
+the GPU batch-size settings. All tests use fake models and run on CPU; the
+out-of-memory scenarios are simulated by raising the same exception types
+the CUDA allocator raises.
 """
 
-import os
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 import torch
 
 from trapdata.antenna.worker import (
-    _DEFAULT_ALLOC_CONF,
+    _classify_crops_in_chunks,
     _init_job_models,
     _is_cuda_memory_error,
     _predict_in_chunks,
-    _set_default_allocator_config,
 )
-
-_ALLOC_ENV_VARS = ("PYTORCH_ALLOC_CONF", "PYTORCH_CUDA_ALLOC_CONF")
 
 
 class FakeModel:
@@ -50,14 +47,14 @@ class FakeModel:
 
 
 class TestPredictInChunks(TestCase):
-    """The forward-pass peak must be bounded by the model's batch_size."""
+    """The detector's forward-pass peak must be bounded by its batch_size."""
 
     def _items(self, n: int) -> list[torch.Tensor]:
         return [torch.tensor(float(i)) for i in range(n)]
 
     def test_list_input_is_chunked_and_order_preserved(self):
         model = FakeModel(batch_size=4)
-        results = _predict_in_chunks(model, self._items(10), stack_chunks=True)
+        results = _predict_in_chunks(model, self._items(10))
 
         assert model.seen_chunk_sizes == [4, 4, 2]
         assert [float(r) for r in results] == [-float(i) for i in range(10)]
@@ -71,7 +68,7 @@ class TestPredictInChunks(TestCase):
 
     def test_single_chunk_when_batch_size_exceeds_items(self):
         model = FakeModel(batch_size=8)
-        results = _predict_in_chunks(model, self._items(3), stack_chunks=True)
+        results = _predict_in_chunks(model, self._items(3))
 
         assert model.seen_chunk_sizes == [3]
         assert len(results) == 3
@@ -79,7 +76,7 @@ class TestPredictInChunks(TestCase):
     def test_oom_halves_chunk_size_and_retries(self):
         """A simulated allocation failure must shrink the chunk, not fail the batch."""
         model = FakeModel(batch_size=8, fail_first_n=1)
-        results = _predict_in_chunks(model, self._items(8), stack_chunks=True)
+        results = _predict_in_chunks(model, self._items(8))
 
         # The failed 8-item attempt is not recorded; the retry runs at 4.
         assert model.seen_chunk_sizes == [4, 4]
@@ -89,16 +86,107 @@ class TestPredictInChunks(TestCase):
         model = FakeModel(batch_size=1, fail_first_n=100)
 
         with self.assertRaises(torch.OutOfMemoryError):
-            _predict_in_chunks(model, self._items(2), stack_chunks=True)
+            _predict_in_chunks(model, self._items(2))
 
     def test_unrelated_runtime_error_propagates_without_retry(self):
         model = FakeModel(batch_size=4)
         model.predict_batch = MagicMock(side_effect=RuntimeError("size mismatch"))
 
         with self.assertRaises(RuntimeError):
-            _predict_in_chunks(model, self._items(4), stack_chunks=True)
+            _predict_in_chunks(model, self._items(4))
         # No retry: a non-memory error must fail on the first call.
         assert model.predict_batch.call_count == 1
+
+
+def _make_detection(image_id: str, x1: int, y1: int, x2: int, y2: int):
+    """A minimal stand-in for DetectionResponse: just bbox and source image id."""
+    return SimpleNamespace(
+        source_image_id=image_id,
+        bbox=SimpleNamespace(x1=x1, y1=y1, x2=x2, y2=y2),
+    )
+
+
+class FakeCropClassifier(FakeModel):
+    """FakeModel plus the transform hook ``_classify_crops_in_chunks`` needs.
+
+    The transform trims each crop to its top-left pixel, whose value encodes
+    the crop's x position in the test image — so predictions can be traced
+    back to detections, and crops stack regardless of bbox size.
+    """
+
+    def get_transforms(self):
+        return lambda crop: crop[:, :1, :1]
+
+    def post_process_batch(self, output):
+        # Identify each crop by the value at its top-left corner.
+        return [float(item[0, 0, 0]) for item in output]
+
+
+class TestClassifyCropsInChunks(TestCase):
+    """Crop construction itself must be chunked, not just the forward pass.
+
+    If all crops were built before inference, a dense batch (hundreds of
+    detections per image) would allocate every crop tensor up front and the
+    chunked forward pass would cap nothing.
+    """
+
+    def _image_tensors(self) -> dict[str, torch.Tensor]:
+        # One 3x100x100 "image" whose pixel values encode the x coordinate,
+        # so each crop is identifiable by its top-left corner value.
+        gradient = torch.arange(100.0).repeat(3, 100, 1)
+        return {"img_a": gradient}
+
+    def test_chunked_and_mapped_back_to_detections(self):
+        detections = [
+            _make_detection("img_a", x1=x, y1=0, x2=x + 10, y2=10) for x in range(5)
+        ]
+        model = FakeCropClassifier(batch_size=2)
+
+        predictions, valid_indices = _classify_crops_in_chunks(
+            model, detections, self._image_tensors()
+        )
+
+        assert model.seen_chunk_sizes == [2, 2, 1]
+        assert valid_indices == [0, 1, 2, 3, 4]
+        # Each prediction carries its crop's top-left value = detection's x1.
+        assert predictions == [0.0, 1.0, 2.0, 3.0, 4.0]
+
+    def test_invalid_bboxes_are_skipped(self):
+        detections = [
+            _make_detection("img_a", x1=0, y1=0, x2=10, y2=10),
+            _make_detection("img_a", x1=5, y1=5, x2=5, y2=10),  # zero width
+            _make_detection("img_a", x1=20, y1=0, x2=30, y2=10),
+        ]
+        model = FakeCropClassifier(batch_size=4)
+
+        predictions, valid_indices = _classify_crops_in_chunks(
+            model, detections, self._image_tensors()
+        )
+
+        assert valid_indices == [0, 2]
+        assert predictions == [0.0, 20.0]
+
+    def test_empty_detections(self):
+        model = FakeCropClassifier(batch_size=4)
+        predictions, valid_indices = _classify_crops_in_chunks(
+            model, [], self._image_tensors()
+        )
+
+        assert predictions == []
+        assert valid_indices == []
+
+    def test_oom_halves_chunk_size_and_retries(self):
+        detections = [
+            _make_detection("img_a", x1=x, y1=0, x2=x + 10, y2=10) for x in range(4)
+        ]
+        model = FakeCropClassifier(batch_size=4, fail_first_n=1)
+
+        predictions, valid_indices = _classify_crops_in_chunks(
+            model, detections, self._image_tensors()
+        )
+
+        assert model.seen_chunk_sizes == [2, 2]
+        assert predictions == [0.0, 1.0, 2.0, 3.0]
 
 
 class TestIsCudaMemoryError(TestCase):
@@ -159,30 +247,3 @@ class TestInitJobModels(TestCase):
 
         assert binary_filter is None
         mock_binary.assert_not_called()
-
-
-class TestDefaultAllocatorConfig(TestCase):
-    def test_sets_both_vars_when_unset(self):
-        with patch.dict(os.environ):
-            for var in _ALLOC_ENV_VARS:
-                os.environ.pop(var, None)
-
-            _set_default_allocator_config()
-
-            for var in _ALLOC_ENV_VARS:
-                assert os.environ[var] == _DEFAULT_ALLOC_CONF
-
-    def test_operator_setting_is_never_overridden(self):
-        for preset_var in _ALLOC_ENV_VARS:
-            other_var = next(v for v in _ALLOC_ENV_VARS if v != preset_var)
-            with patch.dict(os.environ):
-                for var in _ALLOC_ENV_VARS:
-                    os.environ.pop(var, None)
-                os.environ[preset_var] = "max_split_size_mb:512"
-
-                _set_default_allocator_config()
-
-                # The preset value stays, and no default is layered on top of
-                # it via the other variable name either.
-                assert os.environ[preset_var] == "max_split_size_mb:512"
-                assert other_var not in os.environ

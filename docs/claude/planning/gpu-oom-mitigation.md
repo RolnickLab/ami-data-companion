@@ -1,6 +1,11 @@
 # GPU Out-of-Memory Mitigation for the Antenna Worker
 
-Status: implemented on branch `fix/gpu-oom-mitigation` (August 2026).
+Status: implemented on branch `fix/gpu-oom-mitigation` (August 2026). The
+operational half of the mitigation (fewer worker processes per card, smaller
+fetch batches) has been confirmed in production; see "Production results"
+below. The allocator default originally proposed here (item 4) was tried in
+production, failed on the deployed hardware, and has been removed from the
+branch — see "Correction: the allocator default".
 
 ## Problem
 
@@ -97,7 +102,9 @@ No `PYTORCH_ALLOC_CONF` / `PYTORCH_CUDA_ALLOC_CONF` is set anywhere in the
 repo, and `torch.cuda.set_per_process_memory_fraction` is not used. The
 measured 757–899 MiB reserved-but-unallocated at failure is the fragmentation
 signature that `expandable_segments:True` targets (the OOM message itself
-recommends it).
+recommends it). However, that option is not usable on the deployed vGPU
+hardware — see "Correction: the allocator default" below before considering
+it.
 
 ## Fix
 
@@ -124,10 +131,11 @@ Smallest changes that address the dominant cause, in order of impact:
    `finally` block, drop references to the models, prefetcher, and loader,
    then call `empty_cache()`, so an idle process returns cached VRAM to the
    shared card instead of holding it until its next job.
-4. **Default the allocator to `expandable_segments:True`.** Set both
-   `PYTORCH_ALLOC_CONF` (newer name) and `PYTORCH_CUDA_ALLOC_CONF` at worker
-   startup, only when the operator has set neither, so deployments can still
-   override or disable it via the environment.
+4. ~~**Default the allocator to `expandable_segments:True`.**~~ **Withdrawn —
+   see "Correction: the allocator default" below.** The worker sets no
+   allocator default; it only logs the effective `PYTORCH_ALLOC_CONF` /
+   `PYTORCH_CUDA_ALLOC_CONF` values at startup. Operators can opt in via the
+   environment on hardware that supports it.
 5. **Update stale documentation** in `datasets.py` (which currently says the
    async worker uses `antenna_api_batch_size` for the GPU batch) and the
    worker-tuning notes.
@@ -152,6 +160,45 @@ image tensors and the prefetcher's double-buffer.
 - **Default values of the batch-size settings** — 8 (localization) and
   20 (classification) are the long-standing defaults of the synchronous path.
 
+## Correction: the allocator default (tried in production, removed)
+
+An earlier revision of this plan (item 4) proposed defaulting the CUDA
+allocator to `expandable_segments:True` at worker startup, and this document
+claimed that "PyTorch falls back with a warning where unsupported". **Both
+claims were wrong.** When the default was deployed to production hosts
+running on NVIDIA vGPU (H100 24 GB vGPU profile), every CUDA initialization
+hard-failed with:
+
+```
+CUDA driver error: operation not supported
+```
+
+Both hosts failed identically and one job run was lost. `expandable_segments`
+requires the CUDA virtual-memory-management driver APIs, which the vGPU
+profile does not expose, and PyTorch raises rather than falling back. Do not
+re-attempt an allocator default here: the worker now sets nothing and only
+logs the effective `PYTORCH_ALLOC_CONF` / `PYTORCH_CUDA_ALLOC_CONF` values at
+startup, so an operator-set value is visible in the logs. Opting in remains
+possible via the environment on hardware that supports it.
+
+## Production results (measured, August 2026)
+
+The operational half of this mitigation was applied to the affected
+deployment before the code changes shipped: worker processes per 24 GiB card
+reduced from two to one (per environment pool), and the API fetch batch size
+set to 8. Measured outcome:
+
+- A production job with ~3,200 large images completed 100% at 88.3
+  images/min with zero CUDA out-of-memory errors. The previous run of the
+  same workload ran at 3.1 images/min, produced 512 `CUDA out of memory`
+  errors, and was killed by the stale-job reaper at 7% progress.
+- A second job (~400 images) completed at 103.4 images/min with zero errors.
+
+Throughput went *up* with half the processes: the second process on the card
+was causing allocator thrash and failed-batch retries, not adding capacity.
+This confirms the peak-working-set diagnosis above (13–17.4 GiB per busy
+process; two busy processes cannot coexist on a 24 GiB card).
+
 ## What still needs verification (no GPU available in this environment)
 
 - That the chunked detector/classifier forward passes produce identical
@@ -159,8 +206,6 @@ image tensors and the prefetcher's double-buffer.
   prefetcher path is not exercised without a GPU).
 - The actual post-fix peak VRAM per busy process (estimated, not measured:
   roughly 5–9 GiB with defaults) — observe `nvidia-smi` during a real job.
-- That `expandable_segments` behaves on the deployed driver/vGPU combination
-  (PyTorch falls back with a warning where unsupported).
 - Whether the backoff path ever triggers in steady state (its warning log is
   the signal that the card is still over-committed and process count or batch
   sizes need ops-side tuning).
