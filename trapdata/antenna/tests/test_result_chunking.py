@@ -12,6 +12,8 @@ import json
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
+import requests
+
 from trapdata.antenna.client import chunk_results_by_size, post_batch_results
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResults
 from trapdata.api.schemas import (
@@ -73,10 +75,21 @@ def _make_result(
     )
 
 
+def _encoded_body_size(payload) -> int:
+    """Size of the request body ``requests`` would build from ``payload``.
+
+    Mirrors requests' own encoding, which uses ``json.dumps`` defaults and so
+    puts a space after every comma and colon. Measuring a compact encoding here
+    would understate the wire size by roughly a quarter on these array-heavy
+    payloads and let an over-cap body pass the assertions below.
+    """
+    return len(json.dumps(payload).encode("utf-8"))
+
+
 def _serialized_body_size(results: list[AntennaTaskResult]) -> int:
     """Size in bytes of the JSON body actually sent for a list of results."""
     payload = AntennaTaskResults(results=results).model_dump(mode="json")
-    return len(json.dumps(payload).encode("utf-8"))
+    return _encoded_body_size(payload)
 
 
 class TestChunkResultsBySize(TestCase):
@@ -99,7 +112,7 @@ class TestChunkResultsBySize(TestCase):
 
         self.assertGreater(len(chunks), 1, "expected the batch to be split")
         for chunk in chunks:
-            body_size = len(json.dumps({"results": chunk}).encode("utf-8"))
+            body_size = _encoded_body_size({"results": chunk})
             self.assertLessEqual(
                 body_size,
                 max_bytes,
@@ -149,8 +162,7 @@ class TestPostBatchResultsChunking(TestCase):
         }
 
         def fake_post(url, json=None, timeout=None):
-            body_size = len(__import__("json").dumps(json).encode("utf-8"))
-            posted_bodies.append(body_size)
+            posted_bodies.append(_encoded_body_size(json))
             return fake_response
 
         fake_session = MagicMock()
@@ -193,3 +205,195 @@ class TestPostBatchResultsChunking(TestCase):
             )
         self.assertTrue(ok)
         get_session.assert_not_called()
+
+    def test_posted_bodies_stay_under_cap_at_requests_encoding(self):
+        """The cap must bound the bytes sent, measured as ``requests`` encodes them.
+
+        The packer sizes entries the same way requests serializes them, spaces
+        after separators included. Were it to measure a compact encoding instead,
+        these array-heavy bodies would go out roughly a quarter over the cap and
+        draw the HTTP 413 the chunking exists to avoid.
+        """
+        num_classes = 29_000
+        results = [_make_result(f"img{i}", num_classes) for i in range(8)]
+        max_bytes = 4 * 1024 * 1024
+        sent_sizes: list[int] = []
+
+        fake_response = MagicMock()
+        fake_response.raise_for_status.return_value = None
+        fake_response.json.return_value = {
+            "status": "accepted",
+            "job_id": 1,
+            "results_queued": 0,
+        }
+
+        def fake_post(url, json=None, timeout=None):
+            sent_sizes.append(_encoded_body_size(json))
+            return fake_response
+
+        fake_session = MagicMock()
+        fake_session.post.side_effect = fake_post
+        fake_session.__enter__.return_value = fake_session
+        fake_session.__exit__.return_value = False
+
+        with patch(
+            "trapdata.antenna.client.get_http_session", return_value=fake_session
+        ):
+            ok = post_batch_results(
+                base_url="http://x/api/v2",
+                auth_token="t",
+                job_id=1,
+                results=results,
+                max_bytes=max_bytes,
+            )
+
+        self.assertTrue(ok)
+        self.assertGreater(len(sent_sizes), 1, "expected multiple POSTs")
+        for size in sent_sizes:
+            self.assertLessEqual(size, max_bytes, f"sent body {size} exceeded cap")
+
+
+class TestPostBatchResultsFailureSemantics(TestCase):
+    """How a failing chunk affects the other chunks and the return value.
+
+    The server queues and acknowledges each result by its own ``reply_subject``,
+    so a chunk that fails leaves only its own images unacknowledged for
+    redelivery. Chunks after it must still be attempted -- skipping them would
+    discard work that is already done -- while the caller must still be told the
+    batch was not fully recorded.
+    """
+
+    def _run_with_chunk_outcomes(self, outcomes: list[Exception | None]):
+        """Post 8 wide results, failing the Nth POST per ``outcomes``.
+
+        Returns (return_value, number_of_POSTs_attempted).
+        """
+        results = [_make_result(f"img{i}", 29_000) for i in range(8)]
+        attempts = {"n": 0}
+
+        ok_response = MagicMock()
+        ok_response.raise_for_status.return_value = None
+        ok_response.json.return_value = {
+            "status": "accepted",
+            "job_id": 1,
+            "results_queued": 0,
+        }
+
+        def fake_post(url, json=None, timeout=None):
+            idx = attempts["n"]
+            attempts["n"] += 1
+            outcome = outcomes[idx] if idx < len(outcomes) else None
+            if outcome is not None:
+                raise outcome
+            return ok_response
+
+        fake_session = MagicMock()
+        fake_session.post.side_effect = fake_post
+        fake_session.__enter__.return_value = fake_session
+        fake_session.__exit__.return_value = False
+
+        with patch(
+            "trapdata.antenna.client.get_http_session", return_value=fake_session
+        ):
+            ok = post_batch_results(
+                base_url="http://x/api/v2",
+                auth_token="t",
+                job_id=1,
+                results=results,
+                # 4 MB against ~2 MB results forces several chunks.
+                max_bytes=4 * 1024 * 1024,
+            )
+        return ok, attempts["n"]
+
+    def test_one_failed_chunk_reports_failure(self):
+        ok, _ = self._run_with_chunk_outcomes([requests.RequestException("boom")])
+        self.assertFalse(ok, "a partially posted batch must not report success")
+
+    def test_remaining_chunks_are_still_posted_after_a_failure(self):
+        _, attempted = self._run_with_chunk_outcomes(
+            [requests.RequestException("boom")]
+        )
+        _, total_chunks = self._run_with_chunk_outcomes([])
+        self.assertEqual(
+            attempted,
+            total_chunks,
+            "a failed chunk must not strand the chunks behind it",
+        )
+
+    def test_all_chunks_succeeding_reports_success(self):
+        ok, attempted = self._run_with_chunk_outcomes([])
+        self.assertTrue(ok)
+        self.assertGreater(attempted, 1, "expected the batch to be split")
+
+    def test_offschema_response_is_caught_per_chunk(self):
+        """A response that parses but does not match the schema fails one chunk.
+
+        ``model_validate`` raises Pydantic's ValidationError, which is not a
+        ``requests`` exception. Left uncaught it would escape the loop and strand
+        every chunk behind it.
+        """
+        bad_response = MagicMock()
+        bad_response.raise_for_status.return_value = None
+        bad_response.json.return_value = {"unexpected": "shape"}
+
+        results = [_make_result(f"img{i}", 29_000) for i in range(8)]
+        attempts = {"n": 0}
+
+        def fake_post(url, json=None, timeout=None):
+            attempts["n"] += 1
+            return bad_response
+
+        fake_session = MagicMock()
+        fake_session.post.side_effect = fake_post
+        fake_session.__enter__.return_value = fake_session
+        fake_session.__exit__.return_value = False
+
+        with patch(
+            "trapdata.antenna.client.get_http_session", return_value=fake_session
+        ):
+            ok = post_batch_results(
+                base_url="http://x/api/v2",
+                auth_token="t",
+                job_id=1,
+                results=results,
+                max_bytes=4 * 1024 * 1024,
+            )
+
+        self.assertFalse(ok)
+        self.assertGreater(
+            attempts["n"], 1, "validation failure must not abort later chunks"
+        )
+
+    def test_undecodable_response_is_caught_per_chunk(self):
+        """A non-JSON response body fails one chunk rather than the loop."""
+        bad_response = MagicMock()
+        bad_response.raise_for_status.return_value = None
+        bad_response.json.side_effect = requests.exceptions.JSONDecodeError(
+            "no json", "", 0
+        )
+
+        results = [_make_result(f"img{i}", 29_000) for i in range(8)]
+        attempts = {"n": 0}
+
+        def fake_post(url, json=None, timeout=None):
+            attempts["n"] += 1
+            return bad_response
+
+        fake_session = MagicMock()
+        fake_session.post.side_effect = fake_post
+        fake_session.__enter__.return_value = fake_session
+        fake_session.__exit__.return_value = False
+
+        with patch(
+            "trapdata.antenna.client.get_http_session", return_value=fake_session
+        ):
+            ok = post_batch_results(
+                base_url="http://x/api/v2",
+                auth_token="t",
+                job_id=1,
+                results=results,
+                max_bytes=4 * 1024 * 1024,
+            )
+
+        self.assertFalse(ok)
+        self.assertGreater(attempts["n"], 1)

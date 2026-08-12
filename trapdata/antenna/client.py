@@ -78,15 +78,32 @@ def get_jobs(
             return []
 
 
-def _result_json_size(result_json: dict) -> int:
-    """Approximate the serialized byte size of one result entry.
+def _encoded_size(obj) -> int:
+    """Measure the bytes ``obj`` occupies once sent as a JSON request body.
 
-    Uses a compact JSON encoding (no extra whitespace) so the estimate tracks
-    what ``requests`` actually sends. The few bytes of array/comma framing that
-    join entries in the final payload are ignored; they are negligible next to
-    the per-result content for wide-taxonomy classifiers.
+    ``requests`` serializes a ``json=`` argument with ``json.dumps`` defaults,
+    which put a space after every comma and colon. Across the long numeric
+    ``scores`` and ``logits`` arrays a wide-taxonomy classifier emits, that
+    whitespace is roughly a quarter of the body, so measuring a compact encoding
+    instead would let a chunk packed just under the cap go out well over it.
     """
-    return len(json.dumps(result_json, separators=(",", ":")).encode("utf-8"))
+    return len(json.dumps(obj, allow_nan=False).encode("utf-8"))
+
+
+# Fixed costs of the ``{"results": [...]}`` envelope and of the ``, `` the
+# encoder puts between entries. Derived from the encoder rather than written out
+# so they stay correct if its settings ever change.
+_ENVELOPE_BYTES = _encoded_size({"results": []})
+_ENTRY_SEPARATOR_BYTES = _encoded_size([0, 0]) - 2 * _encoded_size(0) - len("[]")
+
+
+def _result_json_size(result_json: dict) -> int:
+    """Measure one result entry as encoded inside a request body.
+
+    Excludes the surrounding envelope and the separator joining entries; the
+    packer accounts for those itself.
+    """
+    return _encoded_size(result_json)
 
 
 def chunk_results_by_size(
@@ -116,9 +133,7 @@ def chunk_results_by_size(
         # to posting everything in a single chunk.
         return [list(results_json)]
 
-    # Account for the constant envelope overhead of ``{"results":[]}``.
-    envelope_overhead = len(b'{"results":[]}')
-    budget = max(1, max_bytes - envelope_overhead)
+    budget = max(1, max_bytes - _ENVELOPE_BYTES)
 
     chunks: list[list[dict]] = []
     current: list[dict] = []
@@ -132,8 +147,7 @@ def chunk_results_by_size(
                 f"{max_bytes}-byte POST limit; sending it in its own request. "
                 "It may still be rejected by the server or proxy."
             )
-        # +1 accounts for the comma joining this entry to the previous one.
-        added_size = size + (1 if current else 0)
+        added_size = size + (_ENTRY_SEPARATOR_BYTES if current else 0)
         if current and current_size + added_size > budget:
             chunks.append(current)
             current = []
@@ -162,6 +176,14 @@ def post_batch_results(
     single dense, wide-taxonomy batch from producing a request body large enough
     to be rejected by the reverse proxy (HTTP 413).
 
+    Splitting is safe because the server treats a POST body as a container of
+    independent results: it queues and acknowledges each one by its own
+    ``reply_subject``. A chunk that fails to post therefore leaves only its own
+    images unacknowledged, to be redelivered later, while results from chunks
+    that did land stay recorded. For that reason a failed chunk does not abort
+    the ones after it: posting them acknowledges work that is already done,
+    rather than forcing it to be repeated.
+
     Args:
         base_url: Antenna API base URL (e.g., "http://localhost:8000/api/v2")
         auth_token: API authentication token
@@ -170,7 +192,8 @@ def post_batch_results(
         max_bytes: Maximum size in bytes of a single POST body.
 
     Returns:
-        True only if every chunk was posted successfully, False otherwise.
+        True only if every chunk was posted successfully, False otherwise. A
+        partial failure returns False even though some results were recorded.
     """
     if not results:
         return True
@@ -188,9 +211,8 @@ def post_batch_results(
     all_ok = True
     with get_http_session(auth_token) as session:
         for chunk_idx, chunk in enumerate(chunks):
-            payload = {"results": chunk}
             try:
-                response = session.post(url, json=payload, timeout=60)
+                response = session.post(url, json={"results": chunk}, timeout=60)
                 response.raise_for_status()
                 result = AntennaResultPostResponse.model_validate(response.json())
                 logger.debug(
@@ -198,7 +220,12 @@ def post_batch_results(
                     f"({len(chunk)} results) to job {job_id}: "
                     f"{result.results_queued} queued"
                 )
-            except requests.RequestException as e:
+            # ValueError covers a malformed or off-schema response body as well
+            # as a non-finite score: ``requests``' JSONDecodeError and Pydantic's
+            # ValidationError are both ValueError subclasses. Catching them per
+            # chunk keeps one bad response from stranding the chunks behind it,
+            # which would leave their images to be redelivered for no reason.
+            except (requests.RequestException, ValueError) as e:
                 logger.error(
                     f"Failed to post result chunk {chunk_idx + 1}/{len(chunks)} "
                     f"to {url}: {e}"
