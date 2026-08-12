@@ -10,6 +10,7 @@ loop exits after a drain request. No models are loaded; inference is mocked
 out.
 """
 
+import multiprocessing
 import os
 import signal
 import unittest
@@ -22,11 +23,17 @@ from trapdata.antenna.worker import (
     _current_rss_bytes,
     _DrainRequest,
     _install_drain_handler,
+    _install_parent_drain_handler,
     _process_job,
     _worker_loop,
 )
 
 _HAS_SIGUSR1 = hasattr(signal, "SIGUSR1")
+
+
+def _spawn_event():
+    """An event of the kind the parent shares with spawned worker instances."""
+    return multiprocessing.get_context("spawn").Event()
 
 
 class TestDrainRequest(TestCase):
@@ -56,6 +63,58 @@ class TestDrainRequest(TestCase):
             _install_drain_handler(drain)
             os.kill(os.getpid(), signal.SIGUSR1)
             assert drain.requested
+        finally:
+            signal.signal(signal.SIGUSR1, previous)
+
+
+class TestParentDrainPropagation(TestCase):
+    """A drain reaches a worker instance even if it arrives before that
+    instance is ready to handle a signal.
+
+    Worker instances are started with the spawn method, so each begins life
+    with SIGUSR1 at its default action of terminating the process. The parent
+    therefore never signals them: it sets a shared event that each instance
+    reads at its own safe points. The guarantee under test is that an event
+    already set when the instance starts is honoured, which is exactly the
+    case a signal could not survive.
+    """
+
+    def test_event_set_before_start_is_observed(self):
+        event = _spawn_event()
+        event.set()
+        drain = _DrainRequest(event)
+        assert drain.requested
+        assert "parent" in drain.reason
+
+    def test_event_set_after_start_is_observed(self):
+        event = _spawn_event()
+        drain = _DrainRequest(event)
+        assert not drain.requested
+        event.set()
+        assert drain.requested
+
+    def test_unset_event_does_not_request_a_drain(self):
+        # Without this, an always-true `requested` would pass the positive
+        # cases above while draining every worker immediately.
+        drain = _DrainRequest(_spawn_event())
+        assert not drain.requested
+        assert drain.reason is None
+
+    def test_own_reason_survives_a_parent_event(self):
+        drain = _DrainRequest(_spawn_event())
+        drain.request("SIGUSR1")
+        drain._parent_event.set()
+        assert drain.reason == "SIGUSR1"
+
+    @unittest.skipUnless(_HAS_SIGUSR1, "platform has no SIGUSR1")
+    def test_parent_handler_publishes_to_the_event(self):
+        event = _spawn_event()
+        previous = signal.getsignal(signal.SIGUSR1)
+        try:
+            _install_parent_drain_handler(event)
+            assert not event.is_set()
+            os.kill(os.getpid(), signal.SIGUSR1)
+            assert event.is_set()
         finally:
             signal.signal(signal.SIGUSR1, previous)
 
@@ -133,6 +192,32 @@ class TestAfterJobCheck(TestCase):
         if rss is None:
             self.skipTest("/proc/self/status not available on this platform")
         assert rss > 0
+
+
+class TestRecycleCapValidation(TestCase):
+    """Only 0 disables a recycle cap.
+
+    A negative value would otherwise be accepted and read as "disabled" by
+    the threshold checks, quietly turning off a cap an operator meant to set.
+    """
+
+    def test_negative_caps_are_rejected(self):
+        import pydantic
+
+        from trapdata.settings import Settings
+
+        for field in ("worker_max_rss_mb", "worker_max_jobs"):
+            with self.subTest(field=field):
+                with self.assertRaises(pydantic.ValidationError):
+                    Settings(**{field: -1})
+
+    def test_zero_and_positive_caps_are_accepted(self):
+        from trapdata.settings import Settings
+
+        for value in (0, 4096):
+            settings = Settings(worker_max_rss_mb=value, worker_max_jobs=value)
+            assert settings.worker_max_rss_mb == value
+            assert settings.worker_max_jobs == value
 
 
 def _fake_batches(n: int) -> list[dict]:
@@ -262,3 +347,33 @@ class TestWorkerLoopExitsOnDrain(TestCase):
             signal.signal(signal.SIGUSR1, previous)
 
         assert polls == [1]
+
+    @patch("trapdata.antenna.worker.get_jobs")
+    @patch("trapdata.antenna.worker.read_settings")
+    def test_loop_honours_a_drain_requested_before_it_started(
+        self, mock_read_settings, mock_get_jobs
+    ):
+        """A worker instance started after the parent already drained exits
+        without claiming a job.
+
+        This is the startup case a forwarded signal cannot cover: the parent
+        may drain while an instance is still starting, before that instance
+        can handle SIGUSR1.
+        """
+        settings = MagicMock()
+        settings.antenna_service_name = "test-worker"
+        settings.worker_max_rss_mb = 0
+        settings.worker_max_jobs = 0
+        mock_read_settings.return_value = settings
+
+        event = _spawn_event()
+        event.set()
+
+        previous = signal.getsignal(signal.SIGUSR1) if _HAS_SIGUSR1 else None
+        try:
+            _worker_loop(0, ["fake_pipeline"], event)
+        finally:
+            if _HAS_SIGUSR1:
+                signal.signal(signal.SIGUSR1, previous)
+
+        mock_get_jobs.assert_not_called()

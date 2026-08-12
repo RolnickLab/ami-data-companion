@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import datetime
-import os
 import signal
 import time
 from collections.abc import Callable
+from multiprocessing.synchronize import Event as EventType
+from types import FrameType
 
 import numpy as np
 import torch
@@ -37,20 +38,28 @@ _MIB = 1024 * 1024
 class _DrainRequest:
     """A request for the worker process to exit at the next safe point.
 
-    Set by SIGUSR1 (an operator or process supervisor asking for a recycle)
-    or by the worker itself when a between-jobs recycle cap is hit — see
-    ``_after_job_check``. A safe point is a batch boundary:
-    the batch in flight finishes and its results are posted before the
-    process exits with status 0, so a process supervisor restarts a fresh
-    worker (fresh memory, file descriptors, and DataLoader state) without
-    losing in-flight work.
+    Set by SIGUSR1 (an operator or process supervisor asking for a recycle),
+    by the worker itself when a between-jobs recycle cap is hit (see
+    ``_after_job_check``), or by the parent of a multi-GPU worker group
+    through ``parent_event``. A safe point is a batch boundary: the batch in
+    flight finishes and its results are posted before the process exits with
+    status 0, so a process manager configured to restart the worker after a
+    clean exit starts a fresh one (fresh memory, file descriptors, and
+    DataLoader state) without losing in-flight work.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, parent_event: EventType | None = None) -> None:
         self.reason: str | None = None
+        self._parent_event = parent_event
 
     @property
     def requested(self) -> bool:
+        # Reading the parent's event here means every safe point already in
+        # the worker — the polling loop and the batch-boundary
+        # ``should_stop`` — observes a drain published by the parent without
+        # having to check for it separately.
+        if self._parent_event is not None and self._parent_event.is_set():
+            self.request("parent process requested a drain")
         return self.reason is not None
 
     def request(self, reason: str) -> None:
@@ -58,7 +67,7 @@ class _DrainRequest:
         if self.reason is None:
             self.reason = reason
 
-    def handle_signal(self, signum, frame) -> None:
+    def handle_signal(self, signum: int, frame: FrameType | None) -> None:
         logger.info(
             "SIGUSR1 received: will finish the batch in flight, post its "
             "results, and exit cleanly"
@@ -70,6 +79,36 @@ def _install_drain_handler(drain: _DrainRequest) -> None:
     """Route SIGUSR1 to ``drain`` on platforms that have the signal."""
     if hasattr(signal, "SIGUSR1"):
         signal.signal(signal.SIGUSR1, drain.handle_signal)
+
+
+def _install_parent_drain_handler(drain_event: EventType) -> None:
+    """Let the parent of a worker group publish drains without signalling children.
+
+    The parent owns SIGUSR1 on behalf of the whole group, because signalling
+    the children directly is unsafe during their startup: they are started
+    with the spawn method, so each begins life with SIGUSR1 at its default
+    action of terminating the process and only installs its own handler once
+    ``_worker_loop`` runs. A signal landing in that window kills the child,
+    and torch responds by terminating its siblings — the opposite of a clean
+    drain. Publishing the request through an event the children read at their
+    own safe points removes that window rather than narrowing it.
+
+    Installing this before any child is spawned also closes the matching
+    window in the parent, which is otherwise still at SIGUSR1's default
+    action while its children are already running, so a drain arriving then
+    would kill the parent and orphan workers holding GPU memory.
+    """
+    if not hasattr(signal, "SIGUSR1"):
+        return
+
+    def _publish_drain(signum: int, frame: FrameType | None) -> None:
+        logger.info(
+            "SIGUSR1 received: asking every worker instance to finish the "
+            "batch in flight, post its results, and exit cleanly"
+        )
+        drain_event.set()
+
+    signal.signal(signal.SIGUSR1, _publish_drain)
 
 
 def _current_rss_bytes() -> int | None:
@@ -154,25 +193,23 @@ def run_worker(pipelines: list[str]):
     gpu_count = torch.cuda.device_count()
     if gpu_count > 1:
         logger.info(f"Found {gpu_count} GPUs, spawning one AMI worker instance per GPU")
+        # A process manager delivers signals to this parent process, which
+        # relays them to the group through this event. Both the event and its
+        # handler are set up before the first child exists, so a drain
+        # arriving at any point during startup is recorded rather than lost.
+        # The event has to come from the spawn context to be shareable with
+        # processes started by mp.spawn.
+        drain_event = mp.get_context("spawn").Event()
+        _install_parent_drain_handler(drain_event)
         # Don't pass settings through mp.spawn — Settings contains enums that
         # can't be pickled. Each child process calls read_settings() itself.
         context = mp.spawn(
             _worker_loop,
-            args=(pipelines,),
+            args=(pipelines, drain_event),
             nprocs=gpu_count,
             join=False,
         )
         assert context is not None
-        # Each worker instance installs its own SIGUSR1 drain handler, but a
-        # process supervisor delivers signals to this parent process —
-        # forward them so every instance drains and the whole group exits.
-        if hasattr(signal, "SIGUSR1"):
-
-            def _forward_drain(signum, frame):
-                for pid in context.pids():
-                    os.kill(pid, signal.SIGUSR1)
-
-            signal.signal(signal.SIGUSR1, _forward_drain)
         while not context.join():
             pass
     else:
@@ -183,20 +220,29 @@ def run_worker(pipelines: list[str]):
         _worker_loop(0, pipelines)
 
 
-def _worker_loop(gpu_id: int, pipelines: list[str]):
+def _worker_loop(
+    gpu_id: int, pipelines: list[str], drain_event: EventType | None = None
+):
     """Main polling loop for a single AMI worker instance, pinned to a specific GPU.
 
-    The loop runs until a drain is requested — by SIGUSR1 or by a
-    between-jobs recycle cap (see ``_after_job_check``) — and then returns
-    so the process exits with status 0 for its supervisor to restart.
+    The loop runs until a drain is requested — by SIGUSR1, by a between-jobs
+    recycle cap (see ``_after_job_check``), or by the parent of a multi-GPU
+    group — and then returns so the process exits with status 0 for its
+    process manager to restart.
 
     Args:
         gpu_id: GPU index to pin this AMI worker instance to (0 for CPU-only).
         pipelines: List of pipeline slugs to poll for jobs.
+        drain_event: Shared event the parent of a multi-GPU worker group sets
+            to ask this instance to drain. None when the worker runs
+            in-process and owns SIGUSR1 itself.
     """
-    settings = read_settings()
-    drain = _DrainRequest()
+    # Set up drain handling before any slower startup work, so a drain
+    # arriving early is recorded rather than acted on by SIGUSR1's default
+    # action of terminating the process.
+    drain = _DrainRequest(drain_event)
     _install_drain_handler(drain)
+    settings = read_settings()
     device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available() and torch.cuda.device_count() > 0:
         torch.cuda.set_device(gpu_id)
