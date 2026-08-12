@@ -101,9 +101,10 @@ class TestParentDrainPropagation(TestCase):
         assert drain.reason is None
 
     def test_own_reason_survives_a_parent_event(self):
-        drain = _DrainRequest(_spawn_event())
+        event = _spawn_event()
+        drain = _DrainRequest(event)
         drain.request("SIGUSR1")
-        drain._parent_event.set()
+        event.set()
         assert drain.reason == "SIGUSR1"
 
     @unittest.skipUnless(_HAS_SIGUSR1, "platform has no SIGUSR1")
