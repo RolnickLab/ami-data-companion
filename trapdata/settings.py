@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     antenna_service_name: str = "AMI Data Companion"
     antenna_api_batch_size: int = 24
     # The worker exits cleanly (for its process manager to restart) when
-    # resident memory, sampled between jobs, exceeds this many MiB.
+    # resident memory, sampled between jobs, reaches or exceeds this many MiB.
     # Only 0 disables the cap, so a negative value is rejected rather than
     # silently turning the cap off.
     worker_max_rss_mb: int = Field(default=0, ge=0)

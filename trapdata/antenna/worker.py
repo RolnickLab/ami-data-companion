@@ -140,7 +140,7 @@ def _after_job_check(
     - ``worker_max_jobs``: drain after this many jobs. Deterministic bound
       for retention that scales with jobs processed, useful even before the
       retained memory's size or source is known.
-    - ``worker_max_rss_mb``: drain when resident memory exceeds this many
+    - ``worker_max_rss_mb``: drain when resident memory reaches this many
       MiB. Catches whatever the job cap does not predict.
     """
     rss_bytes = _current_rss_bytes()
@@ -161,11 +161,11 @@ def _after_job_check(
     max_rss_mb = settings.worker_max_rss_mb
     if max_rss_mb > 0 and rss_mb is not None and rss_mb >= max_rss_mb:
         logger.warning(
-            f"Resident memory {rss_mb} MiB is over the {max_rss_mb} MiB cap "
+            f"Resident memory {rss_mb} MiB reached the {max_rss_mb} MiB cap "
             "(AMI_WORKER_MAX_RSS_MB); exiting cleanly so the process "
             "supervisor restarts a fresh worker"
         )
-        drain.request(f"resident memory {rss_mb} MiB over the {max_rss_mb} MiB cap")
+        drain.request(f"resident memory {rss_mb} MiB reached the {max_rss_mb} MiB cap")
 
 
 def run_worker(pipelines: list[str]):

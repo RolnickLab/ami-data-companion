@@ -155,6 +155,14 @@ class TestAfterJobCheck(TestCase):
         # 9 GiB = 9216 MiB, over an 8192 MiB cap
         assert "9216" in drain.reason
 
+    @patch("trapdata.antenna.worker._current_rss_bytes", return_value=8 * 1024**3)
+    def test_rss_exactly_at_cap_requests_drain(self, _rss):
+        # The cap is inclusive, which is what the setting's documentation
+        # promises operators.
+        drain = _DrainRequest()
+        _after_job_check(drain, _recycle_settings(max_rss_mb=8192), jobs_processed=1)
+        assert drain.requested
+
     @patch("trapdata.antenna.worker._current_rss_bytes", return_value=2 * 1024**3)
     def test_rss_under_cap_does_nothing(self, _rss):
         drain = _DrainRequest()
