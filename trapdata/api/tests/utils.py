@@ -11,12 +11,20 @@ from trapdata.api.api import CLASSIFIER_CHOICES, APIMothClassifier
 from trapdata.api.schemas import SourceImageRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
 
+# A Vermont trap image that the moth detector finds objects in. Tests asserting
+# on detections or classifications must name the image they use: the Vermont
+# sample also contains a frame where nothing clears the detector's score
+# threshold, so a test that takes whichever image comes first has no guarantee
+# there is anything to assert on.
+IMAGE_WITH_DETECTIONS = "20220622000459-108-snapshot.jpg"
+
 
 def get_test_image_urls(
     file_server: StaticFileTestServer,
     test_images_dir: Path,
     subdir: str = "vermont",
     num: int = 2,
+    filenames: list[str] | None = None,
 ) -> list[str]:
     """Get list of test image URLs from file server.
 
@@ -25,16 +33,20 @@ def get_test_image_urls(
         test_images_dir: Base directory containing test images
         subdir: Subdirectory within test_images_dir (default: "vermont")
         num: Number of images to return (default: 2)
+        filenames: Specific image filenames within subdir. When omitted, the
+            first `num` images are taken in sorted order, which keeps the
+            selection the same on every machine. Directory order is arbitrary
+            and differs between checkouts.
 
     Returns:
         List of image URLs from the file server
     """
     images_dir = test_images_dir / subdir
-    source_image_urls = [
-        file_server.get_url(f.relative_to(test_images_dir))
-        for f in images_dir.glob("*.jpg")
-    ][:num]
-    return source_image_urls
+    if filenames is None:
+        paths = sorted(images_dir.glob("*.jpg"))[:num]
+    else:
+        paths = [images_dir / filename for filename in filenames]
+    return [file_server.get_url(path.relative_to(test_images_dir)) for path in paths]
 
 
 def get_test_images(
@@ -42,6 +54,7 @@ def get_test_images(
     test_images_dir: Path,
     subdir: str = "vermont",
     num: int = 2,
+    filenames: list[str] | None = None,
 ) -> list[SourceImageRequest]:
     """Get list of SourceImageRequest objects for testing.
 
@@ -50,11 +63,13 @@ def get_test_images(
         test_images_dir: Base directory containing test images
         subdir: Subdirectory within test_images_dir (default: "vermont")
         num: Number of images to return (default: 2)
+        filenames: Specific image filenames within subdir, as described on
+            get_test_image_urls.
 
     Returns:
         List of SourceImageRequest objects with IDs and URLs
     """
-    urls = get_test_image_urls(file_server, test_images_dir, subdir, num)
+    urls = get_test_image_urls(file_server, test_images_dir, subdir, num, filenames)
     source_images = [
         SourceImageRequest(id=str(i), url=url) for i, url in enumerate(urls)
     ]

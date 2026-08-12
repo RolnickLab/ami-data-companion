@@ -15,7 +15,11 @@ from trapdata.api.api import (
 )
 from trapdata.api.schemas import PipelineConfigRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
-from trapdata.api.tests.utils import get_test_images, get_pipeline_class
+from trapdata.api.tests.utils import (
+    IMAGE_WITH_DETECTIONS,
+    get_pipeline_class,
+    get_test_images,
+)
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 logging.basicConfig(level=logging.INFO)
@@ -38,8 +42,15 @@ class TestInferenceAPI(TestCase):
         if hasattr(cls, "file_server"):
             cls.file_server.stop()
 
-    def get_test_images(self, subdir: str = "vermont", num: int = 2):
-        return get_test_images(self.file_server, self.test_images_dir, subdir, num)
+    def get_test_images(
+        self,
+        subdir: str = "vermont",
+        num: int = 2,
+        filenames: list[str] | None = None,
+    ):
+        return get_test_images(
+            self.file_server, self.test_images_dir, subdir, num, filenames
+        )
 
     def get_test_pipeline(self, slug: str = "quebec_vermont_moths_2023"):
         return get_pipeline_class(slug)
@@ -127,7 +138,7 @@ class TestInferenceAPI(TestCase):
         Test that the logits are included in the classification response when
         requested via the pipeline configuration.
         """
-        test_images = self.get_test_images(num=1)
+        test_images = self.get_test_images(filenames=[IMAGE_WITH_DETECTIONS])
         assert test_images, "No test images found"
 
         test_pipeline_slug = "insect_orders_2025"
@@ -176,7 +187,7 @@ class TestInferenceAPI(TestCase):
         Test that classification responses have no labels (from algorithm config)
         and scores/logits count equals num classes in category map.
         """
-        test_images = self.get_test_images(num=1)
+        test_images = self.get_test_images(filenames=[IMAGE_WITH_DETECTIONS])
         assert test_images, "No test images found"
 
         test_pipeline_slug = "insect_orders_2025"
