@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import datetime
+import signal
 import time
 from collections.abc import Callable
+from multiprocessing.synchronize import Event as EventType
+from types import FrameType
 
 import numpy as np
 import torch
@@ -28,6 +31,141 @@ from trapdata.settings import Settings, read_settings
 
 MAX_PENDING_POSTS = 5  # Maximum number of concurrent result posts before blocking
 SLEEP_TIME_SECONDS = 5
+
+_MIB = 1024 * 1024
+
+
+class _DrainRequest:
+    """A request for the worker process to exit at the next safe point.
+
+    Set by SIGUSR1 (an operator or process supervisor asking for a recycle),
+    by the worker itself when a between-jobs recycle cap is hit (see
+    ``_after_job_check``), or by the parent of a multi-GPU worker group
+    through ``parent_event``. A safe point is a batch boundary: the batch in
+    flight finishes and its results are posted before the process exits with
+    status 0, so a process manager configured to restart the worker after a
+    clean exit starts a fresh one (fresh memory, file descriptors, and
+    DataLoader state) without losing in-flight work.
+    """
+
+    def __init__(self, parent_event: EventType | None = None) -> None:
+        self.reason: str | None = None
+        self._parent_event = parent_event
+
+    @property
+    def requested(self) -> bool:
+        # Reading the parent's event here means every safe point already in
+        # the worker — the polling loop and the batch-boundary
+        # ``should_stop`` — observes a drain published by the parent without
+        # having to check for it separately.
+        if self._parent_event is not None and self._parent_event.is_set():
+            self.request("parent process requested a drain")
+        return self.reason is not None
+
+    def request(self, reason: str) -> None:
+        # The first reason wins; later triggers change nothing.
+        if self.reason is None:
+            self.reason = reason
+
+    def handle_signal(self, signum: int, frame: FrameType | None) -> None:
+        logger.info(
+            "SIGUSR1 received: will finish the batch in flight, post its "
+            "results, and exit cleanly"
+        )
+        self.request("SIGUSR1")
+
+
+def _install_drain_handler(drain: _DrainRequest) -> None:
+    """Route SIGUSR1 to ``drain`` on platforms that have the signal."""
+    if hasattr(signal, "SIGUSR1"):
+        signal.signal(signal.SIGUSR1, drain.handle_signal)
+
+
+def _install_parent_drain_handler(drain_event: EventType) -> None:
+    """Let the parent of a worker group publish drains without signalling children.
+
+    The parent owns SIGUSR1 on behalf of the whole group, because signalling
+    the children directly is unsafe during their startup: they are started
+    with the spawn method, so each begins life with SIGUSR1 at its default
+    action of terminating the process and only installs its own handler once
+    ``_worker_loop`` runs. A signal landing in that window kills the child,
+    and torch responds by terminating its siblings — the opposite of a clean
+    drain. Publishing the request through an event the children read at their
+    own safe points removes that window rather than narrowing it.
+
+    Installing this before any child is spawned also closes the matching
+    window in the parent, which is otherwise still at SIGUSR1's default
+    action while its children are already running, so a drain arriving then
+    would kill the parent and orphan workers holding GPU memory.
+    """
+    if not hasattr(signal, "SIGUSR1"):
+        return
+
+    def _publish_drain(signum: int, frame: FrameType | None) -> None:
+        logger.info(
+            "SIGUSR1 received: asking every worker instance to finish the "
+            "batch in flight, post its results, and exit cleanly"
+        )
+        drain_event.set()
+
+    signal.signal(signal.SIGUSR1, _publish_drain)
+
+
+def _current_rss_bytes() -> int | None:
+    """Resident set size of this process, or None where /proc is unavailable."""
+    try:
+        with open("/proc/self/status") as status:
+            for line in status:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError):
+        return None
+    return None
+
+
+def _after_job_check(
+    drain: _DrainRequest, settings: Settings, jobs_processed: int
+) -> None:
+    """Log per-job memory and request a drain when a recycle cap is hit.
+
+    Runs between jobs, when the working set is at its idle baseline, so the
+    logged reading — and the ``worker_max_rss_mb`` comparison — reflects
+    memory retained across jobs rather than a job's transient working set.
+    The log line lets operators answer "does resident memory keep climbing
+    job after job, or plateau after the first model load?" from ordinary
+    worker logs, without instrumenting the host.
+
+    Two independent triggers, each disabled at 0 (the default):
+
+    - ``worker_max_jobs``: drain after this many jobs. Deterministic bound
+      for retention that scales with jobs processed, useful even before the
+      retained memory's size or source is known.
+    - ``worker_max_rss_mb``: drain when resident memory reaches this many
+      MiB. Catches whatever the job cap does not predict.
+    """
+    rss_bytes = _current_rss_bytes()
+    rss_mb = rss_bytes // _MIB if rss_bytes is not None else None
+    if rss_mb is not None:
+        logger.info(f"Resident memory after job {jobs_processed}: {rss_mb} MiB")
+    if drain.requested:
+        return
+    max_jobs = settings.worker_max_jobs
+    if max_jobs > 0 and jobs_processed >= max_jobs:
+        logger.info(
+            f"Processed {jobs_processed} jobs, reaching the "
+            f"{max_jobs}-job cap (AMI_WORKER_MAX_JOBS); exiting cleanly so "
+            "the process supervisor restarts a fresh worker"
+        )
+        drain.request(f"{jobs_processed} jobs processed, cap {max_jobs}")
+        return
+    max_rss_mb = settings.worker_max_rss_mb
+    if max_rss_mb > 0 and rss_mb is not None and rss_mb >= max_rss_mb:
+        logger.warning(
+            f"Resident memory {rss_mb} MiB reached the {max_rss_mb} MiB cap "
+            "(AMI_WORKER_MAX_RSS_MB); exiting cleanly so the process "
+            "supervisor restarts a fresh worker"
+        )
+        drain.request(f"resident memory {rss_mb} MiB reached the {max_rss_mb} MiB cap")
 
 
 def run_worker(pipelines: list[str]):
@@ -55,14 +193,25 @@ def run_worker(pipelines: list[str]):
     gpu_count = torch.cuda.device_count()
     if gpu_count > 1:
         logger.info(f"Found {gpu_count} GPUs, spawning one AMI worker instance per GPU")
+        # A process manager delivers signals to this parent process, which
+        # relays them to the group through this event. Both the event and its
+        # handler are set up before the first child exists, so a drain
+        # arriving at any point during startup is recorded rather than lost.
+        # The event has to come from the spawn context to be shareable with
+        # processes started by mp.spawn.
+        drain_event = mp.get_context("spawn").Event()
+        _install_parent_drain_handler(drain_event)
         # Don't pass settings through mp.spawn — Settings contains enums that
         # can't be pickled. Each child process calls read_settings() itself.
-        mp.spawn(
+        context = mp.spawn(
             _worker_loop,
-            args=(pipelines,),
+            args=(pipelines, drain_event),
             nprocs=gpu_count,
-            join=True,
+            join=False,
         )
+        assert context is not None
+        while not context.join():
+            pass
     else:
         if gpu_count == 1:
             logger.info(f"Found 1 GPU: {torch.cuda.get_device_name(0)}")
@@ -71,13 +220,28 @@ def run_worker(pipelines: list[str]):
         _worker_loop(0, pipelines)
 
 
-def _worker_loop(gpu_id: int, pipelines: list[str]):
+def _worker_loop(
+    gpu_id: int, pipelines: list[str], drain_event: EventType | None = None
+):
     """Main polling loop for a single AMI worker instance, pinned to a specific GPU.
+
+    The loop runs until a drain is requested — by SIGUSR1, by a between-jobs
+    recycle cap (see ``_after_job_check``), or by the parent of a multi-GPU
+    group — and then returns so the process exits with status 0 for its
+    process manager to restart.
 
     Args:
         gpu_id: GPU index to pin this AMI worker instance to (0 for CPU-only).
         pipelines: List of pipeline slugs to poll for jobs.
+        drain_event: Shared event the parent of a multi-GPU worker group sets
+            to ask this instance to drain. None when the worker runs
+            in-process and owns SIGUSR1 itself.
     """
+    # Set up drain handling before any slower startup work, so a drain
+    # arriving early is recorded rather than acted on by SIGUSR1's default
+    # action of terminating the process.
+    drain = _DrainRequest(drain_event)
+    _install_drain_handler(drain)
     settings = read_settings()
     device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available() and torch.cuda.device_count() > 0:
@@ -90,7 +254,8 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
     full_service_name = get_full_service_name(settings.antenna_service_name)
     logger.info(f"Running worker as: {full_service_name}")
 
-    while True:
+    jobs_processed = 0
+    while not drain.requested:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
         # These should probably come from a dedicated endpoint and should preempt batch jobs under the assumption that they
         # would run on the same GPU.
@@ -104,29 +269,47 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             pipeline_slugs=pipelines,
         )
         for job_id, pipeline in jobs:
+            if drain.requested:
+                break
             logger.info(
                 f"[GPU {gpu_id}] Processing job {job_id} with pipeline {pipeline}"
             )
+            # A job that raised mid-processing still counts toward the
+            # recycle caps: it may have loaded models and run batches, so
+            # it retains memory like a completed job. Claims that yielded
+            # no work do not count.
+            work_attempted = False
             try:
                 any_work_done = _process_job(
                     pipeline=pipeline,
                     job_id=job_id,
                     settings=settings,
                     device=device,
+                    should_stop=lambda: drain.requested,
                 )
                 any_jobs = any_jobs or any_work_done
+                work_attempted = any_work_done
             except Exception as e:
                 logger.error(
                     f"[GPU {gpu_id}] Failed to process job {job_id} with pipeline {pipeline}: {e}",
                     exc_info=True,
                 )
                 # Continue to next job rather than crashing the worker
+                work_attempted = True
+            if work_attempted:
+                jobs_processed += 1
+                _after_job_check(drain, settings, jobs_processed)
 
-        if not any_jobs:
+        if not any_jobs and not drain.requested:
             logger.info(
                 f"[GPU {gpu_id}] No jobs found, sleeping for {SLEEP_TIME_SECONDS} seconds"
             )
             time.sleep(SLEEP_TIME_SECONDS)
+
+    logger.info(
+        f"[GPU {gpu_id}] Drain complete ({drain.reason}); exiting cleanly for "
+        "the process supervisor to restart a fresh worker"
+    )
 
 
 def _apply_binary_classification(
@@ -403,6 +586,7 @@ def _process_job(
     settings: Settings,
     device: torch.device | None = None,
     on_batch_complete: Callable | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> bool:
     """Run the worker to process images from the REST API queue.
 
@@ -413,6 +597,10 @@ def _process_job(
         device: The device to use for processing. Auto-detected if None.
         on_batch_complete: Optional callback invoked after each batch, with kwargs
             batch_num (int) and items (int, cumulative items processed so far).
+        should_stop: Optional callable checked at every batch boundary. When
+            it returns True the job stops before starting another batch:
+            results for completed batches are still posted, and the job's
+            remaining tasks stay queued for the next worker to claim.
     Returns:
         True if any work was done, False otherwise
     """
@@ -453,6 +641,13 @@ def _process_job(
     _, t_total = log_time()
     try:
         for i, batch in enumerate(batch_source):
+            if should_stop and should_stop():
+                logger.info(
+                    f"Stop requested; leaving job {job_id} at a batch "
+                    "boundary. Remaining tasks stay queued for the next "
+                    "worker to claim."
+                )
+                break
             cls_time = 0.0
             det_time = 0.0
             load_time, t = t()
@@ -506,7 +701,7 @@ def _process_job(
             )
             batch_total, t_total = t_total()
             logger.info(
-                f"Batch {i + 1}: {batch_total/max(n_items, 1):.2f}s/image, "
+                f"Batch {i + 1}: {batch_total / max(n_items, 1):.2f}s/image, "
                 f"Classification time: {cls_time:.2f}s, Detection time: {det_time:.2f}s, "
                 f"Load time: {load_time:.2f}s"
             )

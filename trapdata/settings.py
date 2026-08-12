@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     antenna_api_auth_token: str = ""
     antenna_service_name: str = "AMI Data Companion"
     antenna_api_batch_size: int = 24
+    # The worker exits cleanly (for its process manager to restart) when
+    # resident memory, sampled between jobs, reaches or exceeds this many MiB.
+    # Only 0 disables the cap, so a negative value is rejected rather than
+    # silently turning the cap off.
+    worker_max_rss_mb: int = Field(default=0, ge=0)
+    # The worker exits cleanly after processing this many jobs. Bounds
+    # memory retained per job even when its size is not known. 0 disables.
+    worker_max_jobs: int = Field(default=0, ge=0)
 
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
