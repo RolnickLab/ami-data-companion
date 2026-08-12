@@ -57,6 +57,9 @@ class ResultPoster:
 
     Args:
         max_pending: Maximum number of concurrent posts before blocking (default: 5)
+        future_timeout: Seconds to wait on any single pending post (default: 30)
+        max_post_bytes: Maximum size in bytes of one POST body (default: 25 MiB).
+            A batch whose results exceed this is split across several POSTs.
 
     Example:
         poster = ResultPoster(max_pending=10)
