@@ -42,17 +42,37 @@ class APIMothClassifier(
         detections: typing.Iterable[DetectionResponse],
         terminal: bool = True,
         *args,
+        include_features: bool = False,
+        include_logits: bool = True,
         **kwargs,
     ):
         self.source_images = source_images
         self.detections = list(detections)
         self.terminal = terminal
+        self.include_features = include_features
+        self.include_logits = include_logits
+        self._last_features: torch.Tensor | None = None
         self.results: list[DetectionResponse] = []
         super().__init__(*args, **kwargs)
+        if include_features and not self.supports_features():
+            logger.warning(
+                f"{self.__class__.__name__} has no feature extractor, so "
+                "classifications will be returned without features. Only "
+                "classifiers built on Resnet50TimmClassifier support them."
+            )
         logger.info(
             f"Initialized {self.__class__.__name__} with {len(self.detections)} "
             "detections"
         )
+
+    @classmethod
+    def supports_features(cls) -> bool:
+        """Whether this classifier can return backbone features at all.
+
+        Lets callers tell "features were switched off" apart from "this model
+        cannot produce them", which otherwise both look like ``features=None``.
+        """
+        return cls.forward_with_features is not InferenceBaseClass.forward_with_features
 
     def reset(self, detections: typing.Iterable[DetectionResponse]):
         self.detections = list(detections)
@@ -66,28 +86,49 @@ class APIMothClassifier(
             batch_size=self.batch_size,
         )
 
-    def post_process_batch(self, logits: torch.Tensor):
-        """
-        Return the labels, softmax/calibrated scores, and the original logits for
-        each image in the batch.
+    @torch.no_grad()
+    def predict_batch(self, batch: torch.Tensor) -> torch.Tensor:
+        """Return the batch logits, stashing features for ``post_process_batch``.
 
-        Almost like the base class method, but we need to return the logits as well.
+        The base class ``run()`` calls these two in sequence on one batch, which
+        is what lets the features be handed over on the instance. ``no_grad`` is
+        declared here rather than left to the caller, since the worker drives
+        these two methods directly.
         """
+        batch_input = batch.to(self.device, non_blocking=True)
+        if self.include_features:
+            logits, self._last_features = self.forward_with_features(batch_input)
+        else:
+            logits, self._last_features = self.model(batch_input), None
+        return logits
+
+    def post_process_batch(self, batch_output: torch.Tensor) -> list[ClassifierResult]:
+        """
+        Return ClassifierResult objects with labels, scores, and
+        optional logits and feature vectors for each image in the batch.
+        """
+        logits = batch_output
+        features = self._last_features
+        self._last_features = None  # Release GPU tensor reference
         predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
-        logits = logits.cpu()
+        logits_cpu = logits.cpu() if self.include_logits else None
+        if features is not None:
+            features = features.cpu()
 
         batch_results = []
 
         for i, pred in enumerate(predictions):
             class_indices = np.arange(len(pred))
-            labels = [self.category_map[i] for i in class_indices]
-            logit = logits[i].tolist()
+            labels = [self.category_map[idx] for idx in class_indices]
+            logit = logits_cpu[i].tolist() if logits_cpu is not None else None
+            feature_vec = features[i].tolist() if features is not None else None
 
             result = ClassifierResult(
                 labels=labels,
                 logit=logit,
                 scores=pred.tolist(),
+                features=feature_vec,
             )
 
             batch_results.append(result)
@@ -164,6 +205,7 @@ class APIMothClassifier(
             classification=self.get_best_label(predictions),
             scores=predictions.scores,
             logits=predictions.logit,
+            features=predictions.features,
             inference_time=seconds_per_item,
             algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
             timestamp=datetime.datetime.now(),

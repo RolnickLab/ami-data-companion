@@ -15,7 +15,7 @@ from trapdata.api.api import (
 )
 from trapdata.api.schemas import PipelineConfigRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
-from trapdata.api.tests.utils import get_test_images, get_pipeline_class
+from trapdata.api.tests.utils import get_pipeline_class, get_test_images
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 logging.basicConfig(level=logging.INFO)
@@ -106,6 +106,7 @@ class TestInferenceAPI(TestCase):
         pipeline_request = PipelineRequest(
             pipeline=PipelineChoice[binary_classifier_pipeline_choice],
             source_images=self.get_test_images(num=2),
+            config=PipelineConfigRequest(include_logits=True),
         )
         with self.file_server:
             response = self.client.post("/process", json=pipeline_request.model_dump())
@@ -132,9 +133,7 @@ class TestInferenceAPI(TestCase):
 
         test_pipeline_slug = "insect_orders_2025"
 
-        config = PipelineConfigRequest(
-            # return_logits=True
-        )
+        config = PipelineConfigRequest(include_logits=True)
         pipeline_request = PipelineRequest(
             pipeline=PipelineChoice[test_pipeline_slug],
             source_images=test_images,
@@ -181,7 +180,7 @@ class TestInferenceAPI(TestCase):
 
         test_pipeline_slug = "insect_orders_2025"
 
-        config = PipelineConfigRequest()
+        config = PipelineConfigRequest(include_logits=True)
         pipeline_request = PipelineRequest(
             pipeline=PipelineChoice[test_pipeline_slug],
             source_images=test_images,

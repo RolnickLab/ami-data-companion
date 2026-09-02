@@ -201,6 +201,17 @@ class InferenceBaseClass:
         """
         raise NotImplementedError
 
+    def forward_with_features(
+        self, batch_input: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Run the model, returning its logits and the backbone features behind them.
+
+        Both come from one forward pass; fetching features separately would run
+        the backbone twice. Subclasses that expose a backbone override this, so
+        the default returns ``None`` for features.
+        """
+        return self.model(batch_input), None
+
     def get_transforms(self) -> torchvision.transforms.Compose:
         """
         This method must be implemented by a subclass.
@@ -342,3 +353,4 @@ class ClassifierResult:
     labels: list[str] | None
     logit: list[float] | None
     scores: list[float]
+    features: list[float] | None = None
