@@ -1,5 +1,13 @@
 # Feature Vector Extraction Implementation Plan
 
+> **Historical planning document.** It records how this branch was brought up to
+> date with main and is kept for that history; it is not a description of the code
+> as it stands. Two things named below have since changed: `get_features()` was
+> replaced by `forward_with_features()`, which returns the logits and the features
+> from a single forward pass, and `include_logits` defaults to true so that adding
+> feature vectors does not take logits away from existing consumers. Read the code
+> and `trapdata/api/tests/test_features_extraction.py` for current behaviour.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add opt-in feature vector (embedding) extraction and opt-in logits to classification responses, toggleable via API request config and worker settings.
