@@ -241,6 +241,9 @@ async def process(data: PipelineRequest) -> PipelineResponse:
             # single=True if len(detector_results) == 1 else False,
             single=True,  # @TODO solve issues with reading images in multiprocessing
             terminal=False,
+            # The binary gate has no backbone hook, so only logits are worth
+            # passing on; asking it for features would return nothing.
+            include_logits=data.config.include_logits,
         )
         filter.run()
         algorithms_used[filter.get_key()] = make_algorithm_response(filter)

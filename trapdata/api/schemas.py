@@ -96,7 +96,7 @@ class ClassificationResponse(pydantic.BaseModel):
         default=None,
         description=(
             "Raw logits (unnormalized model outputs) for each class. "
-            "Only included when include_logits=true in the pipeline config."
+            "Omitted when include_logits=false in the pipeline config."
         ),
         repr=False,
     )
@@ -257,11 +257,12 @@ class PipelineConfigRequest(pydantic.BaseModel):
         ),
     )
     include_logits: bool = pydantic.Field(
-        default=False,
+        default=True,
         description=(
             "Whether to include raw logits in classification responses. "
             "Logits are the unnormalized model outputs before softmax. "
-            "Disabled by default to reduce response size."
+            "On by default: downstream consumers re-score classifications from "
+            "them. Turn it off to reduce response size."
         ),
     )
 

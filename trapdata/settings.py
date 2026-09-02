@@ -45,7 +45,7 @@ class Settings(BaseSettings):
 
     # Feature and logits extraction settings
     include_features: bool = False
-    include_logits: bool = False
+    include_logits: bool = True
 
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
@@ -188,7 +188,7 @@ class Settings(BaseSettings):
             },
             "include_logits": {
                 "title": "Include logits",
-                "description": "Include raw logits (unnormalized model outputs) in API/worker responses. Increases response size.",
+                "description": "Include raw logits (unnormalized model outputs) in API/worker responses. On by default; turn off to reduce response size.",
                 "kivy_type": "bool",
                 "kivy_section": "antenna",
             },

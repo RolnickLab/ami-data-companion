@@ -477,6 +477,9 @@ def _process_job(
                         source_images=[],
                         detections=[],
                         terminal=False,
+                        # See the note in api.py: the binary gate can return
+                        # logits but not features.
+                        include_logits=settings.include_logits,
                     )
 
             assert detector is not None, "Detector not initialized"
