@@ -13,4 +13,11 @@ NEGATIVE_COLOR = [1, 1, 1, 0]  # Transparent
 
 SUMMARY_REFRESH_SECONDS = 5
 
-IMAGE_BASE_URL = "https://object-arbutus.cloud.computecanada.ca/ami-trapdata/"
+# Public object store holding the model weights, label maps and sample trap images.
+# Buckets on this cluster are namespaced by the tenant that owns them, which is why the
+# bucket name carries a "<tenant>:" prefix. Both buckets below are anonymously readable.
+OBJECT_STORE_BASE_URL = (
+    "https://object-arbutus.alliancecan.ca/3c987b8fc90743469d42899b1fdb48eb:"
+)
+MODEL_BASE_URL = f"{OBJECT_STORE_BASE_URL}ami-models/"
+IMAGE_BASE_URL = f"{OBJECT_STORE_BASE_URL}ami-trapdata/"
