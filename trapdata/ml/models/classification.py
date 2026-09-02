@@ -313,16 +313,20 @@ class Resnet50TimmClassifier(Resnet50Classifier):
         return model
 
     @torch.no_grad()
-    def get_features(self, batch_input: torch.Tensor) -> torch.Tensor:
-        """Extract 2048-dim feature vectors from the ResNet50 backbone.
+    def forward_with_features(
+        self, batch_input: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return logits plus the 2048-dim ResNet50 backbone features, in one pass.
 
-        Uses timm's forward_features() which returns (B, 2048, H, W) spatial
-        feature maps for ResNet50. Pooled to (B, 2048) via adaptive avg pool.
+        ``forward_features`` produces the (B, 2048, H, W) maps that ``forward_head``
+        turns into logits, and into the pooled vector when asked for ``pre_logits``.
+        A second, older feature extractor lives in ``trapdata/ml/models/tracking.py``
+        (see the note there for how the two differ).
         """
-        features = self.model.forward_features(batch_input)
-        features = torch.nn.functional.adaptive_avg_pool2d(features, (1, 1))
-        features = features.view(features.size(0), -1)
-        return features
+        feature_maps = self.model.forward_features(batch_input)
+        logits = self.model.forward_head(feature_maps)
+        features = self.model.forward_head(feature_maps, pre_logits=True)
+        return logits, features
 
 
 class BinaryClassifier(Resnet50ClassifierLowRes):

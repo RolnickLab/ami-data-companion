@@ -201,13 +201,16 @@ class InferenceBaseClass:
         """
         raise NotImplementedError
 
-    def get_features(self, batch_input: torch.Tensor) -> torch.Tensor | None:
-        """Extract feature vectors from the model backbone.
+    def forward_with_features(
+        self, batch_input: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Run the model, returning its logits and the backbone features behind them.
 
-        Override in subclasses that support feature extraction.
-        Returns None by default for models that don't implement it.
+        Both come from one forward pass; fetching features separately would run
+        the backbone twice. Subclasses that expose a backbone override this, so
+        the default returns ``None`` for features.
         """
-        return None
+        return self.model(batch_input), None
 
     def get_transforms(self) -> torchvision.transforms.Compose:
         """
