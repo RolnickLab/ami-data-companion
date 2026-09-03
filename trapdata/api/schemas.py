@@ -226,6 +226,14 @@ class AlgorithmConfigResponse(pydantic.BaseModel):
         default=None,
         description="A URI to the weights or model details, could be a public web URL or object store path.",
     )
+    trainable: bool = pydantic.Field(
+        default=False,
+        description=(
+            "Whether this algorithm can be retrained from labelled data. Antenna reads this "
+            "to decide whether retraining can be offered for the algorithm. Only a classifier "
+            "head over a frozen backbone is cheap enough to retrain; a detector is not."
+        ),
+    )
     category_map: AlgorithmCategoryMapResponse | None = None
 
 

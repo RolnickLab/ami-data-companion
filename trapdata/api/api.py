@@ -111,6 +111,7 @@ def make_algorithm_response(
         description=model.description,
         category_map=category_map,
         uri=model.weights_path,
+        trainable=getattr(model, "trainable", False),
     )
 
 
@@ -125,6 +126,7 @@ def make_algorithm_config_response(
         description=model.description,
         category_map=category_map,
         uri=model.weights_path,
+        trainable=getattr(model, "trainable", False),
     )
 
 

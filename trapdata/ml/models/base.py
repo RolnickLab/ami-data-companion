@@ -77,6 +77,10 @@ class InferenceBaseClass:
     labels_path = None
     category_map = {}
     num_classes: Union[int, None] = None  # Will use len(category_map) if None
+    # Whether this model's classifier head can be retrained from labelled data without
+    # touching the backbone. Reported to Antenna so it can offer retraining only where it
+    # is cheap. Off by default: a detector, and any model trained end to end, is not.
+    trainable: bool = False
     lookup_gbif_names: bool = False
     default_taxon_rank: str = "SPECIES"
     model: torch.nn.Module
