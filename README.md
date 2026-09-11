@@ -105,6 +105,8 @@ There are two ways to configure settings
 
 The CLI will read settings from either source, but will prioritize environment variables. The GUI only reads from `trapdata.ini`.
 
+Model weights and label maps are downloaded from the project's public object store the first time each model is used. To download them from somewhere else, such as a mirror close to a compute cluster, set `AMI_MODEL_BASE_URL` in the environment or in `.env` (and `AMI_IMAGE_BASE_URL` for the sample trap images). A value with or without a trailing slash is accepted. These two settings are not read from `trapdata.ini`.
+
 ### Example workflow
 
 The AMI Data Companion operates using a pipeline for data processing. By default it lists input images, finds detections in them, identifies which images need to be classified to moth species using a moth/nonmoth threshold, computes features for each object, and performs a photo-to-photo tracking procedure.
@@ -189,7 +191,7 @@ A script is available in the repo source to run the commands above.
 
 1. Create a new inference class in `trapdata/ml/models/classification.py` or `trapdata/ml/models/localization.py`. All models inherit from `InferenceBaseClass`, but there are more specific classes for classification and localization and different architectures. Choose the appropriate class to inherit from. It's best to copy an existing inference class that is similar to the new model you are adding.
 
-2. Upload your model weights and category map to a cloud storage service and make sure the file is publicly accessible via a URL. The weights will be downloaded the first time the model is run. Alternatively, you can manually add the model weights to the configured `USER_DATA_PATH` directory under the subdir `USER_DATA_PATH/models/` (on macOS this is `~/Library/Application Support/trapdata/models`). However the model will not be available to other users unless they also manually add the model weights. The category map json file is simply a dict of species names and their indexes in your model's last layer. See the existing category maps for examples.
+2. Upload your model weights and category map to a cloud storage service and make sure the file is publicly accessible via a URL. For files hosted in the project's object store, build the URL from `constants.MODEL_BASE_URL` rather than writing out the host, so that a deployment's `AMI_MODEL_BASE_URL` override also applies to your model. The weights will be downloaded the first time the model is run. Alternatively, you can manually add the model weights to the configured `USER_DATA_PATH` directory under the subdir `USER_DATA_PATH/models/` (on macOS this is `~/Library/Application Support/trapdata/models`). However the model will not be available to other users unless they also manually add the model weights. The category map json file is simply a dict of species names and their indexes in your model's last layer. See the existing category maps for examples.
 
 3. Select your model in the GUI settings or set the `SPECIES_CLASSIFICATION_MODEL` setting. If the model inherits from `SpeciesClassifier` class, it will automatically become one of the valid choices.
 
@@ -241,6 +243,7 @@ AMI_ANTENNA_API_BASE_URL=https://antenna.insectai.org/api/v2  # Or your Antenna 
 AMI_ANTENNA_API_AUTH_TOKEN=your_token_here
 AMI_ANTENNA_API_BATCH_SIZE=4
 AMI_NUM_WORKERS=2  # Safe for REST API (atomic task dequeue)
+# AMI_MODEL_BASE_URL=https://mirror.example.org/ami-models/  # Optional: download model weights from a mirror
 ```
 
 **Register pipelines (optional):**

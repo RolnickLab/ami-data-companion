@@ -1,3 +1,6 @@
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg")
 
 POSITIVE_BINARY_LABEL = "moth"
@@ -14,11 +17,48 @@ NEGATIVE_COLOR = [1, 1, 1, 0]  # Transparent
 
 SUMMARY_REFRESH_SECONDS = 5
 
-# Public object store holding the model weights, label maps and sample trap images.
-# Buckets on this cluster are namespaced by the tenant that owns them, which is why the
-# bucket name carries a "<tenant>:" prefix. Both buckets below are anonymously readable.
+# Public object store that holds the model weights, label maps and sample trap images.
+# The Swift path form is used because the equivalent S3 path form puts a "<tenant>:"
+# prefix on the bucket name, and the colon trips some URL parsers and caches.
 OBJECT_STORE_BASE_URL = (
-    "https://object-arbutus.alliancecan.ca/3c987b8fc90743469d42899b1fdb48eb:"
+    "https://object-arbutus.alliancecan.ca/swift/v1/"
+    "AUTH_3c987b8fc90743469d42899b1fdb48eb/"
 )
-MODEL_BASE_URL = f"{OBJECT_STORE_BASE_URL}ami-models/"
-IMAGE_BASE_URL = f"{OBJECT_STORE_BASE_URL}ami-trapdata/"
+
+
+class ObjectStoreSettings(BaseSettings):
+    """
+    Where model weights and sample trap images are downloaded from.
+
+    Both locations default to the public object store and can be overridden per
+    deployment, for example to serve models from a mirror close to a compute cluster.
+    Values are read from the environment and from the ".env" file with the same "AMI_"
+    prefix as the other settings, so an override placed in ".env" takes effect. They are
+    resolved once at import time, because model classes build their download URLs as
+    class attributes.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="ami_",
+        extra="ignore",
+        protected_namespaces=(),
+    )
+
+    model_base_url: str = f"{OBJECT_STORE_BASE_URL}ami-models/"
+    image_base_url: str = f"{OBJECT_STORE_BASE_URL}ami-trapdata/"
+
+    @field_validator("model_base_url", "image_base_url")
+    @classmethod
+    def ensure_trailing_slash(cls, value: str) -> str:
+        """Accept a base URL with or without a trailing slash, since paths are appended directly."""
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be empty")
+        return value if value.endswith("/") else f"{value}/"
+
+
+_object_store = ObjectStoreSettings()
+MODEL_BASE_URL = _object_store.model_base_url
+IMAGE_BASE_URL = _object_store.image_base_url
