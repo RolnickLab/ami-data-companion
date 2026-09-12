@@ -57,6 +57,14 @@ def register(
             "If not specified, registers for all accessible projects.",
         ),
     ] = None,
+    pipeline: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--pipeline",
+            help="Only register these pipelines. Can be given multiple times. "
+            "Defaults to every pipeline, which instantiates every model.",
+        ),
+    ] = None,
 ):
     """
     Register available pipelines with the Antenna platform for specified projects.
@@ -77,5 +85,7 @@ def register(
     settings = read_settings()
     project_ids = project if project else []
     register_pipelines(
-        project_ids=project_ids, service_name=settings.antenna_service_name
+        project_ids=project_ids,
+        pipeline_keys=pipeline,
+        service_name=settings.antenna_service_name
     )

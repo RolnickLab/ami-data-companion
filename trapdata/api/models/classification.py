@@ -6,6 +6,15 @@ import torch
 
 from trapdata.common.logs import logger
 from trapdata.ml.models.base import ClassifierResult
+from trapdata.ml.models.bioclip import (
+    BioCLIPNewfoundland749,
+    BioCLIPPanama900,
+    BioCLIPWithGeminiGenusCheck,
+    BioCLIPWithGeminiSpeciesCheck,
+)
+from trapdata.ml.models.gemini_vlm import (
+    GeminiVLMOnlyNewfoundland749,
+)
 from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
     InferenceBaseClass,
@@ -195,6 +204,30 @@ class MothClassifierPanama(
     pass
 
 
+class MothClassifierBioCLIPNF749(APIMothClassifier, BioCLIPNewfoundland749):
+    pass
+
+
+class MothClassifierBioCLIPPanama900(APIMothClassifier, BioCLIPPanama900):
+    pass
+
+
+class MothClassifierBioCLIPNF749GenusChecked(
+    BioCLIPWithGeminiGenusCheck, APIMothClassifier, BioCLIPNewfoundland749
+):
+    """NF-749 species head, plus an independent VLM genus opinion per detection."""
+
+    name = "BioCLIP 2.5 + LogReg head (Newfoundland, 749 species) - genus checked"
+
+
+class MothClassifierBioCLIPNF749SpeciesChecked(
+    BioCLIPWithGeminiSpeciesCheck, APIMothClassifier, BioCLIPNewfoundland749
+):
+    """NF-749 species head, plus an independent VLM species opinion per detection."""
+
+    name = "BioCLIP 2.5 + LogReg head (Newfoundland, 749 species) - species checked"
+
+
 class MothClassifierPanama2024(APIMothClassifier, PanamaMothSpeciesClassifier2024):
     pass
 
@@ -230,4 +263,9 @@ class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
 
 
 class InsectOrderClassifier(APIMothClassifier, InsectOrderClassifier2025):
+    pass
+
+
+class MothClassifierGeminiVLM(APIMothClassifier, GeminiVLMOnlyNewfoundland749):
+    """Pure Gemini 3-Flash species classifier using VLM for direct identification."""
     pass

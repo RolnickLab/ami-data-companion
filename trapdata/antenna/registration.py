@@ -72,6 +72,7 @@ def register_pipelines(
     project_ids: list[int],
     service_name: str,
     settings: Settings | None = None,
+    pipeline_keys: list[str] | None = None,
 ) -> None:
     """
     Register pipelines for specified projects or all accessible projects.
@@ -126,7 +127,7 @@ def register_pipelines(
 
     # Initialize service info once to get pipeline configurations
     logger.info("Initializing pipeline configurations...")
-    service_info = initialize_service_info()
+    service_info = initialize_service_info(pipeline_keys=pipeline_keys)
     pipeline_configs = service_info.pipelines
     logger.info(f"Generated {len(pipeline_configs)} pipeline configurations")
 

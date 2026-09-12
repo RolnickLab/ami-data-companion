@@ -14,6 +14,11 @@ from fastapi.middleware.gzip import GZipMiddleware
 from ..common.logs import logger  # noqa: F401
 from . import settings
 from .models.classification import (
+    MothClassifierBioCLIPNF749,
+    MothClassifierBioCLIPNF749GenusChecked,
+    MothClassifierBioCLIPNF749SpeciesChecked,
+    MothClassifierBioCLIPPanama900,
+    MothClassifierGeminiVLM,
     APIMothClassifier,
     InsectOrderClassifier,
     MothClassifierBinary,
@@ -63,6 +68,11 @@ CLASSIFIER_CHOICES = {
     "global_moths_2024": MothClassifierGlobal,
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
+    "bioclip_nf_749": MothClassifierBioCLIPNF749,
+    "bioclip_panama_900": MothClassifierBioCLIPPanama900,
+    "bioclip_nf_749_genus_checked": MothClassifierBioCLIPNF749GenusChecked,
+    "bioclip_nf_749_species_checked": MothClassifierBioCLIPNF749SpeciesChecked,
+    "gemini_vlm_nf": MothClassifierGeminiVLM,
 }
 _classifier_choices = dict(
     zip(CLASSIFIER_CHOICES.keys(), list(CLASSIFIER_CHOICES.keys()))
@@ -158,6 +168,12 @@ def make_pipeline_config_response(
         terminal=True,
     )
     algorithms.append(make_algorithm_config_response(classifier))
+
+    # A classifier may attach extra, non-terminal classifications from a companion
+    # algorithm (e.g. an independent VLM genus check). Antenna rejects any classification
+    # whose algorithm was not declared here, so those must be advertised too.
+    for extra in getattr(classifier, "extra_algorithm_configs", lambda: [])():
+        algorithms.append(extra)
 
     return PipelineConfigResponse(
         name=classifier.name,
@@ -355,11 +371,22 @@ async def readyz():
 #     pass
 
 
-def initialize_service_info() -> ProcessingServiceInfoResponse:
+def initialize_service_info(
+    pipeline_keys: list[str] | None = None,
+) -> ProcessingServiceInfoResponse:
     # @TODO This requires loading all models into memory! Can we avoid this?
+    # Passing pipeline_keys keeps that cost to the pipelines a worker actually serves,
+    # instead of instantiating every classifier in the registry.
+    selected = CLASSIFIER_CHOICES
+    if pipeline_keys:
+        unknown = [key for key in pipeline_keys if key not in CLASSIFIER_CHOICES]
+        if unknown:
+            raise ValueError(f"Unknown pipeline(s): {', '.join(unknown)}")
+        selected = {key: CLASSIFIER_CHOICES[key] for key in pipeline_keys}
+
     pipeline_configs = [
         make_pipeline_config_response(classifier_class, slug=key)
-        for key, classifier_class in CLASSIFIER_CHOICES.items()
+        for key, classifier_class in selected.items()
     ]
 
     _info = ProcessingServiceInfoResponse(

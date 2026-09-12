@@ -333,6 +333,15 @@ def _process_batch(
                 image_detections[dresp.source_image_id].append(detection)
                 n_detections += 1
 
+        # Optional post-classification hook, e.g. an independent VLM genus check that
+        # attaches a second classification under its own algorithm reference.
+        hook = getattr(classifier, "post_classification_hook", None)
+        if hook is not None:
+            try:
+                hook(image_detections, image_tensors)
+            except Exception as exc:
+                logger.warning(f"post_classification_hook failed, continuing: {exc}")
+
         classify_time = (datetime.datetime.now() - classify_start).total_seconds()
         # Count non-moth detections returned from binary filter
         n_detections += len(detections_to_return)
