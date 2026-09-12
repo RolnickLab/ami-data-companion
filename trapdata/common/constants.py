@@ -1,8 +1,3 @@
-from urllib.parse import urlparse
-
-from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
 SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg")
 
 POSITIVE_BINARY_LABEL = "moth"
@@ -19,72 +14,13 @@ NEGATIVE_COLOR = [1, 1, 1, 0]  # Transparent
 
 SUMMARY_REFRESH_SECONDS = 5
 
-# Public object store that holds the model weights, label maps and sample trap images.
-# The Swift path form is used because the equivalent S3 path form puts a "<tenant>:"
-# prefix on the bucket name, and the colon trips some URL parsers and caches.
+# Default location of the public object store that holds the model weights, label maps
+# and sample trap images. Deployments can download from elsewhere by setting
+# model_base_url and image_base_url (AMI_MODEL_BASE_URL, AMI_IMAGE_BASE_URL), which
+# default to buckets under this URL. The Swift path form is used because the equivalent
+# S3 path form puts a "<tenant>:" prefix on the bucket name, and the colon trips some
+# URL parsers and caches.
 OBJECT_STORE_BASE_URL = (
     "https://object-arbutus.alliancecan.ca/swift/v1/"
     "AUTH_3c987b8fc90743469d42899b1fdb48eb/"
 )
-
-# Hosts where a plain http:// base URL is accepted, such as a local object store used
-# during development. There is no network path to tamper with on a loopback address.
-_LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
-
-
-class ObjectStoreSettings(BaseSettings):
-    """
-    Where model weights and sample trap images are downloaded from.
-
-    Both locations default to the public object store and can be overridden per
-    deployment, for example to serve models from a mirror close to a compute cluster.
-    Values are read from the environment and from the ".env" file with the same "AMI_"
-    prefix as the other settings, so an override placed in ".env" takes effect. They are
-    resolved once at import time, because model classes build their download URLs as
-    class attributes.
-    """
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        env_prefix="ami_",
-        extra="ignore",
-        protected_namespaces=(),
-    )
-
-    model_base_url: str = f"{OBJECT_STORE_BASE_URL}ami-models/"
-    image_base_url: str = f"{OBJECT_STORE_BASE_URL}ami-trapdata/"
-
-    @field_validator("model_base_url", "image_base_url")
-    @classmethod
-    def validate_base_url(cls, value: str) -> str:
-        """
-        Require an HTTPS URL made of a host and a path, with or without a trailing slash.
-
-        Model weights are unpickled by torch.load, so fetching them over plain HTTP would
-        let anyone on the network path substitute a file that runs code when loaded.
-        Plain HTTP is accepted only for a loopback host. File paths are appended to the
-        base URL directly, so a query string or fragment would swallow them, and the
-        trailing slash is added when missing.
-        """
-        value = value.strip()
-        if not value:
-            raise ValueError("must not be empty")
-        parsed = urlparse(value)
-        if not parsed.hostname or parsed.query or parsed.fragment:
-            raise ValueError(
-                "must be an absolute URL with a host and no query string or fragment, "
-                f"got {value!r}"
-            )
-        is_local_http = parsed.scheme == "http" and parsed.hostname in _LOOPBACK_HOSTS
-        if parsed.scheme != "https" and not is_local_http:
-            raise ValueError(
-                "must be an https:// URL (plain http:// is accepted only for localhost), "
-                f"got {value!r}"
-            )
-        return value if value.endswith("/") else f"{value}/"
-
-
-_object_store = ObjectStoreSettings()
-MODEL_BASE_URL = _object_store.model_base_url
-IMAGE_BASE_URL = _object_store.image_base_url
