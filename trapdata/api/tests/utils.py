@@ -69,7 +69,9 @@ def get_test_images(
     Returns:
         List of SourceImageRequest objects with IDs and URLs
     """
-    urls = get_test_image_urls(file_server, test_images_dir, subdir, num, filenames)
+    urls = get_test_image_urls(
+        file_server, test_images_dir, subdir=subdir, num=num, filenames=filenames
+    )
     source_images = [
         SourceImageRequest(id=str(i), url=url) for i, url in enumerate(urls)
     ]

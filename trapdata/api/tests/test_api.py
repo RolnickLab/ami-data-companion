@@ -49,7 +49,11 @@ class TestInferenceAPI(TestCase):
         filenames: list[str] | None = None,
     ):
         return get_test_images(
-            self.file_server, self.test_images_dir, subdir, num, filenames
+            self.file_server,
+            self.test_images_dir,
+            subdir=subdir,
+            num=num,
+            filenames=filenames,
         )
 
     def get_test_pipeline(self, slug: str = "quebec_vermont_moths_2023"):
