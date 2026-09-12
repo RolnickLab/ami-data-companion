@@ -105,7 +105,7 @@ There are two ways to configure settings
 
 The CLI will read settings from either source, but will prioritize environment variables. The GUI only reads from `trapdata.ini`.
 
-Model weights and label maps are downloaded from the project's public object store the first time each model is used. To download them from somewhere else, such as a mirror close to a compute cluster, set `AMI_MODEL_BASE_URL` in the environment or in `.env` (and `AMI_IMAGE_BASE_URL` for the sample trap images). A value with or without a trailing slash is accepted. These two settings are not read from `trapdata.ini`.
+Model weights and label maps are downloaded from the project's public object store the first time each model is used. To download them from somewhere else, such as a mirror close to a compute cluster, set `AMI_MODEL_BASE_URL` in the environment or in `.env` (and `AMI_IMAGE_BASE_URL` for the sample trap images). The URL must use `https://`, since model weights are executed as code when loaded; plain `http://` is accepted only for a local object store on `localhost`. A value with or without a trailing slash is accepted. These two settings are not read from `trapdata.ini`.
 
 ### Example workflow
 

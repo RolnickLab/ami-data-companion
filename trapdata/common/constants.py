@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -25,6 +27,10 @@ OBJECT_STORE_BASE_URL = (
     "AUTH_3c987b8fc90743469d42899b1fdb48eb/"
 )
 
+# Hosts where a plain http:// base URL is accepted, such as a local object store used
+# during development. There is no network path to tamper with on a loopback address.
+_LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
+
 
 class ObjectStoreSettings(BaseSettings):
     """
@@ -51,11 +57,25 @@ class ObjectStoreSettings(BaseSettings):
 
     @field_validator("model_base_url", "image_base_url")
     @classmethod
-    def ensure_trailing_slash(cls, value: str) -> str:
-        """Accept a base URL with or without a trailing slash, since paths are appended directly."""
+    def validate_base_url(cls, value: str) -> str:
+        """
+        Require HTTPS, and accept a base URL with or without a trailing slash.
+
+        Model weights are unpickled by torch.load, so fetching them over plain HTTP would
+        let anyone on the network path substitute a file that runs code when loaded.
+        Plain HTTP is accepted only for a loopback host. The trailing slash is added when
+        missing because file paths are appended to the base URL directly.
+        """
         value = value.strip()
         if not value:
             raise ValueError("must not be empty")
+        parsed = urlparse(value)
+        is_local_http = parsed.scheme == "http" and parsed.hostname in _LOOPBACK_HOSTS
+        if parsed.scheme != "https" and not is_local_http:
+            raise ValueError(
+                "must be an https:// URL (plain http:// is accepted only for localhost), "
+                f"got {value!r}"
+            )
         return value if value.endswith("/") else f"{value}/"
 
 
