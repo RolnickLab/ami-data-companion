@@ -348,8 +348,8 @@ class BinaryClassifier(Resnet50ClassifierLowRes):
 class MothNonMothClassifier2022(EfficientNetClassifier, BinaryClassifier):
     name = "Moth / Non-Moth Classifier"
     description = "Trained on May 6, 2022"
-    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/moth-nonmoth-effv2b3_20220506_061527_30.pth"
-    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/05-moth-nonmoth_category_map.json"
+    weights_path = "moths/classification/moth-nonmoth-effv2b3_20220506_061527_30.pth"
+    labels_path = "moths/classification/05-moth-nonmoth_category_map.json"
     positive_binary_label = "moth"
     negative_binary_label = "nonmoth"
 
@@ -357,14 +357,8 @@ class MothNonMothClassifier2022(EfficientNetClassifier, BinaryClassifier):
 class MothNonMothClassifier(BinaryClassifier):
     name = "Moth / Non-Moth Classifier"
     description = "Trained on April 17, 2024"
-    weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "moth-nonmoth_resnet50_20240417_b4fe3efe.pth"
-    )
-    labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "05-moth-nonmoth_category_map.json"
-    )
+    weights_path = "moths/classification/" "moth-nonmoth_resnet50_20240417_b4fe3efe.pth"
+    labels_path = "moths/classification/" "05-moth-nonmoth_category_map.json"
     positive_binary_label = "moth"
     negative_binary_label = "nonmoth"
 
@@ -406,12 +400,11 @@ class QuebecVermontMothSpeciesClassifierMixedResolution(
         "Trained on February 24, 2022 using mix of low & med resolution images"
     )
     weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "moths/classification/"
         "moths_quebecvermont_resnet50_randaug_mixres_128_fev24.pth"
     )
     labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "quebec-vermont_moth-category-map_19Jan2023.json"
+        "moths/classification/" "quebec-vermont_moth-category-map_19Jan2023.json"
     )
 
 
@@ -419,52 +412,38 @@ class TuringCostaRicaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Tur
     name = "Turing Costa Rica Species Classifier"
     description = "Trained on 4th June 2024 by Turing team using Resnet50 model."
     weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "moths/classification/"
         "turing-costarica_v03_resnet50_2024-06-04-16-17_state.pt"
     )
-    labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "03_costarica_data_category_map.json"
-    )
+    labels_path = "moths/classification/" "03_costarica_data_category_map.json"
 
 
 class TuringAnguillaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
     name = "Turing Anguilla Species Classifier"
     description = "Trained on 28th June 2024 by Turing team using Resnet50 model."
     weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "turing-anguilla_v01_resnet50_2024-06-28-17-01_state.pt"
+        "moths/classification/" "turing-anguilla_v01_resnet50_2024-06-28-17-01_state.pt"
     )
-    labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "01_anguilla_data_category_map.json"
-    )
+    labels_path = "moths/classification/" "01_anguilla_data_category_map.json"
 
 
 class TuringKenyaUgandaSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
     name = "Turing Kenya and Uganda Species Classifier"
     description = "Trained on 19th November 2024 by Turing team using Resnet50 model."
     weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "moths/classification/"
         "turing-kenya-uganda_v01_resnet50_2024-11-19-18-44_state.pt"
     )
-    labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "01_kenya-uganda_data_category_map.json"
-    )
+    labels_path = "moths/classification/" "01_kenya-uganda_data_category_map.json"
 
 
 class TuringUKSpeciesClassifier(SpeciesClassifier, Resnet50Classifier_Turing):
     name = "Turing UK Species Classifier"
     description = "Trained on 13th May 2024 by Turing team using Resnet50 model."
     weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "turing-uk_v03_resnet50_2024-05-13-10-03_state.pt"
+        "moths/classification/" "turing-uk_v03_resnet50_2024-05-13-10-03_state.pt"
     )
-    labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "03_uk_data_category_map.json"
-    )
+    labels_path = "moths/classification/" "03_uk_data_category_map.json"
 
 
 class UKDenmarkMothSpeciesClassifierMixedResolution(
@@ -481,12 +460,10 @@ class UKDenmarkMothSpeciesClassifierMixedResolution(
     name = "UK & Denmark Species Classifier"
     description = "Trained on April 3, 2023 using mix of low & med resolution images."
     weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "uk-denmark-moths-mixedres-20230403_140131_30.pth"
+        "moths/classification/" "uk-denmark-moths-mixedres-20230403_140131_30.pth"
     )
     labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "01-moths-ukdenmark_v2_category_map_species_names.json"
+        "moths/classification/" "01-moths-ukdenmark_v2_category_map_species_names.json"
     )
 
 
@@ -494,13 +471,9 @@ class PanamaMothSpeciesClassifierMixedResolution(SpeciesClassifier, Resnet50Clas
     name = "Panama Species Classifier"
     description = "Trained on December 22, 2022 using a mix of low & med resolution images. 148 species."
     weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "panama_moth-model_v01_resnet50_2023-01-24-09-51.pt"
+        "moths/classification/" "panama_moth-model_v01_resnet50_2023-01-24-09-51.pt"
     )
-    labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "panama_moth-category-map_24Jan2023.json"
-    )
+    labels_path = "moths/classification/" "panama_moth-category-map_24Jan2023.json"
 
 
 class PanamaMothSpeciesClassifierMixedResolution2023(
@@ -513,12 +486,9 @@ class PanamaMothSpeciesClassifierMixedResolution2023(
     description = (
         "Trained on November 11th, 2023 using a corrected species list of 1060 classes."
     )
-    weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "panama_resetnet50_best_5aeb515a.pth"
-    )
+    weights_path = "moths/classification/" "panama_resetnet50_best_5aeb515a.pth"
     labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "moths/classification/"
         "03_moths_centralAmerica_category_map-202311110-with-names.json"
     )
 
@@ -533,14 +503,8 @@ class GlobalMothSpeciesClassifier(SpeciesClassifier, Resnet50TimmClassifier):
         "Trained on August 28th, 2024 for 29,176 species. "
         "https://wandb.ai/moth-ai/global-moth-classifier/runs/h0cuqrbc/overview"
     )
-    weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "global_resnet50_20240828_b06d3b3a.pth"
-    )
-    labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "global_category_map_with_names_20240828.json"
-    )
+    weights_path = "moths/classification/" "global_resnet50_20240828_b06d3b3a.pth"
+    labels_path = "moths/classification/" "global_category_map_with_names_20240828.json"
 
 
 class QuebecVermontMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier):
@@ -554,11 +518,10 @@ class QuebecVermontMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClas
         "https://wandb.ai/moth-ai/ami-gbif-fine-grained/runs/1x53zmp2/overview"
     )
     weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "quebec-vermont_resnet50_baseline_20240417_950de764.pth"
+        "moths/classification/" "quebec-vermont_resnet50_baseline_20240417_950de764.pth"
     )
     labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "moths/classification/"
         "01_ami-gbif_fine-grained_ne-america_category_map-with_names.json"
     )
 
@@ -574,11 +537,10 @@ class UKDenmarkMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifi
         "https://wandb.ai/moth-ai/ami-gbif-fine-grained/runs/x5u7jcbf/overview"
     )
     weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "uk-denmark_resnet50_baseline_20240417_55250a8b.pth"
+        "moths/classification/" "uk-denmark_resnet50_baseline_20240417_55250a8b.pth"
     )
     labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "moths/classification/"
         "02_ami-gbif_fine-grained_w-europe_category_map-with_names.json"
     )
 
@@ -595,11 +557,10 @@ class PanamaMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier)
     )
 
     weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
-        "panama_resnet50_baseline_20240417_edbb46dd.pth"
+        "moths/classification/" "panama_resnet50_baseline_20240417_edbb46dd.pth"
     )
     labels_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/classification/"
+        "moths/classification/"
         "03_ami-gbif_fine-grained_c-america_category_map-with_names.json"
     )
 
@@ -607,6 +568,8 @@ class PanamaMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier)
 class InsectOrderClassifier2025(SpeciesClassifier, ConvNeXtOrderClassifier):
     name = "Insect Order Classifier"
     description = "ConvNeXt-T based insect order classifier for 16 classes trained by Mila in January 2025"
-    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/insect_orders/convnext_tiny_in22k_worder0.5_wbinary0.5_run2_checkpoint.pt"
-    labels_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/insect_orders/insect_order_category_map.json"
+    weights_path = (
+        "insect_orders/convnext_tiny_in22k_worder0.5_wbinary0.5_run2_checkpoint.pt"
+    )
+    labels_path = "insect_orders/insect_order_category_map.json"
     default_taxon_rank = "ORDER"

@@ -54,6 +54,28 @@ def get_device(device_str=None) -> torch.device:
     return device
 
 
+def resolve_model_url(path: str | None, base_url: str | None = None) -> str | None:
+    """
+    Return the location to fetch a model's weights or label map from.
+
+    Model classes give their files as paths relative to the model store, such as
+    "moths/classification/weights.pth". Those are joined to the configured
+    model_base_url (AMI_MODEL_BASE_URL), so a deployment can serve every model from a
+    mirror. A full URL or an absolute local path is returned unchanged, for files hosted
+    elsewhere or placed on disk by hand.
+    """
+    if not path:
+        return path
+    if urlparse(path).scheme or os.path.isabs(path):
+        return path
+    if base_url is None:
+        # Imported here to avoid a circular import: trapdata.settings imports the models.
+        from trapdata.settings import read_settings
+
+        base_url = read_settings().model_base_url
+    return f"{base_url}{path}"
+
+
 def get_or_download_file(
     path_or_url, destination_dir=None, prefix=None, suffix=None
 ) -> pathlib.Path:

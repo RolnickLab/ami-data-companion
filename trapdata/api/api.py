@@ -12,6 +12,7 @@ import pydantic
 from fastapi.middleware.gzip import GZipMiddleware
 
 from ..common.logs import logger  # noqa: F401
+from ..ml.utils import resolve_model_url
 from . import settings
 from .models.classification import (
     APIMothClassifier,
@@ -96,7 +97,7 @@ def make_category_map_response(
     return AlgorithmCategoryMapResponse(
         data=categories_sorted_by_index,
         labels=label_strings_sorted_by_index,
-        uri=model.labels_path,
+        uri=resolve_model_url(model.labels_path),
     )
 
 
@@ -110,7 +111,7 @@ def make_algorithm_response(
         task_type=model.task_type,
         description=model.description,
         category_map=category_map,
-        uri=model.weights_path,
+        uri=resolve_model_url(model.weights_path),
     )
 
 
@@ -124,7 +125,7 @@ def make_algorithm_config_response(
         task_type=model.task_type,
         description=model.description,
         category_map=category_map,
-        uri=model.weights_path,
+        uri=resolve_model_url(model.weights_path),
     )
 
 

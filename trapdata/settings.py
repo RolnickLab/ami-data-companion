@@ -3,6 +3,7 @@ import pathlib
 import sys
 from functools import lru_cache
 from typing import Optional, Union
+from urllib.parse import urlparse
 
 import pydantic
 import sqlalchemy
@@ -11,8 +12,41 @@ from pydantic_settings import BaseSettings
 from rich import print as rprint
 
 from trapdata import ml
+from trapdata.common import constants
 from trapdata.common.filemanagement import default_database_dsn, get_app_dir
 from trapdata.common.schemas import FilePath
+
+# Hosts where a plain http:// download base URL is accepted, such as a local object store
+# used during development. There is no network path to tamper with on a loopback address.
+_LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+
+def validate_object_store_base_url(value: str) -> str:
+    """
+    Check a model or image download base URL, and add a trailing slash if missing.
+
+    The URL must use HTTPS: model weights are unpickled by torch.load, so fetching them
+    over plain HTTP would let anyone on the network path substitute a file that runs
+    code when loaded. Plain HTTP is accepted only for a loopback host. File paths are
+    appended to the base URL directly, so it must have a host and no query string or
+    fragment.
+    """
+    value = value.strip()
+    if not value:
+        raise ValueError("must not be empty")
+    parsed = urlparse(value)
+    if not parsed.hostname or parsed.query or parsed.fragment:
+        raise ValueError(
+            "must be an absolute URL with a host and no query string or fragment, "
+            f"got {value!r}"
+        )
+    is_local_http = parsed.scheme == "http" and parsed.hostname in _LOOPBACK_HOSTS
+    if parsed.scheme != "https" and not is_local_http:
+        raise ValueError(
+            "must be an https:// URL (plain http:// is accepted only for localhost), "
+            f"got {value!r}"
+        )
+    return value if value.endswith("/") else f"{value}/"
 
 
 class Settings(BaseSettings):
@@ -43,6 +77,12 @@ class Settings(BaseSettings):
     antenna_service_name: str = "AMI Data Companion"
     antenna_api_batch_size: int = 24
 
+    # Where model weights and sample trap images are downloaded from. Model classes give
+    # their files as paths relative to model_base_url; see resolve_model_url in
+    # trapdata/ml/utils.py.
+    model_base_url: str = f"{constants.OBJECT_STORE_BASE_URL}ami-models/"
+    image_base_url: str = f"{constants.OBJECT_STORE_BASE_URL}ami-trapdata/"
+
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
         """
@@ -60,11 +100,16 @@ class Settings(BaseSettings):
     def validate_database_dsn(cls, v):
         return sqlalchemy.engine.url.make_url(v)
 
+    @pydantic.field_validator("model_base_url", "image_base_url")
+    def validate_base_url(cls, v):
+        return validate_object_store_base_url(v)
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         env_prefix = "ami_"
         extra = "ignore"
+        protected_namespaces = ()
 
         fields = {
             "image_base_path": {
