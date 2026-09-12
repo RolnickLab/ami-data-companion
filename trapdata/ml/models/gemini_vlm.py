@@ -4,8 +4,12 @@ Pure Gemini 3-Flash species classifier for moth identification.
 Uses Gemini VLM to directly classify moth species without a learned head.
 Suitable for rapid iteration and novel species not in training data.
 
-Set AMI_OPENROUTER_API_KEY to use.
-Set AMI_GEMINI_VLM_MODEL to override model (default: google/gemini-3-flash-preview).
+Configuration via environment variables or config file:
+- AMI_OPENROUTER_API_KEY: Required. OpenRouter API key.
+- AMI_GEMINI_VLM_LABELS: Required. Path to label_map.json file.
+- AMI_GEMINI_VLM_MODEL: Optional. Model override (default: google/gemini-3-flash-preview).
+
+Or create ~/.config/ami/gemini_vlm.json with these settings.
 """
 
 import base64
@@ -19,6 +23,7 @@ import torchvision
 from trapdata.common.logs import logger
 from trapdata.ml.models.base import InferenceBaseClass
 from trapdata.ml.models.bioclip import BACKBONE, BioCLIPWithLinearHead
+from trapdata.ml.models.gemini_config import get_gemini_config
 
 import numpy as np
 import urllib.request
@@ -51,15 +56,7 @@ class GeminiVLMOnlyNewfoundland749(InferenceBaseClass):
         "Queries a list of candidate species and returns the model's choice ranked with confidence."
     )
 
-    # Labels path: JSON file with species names indexed by class
-    labels_path = os.environ.get(
-        "AMI_GEMINI_VLM_LABELS",
-        "/home/debian/bioclip-distill-leps/nf_deploy/label_map.json"
-    )
-
-    # API configuration
-    api_key = os.environ.get("AMI_OPENROUTER_API_KEY", "")
-    model = os.environ.get("AMI_GEMINI_VLM_MODEL", "google/gemini-3-flash-preview")
+    # Configuration from environment or config file
     api_url = "https://openrouter.ai/api/v1/chat/completions"
     timeout = 120
     max_tokens = 200
@@ -72,6 +69,13 @@ class GeminiVLMOnlyNewfoundland749(InferenceBaseClass):
 
     _label_map_cache: dict = {}
     _category_map_cache: dict = {}
+
+    def __init__(self):
+        """Initialize classifier with config from environment or config file."""
+        config = get_gemini_config()
+        self.api_key = config["api_key"]
+        self.model = config["model"]
+        self.labels_path = config["labels_path"]
 
     def _load_label_map(self) -> dict:
         """Load species name mapping: {index_str: {name, gbif_key, ...}}"""
