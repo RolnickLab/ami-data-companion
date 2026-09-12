@@ -259,7 +259,12 @@ class TestProcessJobIntegration(TestCase):
         settings.antenna_api_auth_token = "test-token"
         settings.antenna_api_batch_size = 2
         settings.num_workers = 0  # Disable multiprocessing for tests
-        settings.localization_batch_size = 2  # Real integer for batch processing
+        # Numeric settings need real numbers. A bare MagicMock attribute returns
+        # another MagicMock, which raises TypeError once the worker compares it
+        # against an int -- far from here, and surfacing only as results that
+        # never got posted.
+        settings.localization_batch_size = 2
+        settings.antenna_result_post_max_bytes = 25 * 1024 * 1024
         return settings
 
     def test_empty_queue(self):
@@ -420,7 +425,10 @@ class TestWorkerEndToEnd(TestCase):
         settings.antenna_api_auth_token = "test-token"
         settings.antenna_api_batch_size = 2
         settings.num_workers = 0
-        settings.localization_batch_size = 2  # Real integer for batch processing
+        # See the note on the matching helper above: numeric settings need real
+        # numbers or the worker fails deep in the call with a TypeError.
+        settings.localization_batch_size = 2
+        settings.antenna_result_post_max_bytes = 25 * 1024 * 1024
         return settings
 
     def test_full_workflow_with_real_inference(self):

@@ -465,7 +465,10 @@ def _process_job(
             if not classifier:
                 classifier = classifier_class(source_images=[], detections=[])
                 detector = APIMothDetector([])
-                result_poster = ResultPoster(max_pending=MAX_PENDING_POSTS)
+                result_poster = ResultPoster(
+                    max_pending=MAX_PENDING_POSTS,
+                    max_post_bytes=settings.antenna_result_post_max_bytes,
+                )
 
                 if use_binary_filter:
                     binary_filter = MothClassifierBinary(
