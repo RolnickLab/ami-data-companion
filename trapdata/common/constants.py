@@ -59,17 +59,23 @@ class ObjectStoreSettings(BaseSettings):
     @classmethod
     def validate_base_url(cls, value: str) -> str:
         """
-        Require HTTPS, and accept a base URL with or without a trailing slash.
+        Require an HTTPS URL made of a host and a path, with or without a trailing slash.
 
         Model weights are unpickled by torch.load, so fetching them over plain HTTP would
         let anyone on the network path substitute a file that runs code when loaded.
-        Plain HTTP is accepted only for a loopback host. The trailing slash is added when
-        missing because file paths are appended to the base URL directly.
+        Plain HTTP is accepted only for a loopback host. File paths are appended to the
+        base URL directly, so a query string or fragment would swallow them, and the
+        trailing slash is added when missing.
         """
         value = value.strip()
         if not value:
             raise ValueError("must not be empty")
         parsed = urlparse(value)
+        if not parsed.hostname or parsed.query or parsed.fragment:
+            raise ValueError(
+                "must be an absolute URL with a host and no query string or fragment, "
+                f"got {value!r}"
+            )
         is_local_http = parsed.scheme == "http" and parsed.hostname in _LOOPBACK_HOSTS
         if parsed.scheme != "https" and not is_local_http:
             raise ValueError(

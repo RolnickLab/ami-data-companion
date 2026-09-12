@@ -89,6 +89,21 @@ def test_plain_http_is_accepted_for_a_loopback_host(monkeypatch, value):
     assert settings.model_base_url == value.rstrip("/") + "/"
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "https:///ami-models/",
+        "https://mirror.example.org/ami-models/?token=abc",
+        "https://mirror.example.org/ami-models/#models",
+    ],
+)
+def test_url_without_host_or_with_query_is_rejected(monkeypatch, value):
+    """File paths are appended to the base URL, so it must be a plain host and path."""
+    monkeypatch.setenv("AMI_MODEL_BASE_URL", value)
+    with pytest.raises(ValidationError):
+        ObjectStoreSettings(_env_file=None)
+
+
 @pytest.mark.parametrize("module_path", MODEL_MODULES, ids=lambda p: p.name)
 def test_model_modules_do_not_hardcode_the_host(module_path):
     """Writing out the host in a model module would bypass a deployment's override."""
