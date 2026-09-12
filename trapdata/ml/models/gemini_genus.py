@@ -88,7 +88,8 @@ class GeminiGenusChecker:
             headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
         )
         try:
-            response = json.load(urllib.request.urlopen(request, timeout=self.timeout))
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                response = json.load(response)
         except Exception as exc:
             logger.warning(f"Gemini genus check failed: {type(exc).__name__}: {exc}")
             return None, ""

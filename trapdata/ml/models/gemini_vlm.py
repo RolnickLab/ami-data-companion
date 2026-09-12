@@ -123,10 +123,11 @@ class GeminiVLMOnlyNewfoundland749(InferenceBaseClass):
         return base64.b64encode(buffer.getvalue()).decode()
 
     def _get_species_candidates(self, species_names: list[str], top_k: int = 20) -> list[str]:
-        """Return top candidates for the prompt (to reduce API context)."""
+        """Return random sample of candidates for the prompt (to reduce API context)."""
+        import random
         if len(species_names) <= top_k:
             return species_names
-        return sorted(species_names)[:top_k]
+        return random.sample(species_names, top_k)
 
     def _call_gemini(self, image_b64: str, candidates: list[str]) -> tuple[str | None, str]:
         """
@@ -180,7 +181,8 @@ class GeminiVLMOnlyNewfoundland749(InferenceBaseClass):
         )
 
         try:
-            response = json.load(urllib.request.urlopen(request, timeout=self.timeout))
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                response = json.load(response)
         except Exception as exc:
             logger.warning(f"Gemini VLM API call failed: {type(exc).__name__}: {exc}")
             return None, ""
