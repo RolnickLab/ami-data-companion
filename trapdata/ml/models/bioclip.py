@@ -115,9 +115,8 @@ class BioCLIPNewfoundland749(BioCLIPLogRegClassifier):
     weights_path = os.environ.get(
         "AMI_BIOCLIP_NF_HEAD", "/mnt/melabbas/antenna-nf-species/head_749_session.npz"
     )
-    labels_path = os.environ.get(
-        "AMI_BIOCLIP_NF_LABELS", "/home/debian/bioclip-distill-leps/nf_deploy/label_map.json"
-    )
+    # Labels path now configurable via environment variable only
+    labels_path = os.environ.get("AMI_BIOCLIP_NF_LABELS")
 
     _label_map_cache: dict = {}
 
