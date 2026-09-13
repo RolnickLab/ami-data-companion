@@ -81,7 +81,7 @@ def test_empty_value_is_rejected(monkeypatch):
     ],
 )
 def test_non_https_remote_url_is_rejected(monkeypatch, env_var, value):
-    """Weights are unpickled on load, so a remote mirror must be reached over HTTPS."""
+    """A remote store must be reached over HTTPS, so downloads cannot be swapped."""
     monkeypatch.setenv(env_var, value)
     with pytest.raises(ValidationError):
         make_settings()
@@ -125,6 +125,9 @@ def test_relative_model_path_is_joined_to_base_url():
     "path",
     [
         "https://elsewhere.example.org/models/weights.pth",
+        # A pre-signed URL carries its credentials in the query string, which must survive.
+        "https://elsewhere.example.org/models/weights.pth?X-Amz-Signature=abc&X-Amz-Expires=1",
+        "http://localhost:9000/models/weights.pth",
         "/srv/models/weights.pth",
         None,
     ],
@@ -132,6 +135,19 @@ def test_relative_model_path_is_joined_to_base_url():
 def test_full_url_absolute_path_or_none_is_unchanged(path):
     """Files hosted elsewhere or placed on disk by hand are used as given."""
     assert resolve_model_url(path, base_url=MIRROR) == path
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "http://elsewhere.example.org/models/weights.pth",
+        "ftp://elsewhere.example.org/models/weights.pth",
+    ],
+)
+def test_full_url_in_model_path_must_use_https(path):
+    """The HTTPS rule for the base URL applies to a model that names a full URL too."""
+    with pytest.raises(ValueError):
+        resolve_model_url(path, base_url=MIRROR)
 
 
 @pytest.mark.usefixtures("fresh_settings_cache")

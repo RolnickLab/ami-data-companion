@@ -14,6 +14,7 @@ from rich import print as rprint
 from trapdata import ml
 from trapdata.common.filemanagement import default_database_dsn, get_app_dir
 from trapdata.common.schemas import FilePath
+from trapdata.ml.utils import check_download_url_scheme
 
 # Default location of the public object store that holds most of the project's model
 # weights, label maps and sample trap images. It is only the default for the
@@ -25,20 +26,14 @@ DEFAULT_OBJECT_STORE_URL = (
     "AUTH_3c987b8fc90743469d42899b1fdb48eb/"
 )
 
-# Hosts where a plain http:// download base URL is accepted, such as a local object store
-# used during development. There is no network path to tamper with on a loopback address.
-_LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
-
 
 def validate_object_store_base_url(value: str) -> str:
     """
     Check a model or image download base URL, and add a trailing slash if missing.
 
-    The URL must use HTTPS: model weights are unpickled by torch.load, so fetching them
-    over plain HTTP would let anyone on the network path substitute a file that runs
-    code when loaded. Plain HTTP is accepted only for a loopback host. File paths are
-    appended to the base URL directly, so it must have a host and no query string or
-    fragment.
+    File paths are appended to the base URL directly, so it must have a host and no
+    query string or fragment. It must also use HTTPS, or HTTP on a loopback host, for
+    the reason given on check_download_url_scheme.
     """
     value = value.strip()
     if not value:
@@ -49,12 +44,7 @@ def validate_object_store_base_url(value: str) -> str:
             "must be an absolute URL with a host and no query string or fragment, "
             f"got {value!r}"
         )
-    is_local_http = parsed.scheme == "http" and parsed.hostname in _LOOPBACK_HOSTS
-    if parsed.scheme != "https" and not is_local_http:
-        raise ValueError(
-            "must be an https:// URL (plain http:// is accepted only for localhost), "
-            f"got {value!r}"
-        )
+    check_download_url_scheme(value)
     return value if value.endswith("/") else f"{value}/"
 
 
