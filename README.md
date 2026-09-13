@@ -79,7 +79,7 @@ uv run ami test all
 - The cropped images, reports, cached models & local database are stored in the "user data" directory which can be changed in the Settings panel. By default, the user data directory is in one of the locations below, You
 
   macOS:
-  `/Library/Application Support/trapdata/`
+  `~/Library/Application Support/trapdata/`
 
   Linux:
   `~/.config/trapdata`
@@ -105,7 +105,7 @@ There are two ways to configure settings
 
 The CLI will read settings from either source, but will prioritize environment variables. The GUI only reads from `trapdata.ini`.
 
-Model weights and label maps are downloaded from the project's public object store the first time each model is used. To download them from somewhere else, such as a mirror close to a compute cluster, set `AMI_MODEL_BASE_URL` in the environment or in `.env` (and `AMI_IMAGE_BASE_URL` for the sample trap images). The URL must use `https://`, since model weights are executed as code when loaded; plain `http://` is accepted only for a local object store on `localhost`. A value with or without a trailing slash is accepted.
+Model weights and label maps are downloaded the first time each model is used. Most of the project's models are kept in the project's public object store, and their model classes name files by a path relative to it, so one setting decides where all of them come from. To download them from somewhere else, such as an object store on the same network as a compute cluster, set `AMI_MODEL_BASE_URL` in the environment or in `.env` (and `AMI_IMAGE_BASE_URL` for the sample trap images). The URL must use `https://`, so that a download cannot be swapped in transit; plain `http://` is accepted only for a local object store on `localhost`. A value with or without a trailing slash is accepted.
 
 ### Example workflow
 
@@ -191,7 +191,7 @@ A script is available in the repo source to run the commands above.
 
 1. Create a new inference class in `trapdata/ml/models/classification.py` or `trapdata/ml/models/localization.py`. All models inherit from `InferenceBaseClass`, but there are more specific classes for classification and localization and different architectures. Choose the appropriate class to inherit from. It's best to copy an existing inference class that is similar to the new model you are adding.
 
-2. Upload your model weights and category map to a cloud storage service and make sure the file is publicly accessible via a URL. For files hosted in the project's object store, set `weights_path` and `labels_path` to paths relative to the store, such as `moths/classification/<file>.pth`, rather than full URLs. They are joined to `AMI_MODEL_BASE_URL` when the model is loaded, so a deployment's override also applies to your model. A full URL is used as-is, for files hosted elsewhere. The weights will be downloaded the first time the model is run. Alternatively, you can manually add the model weights to the configured `USER_DATA_PATH` directory under the subdir `USER_DATA_PATH/models/` (on macOS this is `~/Library/Application Support/trapdata/models`). However the model will not be available to other users unless they also manually add the model weights. The category map json file is simply a dict of species names and their indexes in your model's last layer. See the existing category maps for examples.
+2. Upload your model weights and category map somewhere publicly reachable over HTTPS, such as the project's object store or Hugging Face. For files in the project's object store, set `weights_path` and `labels_path` to paths relative to it, such as `moths/classification/<file>.pth`. They are joined to `AMI_MODEL_BASE_URL` when the model is loaded, so a deployment that sets that variable gets your model from the same place as all the others. For files hosted anywhere else, give the full `https://` URL and it is used as-is. The files are downloaded the first time the model is run. Alternatively, place the files in the local model cache yourself, named exactly as the last part of their URL (for example `fasterrcnn_resnet50_fpn_tz53qv9v.pt`); a file already there is used without downloading. The desktop app and the `ami` pipeline commands look in `USER_DATA_PATH/models/` (on macOS `~/Library/Application Support/trapdata/models`). The API server and the Antenna worker look in PyTorch's cache instead: `$TORCH_HOME/hub/models/`, by default `~/.cache/torch/hub/models/`. A model added this way is not available to other users unless they also add the files by hand. The category map json file is simply a dict of species names and their indexes in your model's last layer. See the existing category maps for examples.
 
 3. Select your model in the GUI settings or set the `SPECIES_CLASSIFICATION_MODEL` setting. If the model inherits from `SpeciesClassifier` class, it will automatically become one of the valid choices.
 
@@ -243,7 +243,7 @@ AMI_ANTENNA_API_BASE_URL=https://antenna.insectai.org/api/v2  # Or your Antenna 
 AMI_ANTENNA_API_AUTH_TOKEN=your_token_here
 AMI_ANTENNA_API_BATCH_SIZE=4
 AMI_NUM_WORKERS=2  # Safe for REST API (atomic task dequeue)
-# AMI_MODEL_BASE_URL=https://mirror.example.org/ami-models/  # Optional: download model weights from a mirror
+# AMI_MODEL_BASE_URL=https://models.example.org/ami-models/  # Optional: download model weights from another object store
 ```
 
 **Register pipelines (optional):**
