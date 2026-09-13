@@ -145,9 +145,12 @@ def test_full_url_absolute_path_or_none_is_unchanged(path):
     [
         "http://elsewhere.example.org/models/weights.pth",
         "ftp://elsewhere.example.org/models/weights.pth",
+        # A scheme with no host is not a URL the downloader can fetch; it must not fall
+        # through and be treated as a local path.
+        "https:weights.pth",
     ],
 )
-def test_full_url_in_model_path_must_use_https(path):
+def test_insecure_or_malformed_full_url_in_model_path_is_rejected(path):
     """The HTTPS rule for the base URL applies to a model that names a full URL too."""
     with pytest.raises(ValueError):
         resolve_model_url(path, base_url=OTHER_STORE)
@@ -191,22 +194,33 @@ def test_cached_file_named_after_the_url_is_used_without_downloading(
     assert local_path == cache_dir / "weights.pth"
 
 
+class FakeResponse:
+    """Stand-in for a streamed requests.Response, with the redirect chain it followed."""
+
+    def __init__(self, url, history=()):
+        self.url = url
+        self.history = [FakeResponse(hop) for hop in history]
+        self.closed = False
+
+    def raise_for_status(self):
+        pass
+
+    def iter_content(self, chunk_size):
+        yield b"weights"
+
+    def close(self):
+        self.closed = True
+
+
 def test_model_file_is_downloaded_from_the_configured_store_into_the_cache(
     tmp_path, monkeypatch
 ):
     """The joined URL is what gets requested, and the file lands in the models cache."""
     requested = []
 
-    class FakeResponse:
-        def raise_for_status(self):
-            pass
-
-        def iter_content(self, chunk_size):
-            yield b"weights"
-
     def fake_get(url, **kwargs):
         requested.append(url)
-        return FakeResponse()
+        return FakeResponse(url)
 
     monkeypatch.setattr("trapdata.ml.utils.requests.get", fake_get)
 
@@ -215,6 +229,34 @@ def test_model_file_is_downloaded_from_the_configured_store_into_the_cache(
 
     assert requested == [f"{OTHER_STORE}moths/classification/weights.pth"]
     assert local_path == tmp_path / "models" / "weights.pth"
+    assert local_path.read_bytes() == b"weights"
+
+
+def test_download_that_redirects_to_plain_http_is_refused(tmp_path, monkeypatch):
+    """
+    An HTTPS URL that redirects to plain HTTP loses the protection HTTPS gives against
+    a swapped file, so the download is refused and nothing is written to the cache.
+    """
+    url = f"{OTHER_STORE}moths/classification/weights.pth"
+    downgraded = "http://elsewhere.example.org/moths/classification/weights.pth"
+    response = FakeResponse(downgraded, history=[url])
+    monkeypatch.setattr("trapdata.ml.utils.requests.get", lambda *a, **kw: response)
+
+    with pytest.raises(ValueError, match="redirected to a plain http://"):
+        get_or_download_file(url, tmp_path, prefix="models")
+
+    assert response.closed
+    assert not (tmp_path / "models" / "weights.pth").exists()
+
+
+def test_download_that_redirects_within_https_is_accepted(tmp_path, monkeypatch):
+    """A redirect between HTTPS URLs, as object stores and Hugging Face do, is fine."""
+    url = f"{OTHER_STORE}moths/classification/weights.pth"
+    response = FakeResponse("https://cdn.example.org/weights.pth", history=[url])
+    monkeypatch.setattr("trapdata.ml.utils.requests.get", lambda *a, **kw: response)
+
+    local_path = get_or_download_file(url, tmp_path, prefix="models")
+
     assert local_path.read_bytes() == b"weights"
 
 

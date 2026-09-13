@@ -68,6 +68,8 @@ def check_download_url_scheme(url: str) -> None:
     still replace a model with a different one. HTTPS keeps the download intact.
     """
     parsed = urlparse(url)
+    if not parsed.hostname:
+        raise ValueError(f"must be an absolute URL with a host, got {url!r}")
     is_local_http = parsed.scheme == "http" and parsed.hostname in LOOPBACK_HOSTS
     if parsed.scheme != "https" and not is_local_http:
         raise ValueError(
@@ -164,6 +166,17 @@ def get_or_download_file(
             headers = {"User-Agent": USER_AGENT}
             response = requests.get(path_or_url, stream=True, headers=headers)
             response.raise_for_status()  # Raise an exception for HTTP errors
+
+            # A redirect must not downgrade an HTTPS download to plain HTTP, or the
+            # protection the HTTPS URL gives against a swapped file is lost in transit.
+            if path_or_url.startswith("https://"):
+                for hop in [*response.history, response]:
+                    if not hop.url.startswith("https://"):
+                        response.close()
+                        raise ValueError(
+                            f"Refusing to download {path_or_url}: it redirected to a "
+                            f"plain http:// URL, {hop.url}"
+                        )
 
             with open(local_filepath, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
