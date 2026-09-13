@@ -12,9 +12,18 @@ from pydantic_settings import BaseSettings
 from rich import print as rprint
 
 from trapdata import ml
-from trapdata.common import constants
 from trapdata.common.filemanagement import default_database_dsn, get_app_dir
 from trapdata.common.schemas import FilePath
+
+# Default location of the public object store that holds most of the project's model
+# weights, label maps and sample trap images. It is only the default for the
+# model_base_url and image_base_url settings below; any deployment can point those
+# elsewhere. The Swift path form is used because the equivalent S3 path form puts a
+# "<tenant>:" prefix on the bucket name, and the colon trips some URL parsers and caches.
+DEFAULT_OBJECT_STORE_URL = (
+    "https://object-arbutus.alliancecan.ca/swift/v1/"
+    "AUTH_3c987b8fc90743469d42899b1fdb48eb/"
+)
 
 # Hosts where a plain http:// download base URL is accepted, such as a local object store
 # used during development. There is no network path to tamper with on a loopback address.
@@ -80,8 +89,8 @@ class Settings(BaseSettings):
     # Where model weights and sample trap images are downloaded from. Model classes give
     # their files as paths relative to model_base_url; see resolve_model_url in
     # trapdata/ml/utils.py.
-    model_base_url: str = f"{constants.OBJECT_STORE_BASE_URL}ami-models/"
-    image_base_url: str = f"{constants.OBJECT_STORE_BASE_URL}ami-trapdata/"
+    model_base_url: str = f"{DEFAULT_OBJECT_STORE_URL}ami-models/"
+    image_base_url: str = f"{DEFAULT_OBJECT_STORE_URL}ami-trapdata/"
 
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):

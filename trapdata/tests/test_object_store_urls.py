@@ -14,12 +14,13 @@ import pathlib
 import pytest
 from pydantic import ValidationError
 
-from trapdata.common import constants
+import trapdata.settings
 from trapdata.ml.utils import resolve_model_url
-from trapdata.settings import Settings, read_settings
+from trapdata.settings import DEFAULT_OBJECT_STORE_URL, Settings, read_settings
 
+PACKAGE_DIR = pathlib.Path(trapdata.settings.__file__).parent
 MODEL_MODULES = [
-    pathlib.Path(constants.__file__).parents[1] / "ml" / "models" / name
+    PACKAGE_DIR / "ml" / "models" / name
     for name in ("classification.py", "localization.py")
 ]
 MIRROR = "https://mirror.example.org/ami-models/"
@@ -42,8 +43,8 @@ def test_defaults_point_at_public_object_store(monkeypatch):
     monkeypatch.delenv("AMI_MODEL_BASE_URL", raising=False)
     monkeypatch.delenv("AMI_IMAGE_BASE_URL", raising=False)
     settings = make_settings()
-    assert settings.model_base_url == f"{constants.OBJECT_STORE_BASE_URL}ami-models/"
-    assert settings.image_base_url == f"{constants.OBJECT_STORE_BASE_URL}ami-trapdata/"
+    assert settings.model_base_url == f"{DEFAULT_OBJECT_STORE_URL}ami-models/"
+    assert settings.image_base_url == f"{DEFAULT_OBJECT_STORE_URL}ami-trapdata/"
 
 
 def test_environment_overrides_default(monkeypatch):
