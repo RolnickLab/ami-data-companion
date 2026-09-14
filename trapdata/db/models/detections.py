@@ -337,8 +337,12 @@ def save_detected_objects(
         timestamp = datetime.datetime.now()
         orm_objects = []
 
+        # Pair each image_id with its corresponding detected_objects_data
+        images_by_id = {img.id: img for img in images}
+
         # Process all images and create objects
-        for image, detected_objects in zip(images, detected_objects_data):
+        for image_id, detected_objects in zip(image_ids, detected_objects_data):
+            image = images_by_id[image_id]
             # Collect existing objects for bulk delete instead of individual deletes
             if (
                 delete_existing
