@@ -54,20 +54,63 @@ def get_device(device_str=None) -> torch.device:
     return device
 
 
+# Hosts where a plain http:// download URL is accepted, such as a local object store used
+# during development. There is no network path to tamper with on a loopback address.
+LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+
+def check_download_url_scheme(url: str) -> None:
+    """
+    Raise ValueError unless a download URL uses HTTPS, or plain HTTP on a loopback host.
+
+    Model weights are loaded with weights_only=True, so a swapped file cannot run code
+    when it is loaded, but anyone on the network path of a plain HTTP download could
+    still replace a model with a different one. HTTPS keeps the download intact.
+    """
+    parsed = urlparse(url)
+    if not parsed.hostname:
+        raise ValueError(f"must be an absolute URL with a host, got {url!r}")
+    is_local_http = parsed.scheme == "http" and parsed.hostname in LOOPBACK_HOSTS
+    if parsed.scheme != "https" and not is_local_http:
+        raise ValueError(
+            "must be an https:// URL (plain http:// is accepted only for localhost), "
+            f"got {url!r}"
+        )
+
+
 def resolve_model_url(path: str | None, base_url: str | None = None) -> str | None:
     """
     Return the location to fetch a model's weights or label map from.
 
-    Model classes give their files as paths relative to the model store, such as
-    "moths/classification/weights.pth". Those are joined to the configured
-    model_base_url (AMI_MODEL_BASE_URL), so a deployment can serve every model from a
-    mirror. A full URL or an absolute local path is returned unchanged, for files hosted
-    elsewhere or placed on disk by hand.
+    Model classes name their files in one of three ways. A path relative to the model
+    store, such as "moths/classification/weights.pth", is joined to the configured
+    model_base_url (AMI_MODEL_BASE_URL); most of the project's models are named this
+    way, so one setting moves all of them. A full URL, for a file hosted anywhere else,
+    is returned unchanged after checking that it uses HTTPS (or HTTP on localhost). An
+    absolute local path is returned unchanged.
+
+    >>> store = "https://models.example.org/ami/"
+    >>> resolve_model_url("moths/classification/weights.pth", base_url=store)
+    'https://models.example.org/ami/moths/classification/weights.pth'
+    >>> hosted = "https://huggingface.co/some-org/some-model/resolve/main/weights.pth"
+    >>> resolve_model_url(hosted, base_url=store) == hosted
+    True
+    >>> resolve_model_url("/data/models/weights.pth", base_url=store)
+    '/data/models/weights.pth'
     """
     if not path:
         return path
-    if urlparse(path).scheme or os.path.isabs(path):
+    if os.path.isabs(path):
         return path
+    scheme = urlparse(path).scheme
+    if scheme in ("http", "https"):
+        check_download_url_scheme(path)
+        return path
+    if scheme:
+        raise ValueError(
+            f"Model files must be an https:// URL, an absolute local path, or a path "
+            f"relative to the model store, got {path!r}"
+        )
     if base_url is None:
         # Imported here to avoid a circular import: trapdata.settings imports the models.
         from trapdata.settings import read_settings
@@ -123,6 +166,17 @@ def get_or_download_file(
             headers = {"User-Agent": USER_AGENT}
             response = requests.get(path_or_url, stream=True, headers=headers)
             response.raise_for_status()  # Raise an exception for HTTP errors
+
+            # A redirect must not downgrade an HTTPS download to plain HTTP, or the
+            # protection the HTTPS URL gives against a swapped file is lost in transit.
+            if path_or_url.startswith("https://"):
+                for hop in [*response.history, response]:
+                    if not hop.url.startswith("https://"):
+                        response.close()
+                        raise ValueError(
+                            f"Refusing to download {path_or_url}: it redirected to a "
+                            f"plain http:// URL, {hop.url}"
+                        )
 
             with open(local_filepath, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):

@@ -220,7 +220,9 @@ class MothObjectDetector_FasterRCNN_2021(ObjectDetector):
             )
         )
         logger.debug(f"Loading weights: {self.weights}")
-        checkpoint = torch.load(self.weights, map_location=self.device)
+        checkpoint = torch.load(
+            self.weights, map_location=self.device, weights_only=True
+        )
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model = model.to(self.device)
@@ -263,7 +265,9 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
             weights=None,
             box_detections_per_img=self.box_detections_per_img,
         )
-        checkpoint = torch.load(self.weights, map_location=self.device)
+        checkpoint = torch.load(
+            self.weights, map_location=self.device, weights_only=True
+        )
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model = model.to(self.device)
@@ -319,7 +323,9 @@ class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
             rpn_score_thresh=0.05,
             box_detections_per_img=self.box_detections_per_img,
         )
-        checkpoint = torch.load(self.weights, map_location=self.device)
+        checkpoint = torch.load(
+            self.weights, map_location=self.device, weights_only=True
+        )
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model = model.to(self.device)
