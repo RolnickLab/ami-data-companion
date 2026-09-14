@@ -4,7 +4,7 @@ from typing import Annotated
 
 import typer
 
-from trapdata.api.api import CLASSIFIER_CHOICES
+from trapdata.api.api import select_pipelines
 
 cli = typer.Typer(help="Antenna worker commands for remote processing")
 
@@ -17,7 +17,8 @@ def run(
         typer.Option(
             "--pipeline",
             help="Pipeline to use for processing (e.g., moth_binary, panama_moths_2024). Can be specified multiple times. "
-            "Defaults to all pipelines if not specified.",
+            "Defaults to the pipelines in the AMI_PIPELINES setting, or to all "
+            "pipelines if that is not set.",
         ),
     ] = None,
 ):
@@ -30,18 +31,11 @@ def run(
     if ctx.invoked_subcommand is not None:
         return
 
-    if not pipelines:
-        pipelines = list(CLASSIFIER_CHOICES.keys())
-
-    # Validate that each pipeline is in CLASSIFIER_CHOICES
-    invalid_pipelines = [
-        pipeline for pipeline in pipelines if pipeline not in CLASSIFIER_CHOICES.keys()
-    ]
-
-    if invalid_pipelines:
-        raise typer.BadParameter(
-            f"Invalid pipeline(s): {', '.join(invalid_pipelines)}. Must be one of: {', '.join(CLASSIFIER_CHOICES.keys())}"
-        )
+    # Pipelines given with --pipeline take precedence over the AMI_PIPELINES setting.
+    try:
+        pipelines = list(select_pipelines(pipelines or None))
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
 
     from trapdata.antenna.worker import run_worker
 

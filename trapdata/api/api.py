@@ -73,6 +73,32 @@ _classifier_choices = dict(
 PipelineChoice = enum.Enum("PipelineChoice", _classifier_choices)
 
 
+def select_pipelines(
+    slugs: list[str] | None = None,
+) -> dict[str, type[APIMothClassifier]]:
+    """
+    Return the pipelines this service offers, keyed by slug.
+
+    Offering a pipeline means loading its models, which takes time and memory, so a
+    deployment can offer a subset. The slugs come from the argument when one is given,
+    such as the worker's --pipeline option, and otherwise from the AMI_PIPELINES
+    setting, a comma-separated list. When neither names a pipeline, every pipeline in
+    CLASSIFIER_CHOICES is offered. An unknown slug raises ValueError, so a typo stops
+    the service at startup instead of quietly leaving a pipeline out.
+    """
+    if slugs is None:
+        slugs = [slug.strip() for slug in settings.pipelines.split(",") if slug.strip()]
+    if not slugs:
+        return dict(CLASSIFIER_CHOICES)
+    unknown = [slug for slug in slugs if slug not in CLASSIFIER_CHOICES]
+    if unknown:
+        raise ValueError(
+            f"Unknown pipeline(s): {', '.join(unknown)}. "
+            f"Must be one of: {', '.join(CLASSIFIER_CHOICES)}"
+        )
+    return {slug: CLASSIFIER_CHOICES[slug] for slug in slugs}
+
+
 def should_filter_detections(Classifier: type[APIMothClassifier]) -> bool:
     if Classifier in [MothClassifierBinary, InsectOrderClassifier]:
         return False
@@ -195,6 +221,16 @@ async def root():
 @app.post("/process", tags=["services"])  # new endpoint
 @app.post("/process/", tags=["services"])  # new endpoint
 async def process(data: PipelineRequest) -> PipelineResponse:
+    enabled_pipelines = select_pipelines()
+    if str(data.pipeline) not in enabled_pipelines:
+        raise fastapi.HTTPException(
+            status_code=422,
+            detail=(
+                f"Pipeline {data.pipeline} is not enabled on this server. "
+                f"Enabled pipelines: {', '.join(enabled_pipelines)}"
+            ),
+        )
+
     algorithms_used: dict[str, AlgorithmConfigResponse] = {}
 
     # Ensure that the source images are unique, filter out duplicates
@@ -337,9 +373,10 @@ async def readyz():
     @TODO may need to simplify this to just return True/False. Pipeline algorithms will
     likely be loaded into memory on-demand when the pipeline is selected.
     """
-    if _classifier_choices:
+    enabled_pipelines = list(select_pipelines())
+    if enabled_pipelines:
         return fastapi.responses.JSONResponse(
-            status_code=200, content={"status": list(_classifier_choices.keys())}
+            status_code=200, content={"status": enabled_pipelines}
         )
     else:
         return fastapi.responses.JSONResponse(status_code=503, content={"status": []})
@@ -356,11 +393,19 @@ async def readyz():
 #     pass
 
 
-def initialize_service_info() -> ProcessingServiceInfoResponse:
-    # @TODO This requires loading all models into memory! Can we avoid this?
+def initialize_service_info(
+    pipelines: list[str] | None = None,
+) -> ProcessingServiceInfoResponse:
+    """
+    Describe the pipelines this service offers, for the /info endpoint and for
+    registering the pipelines with Antenna.
+
+    Describing a pipeline loads its models into memory, so only the pipelines chosen
+    by select_pipelines are included.
+    """
     pipeline_configs = [
         make_pipeline_config_response(classifier_class, slug=key)
-        for key, classifier_class in CLASSIFIER_CHOICES.items()
+        for key, classifier_class in select_pipelines(pipelines).items()
     ]
 
     _info = ProcessingServiceInfoResponse(
