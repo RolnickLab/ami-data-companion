@@ -290,6 +290,34 @@ def test_interrupted_download_leaves_nothing_in_the_cache(tmp_path, monkeypatch)
     local_path = get_or_download_file(url, tmp_path, prefix="models")
 
     assert local_path.read_bytes() == b"weights"
+    assert list((tmp_path / "models").iterdir()) == [local_path]
+
+
+def test_overlapping_downloads_of_the_same_file_do_not_collide(tmp_path, monkeypatch):
+    """
+    Two worker processes can download the same model at once. Each writes its own
+    temporary file, so neither truncates nor renames the other's, and the cache ends up
+    holding one whole file and no leftover temporary files.
+    """
+    url = f"{OTHER_STORE}moths/classification/weights.pth"
+
+    class OverlappedResponse(FakeResponse):
+        def iter_content(self, chunk_size):
+            yield b"wei"
+            # A second download of the same file starts and finishes meanwhile.
+            monkeypatch.setattr(
+                "trapdata.ml.utils.requests.get", lambda u, **kw: FakeResponse(u)
+            )
+            get_or_download_file(url, tmp_path, prefix="models")
+            yield b"ghts"
+
+    monkeypatch.setattr(
+        "trapdata.ml.utils.requests.get", lambda u, **kw: OverlappedResponse(u)
+    )
+    local_path = get_or_download_file(url, tmp_path, prefix="models")
+
+    assert local_path.read_bytes() == b"weights"
+    assert list((tmp_path / "models").iterdir()) == [local_path]
 
 
 @pytest.mark.parametrize(

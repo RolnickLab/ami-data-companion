@@ -12,6 +12,7 @@ import re
 import tempfile
 import time
 import urllib.error
+import uuid
 import zipfile
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
@@ -180,18 +181,24 @@ def get_or_download_file(
                             f"plain http:// URL, {hop.url}"
                         )
 
-            # Write to a temporary name and rename only once the whole file has
-            # arrived, so an interrupted download never leaves a partial file at the
-            # cache path, where later runs would take it for a finished one.
-            partial_filepath = local_filepath.with_name(local_filepath.name + ".part")
+            # Write to a temporary file and rename it into place only once the whole
+            # file has arrived and is on disk, so an interrupted download never leaves
+            # a partial file at the cache path, where later runs would take it for a
+            # finished one. Each download gets its own temporary name, so processes
+            # that fetch the same model at the same time do not write over each other.
+            partial_filepath = local_filepath.with_name(
+                f"{local_filepath.name}.{uuid.uuid4().hex}.part"
+            )
             try:
-                with open(partial_filepath, "wb") as f:
+                with open(partial_filepath, "xb") as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(partial_filepath, local_filepath)
             except BaseException:
                 partial_filepath.unlink(missing_ok=True)
                 raise
-            os.replace(partial_filepath, local_filepath)
 
             logger.info(f"Downloaded to {local_filepath}")
             return local_filepath
@@ -200,7 +207,10 @@ def get_or_download_file(
             return pathlib.Path(path_or_url)
 
 
-def load_model_checkpoint(weights_path, device=None) -> dict:
+def load_model_checkpoint(
+    weights_path: str | os.PathLike,
+    device: torch.device | str | None = None,
+) -> dict:
     """
     Load a model weights file, naming the file and the fix when it cannot be read.
 
