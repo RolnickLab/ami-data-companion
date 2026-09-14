@@ -7,10 +7,12 @@ import io
 import json
 import os
 import pathlib
+import pickle
 import re
 import tempfile
 import time
 import urllib.error
+import zipfile
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 from urllib.parse import urlparse
@@ -178,15 +180,48 @@ def get_or_download_file(
                             f"plain http:// URL, {hop.url}"
                         )
 
-            with open(local_filepath, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+            # Write to a temporary name and rename only once the whole file has
+            # arrived, so an interrupted download never leaves a partial file at the
+            # cache path, where later runs would take it for a finished one.
+            partial_filepath = local_filepath.with_name(local_filepath.name + ".part")
+            try:
+                with open(partial_filepath, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            except BaseException:
+                partial_filepath.unlink(missing_ok=True)
+                raise
+            os.replace(partial_filepath, local_filepath)
 
             logger.info(f"Downloaded to {local_filepath}")
             return local_filepath
         else:
             # If it's a local path, just return it
             return pathlib.Path(path_or_url)
+
+
+def load_model_checkpoint(weights_path, device=None) -> dict:
+    """
+    Load a model weights file, naming the file and the fix when it cannot be read.
+
+    A weights file that was only partly downloaded, or an error page saved in place of
+    one, otherwise fails deep inside torch with a message that does not say which file
+    is broken. PyTorch has saved checkpoints as zip archives since version 1.6, and a
+    zip archive keeps its index at the end, so an incomplete file is never a valid
+    zip. That check separates a broken file from an intact checkpoint that fails for
+    some other reason, whose original error is raised unchanged.
+    """
+    try:
+        return torch.load(weights_path, map_location=device, weights_only=True)
+    except (RuntimeError, OSError, EOFError, pickle.UnpicklingError) as e:
+        if not os.path.isfile(weights_path) or zipfile.is_zipfile(weights_path):
+            raise
+        raise RuntimeError(
+            f"The model weights file {weights_path} is incomplete or corrupted, "
+            "for example from an interrupted download. Delete it and run again; "
+            "a file that came from a URL is downloaded again when it is missing. "
+            f"The error from PyTorch was: {e}"
+        ) from e
 
 
 def decode_base64_string(string) -> io.BytesIO:

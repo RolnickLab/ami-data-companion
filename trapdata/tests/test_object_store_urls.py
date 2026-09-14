@@ -13,6 +13,7 @@ host in full, which would bypass a deployment's override.
 import pathlib
 
 import pytest
+import requests
 from pydantic import ValidationError
 
 import trapdata.settings
@@ -255,6 +256,37 @@ def test_download_that_redirects_within_https_is_accepted(tmp_path, monkeypatch)
     response = FakeResponse("https://cdn.example.org/weights.pth", history=[url])
     monkeypatch.setattr("trapdata.ml.utils.requests.get", lambda *a, **kw: response)
 
+    local_path = get_or_download_file(url, tmp_path, prefix="models")
+
+    assert local_path.read_bytes() == b"weights"
+
+
+class InterruptedResponse(FakeResponse):
+    """A streamed download whose connection drops after the first chunk."""
+
+    def iter_content(self, chunk_size):
+        yield b"wei"
+        raise requests.exceptions.ChunkedEncodingError("connection dropped")
+
+
+def test_interrupted_download_leaves_nothing_in_the_cache(tmp_path, monkeypatch):
+    """
+    A download that stops partway leaves no file at the cache path, so the next run
+    downloads the file again instead of loading the partial copy as if it were whole.
+    """
+    url = f"{OTHER_STORE}moths/classification/weights.pth"
+    monkeypatch.setattr(
+        "trapdata.ml.utils.requests.get", lambda u, **kw: InterruptedResponse(u)
+    )
+
+    with pytest.raises(requests.exceptions.ChunkedEncodingError):
+        get_or_download_file(url, tmp_path, prefix="models")
+
+    assert list((tmp_path / "models").iterdir()) == []
+
+    monkeypatch.setattr(
+        "trapdata.ml.utils.requests.get", lambda u, **kw: FakeResponse(u)
+    )
     local_path = get_or_download_file(url, tmp_path, prefix="models")
 
     assert local_path.read_bytes() == b"weights"
