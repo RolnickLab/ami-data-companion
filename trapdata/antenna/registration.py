@@ -7,7 +7,11 @@ from trapdata.antenna.schemas import (
     AsyncPipelineRegistrationRequest,
     AsyncPipelineRegistrationResponse,
 )
-from trapdata.api.api import initialize_service_info
+from trapdata.api.api import (
+    initialize_service_info,
+    parse_pipeline_setting,
+    select_pipelines,
+)
 from trapdata.api.utils import get_http_session
 from trapdata.common.logs import logger
 from trapdata.settings import Settings, read_settings
@@ -21,7 +25,7 @@ def register_pipelines_for_project(
     pipeline_configs: list,
 ) -> tuple[bool, str]:
     """
-    Register all available pipelines for a specific project.
+    Register the given pipeline configurations with a specific project.
 
     Args:
         base_url: Base URL for the API (should NOT include /api/v2)
@@ -79,7 +83,8 @@ def register_pipelines(
     Args:
         project_ids: List of specific project IDs to register for. If empty, registers for all accessible projects.
         service_name: Name of the processing service
-        settings: Settings object with antenna_api_* configuration (defaults to read_settings())
+        settings: Settings object with the antenna_api_* configuration and the
+            pipelines to register (defaults to read_settings())
     """
     # Import here to avoid circular import
     from trapdata.antenna.client import get_user_projects
@@ -100,6 +105,15 @@ def register_pipelines(
             "Service name is required for registration. "
             "Configure AMI_ANTENNA_SERVICE_NAME via environment variable, .env file, or Kivy settings."
         )
+        return
+
+    # Check the pipeline names before contacting Antenna, so a typo fails fast.
+    try:
+        pipeline_slugs = list(
+            select_pipelines(parse_pipeline_setting(settings.pipelines))
+        )
+    except ValueError as e:
+        logger.error(f"Invalid AMI_PIPELINES setting: {e}")
         return
 
     # Add hostname to service name
@@ -126,7 +140,7 @@ def register_pipelines(
 
     # Initialize service info once to get pipeline configurations
     logger.info("Initializing pipeline configurations...")
-    service_info = initialize_service_info()
+    service_info = initialize_service_info(pipeline_slugs)
     pipeline_configs = service_info.pipelines
     logger.info(f"Generated {len(pipeline_configs)} pipeline configurations")
 

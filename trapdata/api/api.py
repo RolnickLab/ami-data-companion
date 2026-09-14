@@ -67,27 +67,34 @@ CLASSIFIER_CHOICES = {
 }
 
 
+def parse_pipeline_setting(value: str) -> list[str]:
+    """Split the AMI_PIPELINES setting, a comma-separated list of slugs, into slugs."""
+    return [slug.strip() for slug in value.split(",") if slug.strip()]
+
+
 def select_pipelines(
     slugs: list[str] | None = None,
 ) -> dict[str, type[APIMothClassifier]]:
     """
     Return the pipelines this service offers, keyed by slug.
 
-    Offering a pipeline means loading its models, which takes time and memory, so a
-    deployment can offer a subset. The slugs come from the argument when one is given,
+    Offering a pipeline means downloading and loading its models to describe it, which
+    takes time, so a deployment can offer a subset. The slugs come from the argument when one is given,
     such as the worker's --pipeline option, and otherwise from the AMI_PIPELINES
     setting, a comma-separated list. When neither names a pipeline, every pipeline in
     CLASSIFIER_CHOICES is offered. An unknown slug raises ValueError, so a typo stops
     the service at startup instead of quietly leaving a pipeline out.
     """
+    from_setting = slugs is None
     if slugs is None:
-        slugs = [slug.strip() for slug in settings.pipelines.split(",") if slug.strip()]
+        slugs = parse_pipeline_setting(settings.pipelines)
     if not slugs:
         return dict(CLASSIFIER_CHOICES)
     unknown = [slug for slug in slugs if slug not in CLASSIFIER_CHOICES]
     if unknown:
+        where = " in the AMI_PIPELINES setting" if from_setting else ""
         raise ValueError(
-            f"Unknown pipeline(s): {', '.join(unknown)}. "
+            f"Unknown pipeline(s){where}: {', '.join(unknown)}. "
             f"Must be one of: {', '.join(CLASSIFIER_CHOICES)}"
         )
     return {slug: CLASSIFIER_CHOICES[slug] for slug in slugs}
@@ -235,18 +242,6 @@ async def root():
 @app.post("/process", tags=["services"])  # new endpoint
 @app.post("/process/", tags=["services"])  # new endpoint
 async def process(data: PipelineRequest) -> PipelineResponse:
-    # The request schema already lists only the offered pipelines. This check also
-    # covers a schema built before the setting changed, as in the tests.
-    enabled_pipelines = select_pipelines()
-    if str(data.pipeline) not in enabled_pipelines:
-        raise fastapi.HTTPException(
-            status_code=422,
-            detail=(
-                f"Pipeline {data.pipeline} is not enabled on this server. "
-                f"Enabled pipelines: {', '.join(enabled_pipelines)}"
-            ),
-        )
-
     algorithms_used: dict[str, AlgorithmConfigResponse] = {}
 
     # Ensure that the source images are unique, filter out duplicates

@@ -25,7 +25,7 @@ def run(
     """
     Run the worker to process images from the Antenna API queue.
 
-    Can be invoked as 'ami worker' or 'ami worker run'.
+    Invoked as 'ami worker'.
     """
     # Only run the worker if no subcommand was invoked
     if ctx.invoked_subcommand is not None:
@@ -53,10 +53,12 @@ def register(
     ] = None,
 ):
     """
-    Register available pipelines with the Antenna platform for specified projects.
+    Register this service's pipelines with the Antenna platform for specified projects.
 
-    This command registers all available pipeline configurations with the Antenna platform
-    for the specified projects (or all accessible projects if none specified).
+    This command registers the pipelines listed in the AMI_PIPELINES setting, or every
+    pipeline if it is not set, for the specified projects (or all accessible projects
+    if none specified). Registration only adds pipelines: one removed from
+    AMI_PIPELINES stays registered in Antenna until it is removed there.
 
     The service name is read from the AMI_ANTENNA_SERVICE_NAME configuration setting.
     Hostname will be added automatically to the service name.

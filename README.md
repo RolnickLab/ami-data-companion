@@ -257,12 +257,12 @@ AMI_NUM_WORKERS=2  # Safe for REST API (atomic task dequeue)
 
 **Register pipelines (optional):**
 
-Register available ML pipelines with your Antenna projects. This registers the pipelines listed in `AMI_PIPELINES`, or every pipeline if it is not set, and loads their models to describe them.
+Register available ML pipelines with your Antenna projects. This registers the pipelines listed in `AMI_PIPELINES`, or every pipeline if it is not set, and loads their models to describe them. Registration only adds pipelines: if you later remove one from `AMI_PIPELINES`, Antenna keeps it registered for this service, so requests for it are rejected and queued jobs for it are not picked up until it is removed from the processing service in Antenna.
 
 ```sh
-ami worker register "My Worker Name" --project 1 --project 2
+ami worker register --project 1 --project 2
 # Or register for all accessible projects:
-ami worker register "My Worker Name"
+ami worker register
 ```
 
 **Run the worker:**

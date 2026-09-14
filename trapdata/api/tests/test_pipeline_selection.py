@@ -85,22 +85,81 @@ def test_service_info_loads_only_the_selected_pipelines(offered, monkeypatch):
     assert [pipeline.slug for pipeline in info.pipelines] == ["moth_binary"]
 
 
-def test_request_for_a_pipeline_not_offered_is_rejected_before_loading_models(
-    offered, monkeypatch
-):
-    def refuse(*args, **kwargs):
-        raise AssertionError("a model was loaded for a pipeline that is not offered")
-
-    monkeypatch.setattr(api, "APIMothDetector", refuse)
-    offered("moth_binary")
-
-    response = TestClient(api.app).post(
-        "/process",
-        json={"pipeline": "quebec_vermont_moths_2023", "source_images": []},
+def test_request_for_a_pipeline_not_offered_is_rejected_before_loading_models():
+    """
+    The request schema lists only the offered pipelines, so a request for any other
+    pipeline fails validation, naming the ones on offer, before any model is built.
+    """
+    result = run_in_fresh_interpreter(
+        "moth_binary",
+        "import json\n"
+        "from fastapi.testclient import TestClient\n"
+        "import trapdata.api.api as api\n"
+        "def refuse(*args, **kwargs):\n"
+        "    raise AssertionError('a model was loaded for a pipeline not offered')\n"
+        "api.APIMothDetector = refuse\n"
+        "response = TestClient(api.app).post(\n"
+        "    '/process',\n"
+        "    json={'pipeline': 'quebec_vermont_moths_2023', 'source_images': []},\n"
+        ")\n"
+        "print(json.dumps({'status': response.status_code, 'body': response.json()}))\n",
     )
 
-    assert response.status_code == 422
-    assert "not enabled" in response.json()["detail"]
+    assert result.returncode == 0, result.stderr
+    outcome = json.loads(result.stdout.strip().splitlines()[-1])
+    assert outcome["status"] == 422
+    assert "moth_binary" in json.dumps(outcome["body"])
+
+
+def test_registration_follows_the_settings_it_is_given(monkeypatch):
+    """
+    register_pipelines takes a Settings object, so it must register the pipelines
+    named there rather than those in the process-wide settings.
+    """
+    from trapdata.antenna import registration
+
+    described = []
+    registered = []
+
+    def fake_pipeline_config(Classifier, slug):
+        described.append(slug)
+        return PipelineConfigResponse(name=slug, slug=slug, version=1)
+
+    def fake_register(*args, **kwargs):
+        registered.append([config.slug for config in kwargs["pipeline_configs"]])
+        return True, "registered"
+
+    monkeypatch.setattr(api, "make_pipeline_config_response", fake_pipeline_config)
+    monkeypatch.setattr(registration, "register_pipelines_for_project", fake_register)
+    settings = Settings(
+        _env_file=None, antenna_api_auth_token="token", pipelines="moth_binary"
+    )
+
+    registration.register_pipelines(
+        project_ids=[1], service_name="Test service", settings=settings
+    )
+
+    assert described == ["moth_binary"]
+    assert registered == [["moth_binary"]]
+
+
+def test_registration_with_an_unknown_pipeline_stops_before_contacting_antenna(
+    monkeypatch,
+):
+    from trapdata.antenna import registration
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("Antenna was contacted despite an invalid setting")
+
+    monkeypatch.setattr("trapdata.antenna.client.get_user_projects", refuse)
+    monkeypatch.setattr(registration, "register_pipelines_for_project", refuse)
+    settings = Settings(
+        _env_file=None, antenna_api_auth_token="token", pipelines="not_a_pipeline"
+    )
+
+    registration.register_pipelines(
+        project_ids=[], service_name="Test service", settings=settings
+    )
 
 
 def test_readiness_lists_only_the_offered_pipelines(offered):
