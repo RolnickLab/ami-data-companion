@@ -14,7 +14,12 @@ from trapdata import logger
 from trapdata.common.schemas import FilePath
 from trapdata.common.utils import slugify
 from trapdata.db.models.queue import QueueManager
-from trapdata.ml.utils import StopWatch, get_device, get_or_download_file
+from trapdata.ml.utils import (
+    StopWatch,
+    get_device,
+    get_or_download_file,
+    resolve_model_url,
+)
 
 
 class BatchEmptyException(Exception):
@@ -129,7 +134,7 @@ class InferenceBaseClass:
     def get_weights(self, weights_path):
         if weights_path:
             return get_or_download_file(
-                weights_path,
+                resolve_model_url(weights_path),
                 self.user_data_path or torch.hub.get_dir(),
                 prefix="models",
             )
@@ -139,7 +144,7 @@ class InferenceBaseClass:
     def get_labels(self, labels_path) -> dict[int, str]:
         if labels_path:
             local_path = get_or_download_file(
-                labels_path,
+                resolve_model_url(labels_path),
                 self.user_data_path or torch.hub.get_dir(),
                 prefix="models",
             )
@@ -193,7 +198,7 @@ class InferenceBaseClass:
         Example:
 
         model = torch.nn.Module()
-        checkpoint = torch.load(self.weights, map_location=self.device)
+        checkpoint = torch.load(self.weights, map_location=self.device, weights_only=True)
         model.load_state_dict(checkpoint["model_state_dict"])
         model = model.to(self.device)
         model.eval()
