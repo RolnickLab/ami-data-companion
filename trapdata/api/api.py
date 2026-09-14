@@ -65,12 +65,6 @@ CLASSIFIER_CHOICES = {
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
 }
-_classifier_choices = dict(
-    zip(CLASSIFIER_CHOICES.keys(), list(CLASSIFIER_CHOICES.keys()))
-)
-
-
-PipelineChoice = enum.Enum("PipelineChoice", _classifier_choices)
 
 
 def select_pipelines(
@@ -97,6 +91,26 @@ def select_pipelines(
             f"Must be one of: {', '.join(CLASSIFIER_CHOICES)}"
         )
     return {slug: CLASSIFIER_CHOICES[slug] for slug in slugs}
+
+
+def _offered_pipeline_slugs() -> list[str]:
+    """
+    Name the pipelines for the request and response schema, so that the API docs list
+    only the pipelines this server offers.
+
+    The schema is built once, when this module is imported. Every ami command imports
+    this module, so an invalid AMI_PIPELINES setting must not break the import: it
+    falls back to every pipeline here, and the API server still refuses to start,
+    because initialize_service_info calls select_pipelines again at startup.
+    """
+    try:
+        return list(select_pipelines())
+    except ValueError:
+        return list(CLASSIFIER_CHOICES)
+
+
+_offered_pipeline_choices = {slug: slug for slug in _offered_pipeline_slugs()}
+PipelineChoice = enum.Enum("PipelineChoice", _offered_pipeline_choices)
 
 
 def should_filter_detections(Classifier: type[APIMothClassifier]) -> bool:
@@ -198,7 +212,7 @@ def make_pipeline_config_response(
 class PipelineRequest(PipelineRequest_):
     pipeline: PipelineChoice = pydantic.Field(
         description=PipelineRequest_.model_fields["pipeline"].description,
-        examples=list(_classifier_choices.keys()),
+        examples=list(_offered_pipeline_choices.keys()),
     )
 
 
@@ -206,7 +220,7 @@ class PipelineResponse(PipelineResponse_):
     pipeline: PipelineChoice = pydantic.Field(
         PipelineChoice,
         description=PipelineResponse_.model_fields["pipeline"].description,
-        examples=list(_classifier_choices.keys()),
+        examples=list(_offered_pipeline_choices.keys()),
     )
 
 
@@ -221,6 +235,8 @@ async def root():
 @app.post("/process", tags=["services"])  # new endpoint
 @app.post("/process/", tags=["services"])  # new endpoint
 async def process(data: PipelineRequest) -> PipelineResponse:
+    # The request schema already lists only the offered pipelines. This check also
+    # covers a schema built before the setting changed, as in the tests.
     enabled_pipelines = select_pipelines()
     if str(data.pipeline) not in enabled_pipelines:
         raise fastapi.HTTPException(

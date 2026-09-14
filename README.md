@@ -229,7 +229,7 @@ ami api
 
 View the interactive API docs at http://localhost:2000/
 
-By default the API offers every pipeline and loads the models for all of them when it starts. To offer only some pipelines, and load only their models, list their slugs in `AMI_PIPELINES`, separated by commas. The slugs are the keys of `CLASSIFIER_CHOICES` in `trapdata/api/api.py`. A request for a pipeline that is not listed is rejected, and an unknown slug stops the server at startup.
+By default the API offers every pipeline and loads the models for all of them when it starts. To offer only some pipelines, and load only their models, list their slugs in `AMI_PIPELINES`, separated by commas. The slugs are the keys of `CLASSIFIER_CHOICES` in `trapdata/api/api.py`. The interactive API docs list only these pipelines, a request for any other pipeline is rejected, and an unknown slug stops the server at startup.
 
 ```sh
 AMI_PIPELINES=moth_binary,global_moths_2024 ami api

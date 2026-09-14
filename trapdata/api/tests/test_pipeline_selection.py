@@ -7,6 +7,12 @@ honoured everywhere a list of pipelines is built, and that a typo in it is caugh
 None of them load a model.
 """
 
+import json
+import os
+import pathlib
+import subprocess
+import sys
+
 import pytest
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
@@ -127,3 +133,60 @@ def test_worker_uses_the_setting_unless_pipelines_are_named(offered, monkeypatch
     assert started == [["global_moths_2024"], ["moth_binary"]]
     assert rejected.exit_code != 0
     assert "not_a_pipeline" in rejected.output
+
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
+
+
+def run_in_fresh_interpreter(
+    pipelines: str, code: str
+) -> subprocess.CompletedProcess[str]:
+    """
+    Run code against a newly imported API module with AMI_PIPELINES set.
+
+    The request schema is built when trapdata.api.api is imported, so changing the
+    setting inside this test process would not change it. A new interpreter sees the
+    setting the way a deployment does when it starts.
+    """
+    return subprocess.run(
+        [sys.executable, "-c", code],
+        env={**os.environ, "AMI_PIPELINES": pipelines},
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+
+def test_api_docs_list_only_the_offered_pipelines():
+    result = run_in_fresh_interpreter(
+        "moth_binary,global_moths_2024",
+        "import json\n"
+        "from fastapi.testclient import TestClient\n"
+        "from trapdata.api.api import app\n"
+        "schema = TestClient(app).get('/openapi.json').json()\n"
+        "print(json.dumps(schema['components']['schemas']['PipelineChoice']['enum']))\n",
+    )
+
+    assert result.returncode == 0, result.stderr
+    offered = json.loads(result.stdout.strip().splitlines()[-1])
+    assert offered == ["moth_binary", "global_moths_2024"]
+
+
+def test_invalid_setting_keeps_imports_working_but_stops_the_server():
+    """
+    Every ami command imports the API module, so a typo in AMI_PIPELINES must not
+    break the import, while the API server must still refuse to start.
+    """
+    result = run_in_fresh_interpreter(
+        "moth_binary,not_a_pipeline",
+        "from fastapi.testclient import TestClient\n"
+        "from trapdata.api.api import app\n"
+        "print('imported')\n"
+        "with TestClient(app):\n"
+        "    pass\n",
+    )
+
+    assert "imported" in result.stdout
+    assert result.returncode != 0
+    assert "not_a_pipeline" in result.stderr
