@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     # Feature and logits extraction settings
     include_features: bool = False
     include_logits: bool = True
+    features_for_all_detections: bool = False
 
     # Pipelines to offer, as a comma-separated list of slugs from CLASSIFIER_CHOICES in
     # trapdata/api/api.py. The API server, the Antenna worker and pipeline registration
@@ -238,6 +239,17 @@ class Settings(BaseSettings):
             "include_logits": {
                 "title": "Include logits",
                 "description": "Include raw logits (unnormalized model outputs) in API/worker responses. On by default; turn off to reduce response size.",
+                "kivy_type": "bool",
+                "kivy_section": "antenna",
+            },
+            "features_for_all_detections": {
+                "title": "Feature vectors for all detections",
+                "description": (
+                    "Attach a feature vector from the species classifier to every "
+                    "detection, including those the moth/non-moth filter rejected, "
+                    "which get no species label. Costs one more backbone pass per "
+                    "rejected detection."
+                ),
                 "kivy_type": "bool",
                 "kivy_section": "antenna",
             },

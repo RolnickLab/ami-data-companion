@@ -279,6 +279,12 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
     detections_for_terminal_classifier: list[DetectionResponse] = []
     detections_to_return: list[DetectionResponse] = []
+    non_moth_detections: list[DetectionResponse] = []
+    features_for_all_detections = (
+        data.config.features_for_all_detections
+        if data.config.features_for_all_detections is not None
+        else settings.features_for_all_detections
+    )
 
     if should_filter_detections(Classifier):
         filter = MothClassifierBinary(
@@ -304,7 +310,6 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
         # Filter results based on positive_binary_label
         moth_detections = []
-        non_moth_detections = []
         for detection in filter.results:
             for classification in detection.classifications:
                 if classification.classification == filter.positive_binary_label:
@@ -334,16 +339,21 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         example_config_param=data.config.example_config_param,
         include_features=data.config.include_features,
         include_logits=data.config.include_logits,
+        include_embeddings=features_for_all_detections,
         terminal=True,
         # critera=data.config.criteria, # @TODO another approach to intermediate filter models
     )
     classifier.run()
+    # Return all detections, including those that were not classified as moths
+    detections_to_return += classifier.results
+
+    if classifier.produces_embeddings and non_moth_detections:
+        # Same model as the moth detections' vectors, so every vector in the
+        # response is comparable. Adds no classification to these detections.
+        classifier.embed(non_moth_detections)
     end_time = time.time()
     seconds_elapsed = float(end_time - start_time)
     algorithms_used[classifier.get_key()] = make_algorithm_response(classifier)
-
-    # Return all detections, including those that were not classified as moths
-    detections_to_return += classifier.results
 
     logger.info(
         f"Processed {len(source_images)} images in {seconds_elapsed:.2f} seconds"

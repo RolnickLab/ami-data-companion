@@ -200,6 +200,62 @@ def _apply_binary_classification(
     return moth_detections, non_moth_detections
 
 
+def _transform_crops(
+    detections: list[DetectionResponse],
+    image_tensors: dict[str, torch.Tensor],
+    transforms,
+) -> tuple[list[torch.Tensor], list[int]]:
+    """Crop and transform each detection, skipping empty boxes.
+
+    Returns the crops and, for each one, its index in ``detections``.
+    """
+    crops = []
+    valid_indices = []
+    for idx, dresp in enumerate(detections):
+        image_tensor = image_tensors[dresp.source_image_id]
+        bbox = dresp.bbox
+        y1, y2 = int(bbox.y1), int(bbox.y2)
+        x1, x2 = int(bbox.x1), int(bbox.x2)
+        if y1 >= y2 or x1 >= x2:
+            logger.warning(
+                f"Skipping detection {idx} with invalid bbox: "
+                f"({x1},{y1})->({x2},{y2})"
+            )
+            continue
+        crops.append(transforms(image_tensor[:, y1:y2, x1:x2]))
+        valid_indices.append(idx)
+    return crops, valid_indices
+
+
+def _embed_detections(
+    classifier,
+    detections: list[DetectionResponse],
+    image_tensors: dict[str, torch.Tensor],
+) -> None:
+    """Attach the species classifier's embedding to detections it did not classify.
+
+    These are the crops the moth/non-moth filter rejected. They keep the filter's
+    label and gain a vector from the same model as the moth crops, and no species
+    classification.
+    """
+    classifier.reset(detections)
+    crops, valid_indices = _transform_crops(
+        detections, image_tensors, classifier.get_transforms()
+    )
+    if not crops:
+        return
+    with classifier.embedding_only():
+        outputs = classifier.post_process_batch(
+            classifier.predict_batch(torch.stack(crops))
+        )
+    for crop_i, idx in enumerate(valid_indices):
+        classifier.update_detection_embedding(
+            image_id=detections[idx].source_image_id,
+            detection_idx=idx,
+            predictions=outputs[crop_i],
+        )
+
+
 def _process_batch(
     batch: dict,
     batch_num: int,
@@ -294,27 +350,14 @@ def _process_batch(
 
         # Run terminal classifier on filtered detections
         classifier.reset(detections_for_terminal_classifier)
-        classify_transforms = classifier.get_transforms()
 
         # Collect and transform all crops for batched classification
-        crops = []
-        valid_indices = []
         n_detections = 0
-        for idx, dresp in enumerate(detections_for_terminal_classifier):
-            image_tensor = image_tensors[dresp.source_image_id]
-            bbox = dresp.bbox
-            y1, y2 = int(bbox.y1), int(bbox.y2)
-            x1, x2 = int(bbox.x1), int(bbox.x2)
-            if y1 >= y2 or x1 >= x2:
-                logger.warning(
-                    f"Skipping detection {idx} with invalid bbox: "
-                    f"({x1},{y1})->({x2},{y2})"
-                )
-                continue
-            crop = image_tensor[:, y1:y2, x1:x2]
-            crop_transformed = classify_transforms(crop)
-            crops.append(crop_transformed)
-            valid_indices.append(idx)
+        crops, valid_indices = _transform_crops(
+            detections_for_terminal_classifier,
+            image_tensors,
+            classifier.get_transforms(),
+        )
 
         classify_start = datetime.datetime.now()
         if crops:
@@ -332,6 +375,9 @@ def _process_batch(
                 )
                 image_detections[dresp.source_image_id].append(detection)
                 n_detections += 1
+
+        if classifier.produces_embeddings and detections_to_return:
+            _embed_detections(classifier, detections_to_return, image_tensors)
 
         classify_time = (datetime.datetime.now() - classify_start).total_seconds()
         # Count non-moth detections returned from binary filter
@@ -468,6 +514,7 @@ def _process_job(
                     detections=[],
                     include_features=settings.include_features,
                     include_logits=settings.include_logits,
+                    include_embeddings=settings.features_for_all_detections,
                 )
                 detector = APIMothDetector([])
                 result_poster = ResultPoster(max_pending=MAX_PENDING_POSTS)

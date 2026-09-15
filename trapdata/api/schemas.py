@@ -115,6 +115,23 @@ class ClassificationResponse(pydantic.BaseModel):
     timestamp: datetime.datetime
 
 
+class EmbeddingResponse(pydantic.BaseModel):
+    """A feature vector for one detection and the algorithm whose backbone made it.
+
+    It sits on the detection rather than on a classification, so storing it cannot
+    add a prediction. Vectors are only comparable with vectors from the same algorithm.
+    """
+
+    features: list[float] = pydantic.Field(
+        description=(
+            "Feature vector (embedding) from the model backbone, before the "
+            "classification head."
+        ),
+        repr=False,
+    )
+    algorithm: AlgorithmReference
+
+
 class DetectionResponse(pydantic.BaseModel):
     source_image_id: str
     bbox: BoundingBox
@@ -123,6 +140,14 @@ class DetectionResponse(pydantic.BaseModel):
     timestamp: datetime.datetime
     crop_image_url: str | None = None
     classifications: list[ClassificationResponse] = []
+    embeddings: list[EmbeddingResponse] | None = pydantic.Field(
+        default=None,
+        description=(
+            "Feature vectors for this detection, at most one per algorithm. Only "
+            "included when features_for_all_detections is on, and then every "
+            "detection has one, including those the moth/non-moth filter rejected."
+        ),
+    )
 
 
 class SourceImageRequest(pydantic.BaseModel):
@@ -263,6 +288,16 @@ class PipelineConfigRequest(pydantic.BaseModel):
             "Logits are the unnormalized model outputs before softmax. "
             "On by default: downstream consumers re-score classifications from "
             "them. Turn it off to reduce response size."
+        ),
+    )
+    features_for_all_detections: bool | None = pydantic.Field(
+        default=None,
+        description=(
+            "Whether to attach a feature vector from the species classifier's "
+            "backbone to every detection, as an item in `embeddings`. Detections "
+            "the moth/non-moth filter rejected get the vector but no species "
+            "classification, which costs one more backbone pass each. When "
+            "omitted, the service's AMI_FEATURES_FOR_ALL_DETECTIONS setting applies."
         ),
     )
 

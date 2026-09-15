@@ -1,3 +1,4 @@
+import contextlib
 import datetime
 import typing
 
@@ -25,6 +26,7 @@ from ..schemas import (
     AlgorithmReference,
     ClassificationResponse,
     DetectionResponse,
+    EmbeddingResponse,
     SourceImage,
 )
 from .base import APIInferenceBaseClass
@@ -44,6 +46,7 @@ class APIMothClassifier(
         *args,
         include_features: bool = False,
         include_logits: bool = True,
+        include_embeddings: bool = False,
         **kwargs,
     ):
         self.source_images = source_images
@@ -51,14 +54,16 @@ class APIMothClassifier(
         self.terminal = terminal
         self.include_features = include_features
         self.include_logits = include_logits
+        self.include_embeddings = include_embeddings
+        self._embedding_only = False
         self._last_features: torch.Tensor | None = None
         self.results: list[DetectionResponse] = []
         super().__init__(*args, **kwargs)
-        if include_features and not self.supports_features():
+        if (include_features or include_embeddings) and not self.supports_features():
             logger.warning(
                 f"{self.__class__.__name__} has no feature extractor, so "
-                "classifications will be returned without features. Only "
-                "classifiers built on Resnet50TimmClassifier support them."
+                "detections will be returned without features or embeddings. "
+                "Only classifiers built on Resnet50TimmClassifier support them."
             )
         logger.info(
             f"Initialized {self.__class__.__name__} with {len(self.detections)} "
@@ -73,6 +78,11 @@ class APIMothClassifier(
         cannot produce them", which otherwise both look like ``features=None``.
         """
         return cls.forward_with_features is not InferenceBaseClass.forward_with_features
+
+    @property
+    def produces_embeddings(self) -> bool:
+        """Whether this instance attaches an embedding to each detection it sees."""
+        return bool(self.include_embeddings) and self.supports_features()
 
     def reset(self, detections: typing.Iterable[DetectionResponse]):
         self.detections = list(detections)
@@ -96,7 +106,7 @@ class APIMothClassifier(
         these two methods directly.
         """
         batch_input = batch.to(self.device, non_blocking=True)
-        if self.include_features:
+        if self.include_features or self.include_embeddings:
             logits, self._last_features = self.forward_with_features(batch_input)
         else:
             logits, self._last_features = self.model(batch_input), None
@@ -110,6 +120,15 @@ class APIMothClassifier(
         logits = batch_output
         features = self._last_features
         self._last_features = None  # Release GPU tensor reference
+        if self._embedding_only:
+            # Only the vectors are used. Converting every class score to a list
+            # costs far more than the backbone pass on large-vocabulary models.
+            if features is None:
+                raise ValueError(f"{self.name} returned no features to embed")
+            return [
+                ClassifierResult(labels=None, logit=None, scores=[], features=vec)
+                for vec in features.cpu().tolist()
+            ]
         predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
         logits_cpu = logits.cpu() if self.include_logits else None
@@ -162,12 +181,15 @@ class APIMothClassifier(
         for image_id, detection_idx, predictions in zip(
             image_ids, detection_idxes, batch_output
         ):
-            self.update_detection_classification(
-                seconds_per_item,
-                image_id,
-                detection_idx,
-                predictions,
-            )
+            if self._embedding_only:
+                self.update_detection_embedding(image_id, detection_idx, predictions)
+            else:
+                self.update_detection_classification(
+                    seconds_per_item,
+                    image_id,
+                    detection_idx,
+                    predictions,
+                )
 
         self.results = self.detections
         logger.info(f"Saving {len(self.results)} detections with classifications")
@@ -194,25 +216,99 @@ class APIMothClassifier(
         detection_idx: int,
         predictions: ClassifierResult,
     ) -> DetectionResponse:
-        detection = self.detections[detection_idx]
-        if detection.source_image_id != image_id:
-            raise ValueError(
-                f"Detection index {detection_idx} has mismatched image_id: "
-                f"expected '{image_id}', got '{detection.source_image_id}'"
-            )
+        detection = self._get_detection(image_id, detection_idx)
 
         classification = ClassificationResponse(
             classification=self.get_best_label(predictions),
             scores=predictions.scores,
             logits=predictions.logit,
-            features=predictions.features,
+            features=predictions.features if self.include_features else None,
             inference_time=seconds_per_item,
             algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
             timestamp=datetime.datetime.now(),
             terminal=self.terminal,
         )
         self.update_classification(detection, classification)
+        if self.include_embeddings and predictions.features is not None:
+            self._attach_embedding(detection, predictions.features)
         return detection
+
+    def update_detection_embedding(
+        self,
+        image_id: str,
+        detection_idx: int,
+        predictions: ClassifierResult,
+    ) -> DetectionResponse:
+        """Attach this model's embedding to a detection without classifying it.
+
+        For detections the moth/non-moth filter rejected: tracking needs their
+        vector, but a species label would compete with the filter's label for the
+        determination downstream.
+        """
+        if predictions.features is None:
+            raise ValueError(
+                f"{self.name} returned no features for detection {detection_idx}; "
+                "embeddings need a classifier with a backbone hook and "
+                "include_embeddings=True."
+            )
+        detection = self._get_detection(image_id, detection_idx)
+        self._attach_embedding(detection, predictions.features)
+        return detection
+
+    def _get_detection(self, image_id: str, detection_idx: int) -> DetectionResponse:
+        detection = self.detections[detection_idx]
+        if detection.source_image_id != image_id:
+            raise ValueError(
+                f"Detection index {detection_idx} has mismatched image_id: "
+                f"expected '{image_id}', got '{detection.source_image_id}'"
+            )
+        return detection
+
+    def _attach_embedding(
+        self, detection: DetectionResponse, features: list[float]
+    ) -> None:
+        # One vector per algorithm: replace any earlier one from this model.
+        key = self.get_key()
+        others = [e for e in detection.embeddings or [] if e.algorithm.key != key]
+        embedding = EmbeddingResponse(
+            features=features,
+            algorithm=AlgorithmReference(name=self.name, key=key),
+        )
+        detection.embeddings = others + [embedding]
+
+    def embed(
+        self, detections: typing.Iterable[DetectionResponse]
+    ) -> list[DetectionResponse]:
+        """Attach an embedding, and no classification, to each of these detections.
+
+        Reuses the loaded model and batches the crops the same way ``run()`` does.
+        Like ``reset()``, it replaces ``detections`` and ``results``, so read the
+        results of an earlier ``run()`` before calling it.
+        """
+        if not self.produces_embeddings:
+            raise ValueError(
+                f"{self.__class__.__name__} was not asked for embeddings or cannot "
+                "produce them; check produces_embeddings before calling embed()."
+            )
+        self.reset(detections)
+        self.dataset = self.get_dataset()
+        self.dataloader = self.get_dataloader()
+        with self.embedding_only():
+            self.run()
+        return self.detections
+
+    @contextlib.contextmanager
+    def embedding_only(self):
+        """Within this block, batches yield embeddings and no classifications.
+
+        ``post_process_batch`` then skips the class scores and ``save_results``
+        attaches embeddings only. The worker drives those methods directly.
+        """
+        self._embedding_only = True
+        try:
+            yield self
+        finally:
+            self._embedding_only = False
 
     def run(self) -> list[DetectionResponse]:
         logger.info(

@@ -204,6 +204,8 @@ class _StubAPIClassifier(APIMothClassifier, _RandomWeightTimmClassifier):
         self._last_features = None
         self.include_features = kwargs.get("include_features", False)
         self.include_logits = kwargs.get("include_logits", True)
+        self.include_embeddings = kwargs.get("include_embeddings", False)
+        self._embedding_only = False
 
 
 class TestFeatureExtractionMechanics(TestCase):
