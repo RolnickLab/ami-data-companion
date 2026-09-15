@@ -249,3 +249,45 @@ def test_invalid_setting_keeps_imports_working_but_stops_the_server():
     assert "imported" in result.stdout
     assert result.returncode != 0
     assert "not_a_pipeline" in result.stderr
+
+
+def test_api_command_exits_on_an_invalid_setting_before_starting_the_server(
+    offered, monkeypatch
+):
+    """
+    `ami api` runs uvicorn with its reloader, which keeps running when the app fails
+    at startup, so the command itself must reject the setting and exit.
+    """
+    from trapdata.cli.base import cli
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("uvicorn was started despite an invalid setting")
+
+    monkeypatch.setattr("uvicorn.run", refuse)
+    offered("moth_binary,not_a_pipeline")
+
+    result = CliRunner().invoke(cli, ["api"])
+
+    assert isinstance(result.exception, SystemExit)
+    assert result.exit_code != 0
+    assert "not_a_pipeline" in result.output
+
+
+def test_register_command_fails_on_an_invalid_setting(offered, monkeypatch):
+    """
+    An invalid setting makes `ami worker register` exit with an error, so a script
+    or CI job does not read the run as a success.
+    """
+    from trapdata.cli.worker import cli
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("registration ran despite an invalid setting")
+
+    monkeypatch.setattr("trapdata.antenna.registration.register_pipelines", refuse)
+    offered("not_a_pipeline")
+
+    result = CliRunner().invoke(cli, ["register"])
+
+    assert isinstance(result.exception, SystemExit)
+    assert result.exit_code != 0
+    assert "not_a_pipeline" in result.output

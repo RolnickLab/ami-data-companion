@@ -67,6 +67,13 @@ def register(
         ami worker register --project 1 --project 2
         ami worker register  # registers for all accessible projects
     """
+    # Check the setting here, so an invalid value makes the command fail rather than
+    # log an error and exit successfully.
+    try:
+        select_pipelines()
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
+
     from trapdata.antenna.registration import register_pipelines
     from trapdata.settings import read_settings
 
