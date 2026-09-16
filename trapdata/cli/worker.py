@@ -67,18 +67,15 @@ def register(
         ami worker register --project 1 --project 2
         ami worker register  # registers for all accessible projects
     """
-    # Check the setting here, so an invalid value makes the command fail rather than
-    # log an error and exit successfully.
-    try:
-        select_pipelines()
-    except ValueError as e:
-        raise typer.BadParameter(str(e)) from e
-
     from trapdata.antenna.registration import register_pipelines
     from trapdata.settings import read_settings
 
     settings = read_settings()
     project_ids = project if project else []
-    register_pipelines(
+    registered = register_pipelines(
         project_ids=project_ids, service_name=settings.antenna_service_name
     )
+    if not registered:
+        # register_pipelines logs the reason. Exiting non-zero keeps a script or a CI
+        # job from reading a failed registration as a success.
+        raise typer.Exit(code=1)

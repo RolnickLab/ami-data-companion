@@ -76,9 +76,13 @@ def register_pipelines(
     project_ids: list[int],
     service_name: str,
     settings: Settings | None = None,
-) -> None:
+) -> bool:
     """
     Register pipelines for specified projects or all accessible projects.
+
+    Returns True when every project was registered, and False when the settings are
+    wrong, there is nothing to register, or a registration failed. The caller decides
+    what to do with that; the reason is logged here.
 
     Args:
         project_ids: List of specific project IDs to register for. If empty, registers for all accessible projects.
@@ -98,14 +102,14 @@ def register_pipelines(
 
     if not auth_token:
         logger.error("AMI_ANTENNA_API_AUTH_TOKEN environment variable not set")
-        return
+        return False
 
     if not service_name or not service_name.strip():
         logger.error(
             "Service name is required for registration. "
             "Configure AMI_ANTENNA_SERVICE_NAME via environment variable, .env file, or Kivy settings."
         )
-        return
+        return False
 
     # Check the pipeline names before contacting Antenna, so a typo fails fast.
     try:
@@ -114,7 +118,7 @@ def register_pipelines(
         )
     except ValueError as e:
         logger.error(f"Invalid AMI_PIPELINES setting: {e}")
-        return
+        return False
 
     # Add hostname to service name
     full_service_name = get_full_service_name(service_name)
@@ -136,7 +140,7 @@ def register_pipelines(
 
     if not projects_to_process:
         logger.warning("No projects found to register pipelines for")
-        return
+        return False
 
     # Initialize service info once to get pipeline configurations
     logger.info("Initializing pipeline configurations...")
@@ -194,3 +198,5 @@ def register_pipelines(
         logger.info("\nFailed registrations:")
         for project_id, project_name, message in failed_registrations:
             logger.info(f"  - Project {project_id} ({project_name}): {message}")
+
+    return not failed_registrations

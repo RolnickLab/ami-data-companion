@@ -320,9 +320,14 @@ def test_overlapping_downloads_of_the_same_file_do_not_collide(tmp_path, monkeyp
     assert list((tmp_path / "models").iterdir()) == [local_path]
 
 
-@pytest.mark.parametrize(
-    "source_path", SOURCE_FILES, ids=lambda p: str(p.relative_to(PACKAGE_DIR))
-)
-def test_no_module_hardcodes_the_object_store_host(source_path):
+def test_no_module_hardcodes_the_object_store_host():
     """Writing out the host anywhere but the settings would bypass a deployment's override."""
-    assert "object-arbutus" not in source_path.read_text()
+    offenders = [
+        str(path.relative_to(PACKAGE_DIR))
+        for path in SOURCE_FILES
+        if "object-arbutus" in path.read_text()
+    ]
+
+    assert not offenders, "These modules name the object store host: " + ", ".join(
+        offenders
+    )
