@@ -240,6 +240,10 @@ def test_register_command_fails_on_an_invalid_setting(offered, monkeypatch):
     """
     An invalid setting stops registration before Antenna is contacted, and the command
     exits with an error, so a script or CI job does not read the run as a success.
+
+    Registration checks the auth token and the service name before the pipeline names,
+    so both are set here. Otherwise the command would fail for a different reason and
+    this test would pass without reaching the setting at all.
     """
     from trapdata.cli.worker import cli
 
@@ -250,6 +254,8 @@ def test_register_command_fails_on_an_invalid_setting(offered, monkeypatch):
     monkeypatch.setattr(
         "trapdata.antenna.registration.register_pipelines_for_project", refuse
     )
+    monkeypatch.setattr(api.settings, "antenna_api_auth_token", "token")
+    monkeypatch.setattr(api.settings, "antenna_service_name", "Test service")
     offered("not_a_pipeline")
 
     result = CliRunner().invoke(cli, ["register"])
