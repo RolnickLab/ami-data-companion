@@ -3,7 +3,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from trapdata.api.api import CLASSIFIER_CHOICES
+from trapdata.api.api import select_pipelines
 from trapdata.cli import db, export, queue, settings, shell, show, test, worker
 from trapdata.db.base import get_session_class
 from trapdata.db.models.events import get_or_create_monitoring_sessions
@@ -94,6 +94,13 @@ def run_api(port: int = 2000):
     """
     Run the API.
     """
+    # uvicorn's reloader keeps running when the app fails at startup, so check the
+    # AMI_PIPELINES setting here and exit before starting the server.
+    try:
+        select_pipelines()
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
+
     import uvicorn
 
     uvicorn.run("trapdata.api.api:app", host="0.0.0.0", port=port, reload=True)

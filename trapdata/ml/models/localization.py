@@ -11,7 +11,7 @@ from trapdata import TrapImage, db, logger
 from trapdata.db.models.detections import save_detected_objects
 from trapdata.db.models.queue import ImageQueue
 from trapdata.ml.models.base import InferenceBaseClass
-from trapdata.ml.utils import open_image
+from trapdata.ml.utils import load_model_checkpoint, open_image
 
 
 class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
@@ -220,9 +220,7 @@ class MothObjectDetector_FasterRCNN_2021(ObjectDetector):
             )
         )
         logger.debug(f"Loading weights: {self.weights}")
-        checkpoint = torch.load(
-            self.weights, map_location=self.device, weights_only=True
-        )
+        checkpoint = load_model_checkpoint(self.weights, self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model = model.to(self.device)
@@ -265,9 +263,7 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
             weights=None,
             box_detections_per_img=self.box_detections_per_img,
         )
-        checkpoint = torch.load(
-            self.weights, map_location=self.device, weights_only=True
-        )
+        checkpoint = load_model_checkpoint(self.weights, self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model = model.to(self.device)
@@ -323,9 +319,7 @@ class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
             rpn_score_thresh=0.05,
             box_detections_per_img=self.box_detections_per_img,
         )
-        checkpoint = torch.load(
-            self.weights, map_location=self.device, weights_only=True
-        )
+        checkpoint = load_model_checkpoint(self.weights, self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model = model.to(self.device)

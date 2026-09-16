@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     include_features: bool = False
     include_logits: bool = True
 
+    # Pipelines to offer, as a comma-separated list of slugs from CLASSIFIER_CHOICES in
+    # trapdata/api/api.py. The API server, the Antenna worker and pipeline registration
+    # load models only for these pipelines. Empty means every pipeline.
+    pipelines: str = ""
+
     # Where model weights and sample trap images are downloaded from. Model classes give
     # their files as paths relative to model_base_url; see resolve_model_url in
     # trapdata/ml/utils.py.

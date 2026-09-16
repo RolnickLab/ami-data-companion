@@ -229,6 +229,14 @@ ami api
 
 View the interactive API docs at http://localhost:2000/
 
+By default the API offers every pipeline and loads the models for all of them when it starts. To offer only some pipelines, and load only their models, list their slugs in `AMI_PIPELINES`, separated by commas. The slugs are the keys of `CLASSIFIER_CHOICES` in `trapdata/api/api.py`. The interactive API docs list only these pipelines, a request for any other pipeline is rejected, and an unknown slug stops the server at startup.
+
+```sh
+AMI_PIPELINES=moth_binary,global_moths_2024 ami api
+```
+
+The Antenna worker and `ami worker register` read the same setting.
+
 ## Running the Antenna Worker
 
 The worker polls the Antenna platform API for queued image processing jobs, downloads images, runs detection and classification, and posts results back to Antenna.
@@ -244,25 +252,26 @@ AMI_ANTENNA_API_AUTH_TOKEN=your_token_here
 AMI_ANTENNA_API_BATCH_SIZE=4
 AMI_NUM_WORKERS=2  # Safe for REST API (atomic task dequeue)
 # AMI_MODEL_BASE_URL=https://models.example.org/ami-models/  # Optional: download model weights from another object store
+# AMI_PIPELINES=moth_binary,global_moths_2024  # Optional: process and register only these pipelines
 ```
 
 **Register pipelines (optional):**
 
-Register available ML pipelines with your Antenna projects:
+Register available ML pipelines with your Antenna projects. This registers the pipelines listed in `AMI_PIPELINES`, or every pipeline if it is not set, and loads their models to describe them. Registration only adds pipelines: if you later remove one from `AMI_PIPELINES`, Antenna keeps it registered for this service, so requests for it are rejected and queued jobs for it are not picked up until it is removed from the processing service in Antenna.
 
 ```sh
-ami worker register "My Worker Name" --project 1 --project 2
+ami worker register --project 1 --project 2
 # Or register for all accessible projects:
-ami worker register "My Worker Name"
+ami worker register
 ```
 
 **Run the worker:**
 
 ```sh
-# Process all pipelines:
+# Process the pipelines in AMI_PIPELINES, or all pipelines if it is not set:
 ami worker
 
-# Or specify specific pipeline(s):
+# Or name the pipeline(s) to process, which takes precedence over AMI_PIPELINES:
 ami worker --pipeline moth_binary
 ami worker --pipeline moth_binary --pipeline panama_moths_2024
 ```

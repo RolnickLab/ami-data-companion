@@ -4,7 +4,7 @@ from typing import Annotated
 
 import typer
 
-from trapdata.api.api import CLASSIFIER_CHOICES
+from trapdata.api.api import select_pipelines
 
 cli = typer.Typer(help="Antenna worker commands for remote processing")
 
@@ -17,31 +17,25 @@ def run(
         typer.Option(
             "--pipeline",
             help="Pipeline to use for processing (e.g., moth_binary, panama_moths_2024). Can be specified multiple times. "
-            "Defaults to all pipelines if not specified.",
+            "Defaults to the pipelines in the AMI_PIPELINES setting, or to all "
+            "pipelines if that is not set.",
         ),
     ] = None,
 ):
     """
     Run the worker to process images from the Antenna API queue.
 
-    Can be invoked as 'ami worker' or 'ami worker run'.
+    Invoked as 'ami worker'.
     """
     # Only run the worker if no subcommand was invoked
     if ctx.invoked_subcommand is not None:
         return
 
-    if not pipelines:
-        pipelines = list(CLASSIFIER_CHOICES.keys())
-
-    # Validate that each pipeline is in CLASSIFIER_CHOICES
-    invalid_pipelines = [
-        pipeline for pipeline in pipelines if pipeline not in CLASSIFIER_CHOICES.keys()
-    ]
-
-    if invalid_pipelines:
-        raise typer.BadParameter(
-            f"Invalid pipeline(s): {', '.join(invalid_pipelines)}. Must be one of: {', '.join(CLASSIFIER_CHOICES.keys())}"
-        )
+    # Pipelines given with --pipeline take precedence over the AMI_PIPELINES setting.
+    try:
+        pipelines = list(select_pipelines(pipelines or None))
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
 
     from trapdata.antenna.worker import run_worker
 
@@ -59,10 +53,12 @@ def register(
     ] = None,
 ):
     """
-    Register available pipelines with the Antenna platform for specified projects.
+    Register this service's pipelines with the Antenna platform for specified projects.
 
-    This command registers all available pipeline configurations with the Antenna platform
-    for the specified projects (or all accessible projects if none specified).
+    This command registers the pipelines listed in the AMI_PIPELINES setting, or every
+    pipeline if it is not set, for the specified projects (or all accessible projects
+    if none specified). Registration only adds pipelines: one removed from
+    AMI_PIPELINES stays registered in Antenna until it is removed there.
 
     The service name is read from the AMI_ANTENNA_SERVICE_NAME configuration setting.
     Hostname will be added automatically to the service name.
@@ -71,6 +67,13 @@ def register(
         ami worker register --project 1 --project 2
         ami worker register  # registers for all accessible projects
     """
+    # Check the setting here, so an invalid value makes the command fail rather than
+    # log an error and exit successfully.
+    try:
+        select_pipelines()
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
+
     from trapdata.antenna.registration import register_pipelines
     from trapdata.settings import read_settings
 
