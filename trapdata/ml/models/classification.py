@@ -6,6 +6,7 @@ import torchvision
 from trapdata import constants, logger
 from trapdata.db.models.detections import save_classified_objects
 from trapdata.db.models.queue import DetectedObjectQueue, UnclassifiedObjectQueue
+from trapdata.ml.utils import load_model_checkpoint
 
 from .base import InferenceBaseClass, imagenet_normalization
 
@@ -78,9 +79,7 @@ class EfficientNetClassifier(InferenceBaseClass):
         )
         model = model.to(self.device)
         # state_dict = torch.hub.load_state_dict_from_url(weights_url)
-        checkpoint = torch.load(
-            self.weights, map_location=self.device, weights_only=True
-        )
+        checkpoint = load_model_checkpoint(self.weights, self.device)
         # The model state dict is nested in some checkpoints, and not in others
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
@@ -146,9 +145,7 @@ class ConvNeXtOrderClassifier(InferenceBaseClass):
             num_classes=num_classes,
         )
         model = model.to(self.device)
-        checkpoint = torch.load(
-            self.weights, map_location=self.device, weights_only=True
-        )
+        checkpoint = load_model_checkpoint(self.weights, self.device)
         # The model state dict is nested in some checkpoints, and not in others
         state_dict = checkpoint.get("model_state_dict") or checkpoint
 
@@ -199,9 +196,7 @@ class Resnet50Classifier_Turing(InferenceBaseClass):
         num_classes = len(self.category_map)
         model = Resnet50(num_classes=num_classes)
         model = model.to(self.device)
-        checkpoint = torch.load(
-            self.weights, map_location=self.device, weights_only=True
-        )
+        checkpoint = load_model_checkpoint(self.weights, self.device)
         # The model state dict is nested in some checkpoints, and not in others
         state_dict = checkpoint.get("model_state_dict") or checkpoint
 
@@ -240,9 +235,7 @@ class Resnet50Classifier(InferenceBaseClass):
         model = Resnet50(num_classes=num_classes)
         model = model.to(self.device)
         # state_dict = torch.hub.load_state_dict_from_url(weights_url)
-        checkpoint = torch.load(
-            self.weights, map_location=self.device, weights_only=True
-        )
+        checkpoint = load_model_checkpoint(self.weights, self.device)
         # The model state dict is nested in some checkpoints, and not in others
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
@@ -297,9 +290,7 @@ class Resnet50ClassifierLowRes(Resnet50Classifier):
         model.fc = torch.nn.Linear(num_ftrs, self.num_classes)
         model = model.to(self.device)
         assert self.weights, f"No weights path configured for {self.name}"
-        checkpoint = torch.load(
-            self.weights, map_location=self.device, weights_only=True
-        )
+        checkpoint = load_model_checkpoint(self.weights, self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model.eval()
@@ -315,9 +306,7 @@ class Resnet50TimmClassifier(Resnet50Classifier):
             num_classes=self.num_classes,
         )
         assert self.weights, f"No weights path configured for {self.name}"
-        checkpoint = torch.load(
-            self.weights, map_location=self.device, weights_only=True
-        )
+        checkpoint = load_model_checkpoint(self.weights, self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model.to(self.device)

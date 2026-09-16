@@ -198,7 +198,7 @@ class InferenceBaseClass:
         Example:
 
         model = torch.nn.Module()
-        checkpoint = torch.load(self.weights, map_location=self.device, weights_only=True)
+        checkpoint = load_model_checkpoint(self.weights, self.device)
         model.load_state_dict(checkpoint["model_state_dict"])
         model = model.to(self.device)
         model.eval()
