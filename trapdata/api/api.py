@@ -18,6 +18,8 @@ from .models.classification import (
     APIMothClassifier,
     InsectOrderClassifier,
     MothClassifierBinary,
+    MothClassifierBioCLIP25Newfoundland,
+    MothClassifierBioCLIP25Panama,
     MothClassifierGlobal,
     MothClassifierPanama,
     MothClassifierPanama2024,
@@ -36,7 +38,11 @@ from .schemas import (
 )
 from .schemas import PipelineRequest as PipelineRequest_
 from .schemas import PipelineResultsResponse as PipelineResponse_
-from .schemas import ProcessingServiceInfoResponse, SourceImage, SourceImageResponse
+from .schemas import (
+    ProcessingServiceInfoResponse,
+    SourceImage,
+    SourceImageResponse,
+)
 
 
 @asynccontextmanager
@@ -64,6 +70,8 @@ CLASSIFIER_CHOICES = {
     "global_moths_2024": MothClassifierGlobal,
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
+    "bioclip_2_5_newfoundland": MothClassifierBioCLIP25Newfoundland,
+    "bioclip_2_5_panama": MothClassifierBioCLIP25Panama,
 }
 
 

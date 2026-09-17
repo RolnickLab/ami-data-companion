@@ -100,6 +100,16 @@ class ClassificationResponse(pydantic.BaseModel):
         ),
         repr=False,  # Too long to display in the repr
     )
+    features: list[float] | None = pydantic.Field(
+        default=None,
+        description=(
+            "The embedding the classifier head consumed, from the frozen backbone that "
+            "produced this classification. Returned only by models that can be retrained: "
+            "it is what a new head is fit on, so storing it means the backbone never has "
+            "to run over the same crop twice."
+        ),
+        repr=False,  # Too long to display in the repr
+    )
     inference_time: float | None = None
     algorithm: AlgorithmReference
     terminal: bool = True
