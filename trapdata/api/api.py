@@ -12,6 +12,7 @@ import pydantic
 from fastapi.middleware.gzip import GZipMiddleware
 
 from ..common.logs import logger  # noqa: F401
+from ..ml.utils import resolve_model_url
 from . import settings
 from .models.classification import (
     APIMothClassifier,
@@ -64,12 +65,59 @@ CLASSIFIER_CHOICES = {
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
 }
-_classifier_choices = dict(
-    zip(CLASSIFIER_CHOICES.keys(), list(CLASSIFIER_CHOICES.keys()))
-)
 
 
-PipelineChoice = enum.Enum("PipelineChoice", _classifier_choices)
+def parse_pipeline_setting(value: str) -> list[str]:
+    """Split the AMI_PIPELINES setting, a comma-separated list of slugs, into slugs."""
+    return [slug.strip() for slug in value.split(",") if slug.strip()]
+
+
+def select_pipelines(
+    slugs: list[str] | None = None,
+) -> dict[str, type[APIMothClassifier]]:
+    """
+    Return the pipelines this service offers, keyed by slug.
+
+    Offering a pipeline means downloading and loading its models to describe it, which
+    takes time, so a deployment can offer a subset. The slugs come from the argument when one is given,
+    such as the worker's --pipeline option, and otherwise from the AMI_PIPELINES
+    setting, a comma-separated list. When neither names a pipeline, every pipeline in
+    CLASSIFIER_CHOICES is offered. An unknown slug raises ValueError, so a typo stops
+    the service at startup instead of quietly leaving a pipeline out.
+    """
+    from_setting = slugs is None
+    if slugs is None:
+        slugs = parse_pipeline_setting(settings.pipelines)
+    if not slugs:
+        return dict(CLASSIFIER_CHOICES)
+    unknown = [slug for slug in slugs if slug not in CLASSIFIER_CHOICES]
+    if unknown:
+        where = " in the AMI_PIPELINES setting" if from_setting else ""
+        raise ValueError(
+            f"Unknown pipeline(s){where}: {', '.join(unknown)}. "
+            f"Must be one of: {', '.join(CLASSIFIER_CHOICES)}"
+        )
+    return {slug: CLASSIFIER_CHOICES[slug] for slug in slugs}
+
+
+def _offered_pipeline_slugs() -> list[str]:
+    """
+    Name the pipelines for the request and response schema, so that the API docs list
+    only the pipelines this server offers.
+
+    The schema is built once, when this module is imported. Every ami command imports
+    this module, so an invalid AMI_PIPELINES setting must not break the import: it
+    falls back to every pipeline here, and the API server still refuses to start,
+    because initialize_service_info calls select_pipelines again at startup.
+    """
+    try:
+        return list(select_pipelines())
+    except ValueError:
+        return list(CLASSIFIER_CHOICES)
+
+
+_offered_pipeline_choices = {slug: slug for slug in _offered_pipeline_slugs()}
+PipelineChoice = enum.Enum("PipelineChoice", _offered_pipeline_choices)
 
 
 def should_filter_detections(Classifier: type[APIMothClassifier]) -> bool:
@@ -96,7 +144,7 @@ def make_category_map_response(
     return AlgorithmCategoryMapResponse(
         data=categories_sorted_by_index,
         labels=label_strings_sorted_by_index,
-        uri=model.labels_path,
+        uri=resolve_model_url(model.labels_path),
     )
 
 
@@ -110,7 +158,7 @@ def make_algorithm_response(
         task_type=model.task_type,
         description=model.description,
         category_map=category_map,
-        uri=model.weights_path,
+        uri=resolve_model_url(model.weights_path),
         trainable=getattr(model, "trainable", False),
     )
 
@@ -125,7 +173,7 @@ def make_algorithm_config_response(
         task_type=model.task_type,
         description=model.description,
         category_map=category_map,
-        uri=model.weights_path,
+        uri=resolve_model_url(model.weights_path),
         trainable=getattr(model, "trainable", False),
     )
 
@@ -173,7 +221,7 @@ def make_pipeline_config_response(
 class PipelineRequest(PipelineRequest_):
     pipeline: PipelineChoice = pydantic.Field(
         description=PipelineRequest_.model_fields["pipeline"].description,
-        examples=list(_classifier_choices.keys()),
+        examples=list(_offered_pipeline_choices.keys()),
     )
 
 
@@ -181,7 +229,7 @@ class PipelineResponse(PipelineResponse_):
     pipeline: PipelineChoice = pydantic.Field(
         PipelineChoice,
         description=PipelineResponse_.model_fields["pipeline"].description,
-        examples=list(_classifier_choices.keys()),
+        examples=list(_offered_pipeline_choices.keys()),
     )
 
 
@@ -338,9 +386,10 @@ async def readyz():
     @TODO may need to simplify this to just return True/False. Pipeline algorithms will
     likely be loaded into memory on-demand when the pipeline is selected.
     """
-    if _classifier_choices:
+    enabled_pipelines = list(select_pipelines())
+    if enabled_pipelines:
         return fastapi.responses.JSONResponse(
-            status_code=200, content={"status": list(_classifier_choices.keys())}
+            status_code=200, content={"status": enabled_pipelines}
         )
     else:
         return fastapi.responses.JSONResponse(status_code=503, content={"status": []})
@@ -357,11 +406,19 @@ async def readyz():
 #     pass
 
 
-def initialize_service_info() -> ProcessingServiceInfoResponse:
-    # @TODO This requires loading all models into memory! Can we avoid this?
+def initialize_service_info(
+    pipelines: list[str] | None = None,
+) -> ProcessingServiceInfoResponse:
+    """
+    Describe the pipelines this service offers, for the /info endpoint and for
+    registering the pipelines with Antenna.
+
+    Describing a pipeline loads its models into memory, so only the pipelines chosen
+    by select_pipelines are included.
+    """
     pipeline_configs = [
         make_pipeline_config_response(classifier_class, slug=key)
-        for key, classifier_class in CLASSIFIER_CHOICES.items()
+        for key, classifier_class in select_pipelines(pipelines).items()
     ]
 
     _info = ProcessingServiceInfoResponse(

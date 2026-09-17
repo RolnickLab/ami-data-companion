@@ -3,6 +3,7 @@ import pathlib
 import sys
 from functools import lru_cache
 from typing import Optional, Union
+from urllib.parse import urlparse
 
 import pydantic
 import sqlalchemy
@@ -13,6 +14,38 @@ from rich import print as rprint
 from trapdata import ml
 from trapdata.common.filemanagement import default_database_dsn, get_app_dir
 from trapdata.common.schemas import FilePath
+from trapdata.ml.utils import check_download_url_scheme
+
+# Default location of the public object store that holds most of the project's model
+# weights, label maps and sample trap images. It is only the default for the
+# model_base_url and image_base_url settings below; any deployment can point those
+# elsewhere. The Swift path form is used because the equivalent S3 path form puts a
+# "<tenant>:" prefix on the bucket name, and the colon trips some URL parsers and caches.
+DEFAULT_OBJECT_STORE_URL = (
+    "https://object-arbutus.alliancecan.ca/swift/v1/"
+    "AUTH_3c987b8fc90743469d42899b1fdb48eb/"
+)
+
+
+def validate_object_store_base_url(value: str) -> str:
+    """
+    Check a model or image download base URL, and add a trailing slash if missing.
+
+    File paths are appended to the base URL directly, so it must have a host and no
+    query string or fragment. It must also use HTTPS, or HTTP on a loopback host, for
+    the reason given on check_download_url_scheme.
+    """
+    value = value.strip()
+    if not value:
+        raise ValueError("must not be empty")
+    parsed = urlparse(value)
+    if not parsed.hostname or parsed.query or parsed.fragment:
+        raise ValueError(
+            "must be an absolute URL with a host and no query string or fragment, "
+            f"got {value!r}"
+        )
+    check_download_url_scheme(value)
+    return value if value.endswith("/") else f"{value}/"
 
 
 class Settings(BaseSettings):
@@ -43,6 +76,17 @@ class Settings(BaseSettings):
     antenna_service_name: str = "AMI Data Companion"
     antenna_api_batch_size: int = 24
 
+    # Pipelines to offer, as a comma-separated list of slugs from CLASSIFIER_CHOICES in
+    # trapdata/api/api.py. The API server, the Antenna worker and pipeline registration
+    # load models only for these pipelines. Empty means every pipeline.
+    pipelines: str = ""
+
+    # Where model weights and sample trap images are downloaded from. Model classes give
+    # their files as paths relative to model_base_url; see resolve_model_url in
+    # trapdata/ml/utils.py.
+    model_base_url: str = f"{DEFAULT_OBJECT_STORE_URL}ami-models/"
+    image_base_url: str = f"{DEFAULT_OBJECT_STORE_URL}ami-trapdata/"
+
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
         """
@@ -60,11 +104,16 @@ class Settings(BaseSettings):
     def validate_database_dsn(cls, v):
         return sqlalchemy.engine.url.make_url(v)
 
+    @pydantic.field_validator("model_base_url", "image_base_url")
+    def validate_base_url(cls, v):
+        return validate_object_store_base_url(v)
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         env_prefix = "ami_"
         extra = "ignore"
+        protected_namespaces = ()
 
         fields = {
             "image_base_path": {
