@@ -162,3 +162,34 @@ def test_a_hub_label_map_loads_as_plain_names():
     assert BioCLIPClassifier.labels_from({"labels": ["From a retrain"]}) == [
         "From a retrain"
     ]
+
+
+def test_a_head_carrying_its_own_vocabulary_loads(tmp_path: pathlib.Path):
+    """
+    One published head keeps its label vocabulary inside the npz.
+
+    The vocabulary is longer than the number of classes, because a species with no
+    training data can never be predicted, so `classes` indexes into it rather than
+    lining up with it. Reading them as parallel arrays silently mislabels every class.
+    """
+    from trapdata.ml.models.bioclip import BioCLIP25PanamaClassifier
+
+    np.savez(
+        tmp_path / "head_combined.npz",
+        W=np.zeros((2, EMBED_DIM), dtype=np.float32),
+        b=np.zeros(2, dtype=np.float32),
+        # Two output classes drawn from a four-name vocabulary.
+        classes=np.array([3, 1]),
+        labels=np.array(["Unused one", "Second", "Unused two", "Fourth"], dtype=object),
+    )
+
+    classifier = type(
+        "LocalPanama",
+        (BioCLIP25PanamaClassifier,),
+        {"head_local_dir": str(tmp_path)},
+    )
+    shim = classifier.__new__(classifier)
+
+    assert shim.get_labels(None) == {0: "Fourth", 1: "Second"}
+    _weight, _bias, labels = classifier.load_head_arrays()
+    assert labels == ["Fourth", "Second"]

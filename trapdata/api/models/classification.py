@@ -6,7 +6,10 @@ import torch
 
 from trapdata.common.logs import logger
 from trapdata.ml.models.base import ClassifierResult
-from trapdata.ml.models.bioclip import BioCLIP25NewfoundlandClassifier
+from trapdata.ml.models.bioclip import (
+    BioCLIP25NewfoundlandClassifier,
+    BioCLIP25PanamaClassifier,
+)
 from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
     InferenceBaseClass,
@@ -205,6 +208,10 @@ class MothClassifierBinary(APIMothClassifier, MothNonMothClassifier):
 class MothClassifierBioCLIP25Newfoundland(
     APIMothClassifier, BioCLIP25NewfoundlandClassifier
 ):
+    pass
+
+
+class MothClassifierBioCLIP25Panama(APIMothClassifier, BioCLIP25PanamaClassifier):
     pass
 
 

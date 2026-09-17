@@ -13,6 +13,7 @@ over its output reproduces sklearn's multinomial predict_proba exactly. See
 """
 
 import json
+import os
 import pathlib
 
 import torch
@@ -169,6 +170,40 @@ class BioCLIPClassifier(InferenceBaseClass):
         return self._preprocess
 
 
+class BioCLIPVocabularyInHeadClassifier(BioCLIPClassifier):
+    """
+    A head whose label vocabulary travels inside the npz rather than beside it.
+
+    The vocabulary is longer than the number of output classes — a species with no
+    training data can never be predicted, so it is not a class — which is why the head's
+    ``classes`` array indexes into it rather than lining up with it.
+    """
+
+    categories_filename = ""
+
+    def get_labels(self, labels_path) -> dict[int, str]:
+        import numpy as np
+
+        checkpoint = np.load(self._head_file(self.head_filename), allow_pickle=True)
+        vocabulary = checkpoint["labels"]
+        return {
+            index: str(vocabulary[int(source_class)])
+            for index, source_class in enumerate(checkpoint["classes"])
+        }
+
+    @classmethod
+    def load_head_arrays(cls) -> tuple:
+        import numpy as np
+
+        shim = cls.__new__(cls)
+        checkpoint = np.load(shim._head_file(cls.head_filename), allow_pickle=True)
+        vocabulary = checkpoint["labels"]
+        labels = [
+            str(vocabulary[int(source_class)]) for source_class in checkpoint["classes"]
+        ]
+        return checkpoint["W"], checkpoint["b"], labels
+
+
 class BioCLIP25NewfoundlandClassifier(SpeciesClassifier, BioCLIPClassifier):
     name = "BioCLIP 2.5 + LogReg head (Newfoundland)"
     description = (
@@ -176,3 +211,14 @@ class BioCLIP25NewfoundlandClassifier(SpeciesClassifier, BioCLIPClassifier):
         "Newfoundland species list. The head can be retrained from verified crops."
     )
     head_repo_id = "mohammedelabbas/newfoundland-leps-trap-classifier"
+
+
+class BioCLIP25PanamaClassifier(SpeciesClassifier, BioCLIPVocabularyInHeadClassifier):
+    name = "BioCLIP 2.5 + LogReg head (Panama)"
+    description = (
+        "Frozen BioCLIP 2.5 ViT-H/14 with a logistic-regression head over the Panama "
+        "(BCI and Mount Totumas) species list. The head can be retrained."
+    )
+    # Not published, so it is read from a directory this deployment provides.
+    head_filename = "head_combined.npz"
+    head_local_dir = os.environ.get("BIOCLIP_PANAMA_HEAD_DIR") or None
