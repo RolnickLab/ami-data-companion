@@ -21,6 +21,7 @@ from trapdata.api.schemas import (
     DetectionResponse,
     SourceImage,
 )
+from trapdata.api.tests.image_server import StaticFileTestServer
 from trapdata.common.filemanagement import find_images
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
@@ -260,19 +261,30 @@ class TestSourceImageSchema(TestCase):
         img.close()
 
     def test_url(self):
-        # Don't trust placeholder image services
-        # Don't trust placeholder image services
-        url = (
-            "https://upload.wikimedia.org/wikipedia/en/thumb/8/80/"
-            "Wikipedia-logo-v2.svg/103px-Wikipedia-logo-v2.svg.png"
-        )
-        source_image = SourceImage(id="1", url=url)
-        self.assertEqual(source_image.url, url)
-        img = source_image.open()
-        self.assertIsNotNone(img)
-        assert img is not None
-        self.assertEqual(img.size, (103, 94))
-        img.close()
+        """
+        A source image created from a URL downloads the image and reads its size.
+
+        The image is served by a local HTTP server rather than fetched from the
+        public internet, so the test does not break when a third-party host
+        becomes unreachable or changes which image sizes it will serve. The
+        dimensions are deliberately unequal so the assertion would catch a
+        mixed-up or placeholder image rather than only a failed download.
+        """
+        image_size = (103, 94)
+        with tempfile.TemporaryDirectory() as served_dir:
+            filename = "source-image.png"
+            PIL.Image.new("RGB", image_size, color="blue").save(  # type: ignore
+                pathlib.Path(served_dir) / filename
+            )
+            with StaticFileTestServer(served_dir) as file_server:
+                url = file_server.get_url(filename)
+                source_image = SourceImage(id="1", url=url)
+                self.assertEqual(source_image.url, url)
+                img = source_image.open()
+                self.assertIsNotNone(img)
+                assert img is not None
+                self.assertEqual(img.size, image_size)
+                img.close()
 
     def test_bad_base64(self):
         base64_string = "happy birthday"

@@ -118,9 +118,13 @@ class TrapImage(Base):
         """Have all detected objects been classified"""
 
     def report_data(self) -> CaptureListItem:
+        # Imported here to avoid a circular import: trapdata.settings imports the models.
+        from trapdata.settings import read_settings
+
+        image_base_url = read_settings().image_base_url
         return CaptureListItem(
             id=self.id,
-            source_image=f"{constants.IMAGE_BASE_URL}vermont/snapshots/{self.path}",
+            source_image=f"{image_base_url}vermont/snapshots/{self.path}",
             timestamp=self.timestamp,
             last_read=self.last_read,
             last_processed=self.last_processed,
