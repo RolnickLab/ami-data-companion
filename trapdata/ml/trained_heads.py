@@ -14,11 +14,21 @@ import typing
 
 from trapdata import logger
 
-# Where the training endpoint writes heads. Kept off the model cache so a training run
-# cannot overwrite the head the service is currently serving.
-TRAINED_HEADS_DIR = os.environ.get(
-    "BIOCLIP_TRAINED_HEADS_DIR", "/data/bioclip-service/trained_heads"
-)
+
+def _default_heads_dir() -> str:
+    """
+    Where the training endpoint writes heads.
+
+    Beside the downloaded model weights, following how this package already stores
+    anything large, but in its own directory: a training run must never overwrite the
+    head the service is currently serving.
+    """
+    import torch
+
+    return str(pathlib.Path(torch.hub.get_dir()) / "trained_heads")
+
+
+TRAINED_HEADS_DIR = os.environ.get("BIOCLIP_TRAINED_HEADS_DIR") or _default_heads_dir()
 
 HEAD_SUFFIX = ".npz"
 LABELS_SUFFIX = ".label_map.json"

@@ -82,6 +82,25 @@ class BioCLIPClassifier(InferenceBaseClass):
             repo_type=self.head_repo_type,
         )
 
+    @staticmethod
+    def labels_from(label_map) -> list[str]:
+        """
+        Normalise the three shapes a label map arrives in.
+
+        A head published on the Hub maps an index to a record carrying the species name
+        and its iNaturalist id; an older one maps an index straight to a name; a head
+        retrained here stores its label list beside the counts and metrics of the run.
+        All three have to load, or a head is trainable but not servable.
+        """
+        if isinstance(label_map, dict) and isinstance(label_map.get("labels"), list):
+            return list(label_map["labels"])
+
+        ordered = sorted(label_map.items(), key=lambda kv: int(kv[0]))
+        return [
+            entry["species_name"] if isinstance(entry, dict) else str(entry)
+            for _, entry in ordered
+        ]
+
     @classmethod
     def load_head_arrays(cls) -> tuple:
         """
@@ -97,8 +116,7 @@ class BioCLIPClassifier(InferenceBaseClass):
         shim = cls.__new__(cls)
         checkpoint = np.load(shim._head_file(cls.head_filename))
         with open(shim._head_file(cls.categories_filename)) as f:
-            label_map = json.load(f)
-        labels = [label_map[str(i)] for i in range(len(label_map))]
+            labels = cls.labels_from(json.load(f))
         return checkpoint["W"], checkpoint["b"], labels
 
     def get_weights(self, weights_path):
@@ -106,20 +124,9 @@ class BioCLIPClassifier(InferenceBaseClass):
         return self._head_file(self.head_filename)
 
     def get_labels(self, labels_path) -> dict[int, str]:
-        """
-        Read the label map that belongs to this head.
-
-        Two shapes are accepted because two things write one. A head published on the Hub
-        carries ``{"0": "Species name"}``; a head this service retrained carries its label
-        list under ``labels`` alongside the counts and metrics of the run that produced it.
-        """
+        """Read the label map that belongs to this head. See :meth:`labels_from`."""
         with open(self._head_file(self.categories_filename)) as f:
-            label_map = json.load(f)
-
-        labels = label_map.get("labels") if isinstance(label_map, dict) else None
-        if isinstance(labels, list):
-            return dict(enumerate(labels))
-        return {int(index): label for index, label in label_map.items()}
+            return dict(enumerate(self.labels_from(json.load(f))))
 
     def get_model(self) -> torch.nn.Module:
         import numpy as np
