@@ -351,3 +351,6 @@ class ClassifierResult:
     labels: list[str] | None
     logit: list[float] | None
     scores: list[float]
+    # Set only by a model whose backbone embedding is worth keeping; see
+    # ClassificationResponse.features.
+    features: list[float] | None = None
