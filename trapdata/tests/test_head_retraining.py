@@ -138,3 +138,27 @@ def test_a_retrained_head_can_read_back_its_own_label_map(tmp_path: pathlib.Path
     # Reading the labels must not need the backbone.
     shim = classifier.__new__(classifier)
     assert shim.get_labels(None) == {0: "Species one", 1: "Species two"}
+
+
+def test_a_hub_label_map_loads_as_plain_names():
+    """
+    The published head maps an index to a record, not to a string.
+
+    Reading it as a string gives every class a dict for a name, which fails only later
+    and confusingly, when warm-starting tries to look one up.
+    """
+    from trapdata.ml.models.bioclip import BioCLIPClassifier
+
+    published = {
+        "1": {"species_name": "Actias luna", "inat_taxon_id": 47916},
+        "0": {"species_name": "Lymantria dispar", "inat_taxon_id": 47802},
+    }
+
+    assert BioCLIPClassifier.labels_from(published) == [
+        "Lymantria dispar",
+        "Actias luna",
+    ]
+    assert BioCLIPClassifier.labels_from({"0": "Plain name"}) == ["Plain name"]
+    assert BioCLIPClassifier.labels_from({"labels": ["From a retrain"]}) == [
+        "From a retrain"
+    ]
