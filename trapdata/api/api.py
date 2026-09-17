@@ -20,6 +20,7 @@ from .models.classification import (
     InsectOrderClassifier,
     MothClassifierBinary,
     MothClassifierBioCLIP25Newfoundland,
+    MothClassifierBioCLIP25Panama,
     MothClassifierGlobal,
     MothClassifierPanama,
     MothClassifierPanama2024,
@@ -73,6 +74,7 @@ CLASSIFIER_CHOICES = {
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
     "bioclip_2_5_newfoundland": MothClassifierBioCLIP25Newfoundland,
+    "bioclip_2_5_panama": MothClassifierBioCLIP25Panama,
 }
 
 # Heads this service retrained in an earlier run are offered alongside the ones it ships
