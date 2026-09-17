@@ -6,6 +6,7 @@ import torch
 
 from trapdata.common.logs import logger
 from trapdata.ml.models.base import ClassifierResult
+from trapdata.ml.models.bioclip import BioCLIP25NewfoundlandClassifier
 from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
     InferenceBaseClass,
@@ -66,13 +67,23 @@ class APIMothClassifier(
             batch_size=self.batch_size,
         )
 
-    def post_process_batch(self, logits: torch.Tensor):
+    def post_process_batch(self, batch_output: torch.Tensor | tuple):
         """
         Return the labels, softmax/calibrated scores, and the original logits for
         each image in the batch.
 
         Almost like the base class method, but we need to return the logits as well.
+
+        A model whose head can be retrained returns ``(logits, features)`` so the
+        embedding travels with the classification it produced; anything else returns
+        logits alone.
         """
+        if isinstance(batch_output, tuple):
+            logits, features = batch_output
+            features = features.cpu()
+        else:
+            logits, features = batch_output, None
+
         predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
         logits = logits.cpu()
@@ -88,6 +99,7 @@ class APIMothClassifier(
                 labels=labels,
                 logit=logit,
                 scores=pred.tolist(),
+                features=features[i].tolist() if features is not None else None,
             )
 
             batch_results.append(result)
@@ -164,6 +176,7 @@ class APIMothClassifier(
             classification=self.get_best_label(predictions),
             scores=predictions.scores,
             logits=predictions.logit,
+            features=predictions.features,
             inference_time=seconds_per_item,
             algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
             timestamp=datetime.datetime.now(),
@@ -186,6 +199,12 @@ class APIMothClassifier(
 
 
 class MothClassifierBinary(APIMothClassifier, MothNonMothClassifier):
+    pass
+
+
+class MothClassifierBioCLIP25Newfoundland(
+    APIMothClassifier, BioCLIP25NewfoundlandClassifier
+):
     pass
 
 

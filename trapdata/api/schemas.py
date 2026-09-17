@@ -100,6 +100,16 @@ class ClassificationResponse(pydantic.BaseModel):
         ),
         repr=False,  # Too long to display in the repr
     )
+    features: list[float] | None = pydantic.Field(
+        default=None,
+        description=(
+            "The embedding the classifier head consumed, from the frozen backbone that "
+            "produced this classification. Returned only by models that can be retrained: "
+            "it is what a new head is fit on, so storing it means the backbone never has "
+            "to run over the same crop twice."
+        ),
+        repr=False,  # Too long to display in the repr
+    )
     inference_time: float | None = None
     algorithm: AlgorithmReference
     terminal: bool = True
@@ -338,3 +348,67 @@ class ProcessingServiceInfoResponse(pydantic.BaseModel):
             ]
         ],
     )
+
+
+class TrainRequest(pydantic.BaseModel):
+    """Retrain a classifier head from a dataset Antenna has already prepared."""
+
+    dataset_url: str = pydantic.Field(
+        description="URL of the npz training set Antenna wrote to storage."
+    )
+    algorithm_key: str = pydantic.Field(
+        description=(
+            "Which head to retrain. Its current weights are the baseline the new head "
+            "must beat."
+        )
+    )
+    job_id: int | None = pydantic.Field(
+        default=None,
+        description=(
+            "Antenna job to report back to. Without it the result is only returned in "
+            "this response."
+        ),
+    )
+    callback_url: str | None = pydantic.Field(
+        default=None, description="Where to post the result when training finishes."
+    )
+    callback_token: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Token for the callback, so Antenna can tell a real result from a forged one."
+        ),
+    )
+    name: str | None = pydantic.Field(
+        default=None, description="Name for the produced head."
+    )
+    # Defaults match what Antenna stores as this algorithm's training config; it sends
+    # whatever an admin has set there, so these are overridden in practice.
+    min_per_species: int = 2
+    min_improvement: float = 0.0
+    head_type: str = "linear"
+    epochs: int = 300
+    learning_rate: float = 0.01
+    weight_decay: float = 1e-4
+    save: bool = pydantic.Field(
+        default=True,
+        description=(
+            "Write the head to disk. It is never loaded into the running service "
+            "automatically."
+        ),
+    )
+
+
+class TrainResponse(pydantic.BaseModel):
+    promote: bool
+    reason: str
+    warnings: list[str]
+    rows: dict
+    classes_restored_from_current_head: int = 0
+    counts: dict
+    dropped_species: list[str]
+    candidate_metrics: dict
+    incumbent_metrics: dict | None
+    labels: list[str]
+    saved: dict[str, str] | None
+    trained_at: str
+    reported_to_antenna: bool = False

@@ -12,12 +12,14 @@ import pydantic
 from fastapi.middleware.gzip import GZipMiddleware
 
 from ..common.logs import logger  # noqa: F401
+from ..ml import trained_heads, training
 from ..ml.utils import resolve_model_url
 from . import settings
 from .models.classification import (
     APIMothClassifier,
     InsectOrderClassifier,
     MothClassifierBinary,
+    MothClassifierBioCLIP25Newfoundland,
     MothClassifierGlobal,
     MothClassifierPanama,
     MothClassifierPanama2024,
@@ -36,7 +38,13 @@ from .schemas import (
 )
 from .schemas import PipelineRequest as PipelineRequest_
 from .schemas import PipelineResultsResponse as PipelineResponse_
-from .schemas import ProcessingServiceInfoResponse, SourceImage, SourceImageResponse
+from .schemas import (
+    ProcessingServiceInfoResponse,
+    SourceImage,
+    SourceImageResponse,
+    TrainRequest,
+    TrainResponse,
+)
 
 
 @asynccontextmanager
@@ -64,7 +72,12 @@ CLASSIFIER_CHOICES = {
     "global_moths_2024": MothClassifierGlobal,
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
+    "bioclip_2_5_newfoundland": MothClassifierBioCLIP25Newfoundland,
 }
+
+# Heads this service retrained in an earlier run are offered alongside the ones it ships
+# with, so a restart does not lose them.
+trained_heads.register(CLASSIFIER_CHOICES)
 
 
 def parse_pipeline_setting(value: str) -> list[str]:
@@ -432,6 +445,151 @@ def initialize_service_info(
         # algorithms=list(algorithm_choices.values()),
     )
     return _info
+
+
+def _incumbent_head(algorithm_key: str) -> dict | None:
+    """
+    Load the weights of the head currently in service, so a new one can be compared to it.
+
+    Returns None when the key names something this service does not serve or something
+    whose head cannot be read: training still runs, it just has no baseline to beat.
+    """
+    classifier_class = CLASSIFIER_CHOICES.get(algorithm_key)
+    if classifier_class is None:
+        classifier_class = next(
+            (c for c in CLASSIFIER_CHOICES.values() if c.get_key() == algorithm_key),
+            None,
+        )
+    if classifier_class is None or not getattr(classifier_class, "trainable", False):
+        logger.warn(
+            f"No trainable head named '{algorithm_key}'; training without a baseline"
+        )
+        return None
+
+    try:
+        weight, bias, labels = classifier_class.load_head_arrays()
+    except Exception as e:
+        logger.warn(f"Could not read the current head for '{algorithm_key}': {e}")
+        return None
+    return {"weights": weight, "bias": bias, "labels": labels}
+
+
+def _report_to_antenna(
+    data: TrainRequest, response: TrainResponse, dataset_metadata: dict
+) -> bool:
+    """
+    Tell the Antenna job how the run went.
+
+    Reported rather than raised on failure: the training itself succeeded, and losing the
+    callback should not make the caller think it did not.
+    """
+    import requests
+
+    payload = {
+        "job_id": data.job_id,
+        "algorithm_key": data.algorithm_key,
+        "dataset": dataset_metadata,
+        "result": response.model_dump(),
+    }
+    headers = {"Content-Type": "application/json"}
+    if data.callback_token:
+        headers["Authorization"] = f"Token {data.callback_token}"
+    try:
+        reply = requests.post(
+            data.callback_url, json=payload, headers=headers, timeout=60
+        )
+        reply.raise_for_status()
+        return True
+    except Exception as e:
+        logger.error(
+            f"Trained successfully but could not report to Antenna at "
+            f"{data.callback_url}: {e}"
+        )
+        return False
+
+
+@app.post("/train", tags=["training"])
+async def train(data: TrainRequest) -> TrainResponse:
+    """
+    Retrain a classifier head from human-verified labels.
+
+    Antenna prepares the dataset and hands over a URL; this downloads it, fits a new head,
+    and scores it against the head currently in service on the same held-out rows. It
+    never swaps the running head: promoting is a separate, deliberate step, because an
+    automatic swap would let one bad training run quietly degrade every later
+    classification.
+    """
+    import datetime
+    import pathlib
+
+    import requests
+
+    try:
+        rows, dataset_metadata = training.fetch_dataset(data.dataset_url)
+    except requests.HTTPError as e:
+        raise fastapi.HTTPException(
+            status_code=502, detail=f"Could not download the training set: {e}"
+        )
+    except Exception as e:
+        raise fastapi.HTTPException(
+            status_code=422, detail=f"Could not read the training set: {e}"
+        )
+
+    if not rows:
+        raise fastapi.HTTPException(
+            status_code=422, detail="The training set is empty."
+        )
+
+    try:
+        result = training.retrain(
+            rows=rows,
+            incumbent=_incumbent_head(data.algorithm_key),
+            min_per_species=data.min_per_species,
+            min_improvement=data.min_improvement,
+            epochs=data.epochs,
+            learning_rate=data.learning_rate,
+            weight_decay=data.weight_decay,
+            head_type=data.head_type,
+            # Antenna ships the species list inside the dataset; it usually comes from a
+            # project's taxa list and must win over whatever happens to be in the rows.
+            declared_classes=dataset_metadata.get("classes"),
+        )
+    except (training.NotEnoughData, training.UnsupportedHeadType) as e:
+        raise fastapi.HTTPException(status_code=422, detail=str(e))
+
+    saved = None
+    if data.save:
+        name = data.name or f"head-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        saved = training.save_head(
+            result, pathlib.Path(trained_heads.TRAINED_HEADS_DIR), name
+        )
+        # Offer it straight away. The head it was trained from stays where it is; this
+        # adds a choice rather than replacing one.
+        trained_heads.register(CLASSIFIER_CHOICES)
+
+    response = TrainResponse(
+        promote=result["promote"],
+        reason=result["reason"],
+        warnings=result["warnings"],
+        rows=result["rows"],
+        classes_restored_from_current_head=result.get(
+            "classes_restored_from_current_head", 0
+        ),
+        counts=result["counts"],
+        dropped_species=result["dropped_species"],
+        candidate_metrics=result["candidate_metrics"],
+        incumbent_metrics=result["incumbent_metrics"],
+        labels=result["labels"],
+        saved=saved,
+        trained_at=result["trained_at"],
+    )
+
+    if data.callback_url:
+        response.reported_to_antenna = _report_to_antenna(
+            data, response, dataset_metadata
+        )
+
+    return response
 
 
 if __name__ == "__main__":
