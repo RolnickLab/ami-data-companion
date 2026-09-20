@@ -87,8 +87,13 @@ def run_benchmark(
         settings=settings,
     )
 
-    # Initialize ResultPoster for sending acknowledgments
-    result_poster = ResultPoster(max_pending=10)
+    # Initialize ResultPoster for sending acknowledgments. It takes the same
+    # per-POST size cap as the worker so a benchmark measures the number of
+    # requests a tuned deployment would actually make.
+    result_poster = ResultPoster(
+        max_pending=10,
+        max_post_bytes=settings.antenna_result_post_max_bytes,
+    )
 
     # Performance metrics
     total_batches = 0
