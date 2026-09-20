@@ -7,6 +7,7 @@ import time
 from collections.abc import Callable
 
 import numpy as np
+import sentry_sdk
 import torch
 import torch.multiprocessing as mp
 
@@ -116,6 +117,10 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
                 )
                 any_jobs = any_jobs or any_work_done
             except Exception as e:
+                # Structlog does not route through the stdlib logging module, so
+                # Sentry's logging integration never sees these errors — capture
+                # explicitly to make worker failures visible off-host.
+                sentry_sdk.capture_exception(e)
                 logger.error(
                     f"[GPU {gpu_id}] Failed to process job {job_id} with pipeline {pipeline}: {e}",
                     exc_info=True,
@@ -359,6 +364,9 @@ def _process_batch(
                 )
             )
     except Exception as e:
+        # Captured explicitly for the same reason as the job-level handler:
+        # structlog errors are invisible to Sentry's logging integration.
+        sentry_sdk.capture_exception(e)
         logger.error(
             f"Batch {batch_num + 1} failed during processing: {e}", exc_info=True
         )
