@@ -193,3 +193,84 @@ def test_a_head_carrying_its_own_vocabulary_loads(tmp_path: pathlib.Path):
     assert shim.get_labels(None) == {0: "Fourth", 1: "Second"}
     _weight, _bias, labels = classifier.load_head_arrays()
     assert labels == ["Fourth", "Second"]
+
+
+def _train_request(**overrides):
+    from trapdata.api.schemas import TrainRequest
+
+    fields = {
+        "dataset_url": "http://antenna/media/training/set.npz",
+        "algorithm_key": "some-head",
+        "callback_token": "a-signed-token",
+        "head_upload_url": "http://antenna/api/v2/jobs/7/training-head/",
+    }
+    fields.update(overrides)
+    return TrainRequest(**fields)
+
+
+def test_the_head_is_uploaded_so_it_outlives_this_service(tmp_path, monkeypatch):
+    """
+    The head is written to a cache directory, so a rebuild loses it.
+
+    Uploading is what makes a version something a person can still promote later.
+    """
+    from trapdata.api import api
+
+    head = tmp_path / "run.npz"
+    head.write_bytes(b"the weights")
+    labels = tmp_path / "run.label_map.json"
+    labels.write_text('{"labels": []}')
+
+    sent = {}
+
+    class Reply:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "files": {
+                    "head": {
+                        "path": "algorithms/x/run.npz",
+                        "url": "/media/algorithms/x/run.npz",
+                    }
+                }
+            }
+
+    def fake_post(url, files=None, headers=None, timeout=None):
+        sent["url"] = url
+        sent["headers"] = headers
+        sent["names"] = sorted(files)
+        sent["head_bytes"] = files["head"].read()
+        return Reply()
+
+    monkeypatch.setattr("requests.post", fake_post)
+
+    url = api._upload_head(_train_request(), {"head": str(head), "labels": str(labels)})
+
+    assert url == "/media/algorithms/x/run.npz"
+    assert sent["url"] == "http://antenna/api/v2/jobs/7/training-head/"
+    assert sent["names"] == ["head", "labels"]
+    assert sent["head_bytes"] == b"the weights"
+    # The same signed token that authorises the result callback.
+    assert sent["headers"]["Authorization"] == "Token a-signed-token"
+
+
+def test_a_failed_upload_does_not_fail_the_training(tmp_path, monkeypatch):
+    """
+    The run succeeded and the head is still on local disk.
+
+    Raising here would tell the caller its training failed when it did not; it only lost
+    the durable copy.
+    """
+    from trapdata.api import api
+
+    head = tmp_path / "run.npz"
+    head.write_bytes(b"the weights")
+
+    def fake_post(*args, **kwargs):
+        raise ConnectionError("Antenna is unreachable")
+
+    monkeypatch.setattr("requests.post", fake_post)
+
+    assert api._upload_head(_train_request(), {"head": str(head)}) is None

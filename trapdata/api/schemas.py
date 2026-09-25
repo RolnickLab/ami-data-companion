@@ -381,6 +381,13 @@ class TrainRequest(pydantic.BaseModel):
     name: str | None = pydantic.Field(
         default=None, description="Name for the produced head."
     )
+    head_upload_url: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Where to upload the head this run produces, so it outlives this service's "
+            "disk. Omitted by a caller that keeps no copy."
+        ),
+    )
     # Defaults match what Antenna stores as this algorithm's training config; it sends
     # whatever an admin has set there, so these are overridden in practice.
     min_per_species: int = 2
@@ -410,5 +417,6 @@ class TrainResponse(pydantic.BaseModel):
     incumbent_metrics: dict | None
     labels: list[str]
     saved: dict[str, str] | None
+    head_url: str | None = None
     trained_at: str
     reported_to_antenna: bool = False

@@ -476,6 +476,44 @@ def _incumbent_head(algorithm_key: str) -> dict | None:
     return {"weights": weight, "bias": bias, "labels": labels}
 
 
+def _upload_head(data: TrainRequest, saved: dict) -> str | None:
+    """
+    Send the head this run produced to whoever asked for it, and say where it landed.
+
+    Reported rather than raised on failure, like the callback below: the training itself
+    succeeded, and losing the upload should not make the caller think it did not. The
+    head also stays on local disk either way, so a failed upload costs durability, not
+    the ability to serve it.
+    """
+    import requests
+
+    headers = {}
+    if data.callback_token:
+        headers["Authorization"] = f"Token {data.callback_token}"
+
+    handles = {}
+    try:
+        for name, path in saved.items():
+            handles[name] = open(path, "rb")
+        reply = requests.post(
+            data.head_upload_url, files=handles, headers=headers, timeout=120
+        )
+        reply.raise_for_status()
+        # The caller decides where it put the files; report back what it says.
+        stored = reply.json().get("files", {})
+        head = stored.get("head") or next(iter(stored.values()), None)
+        return head.get("url") if head else None
+    except Exception as e:
+        logger.error(
+            f"Trained successfully but could not upload the head to "
+            f"{data.head_upload_url}: {e}"
+        )
+        return None
+    finally:
+        for handle in handles.values():
+            handle.close()
+
+
 def _report_to_antenna(
     data: TrainRequest, response: TrainResponse, dataset_metadata: dict
 ) -> bool:
@@ -560,6 +598,7 @@ async def train(data: TrainRequest) -> TrainResponse:
         raise fastapi.HTTPException(status_code=422, detail=str(e))
 
     saved = None
+    head_url = None
     if data.save:
         name = data.name or f"head-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
         saved = training.save_head(
@@ -568,6 +607,9 @@ async def train(data: TrainRequest) -> TrainResponse:
         # Offer it straight away. The head it was trained from stays where it is; this
         # adds a choice rather than replacing one.
         trained_heads.register(CLASSIFIER_CHOICES)
+
+        if data.head_upload_url:
+            head_url = _upload_head(data, saved)
 
     response = TrainResponse(
         promote=result["promote"],
@@ -583,6 +625,7 @@ async def train(data: TrainRequest) -> TrainResponse:
         incumbent_metrics=result["incumbent_metrics"],
         labels=result["labels"],
         saved=saved,
+        head_url=head_url,
         trained_at=result["trained_at"],
     )
 
