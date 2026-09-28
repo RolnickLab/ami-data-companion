@@ -26,10 +26,10 @@ from ..schemas import (
     AlgorithmReference,
     ClassificationResponse,
     DetectionResponse,
-    EmbeddingResponse,
     SourceImage,
 )
 from .base import APIInferenceBaseClass
+from .feature_extraction import attach_embedding
 
 
 class APIMothClassifier(
@@ -267,14 +267,9 @@ class APIMothClassifier(
     def _attach_embedding(
         self, detection: DetectionResponse, features: list[float]
     ) -> None:
-        # One vector per algorithm: replace any earlier one from this model.
-        key = self.get_key()
-        others = [e for e in detection.embeddings or [] if e.algorithm.key != key]
-        embedding = EmbeddingResponse(
-            features=features,
-            algorithm=AlgorithmReference(name=self.name, key=key),
+        attach_embedding(
+            detection, features, AlgorithmReference(name=self.name, key=self.get_key())
         )
-        detection.embeddings = others + [embedding]
 
     def embed(
         self, detections: typing.Iterable[DetectionResponse]
