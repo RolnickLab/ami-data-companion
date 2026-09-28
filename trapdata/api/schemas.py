@@ -143,9 +143,11 @@ class DetectionResponse(pydantic.BaseModel):
     embeddings: list[EmbeddingResponse] | None = pydantic.Field(
         default=None,
         description=(
-            "Feature vectors for this detection, at most one per algorithm. Only "
-            "included when features_for_all_detections is on, and then every "
-            "detection has one, including those the moth/non-moth filter rejected."
+            "Feature vectors for this detection, at most one per algorithm key. "
+            "Present when features_for_all_detections or embedding_extractor is on, "
+            "or when the pipeline is feature-only; every detection then has one, "
+            "including those the moth/non-moth filter rejected. Vectors are "
+            "comparable only when their algorithm keys match."
         ),
     )
 
