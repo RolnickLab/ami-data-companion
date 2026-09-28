@@ -108,8 +108,16 @@ class TestEmbeddingExtractorInAClassifierPipeline(_APITestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.off = cls._run(PipelineConfigRequest())
+        # The service advertises the extractor, so a request may turn it on or off.
+        cls.setting = patch.object(api.settings, "embedding_extractor", EXTRACTOR_KEY)
+        cls.setting.start()
+        cls.off = cls._run(PipelineConfigRequest(embedding_extractor=""))
         cls.on = cls._run(PipelineConfigRequest(embedding_extractor=EXTRACTOR_KEY))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.setting.stop()
+        super().tearDownClass()
 
     @classmethod
     def _run(cls, config: PipelineConfigRequest) -> PipelineResponse:
@@ -162,6 +170,18 @@ class TestEmbeddingExtractorInAClassifierPipeline(_APITestCase):
         response = self.post(request)
         self.assertEqual(response.status_code, 422)
         self.assertIn(EXTRACTOR_KEY, response.text)
+
+
+    def test_an_extractor_the_pipeline_does_not_advertise_is_rejected(self):
+        request = PipelineRequest(
+            pipeline=PipelineChoice[CLASSIFIER_PIPELINE],
+            source_images=[self.image()],
+            config=PipelineConfigRequest(embedding_extractor=EXTRACTOR_KEY),
+        )
+        with patch.object(api.settings, "embedding_extractor", ""):
+            response = self.post(request)
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("not offered", response.text)
 
 
 class TestFeatureOnlyPipeline(_APITestCase):

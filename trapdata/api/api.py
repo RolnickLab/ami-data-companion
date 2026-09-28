@@ -367,6 +367,19 @@ async def process(data: PipelineRequest) -> PipelineResponse:
             start_time,
         )
 
+    Advertised = resolve_embedding_extractor()
+    if Extractor and Extractor is not Advertised:
+        # Antenna rejects a result that names an algorithm the pipeline does not
+        # list in /info, so only the extractor from the setting may be requested.
+        raise fastapi.HTTPException(
+            status_code=422,
+            detail=(
+                f"Embedding extractor {Extractor.get_key()} is not offered by the "
+                f"{data.pipeline} pipeline on this service. Offered: "
+                f"{Advertised.get_key() if Advertised else 'none'}."
+            ),
+        )
+
     Classifier = CLASSIFIER_CHOICES[str(data.pipeline)]
 
     detector = APIMothDetector(

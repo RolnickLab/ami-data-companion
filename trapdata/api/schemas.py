@@ -322,7 +322,9 @@ class PipelineConfigRequest(pydantic.BaseModel):
             "Key of a feature extractor that attaches an embedding to every "
             "detection, as an item in `embeddings`, in addition to any other vector. "
             "It adds no classification. An empty string turns it off. When omitted, "
-            "the service's AMI_EMBEDDING_EXTRACTOR setting applies."
+            "the service's AMI_EMBEDDING_EXTRACTOR setting applies. Only the "
+            "extractor that the pipeline lists in /info can be requested; any other "
+            "key returns HTTP 422. Feature-only pipelines ignore this field."
         ),
         examples=["bioclip_2_5_embeddings"],
     )
