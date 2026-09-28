@@ -171,7 +171,6 @@ class TestEmbeddingExtractorInAClassifierPipeline(_APITestCase):
         self.assertEqual(response.status_code, 422)
         self.assertIn(EXTRACTOR_KEY, response.text)
 
-
     def test_an_extractor_the_pipeline_does_not_advertise_is_rejected(self):
         request = PipelineRequest(
             pipeline=PipelineChoice[CLASSIFIER_PIPELINE],
