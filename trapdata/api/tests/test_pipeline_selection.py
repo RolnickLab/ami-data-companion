@@ -41,7 +41,7 @@ def test_setting_is_read_from_the_environment(monkeypatch):
 def test_no_selection_offers_every_pipeline(offered):
     offered("")
 
-    assert api.select_pipelines() == api.CLASSIFIER_CHOICES
+    assert api.select_pipelines() == api.PIPELINE_CHOICES
 
 
 def test_setting_selects_pipelines_in_the_order_given(offered):

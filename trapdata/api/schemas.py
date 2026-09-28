@@ -170,6 +170,22 @@ class SourceImageRequest(pydantic.BaseModel):
     # b64: str | None = None
 
 
+class DetectionRequest(pydantic.BaseModel):
+    """A detection that already exists, sent back so a pipeline can reuse its box."""
+
+    model_config = pydantic.ConfigDict(extra="ignore")
+
+    source_image: SourceImageRequest
+    bbox: BoundingBox | None = None
+    crop_image_url: str | None = None
+    algorithm: AlgorithmReference = pydantic.Field(
+        description=(
+            "The algorithm that made this detection. It is returned unchanged, so the "
+            "caller can match each response detection to the one it sent."
+        ),
+    )
+
+
 class SourceImageResponse(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="ignore")
 
@@ -300,6 +316,16 @@ class PipelineConfigRequest(pydantic.BaseModel):
             "omitted, the service's AMI_FEATURES_FOR_ALL_DETECTIONS setting applies."
         ),
     )
+    embedding_extractor: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Key of a feature extractor that attaches an embedding to every "
+            "detection, as an item in `embeddings`, in addition to any other vector. "
+            "It adds no classification. An empty string turns it off. When omitted, "
+            "the service's AMI_EMBEDDING_EXTRACTOR setting applies."
+        ),
+        examples=["bioclip_2_5_embeddings"],
+    )
 
 
 class PipelineRequest(pydantic.BaseModel):
@@ -314,6 +340,15 @@ class PipelineRequest(pydantic.BaseModel):
 
     source_images: list[SourceImageRequest] = pydantic.Field(
         description="A list of source image URLs to process.",
+    )
+
+    detections: list[DetectionRequest] | None = pydantic.Field(
+        default=None,
+        description=(
+            "Existing detections. Only feature-only pipelines use them: each one with "
+            "a bounding box is embedded as it is, and the detector does not run. "
+            "Other pipelines ignore them."
+        ),
     )
 
     config: PipelineConfigRequest = pydantic.Field(

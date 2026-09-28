@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     include_features: bool = False
     include_logits: bool = True
     features_for_all_detections: bool = False
+    # Key of a feature extractor that embeds every detection in every pipeline, such
+    # as bioclip_2_5_embeddings. Empty means none.
+    embedding_extractor: str = ""
 
     # Pipelines to offer, as a comma-separated list of slugs from CLASSIFIER_CHOICES in
     # trapdata/api/api.py. The API server, the Antenna worker and pipeline registration
@@ -251,6 +254,16 @@ class Settings(BaseSettings):
                     "rejected detection."
                 ),
                 "kivy_type": "bool",
+                "kivy_section": "antenna",
+            },
+            "embedding_extractor": {
+                "title": "Embedding extractor",
+                "description": (
+                    "Key of a feature extractor, such as bioclip_2_5_embeddings, that "
+                    "attaches an embedding to every detection in every pipeline. "
+                    "Leave empty for none."
+                ),
+                "kivy_type": "string",
                 "kivy_section": "antenna",
             },
         }
