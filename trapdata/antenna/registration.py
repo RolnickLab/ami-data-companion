@@ -141,7 +141,10 @@ def register_pipelines(
 
     # Initialize service info once to get pipeline configurations
     logger.info("Initializing pipeline configurations...")
-    service_info = initialize_service_info(pipeline_slugs)
+    # The async worker does not run the embedding extractor, so it is not advertised.
+    service_info = initialize_service_info(
+        pipeline_slugs, include_embedding_extractor=False
+    )
     pipeline_configs = service_info.pipelines
     logger.info(f"Generated {len(pipeline_configs)} pipeline configurations")
 

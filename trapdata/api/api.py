@@ -246,10 +246,14 @@ def make_extractor_config_response(
 def make_pipeline_config_response(
     Classifier: type[APIMothClassifier] | type[APIFeatureExtractor],
     slug: str,
+    include_embedding_extractor: bool = True,
 ) -> PipelineConfigResponse:
     """
     Create a configuration for an entire pipeline, given its species classifier class,
     or its feature extractor class for a feature-only pipeline.
+
+    The AMI_EMBEDDING_EXTRACTOR setting adds its extractor to classifier pipelines
+    only when include_embedding_extractor is on, because only the API runs it.
     """
     algorithms = []
 
@@ -288,7 +292,7 @@ def make_pipeline_config_response(
     )
     algorithms.append(make_algorithm_config_response(classifier))
 
-    Extractor = resolve_embedding_extractor()
+    Extractor = resolve_embedding_extractor() if include_embedding_extractor else None
     if Extractor:
         algorithms.append(make_extractor_config_response(Extractor))
 
@@ -615,18 +619,25 @@ async def readyz():
 
 def initialize_service_info(
     pipelines: list[str] | None = None,
+    include_embedding_extractor: bool = True,
 ) -> ProcessingServiceInfoResponse:
     """
     Describe the pipelines this service offers, for the /info endpoint and for
     registering the pipelines with Antenna.
 
     Describing a pipeline loads its models into memory, so only the pipelines chosen
-    by select_pipelines are included.
+    by select_pipelines are included. The worker registers its pipelines with
+    include_embedding_extractor off, because it does not run the extractor, and
+    Antenna must not record an algorithm that never produces output.
     """
     # Check the setting here, so a typo stops the service at startup.
     resolve_embedding_extractor()
     pipeline_configs = [
-        make_pipeline_config_response(classifier_class, slug=key)
+        make_pipeline_config_response(
+            classifier_class,
+            slug=key,
+            include_embedding_extractor=include_embedding_extractor,
+        )
         for key, classifier_class in select_pipelines(pipelines).items()
     ]
 

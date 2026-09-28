@@ -10,6 +10,7 @@ download it. The detector and classifiers are real, as in the other API tests.
 """
 
 import pathlib
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -291,3 +292,27 @@ def test_backbone_with_the_wrong_dimension_is_rejected(monkeypatch):
     ):
         with pytest.raises(ValueError, match=str(DIM)):
             APIBioCLIP25FeatureExtractor(source_images=[], device="cpu")
+
+
+def test_worker_registration_never_advertises_the_extractor(monkeypatch):
+    # The async worker does not run the extractor, so registering it would make
+    # Antenna wait for output that never arrives.
+    from trapdata.antenna import registration
+
+    monkeypatch.setattr(api.settings, "embedding_extractor", EXTRACTOR_KEY)
+    registered = []
+    monkeypatch.setattr(
+        registration,
+        "register_pipelines_for_project",
+        lambda **kwargs: registered.extend(kwargs["pipeline_configs"]) or (True, ""),
+    )
+    worker_settings = SimpleNamespace(
+        antenna_api_base_url="http://antenna.test/api/v2",
+        antenna_api_auth_token="token",
+        pipelines="moth_binary",
+    )
+    registration.register_pipelines([1], "test service", worker_settings)
+
+    assert [p.slug for p in registered] == ["moth_binary"]
+    task_types = [a.task_type for p in registered for a in p.algorithms]
+    assert "embedding" not in task_types
