@@ -72,7 +72,7 @@ def test_service_info_loads_only_the_selected_pipelines(offered, monkeypatch):
     """
     described = []
 
-    def fake_pipeline_config(Classifier, slug):
+    def fake_pipeline_config(Classifier, slug, **kwargs):
         described.append(slug)
         return PipelineConfigResponse(name=slug, slug=slug, version=1)
 
@@ -121,7 +121,7 @@ def test_registration_follows_the_settings_it_is_given(monkeypatch):
     described = []
     registered = []
 
-    def fake_pipeline_config(Classifier, slug):
+    def fake_pipeline_config(Classifier, slug, **kwargs):
         described.append(slug)
         return PipelineConfigResponse(name=slug, slug=slug, version=1)
 
