@@ -521,13 +521,15 @@ def detections_from_request(
     """
     Turn the request's existing detections into response detections, boxes unchanged.
 
-    A detection without a box cannot be embedded and is left out. A detection whose
-    image is missing from the request's source images adds that image.
+    A detection without a box, or with a box of no area, cannot be cropped and is
+    left out. A detection whose image is missing from the request's source images
+    adds that image.
     """
     known_ids = {image.id for image in source_images}
     detections = []
     for detection in requested:
-        if detection.bbox is None:
+        bbox = detection.bbox
+        if bbox is None or bbox.x1 >= bbox.x2 or bbox.y1 >= bbox.y2:
             continue
         image = detection.source_image
         if image.id not in known_ids:
@@ -545,7 +547,9 @@ def detections_from_request(
         )
     skipped = len(requested) - len(detections)
     if skipped:
-        logger.info(f"Skipped {skipped} requested detections that have no bounding box")
+        logger.info(
+            f"Skipped {skipped} requested detections without a box that has an area"
+        )
     return detections
 
 

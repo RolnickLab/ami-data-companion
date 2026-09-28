@@ -226,6 +226,18 @@ class TestFeatureOnlyPipeline(_APITestCase):
         first, second = (d.embeddings[0].features for d in result.detections)
         self.assertNotEqual(first, second)
 
+    def test_skips_boxes_with_no_area(self):
+        degenerate = [
+            BoundingBox(x1=50, y1=20, x2=50, y2=140),
+            BoundingBox(x1=10, y1=140, x2=110, y2=20),
+        ]
+        detections = [self._detection(b) for b in degenerate + self.BOXES[:1]]
+        response = self.post(self._request(detections))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        result = PipelineResponse(**response.json())
+        self.assertEqual([d.bbox for d in result.detections], self.BOXES[:1])
+
     def test_adds_the_image_of_a_detection_missing_from_source_images(self):
         request = self._request(
             [self._detection(self.BOXES[0], image_id="other")],
