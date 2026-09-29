@@ -122,14 +122,13 @@ def select_pipelines(
 
 def classifier_pipelines(slugs: list[str]) -> list[str]:
     """
-    Keep the pipelines the Antenna worker can run, which are those with a classifier.
-
-    Feature-only pipelines are served by the API alone, so the worker skips them.
+    Keep the pipelines the Antenna worker can run, which is every pipeline except the
+    feature-only ones, since those are served by the API alone.
     """
-    skipped = [slug for slug in slugs if slug not in CLASSIFIER_CHOICES]
+    skipped = [slug for slug in slugs if slug in FEATURE_PIPELINE_CHOICES]
     if skipped:
         logger.info(f"The worker does not run feature-only pipelines: {skipped}")
-    return [slug for slug in slugs if slug in CLASSIFIER_CHOICES]
+    return [slug for slug in slugs if slug not in FEATURE_PIPELINE_CHOICES]
 
 
 def resolve_embedding_extractor(

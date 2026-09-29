@@ -292,8 +292,11 @@ def test_invalid_setting_is_rejected(monkeypatch):
         api.resolve_embedding_extractor()
 
 
-def test_worker_skips_feature_only_pipelines():
-    assert classifier_pipelines(["moth_binary", FEATURE_PIPELINE]) == ["moth_binary"]
+def test_worker_skips_only_feature_only_pipelines():
+    # A pipeline missing from CLASSIFIER_CHOICES, such as one with another
+    # detector, must still reach the worker.
+    slugs = ["moth_binary", FEATURE_PIPELINE, "another_detector_pipeline"]
+    assert classifier_pipelines(slugs) == ["moth_binary", "another_detector_pipeline"]
 
 
 def test_backbone_is_loaded_once_per_device(monkeypatch):
