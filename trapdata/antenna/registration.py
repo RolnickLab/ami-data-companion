@@ -8,6 +8,7 @@ from trapdata.antenna.schemas import (
     AsyncPipelineRegistrationResponse,
 )
 from trapdata.api.api import (
+    classifier_pipelines,
     initialize_service_info,
     parse_pipeline_setting,
     select_pipelines,
@@ -109,8 +110,8 @@ def register_pipelines(
 
     # Check the pipeline names before contacting Antenna, so a typo fails fast.
     try:
-        pipeline_slugs = list(
-            select_pipelines(parse_pipeline_setting(settings.pipelines))
+        pipeline_slugs = classifier_pipelines(
+            list(select_pipelines(parse_pipeline_setting(settings.pipelines)))
         )
     except ValueError as e:
         logger.error(f"Invalid AMI_PIPELINES setting: {e}")
@@ -140,7 +141,10 @@ def register_pipelines(
 
     # Initialize service info once to get pipeline configurations
     logger.info("Initializing pipeline configurations...")
-    service_info = initialize_service_info(pipeline_slugs)
+    # The async worker does not run the embedding extractor, so it is not advertised.
+    service_info = initialize_service_info(
+        pipeline_slugs, include_embedding_extractor=False
+    )
     pipeline_configs = service_info.pipelines
     logger.info(f"Generated {len(pipeline_configs)} pipeline configurations")
 

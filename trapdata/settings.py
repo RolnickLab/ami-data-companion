@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     antenna_service_name: str = "AMI Data Companion"
     antenna_api_batch_size: int = 24
 
+    # Feature and logits extraction settings
+    include_features: bool = False
+    include_logits: bool = True
+    features_for_all_detections: bool = False
+    # Key of a feature extractor that embeds every detection in every pipeline, such
+    # as bioclip_2_5_embeddings. Empty means none.
+    embedding_extractor: str = ""
+
     # Pipelines to offer, as a comma-separated list of slugs from CLASSIFIER_CHOICES in
     # trapdata/api/api.py. The API server, the Antenna worker and pipeline registration
     # load models only for these pipelines. Empty means every pipeline.
@@ -222,6 +230,39 @@ class Settings(BaseSettings):
             "antenna_service_name": {
                 "title": "Antenna Service Name",
                 "description": "Name for the processing service registration (hostname will be added automatically)",
+                "kivy_type": "string",
+                "kivy_section": "antenna",
+            },
+            "include_features": {
+                "title": "Include feature vectors",
+                "description": "Include 2048-dim feature vectors (embeddings) from the classifier backbone in API/worker responses. Increases response size.",
+                "kivy_type": "bool",
+                "kivy_section": "antenna",
+            },
+            "include_logits": {
+                "title": "Include logits",
+                "description": "Include raw logits (unnormalized model outputs) in API/worker responses. On by default; turn off to reduce response size.",
+                "kivy_type": "bool",
+                "kivy_section": "antenna",
+            },
+            "features_for_all_detections": {
+                "title": "Feature vectors for all detections",
+                "description": (
+                    "Attach a feature vector from the species classifier to every "
+                    "detection, including those the moth/non-moth filter rejected, "
+                    "which get no species label. Costs one more backbone pass per "
+                    "rejected detection."
+                ),
+                "kivy_type": "bool",
+                "kivy_section": "antenna",
+            },
+            "embedding_extractor": {
+                "title": "Embedding extractor",
+                "description": (
+                    "Key of a feature extractor, such as bioclip_2_5_embeddings, that "
+                    "attaches an embedding to every detection in every pipeline. "
+                    "Leave empty for none."
+                ),
                 "kivy_type": "string",
                 "kivy_section": "antenna",
             },

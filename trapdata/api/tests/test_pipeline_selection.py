@@ -41,7 +41,7 @@ def test_setting_is_read_from_the_environment(monkeypatch):
 def test_no_selection_offers_every_pipeline(offered):
     offered("")
 
-    assert api.select_pipelines() == api.CLASSIFIER_CHOICES
+    assert api.select_pipelines() == api.ALL_PIPELINE_CHOICES
 
 
 def test_setting_selects_pipelines_in_the_order_given(offered):
@@ -72,7 +72,7 @@ def test_service_info_loads_only_the_selected_pipelines(offered, monkeypatch):
     """
     described = []
 
-    def fake_pipeline_config(Classifier, slug):
+    def fake_pipeline_config(Classifier, slug, **kwargs):
         described.append(slug)
         return PipelineConfigResponse(name=slug, slug=slug, version=1)
 
@@ -121,7 +121,7 @@ def test_registration_follows_the_settings_it_is_given(monkeypatch):
     described = []
     registered = []
 
-    def fake_pipeline_config(Classifier, slug):
+    def fake_pipeline_config(Classifier, slug, **kwargs):
         described.append(slug)
         return PipelineConfigResponse(name=slug, slug=slug, version=1)
 

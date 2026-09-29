@@ -92,18 +92,44 @@ class ClassificationResponse(pydantic.BaseModel):
         ),
         repr=False,  # Too long to display in the repr
     )
-    logits: list[float] = pydantic.Field(
-        default_factory=list,
+    logits: list[float] | None = pydantic.Field(
+        default=None,
         description=(
-            "The raw logits output by the model, before any calibration or "
-            "normalization."
+            "Raw logits (unnormalized model outputs) for each class. "
+            "Omitted when include_logits=false in the pipeline config."
         ),
-        repr=False,  # Too long to display in the repr
+        repr=False,
+    )
+    features: list[float] | None = pydantic.Field(
+        default=None,
+        description=(
+            "Feature vector (embedding) extracted from the model backbone before "
+            "the classification head. Only included when include_features=true in "
+            "the pipeline config."
+        ),
+        repr=False,
     )
     inference_time: float | None = None
     algorithm: AlgorithmReference
     terminal: bool = True
     timestamp: datetime.datetime
+
+
+class EmbeddingResponse(pydantic.BaseModel):
+    """A feature vector for one detection and the algorithm whose backbone made it.
+
+    It sits on the detection rather than on a classification, so storing it cannot
+    add a prediction. Vectors are only comparable with vectors from the same algorithm.
+    """
+
+    features: list[float] = pydantic.Field(
+        description=(
+            "Feature vector (embedding) from the model backbone, before the "
+            "classification head."
+        ),
+        repr=False,
+    )
+    algorithm: AlgorithmReference
 
 
 class DetectionResponse(pydantic.BaseModel):
@@ -114,6 +140,16 @@ class DetectionResponse(pydantic.BaseModel):
     timestamp: datetime.datetime
     crop_image_url: str | None = None
     classifications: list[ClassificationResponse] = []
+    embeddings: list[EmbeddingResponse] | None = pydantic.Field(
+        default=None,
+        description=(
+            "Feature vectors for this detection, at most one per algorithm key. "
+            "Present when features_for_all_detections or embedding_extractor is on, "
+            "or when the pipeline is feature-only; every detection then has one, "
+            "including those the moth/non-moth filter rejected. Vectors are "
+            "comparable only when their algorithm keys match."
+        ),
+    )
 
 
 class SourceImageRequest(pydantic.BaseModel):
@@ -134,6 +170,22 @@ class SourceImageRequest(pydantic.BaseModel):
         ],
     )
     # b64: str | None = None
+
+
+class DetectionRequest(pydantic.BaseModel):
+    """A detection that already exists, sent back so a pipeline can reuse its box."""
+
+    model_config = pydantic.ConfigDict(extra="ignore")
+
+    source_image: SourceImageRequest
+    bbox: BoundingBox | None = None
+    crop_image_url: str | None = None
+    algorithm: AlgorithmReference = pydantic.Field(
+        description=(
+            "The algorithm that made this detection. It is returned unchanged, so the "
+            "caller can match each response detection to the one it sent."
+        ),
+    )
 
 
 class SourceImageResponse(pydantic.BaseModel):
@@ -239,6 +291,45 @@ class PipelineConfigRequest(pydantic.BaseModel):
         description="Example of a configuration parameter for a pipeline.",
         examples=[3],
     )
+    include_features: bool = pydantic.Field(
+        default=False,
+        description=(
+            "Whether to include feature vectors (embeddings) in classification "
+            "responses. Feature vectors are 2048-dim floats extracted from the "
+            "model backbone. Disabled by default to reduce response size."
+        ),
+    )
+    include_logits: bool = pydantic.Field(
+        default=True,
+        description=(
+            "Whether to include raw logits in classification responses. "
+            "Logits are the unnormalized model outputs before softmax. "
+            "On by default: downstream consumers re-score classifications from "
+            "them. Turn it off to reduce response size."
+        ),
+    )
+    features_for_all_detections: bool | None = pydantic.Field(
+        default=None,
+        description=(
+            "Whether to attach a feature vector from the species classifier's "
+            "backbone to every detection, as an item in `embeddings`. Detections "
+            "the moth/non-moth filter rejected get the vector but no species "
+            "classification, which costs one more backbone pass each. When "
+            "omitted, the service's AMI_FEATURES_FOR_ALL_DETECTIONS setting applies."
+        ),
+    )
+    embedding_extractor: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Key of a feature extractor that attaches an embedding to every "
+            "detection, as an item in `embeddings`, in addition to any other vector. "
+            "It adds no classification. An empty string turns it off. When omitted, "
+            "the service's AMI_EMBEDDING_EXTRACTOR setting applies. Only the "
+            "extractor that the pipeline lists in /info can be requested; any other "
+            "key returns HTTP 422. Feature-only pipelines ignore this field."
+        ),
+        examples=["bioclip_2_5_embeddings"],
+    )
 
 
 class PipelineRequest(pydantic.BaseModel):
@@ -253,6 +344,15 @@ class PipelineRequest(pydantic.BaseModel):
 
     source_images: list[SourceImageRequest] = pydantic.Field(
         description="A list of source image URLs to process.",
+    )
+
+    detections: list[DetectionRequest] | None = pydantic.Field(
+        default=None,
+        description=(
+            "Existing detections. Only feature-only pipelines use them: each one with "
+            "a bounding box is embedded as it is, and the detector does not run. "
+            "Other pipelines ignore them."
+        ),
     )
 
     config: PipelineConfigRequest = pydantic.Field(
