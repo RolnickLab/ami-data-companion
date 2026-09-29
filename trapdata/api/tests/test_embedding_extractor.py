@@ -264,7 +264,7 @@ class TestFeatureOnlyPipeline(_APITestCase):
 
 
 def test_setting_advertises_the_extractor_in_classifier_pipelines(monkeypatch):
-    Classifier = api.CLASSIFIER_CHOICES["moth_binary"]
+    Classifier = api.select_pipelines(["moth_binary"])["moth_binary"]
 
     monkeypatch.setattr(api.settings, "embedding_extractor", "")
     keys = [a.key for a in make_pipeline_config_response(Classifier, "x").algorithms]

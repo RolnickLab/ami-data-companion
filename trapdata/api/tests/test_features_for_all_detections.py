@@ -23,6 +23,7 @@ from trapdata.api.api import (
     PipelineResponse,
     app,
     make_pipeline_config_response,
+    select_pipelines,
 )
 from trapdata.api.models.classification import MothClassifierBinary
 from trapdata.api.schemas import (
@@ -171,9 +172,8 @@ class TestFeaturesForAllDetectionsAPI(TestCase):
 
     def test_vector_algorithm_is_advertised_for_the_pipeline(self):
         """Antenna rejects results naming an algorithm the pipeline did not advertise."""
-        config = make_pipeline_config_response(
-            CLASSIFIER_CHOICES[TEST_PIPELINE], TEST_PIPELINE
-        )
+        pipeline = select_pipelines([TEST_PIPELINE])[TEST_PIPELINE]
+        config = make_pipeline_config_response(pipeline, TEST_PIPELINE)
         advertised = {algorithm.key for algorithm in config.algorithms}
         used = {e.algorithm.key for d in self.on.detections for e in d.embeddings}
         self.assertTrue(used <= advertised, f"{used - advertised} not advertised")

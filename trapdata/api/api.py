@@ -81,7 +81,8 @@ FEATURE_PIPELINE_CHOICES: dict[str, type[APIFeatureExtractor]] = {
     "bioclip_2_5_features": APIBioCLIP25FeatureExtractor,
 }
 
-PIPELINE_CHOICES: dict[str, type[APIMothClassifier] | type[APIFeatureExtractor]] = {
+# Every pipeline slug this service knows, classifier and feature-only alike.
+ALL_PIPELINE_CHOICES: dict[str, type[APIMothClassifier] | type[APIFeatureExtractor]] = {
     **CLASSIFIER_CHOICES,
     **FEATURE_PIPELINE_CHOICES,
 }
@@ -102,22 +103,22 @@ def select_pipelines(
     takes time, so a deployment can offer a subset. The slugs come from the argument when one is given,
     such as the worker's --pipeline option, and otherwise from the AMI_PIPELINES
     setting, a comma-separated list. When neither names a pipeline, every pipeline in
-    PIPELINE_CHOICES is offered. An unknown slug raises ValueError, so a typo stops
-    the service at startup instead of quietly leaving a pipeline out.
+    ALL_PIPELINE_CHOICES is offered. An unknown slug raises ValueError, so a typo
+    stops the service at startup instead of quietly leaving a pipeline out.
     """
     from_setting = slugs is None
     if slugs is None:
         slugs = parse_pipeline_setting(settings.pipelines)
     if not slugs:
-        return dict(PIPELINE_CHOICES)
-    unknown = [slug for slug in slugs if slug not in PIPELINE_CHOICES]
+        return dict(ALL_PIPELINE_CHOICES)
+    unknown = [slug for slug in slugs if slug not in ALL_PIPELINE_CHOICES]
     if unknown:
         where = " in the AMI_PIPELINES setting" if from_setting else ""
         raise ValueError(
             f"Unknown pipeline(s){where}: {', '.join(unknown)}. "
-            f"Must be one of: {', '.join(PIPELINE_CHOICES)}"
+            f"Must be one of: {', '.join(ALL_PIPELINE_CHOICES)}"
         )
-    return {slug: PIPELINE_CHOICES[slug] for slug in slugs}
+    return {slug: ALL_PIPELINE_CHOICES[slug] for slug in slugs}
 
 
 def classifier_pipelines(slugs: list[str]) -> list[str]:
@@ -165,7 +166,7 @@ def _offered_pipeline_slugs() -> list[str]:
     try:
         return list(select_pipelines())
     except ValueError:
-        return list(PIPELINE_CHOICES)
+        return list(ALL_PIPELINE_CHOICES)
 
 
 _offered_pipeline_choices = {slug: slug for slug in _offered_pipeline_slugs()}
