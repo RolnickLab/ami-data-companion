@@ -388,6 +388,13 @@ class TrainRequest(pydantic.BaseModel):
             "disk. Omitted by a caller that keeps no copy."
         ),
     )
+    progress_url: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Where to report the epoch this run has reached, so the caller can show how "
+            "far along it is. Omitted by a caller that only wants the result."
+        ),
+    )
     # Defaults match what Antenna stores as this algorithm's training config; it sends
     # whatever an admin has set there, so these are overridden in practice.
     min_per_species: int = 2

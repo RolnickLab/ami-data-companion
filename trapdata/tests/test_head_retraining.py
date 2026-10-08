@@ -274,3 +274,69 @@ def test_a_failed_upload_does_not_fail_the_training(tmp_path, monkeypatch):
     monkeypatch.setattr("requests.post", fake_post)
 
     assert api._upload_head(_train_request(), {"head": str(head)}) is None
+
+
+def test_the_fitting_loop_reports_the_epoch_it_is_on(monkeypatch):
+    """
+    Training is the long part of an Antenna job and this service says nothing while it
+    fits, so the epoch it reports is the only thing that can move that job's progress.
+    """
+    from trapdata.api import api
+
+    sent = []
+
+    class Reply:
+        def raise_for_status(self):
+            pass
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        sent.append((url, json, headers))
+        return Reply()
+
+    monkeypatch.setattr("requests.post", fake_post)
+
+    report = api._progress_reporter(
+        _train_request(progress_url="http://antenna/api/v2/jobs/7/training-progress/")
+    )
+    training.retrain(rows=_rows(["First", "Second"]) + _rows(["First", "Second"], split="test"), on_epoch=report)
+
+    assert sent, "the loop reported nothing"
+    url, payload, headers = sent[0]
+    assert url == "http://antenna/api/v2/jobs/7/training-progress/"
+    assert payload["total_epochs"] == 300
+    assert payload["epoch"] % training.EPOCH_REPORT_INTERVAL == 0
+    # The same signed token that authorises the result callback.
+    assert headers["Authorization"] == "Token a-signed-token"
+    # One request per epoch would be hundreds on a run that takes seconds.
+    assert len(sent) == 300 // training.EPOCH_REPORT_INTERVAL
+
+
+def test_a_run_without_a_progress_url_reports_nothing(monkeypatch):
+    """A caller that only wants the result gets no pings, and no cost for them."""
+    from trapdata.api import api
+
+    def fake_post(*args, **kwargs):
+        raise AssertionError("nothing should have been reported")
+
+    monkeypatch.setattr("requests.post", fake_post)
+
+    assert api._progress_reporter(_train_request()) is None
+
+
+def test_a_failed_progress_ping_does_not_fail_the_training(monkeypatch):
+    """Losing a status ping is not a reason to lose the run."""
+    from trapdata.api import api
+
+    def fake_post(*args, **kwargs):
+        raise ConnectionError("Antenna is unreachable")
+
+    monkeypatch.setattr("requests.post", fake_post)
+
+    report = api._progress_reporter(
+        _train_request(progress_url="http://antenna/api/v2/jobs/7/training-progress/")
+    )
+    result = training.retrain(
+        rows=_rows(["First", "Second"]) + _rows(["First", "Second"], split="test"), on_epoch=report
+    )
+
+    assert result["candidate_metrics"]["top1"] > 0

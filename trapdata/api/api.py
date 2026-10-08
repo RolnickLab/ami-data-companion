@@ -5,6 +5,7 @@ pipelines.
 
 import enum
 import time
+import typing
 from contextlib import asynccontextmanager
 
 import fastapi
@@ -514,6 +515,36 @@ def _upload_head(data: TrainRequest, saved: dict) -> str | None:
             handle.close()
 
 
+def _progress_reporter(data: TrainRequest) -> typing.Callable[[int, int], None] | None:
+    """
+    Report the epoch a run has reached, so the caller's job can show how far along it is.
+
+    None when the caller asked for no progress. Failures are logged and swallowed, like
+    the callbacks below: a run must not die because a status ping did not land.
+    """
+    import requests
+
+    if not data.progress_url:
+        return None
+
+    headers = {"Content-Type": "application/json"}
+    if data.callback_token:
+        headers["Authorization"] = f"Token {data.callback_token}"
+
+    def report(epoch: int, total_epochs: int) -> None:
+        try:
+            requests.post(
+                data.progress_url,
+                json={"epoch": epoch, "total_epochs": total_epochs},
+                headers=headers,
+                timeout=10,
+            )
+        except Exception as e:
+            logger.debug(f"Could not report epoch {epoch} to {data.progress_url}: {e}")
+
+    return report
+
+
 def _report_to_antenna(
     data: TrainRequest, response: TrainResponse, dataset_metadata: dict
 ) -> bool:
@@ -593,6 +624,7 @@ async def train(data: TrainRequest) -> TrainResponse:
             # Antenna ships the species list inside the dataset; it usually comes from a
             # project's taxa list and must win over whatever happens to be in the rows.
             declared_classes=dataset_metadata.get("classes"),
+            on_epoch=_progress_reporter(data),
         )
     except (training.NotEnoughData, training.UnsupportedHeadType) as e:
         raise fastapi.HTTPException(status_code=422, detail=str(e))

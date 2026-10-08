@@ -28,6 +28,10 @@ DEFAULT_MIN_IMPROVEMENT = 0.0
 # reports its numbers, but says plainly that they cannot support a decision.
 MIN_MEANINGFUL_TEST_ROWS = 30
 
+# How often the fitting loop looks up from its work, both to log and to report progress.
+# Every epoch would mean one HTTP request per step on a run that takes seconds.
+EPOCH_REPORT_INTERVAL = 50
+
 # The head shapes this service can fit. Only "linear" for now: the serving path loads a
 # single Linear layer, so anything else would train fine and then fail to load. An MLP-1
 # head scores far better on rare species and is worth adding, but it needs the loader too.
@@ -184,6 +188,7 @@ def train_linear_head(
     device: str = "cpu",
     labels: list[str] | None = None,
     incumbent: dict[str, typing.Any] | None = None,
+    on_epoch: typing.Callable[[int, int], None] | None = None,
 ) -> torch.nn.Linear:
     """
     Fit a single linear layer over frozen embeddings.
@@ -209,8 +214,10 @@ def train_linear_head(
         loss = loss_fn(head(inputs), targets)
         loss.backward()
         optimizer.step()
-        if epoch % 50 == 0:
+        if epoch % EPOCH_REPORT_INTERVAL == 0:
             logger.debug(f"epoch {epoch} loss {loss.item():.4f}")
+            if on_epoch:
+                on_epoch(epoch, epochs)
     head.eval()
     return head
 
@@ -274,6 +281,7 @@ def retrain(
     learning_rate: float = 0.01,
     weight_decay: float = 1e-4,
     head_type: str = "linear",
+    on_epoch: typing.Callable[[int, int], None] | None = None,
 ) -> dict[str, typing.Any]:
     """
     Fit a new head and decide whether it deserves to replace the current one.
@@ -329,6 +337,7 @@ def retrain(
         epochs=epochs,
         learning_rate=learning_rate,
         weight_decay=weight_decay,
+        on_epoch=on_epoch,
     )
     weights = head.weight.detach().cpu().numpy()
     bias = head.bias.detach().cpu().numpy()
