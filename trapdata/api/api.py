@@ -664,12 +664,22 @@ async def train(data: TrainRequest) -> TrainResponse:
         trained_at=result["trained_at"],
     )
 
-    if data.callback_url:
-        response.reported_to_antenna = _report_to_antenna(
-            data, response, dataset_metadata
-        )
+    if not data.callback_url:
+        # No callback: this response is the only way the caller sees the result, so it
+        # carries the whole thing. This is the direct-use path, not Antenna's.
+        return response
 
-    return response
+    response.reported_to_antenna = _report_to_antenna(data, response, dataset_metadata)
+    # One way in: the result went to the callback, so this is an acknowledgement rather
+    # than a second copy for the caller to parse.
+    return fastapi.responses.JSONResponse(
+        status_code=202,
+        content={
+            "status": "accepted",
+            "job_id": data.job_id,
+            "reported_to_antenna": response.reported_to_antenna,
+        },
+    )
 
 
 if __name__ == "__main__":
