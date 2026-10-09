@@ -560,6 +560,9 @@ def _report_to_antenna(
         "job_id": data.job_id,
         "algorithm_key": data.algorithm_key,
         "dataset": dataset_metadata,
+        # The exact file this was fitted on. The metadata describes the set; this says
+        # which copy of it, which is what the caller records against the new version.
+        "dataset_url": data.dataset_url,
         "result": response.model_dump(),
     }
     headers = {"Content-Type": "application/json"}

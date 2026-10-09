@@ -340,3 +340,45 @@ def test_a_failed_progress_ping_does_not_fail_the_training(monkeypatch):
     )
 
     assert result["candidate_metrics"]["top1"] > 0
+
+
+def test_the_callback_says_which_file_the_run_was_fitted_on(monkeypatch):
+    """
+    The metadata describes the training set; the URL says which copy of it.
+
+    Without it the caller can only record what the set looked like, not the file, so a
+    registered version cannot be traced back to the exact data it learned from.
+    """
+    from trapdata.api import api
+    from trapdata.api.schemas import TrainResponse
+
+    sent = {}
+
+    class Reply:
+        def raise_for_status(self):
+            pass
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        sent.update(json or {})
+        return Reply()
+
+    monkeypatch.setattr("requests.post", fake_post)
+
+    data = _train_request(callback_url="http://antenna/api/v2/jobs/7/training-result/")
+    response = TrainResponse(
+        promote=False,
+        reason="",
+        warnings=[],
+        rows={},
+        counts={},
+        dropped_species=[],
+        candidate_metrics={},
+        incumbent_metrics={},
+        labels=["First"],
+        saved=None,
+        trained_at="2026-10-08T23:00:00",
+    )
+
+    assert api._report_to_antenna(data, response, {"rows": 6}) is True
+    assert sent["dataset_url"] == "http://antenna/media/training/set.npz"
+    assert sent["dataset"] == {"rows": 6}
