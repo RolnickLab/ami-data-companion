@@ -276,6 +276,7 @@ def test_setting_advertises_the_extractor_in_classifier_pipelines(monkeypatch):
     assert len(extractor) == 1
     assert extractor[0].task_type == "embedding"
     assert extractor[0].category_map is None
+    assert extractor[0].embedding_dimensions == DIM
 
 
 def test_feature_pipeline_lists_the_detector_and_extractor_only():
@@ -350,3 +351,13 @@ def test_worker_registration_never_advertises_the_extractor(monkeypatch):
     assert [p.slug for p in registered] == ["moth_binary"]
     task_types = [a.task_type for p in registered for a in p.algorithms]
     assert "embedding" not in task_types
+
+
+def test_a_classifier_with_a_backbone_declares_its_vector_length():
+    """Antenna stores a model's vectors only when /info declares their length."""
+    Classifier = api.select_pipelines(["global_moths_2024"])["global_moths_2024"]
+    algorithms = make_pipeline_config_response(Classifier, "x").algorithms
+    declared = {a.name: a.embedding_dimensions for a in algorithms}
+    assert declared[Classifier.name] == 2048
+    localizers = [a for a in algorithms if a.task_type == "localization"]
+    assert [a.embedding_dimensions for a in localizers] == [None]

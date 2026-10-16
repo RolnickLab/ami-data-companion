@@ -212,6 +212,7 @@ def make_algorithm_response(
         description=model.description,
         category_map=category_map,
         uri=resolve_model_url(model.weights_path),
+        embedding_dimensions=model.embedding_dimensions,
     )
 
 
@@ -226,6 +227,7 @@ def make_algorithm_config_response(
         description=model.description,
         category_map=category_map,
         uri=resolve_model_url(model.weights_path),
+        embedding_dimensions=model.embedding_dimensions,
     )
 
 
@@ -240,6 +242,7 @@ def make_extractor_config_response(
         description=Extractor.description,
         category_map=None,
         uri=Extractor.model_uri,
+        embedding_dimensions=Extractor.embedding_dim,
     )
 
 

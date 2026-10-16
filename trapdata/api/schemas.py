@@ -279,6 +279,13 @@ class AlgorithmConfigResponse(pydantic.BaseModel):
         description="A URI to the weights or model details, could be a public web URL or object store path.",
     )
     category_map: AlgorithmCategoryMapResponse | None = None
+    embedding_dimensions: int | None = pydantic.Field(
+        default=None,
+        description=(
+            "The length of the feature vectors this algorithm returns in detection "
+            "embeddings. Antenna stores vectors only from algorithms that declare it."
+        ),
+    )
 
 
 class PipelineConfigRequest(pydantic.BaseModel):

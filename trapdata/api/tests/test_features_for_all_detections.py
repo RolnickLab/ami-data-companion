@@ -177,6 +177,13 @@ class TestFeaturesForAllDetectionsAPI(TestCase):
         advertised = {algorithm.key for algorithm in config.algorithms}
         used = {e.algorithm.key for d in self.on.detections for e in d.embeddings}
         self.assertTrue(used <= advertised, f"{used - advertised} not advertised")
+        # Antenna refuses vectors from an algorithm that declares no length, or another one.
+        declared = {a.key: a.embedding_dimensions for a in config.algorithms}
+        for detection in self.on.detections:
+            for embedding in detection.embeddings:
+                self.assertEqual(
+                    len(embedding.features), declared[embedding.algorithm.key]
+                )
 
 
 class TestEmbeddingMechanics(TestCase):

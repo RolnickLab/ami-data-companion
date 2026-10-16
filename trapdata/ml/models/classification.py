@@ -299,6 +299,8 @@ class Resnet50ClassifierLowRes(Resnet50Classifier):
 
 
 class Resnet50TimmClassifier(Resnet50Classifier):
+    embedding_dimensions = 2048
+
     def get_model(self):
         model = timm.create_model(
             "resnet50",
