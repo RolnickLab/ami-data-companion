@@ -4,7 +4,7 @@ from typing import Annotated
 
 import typer
 
-from trapdata.api.api import select_pipelines
+from trapdata.api.api import classifier_pipelines, select_pipelines
 
 cli = typer.Typer(help="Antenna worker commands for remote processing")
 
@@ -33,7 +33,7 @@ def run(
 
     # Pipelines given with --pipeline take precedence over the AMI_PIPELINES setting.
     try:
-        pipelines = list(select_pipelines(pipelines or None))
+        pipelines = classifier_pipelines(list(select_pipelines(pipelines or None)))
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e
 

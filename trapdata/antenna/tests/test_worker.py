@@ -24,6 +24,8 @@ from trapdata.antenna.schemas import (
 from trapdata.antenna.tests import antenna_api_server
 from trapdata.antenna.tests.antenna_api_server import app as antenna_app
 from trapdata.antenna.worker import _process_job
+from trapdata.api.api import CLASSIFIER_CHOICES
+from trapdata.api.models.classification import MothClassifierBinary
 from trapdata.api.schemas import PipelineResultsResponse
 from trapdata.api.tests.image_server import StaticFileTestServer
 from trapdata.api.tests.utils import get_test_image_urls, patch_antenna_api_requests
@@ -252,7 +254,7 @@ class TestProcessJobIntegration(TestCase):
     def setUp(self):
         antenna_api_server.reset()
 
-    def _make_settings(self):
+    def _make_settings(self, features_for_all_detections: bool = False):
         """Create mock settings for worker."""
         settings = MagicMock()
         settings.antenna_api_base_url = "http://testserver/api/v2"
@@ -260,7 +262,52 @@ class TestProcessJobIntegration(TestCase):
         settings.antenna_api_batch_size = 2
         settings.num_workers = 0  # Disable multiprocessing for tests
         settings.localization_batch_size = 2  # Real integer for batch processing
+        # A bare MagicMock attribute is truthy, which would switch this on.
+        settings.features_for_all_detections = features_for_all_detections
         return settings
+
+    def _process_frame_with_rejected_crops(
+        self, job_id: int, features_for_all_detections: bool
+    ):
+        """Run the worker on one frame in which the binary filter rejects some crops."""
+        url = self.file_server.get_url("panama/01-20231110214539-snapshot.jpg")
+        task = AntennaPipelineProcessingTask(
+            id="task_0", image_id="img_0", image_url=url, reply_subject="reply_0"
+        )
+        antenna_api_server.setup_job(job_id=job_id, tasks=[task])
+        with patch_antenna_api_requests(self.antenna_client):
+            _process_job(
+                "quebec_vermont_moths_2023",
+                job_id,
+                self._make_settings(features_for_all_detections),
+                device=torch.device("cpu"),
+            )
+        (task_result,) = antenna_api_server.get_posted_results(job_id)
+        return task_result.result.detections
+
+    def test_features_for_all_detections_reaches_rejected_crops(self):
+        """Every crop gets one species-classifier vector; rejected crops keep only
+        the filter's non-terminal label."""
+        species_key = CLASSIFIER_CHOICES["quebec_vermont_moths_2023"].get_key()
+        detections = self._process_frame_with_rejected_crops(110, True)
+        rejected = [
+            d for d in detections if not any(c.terminal for c in d.classifications)
+        ]
+        assert rejected, "The fixture frame should contain crops the filter rejects"
+        for detection in detections:
+            assert detection.embeddings is not None
+            assert len(detection.embeddings) == 1
+            assert detection.embeddings[0].algorithm.key == species_key
+            assert len(detection.embeddings[0].features) == 2048
+        for detection in rejected:
+            keys = [c.algorithm.key for c in detection.classifications]
+            assert keys == [MothClassifierBinary.get_key()]
+            assert detection.classifications[0].terminal is False
+
+    def test_no_embeddings_when_features_for_all_detections_is_off(self):
+        detections = self._process_frame_with_rejected_crops(111, False)
+        assert detections
+        assert all(d.embeddings is None for d in detections)
 
     def test_empty_queue(self):
         """No tasks in queue → returns False."""
@@ -421,6 +468,7 @@ class TestWorkerEndToEnd(TestCase):
         settings.antenna_api_batch_size = 2
         settings.num_workers = 0
         settings.localization_batch_size = 2  # Real integer for batch processing
+        settings.features_for_all_detections = False
         return settings
 
     def test_full_workflow_with_real_inference(self):

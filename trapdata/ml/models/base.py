@@ -82,6 +82,8 @@ class InferenceBaseClass:
     labels_path = None
     category_map = {}
     num_classes: Union[int, None] = None  # Will use len(category_map) if None
+    # The length of the vector forward_with_features returns, for models that have one.
+    embedding_dimensions: Union[int, None] = None
     lookup_gbif_names: bool = False
     default_taxon_rank: str = "SPECIES"
     model: torch.nn.Module
@@ -205,6 +207,17 @@ class InferenceBaseClass:
         return model
         """
         raise NotImplementedError
+
+    def forward_with_features(
+        self, batch_input: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Run the model, returning its logits and the backbone features behind them.
+
+        Both come from one forward pass; fetching features separately would run
+        the backbone twice. Subclasses that expose a backbone override this, so
+        the default returns ``None`` for features.
+        """
+        return self.model(batch_input), None
 
     def get_transforms(self) -> torchvision.transforms.Compose:
         """
@@ -347,3 +360,4 @@ class ClassifierResult:
     labels: list[str] | None
     logit: list[float] | None
     scores: list[float]
+    features: list[float] | None = None
