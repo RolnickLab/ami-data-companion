@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     antenna_service_name: str = "AMI Data Companion"
     antenna_api_batch_size: int = 24
 
-    # Pipelines to offer, as a comma-separated list of slugs from CLASSIFIER_CHOICES in
+    # Pipelines to offer, as a comma-separated list of slugs from PIPELINE_CHOICES in
     # trapdata/api/api.py. The API server, the Antenna worker and pipeline registration
     # load models only for these pipelines. Empty means every pipeline.
     pipelines: str = ""

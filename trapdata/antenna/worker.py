@@ -14,7 +14,7 @@ from trapdata.antenna.client import get_full_service_name, get_jobs
 from trapdata.antenna.datasets import CUDAPrefetcher, get_rest_dataloader
 from trapdata.antenna.result_posting import ResultPoster
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
-from trapdata.api.api import CLASSIFIER_CHOICES, should_filter_detections
+from trapdata.api.api import PIPELINE_CHOICES, should_filter_detections
 from trapdata.api.models.classification import MothClassifierBinary
 from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
@@ -425,7 +425,7 @@ def _process_job(
     detector = None
 
     # Check if binary filtering is needed once for the entire job
-    classifier_class = CLASSIFIER_CHOICES[pipeline]
+    classifier_class = PIPELINE_CHOICES[pipeline]
     use_binary_filter = should_filter_detections(classifier_class)
     binary_filter = None
 

@@ -53,7 +53,9 @@ app = fastapi.FastAPI(lifespan=lifespan)
 app.add_middleware(GZipMiddleware)
 
 
-CLASSIFIER_CHOICES = {
+# Every pipeline this service can offer, keyed by slug. Each value is the classifier
+# that defines the pipeline; see make_pipeline_config_response for the rest of it.
+PIPELINE_CHOICES = {
     "panama_moths_2023": MothClassifierPanama,
     "panama_moths_2024": MothClassifierPanama2024,
     "quebec_vermont_moths_2023": MothClassifierQuebecVermont,
@@ -82,22 +84,22 @@ def select_pipelines(
     takes time, so a deployment can offer a subset. The slugs come from the argument when one is given,
     such as the worker's --pipeline option, and otherwise from the AMI_PIPELINES
     setting, a comma-separated list. When neither names a pipeline, every pipeline in
-    CLASSIFIER_CHOICES is offered. An unknown slug raises ValueError, so a typo stops
+    PIPELINE_CHOICES is offered. An unknown slug raises ValueError, so a typo stops
     the service at startup instead of quietly leaving a pipeline out.
     """
     from_setting = slugs is None
     if slugs is None:
         slugs = parse_pipeline_setting(settings.pipelines)
     if not slugs:
-        return dict(CLASSIFIER_CHOICES)
-    unknown = [slug for slug in slugs if slug not in CLASSIFIER_CHOICES]
+        return dict(PIPELINE_CHOICES)
+    unknown = [slug for slug in slugs if slug not in PIPELINE_CHOICES]
     if unknown:
         where = " in the AMI_PIPELINES setting" if from_setting else ""
         raise ValueError(
             f"Unknown pipeline(s){where}: {', '.join(unknown)}. "
-            f"Must be one of: {', '.join(CLASSIFIER_CHOICES)}"
+            f"Must be one of: {', '.join(PIPELINE_CHOICES)}"
         )
-    return {slug: CLASSIFIER_CHOICES[slug] for slug in slugs}
+    return {slug: PIPELINE_CHOICES[slug] for slug in slugs}
 
 
 def _offered_pipeline_slugs() -> list[str]:
@@ -113,7 +115,7 @@ def _offered_pipeline_slugs() -> list[str]:
     try:
         return list(select_pipelines())
     except ValueError:
-        return list(CLASSIFIER_CHOICES)
+        return list(PIPELINE_CHOICES)
 
 
 _offered_pipeline_choices = {slug: slug for slug in _offered_pipeline_slugs()}
@@ -264,7 +266,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
     start_time = time.time()
 
-    Classifier = CLASSIFIER_CHOICES[str(data.pipeline)]
+    Classifier = PIPELINE_CHOICES[str(data.pipeline)]
 
     detector = APIMothDetector(
         source_images=source_images,
