@@ -30,6 +30,7 @@ from trapdata.api.models.feature_extraction import APIBioCLIP25FeatureExtractor
 from trapdata.api.schemas import SourceImageRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
 from trapdata.ml.models.bioclip import BioCLIPFeatureExtractor
+from trapdata.ml.models.classification import MaybeTensor
 from trapdata.settings import Settings
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
@@ -56,8 +57,9 @@ class FakeEncoder(torch.nn.Module):
 
 
 def fake_backbone(self):
+    # Like open_clip's eval transform, it takes PIL crops (API) and tensors (worker).
     transform = torchvision.transforms.Compose(
-        [torchvision.transforms.Resize((32, 32)), torchvision.transforms.ToTensor()]
+        [torchvision.transforms.Resize((32, 32)), MaybeTensor()]
     )
     return FakeEncoder().to(self.device), transform
 
@@ -163,12 +165,12 @@ def test_the_extractor_is_advertised_only_by_a_path_that_runs_it():
     assert extractor[0].embedding_dimensions == DIM
 
 
-def test_the_setting_picks_the_extractor(monkeypatch):
-    monkeypatch.setattr(api.settings, "embedding_extractor", EXTRACTOR_KEY)
-    assert api.resolve_embedding_extractor() is APIBioCLIP25FeatureExtractor
+def test_the_setting_picks_the_extractor():
+    assert (
+        api.resolve_embedding_extractor(EXTRACTOR_KEY) is APIBioCLIP25FeatureExtractor
+    )
     for off in ("none", "None", ""):
-        monkeypatch.setattr(api.settings, "embedding_extractor", off)
-        assert api.resolve_embedding_extractor() is None
+        assert api.resolve_embedding_extractor(off) is None
 
 
 def test_the_api_runs_bioclip_by_default():
@@ -176,10 +178,9 @@ def test_the_api_runs_bioclip_by_default():
     assert Settings.model_fields["embedding_extractor"].default == EXTRACTOR_KEY
 
 
-def test_invalid_setting_is_rejected(monkeypatch):
-    monkeypatch.setattr(api.settings, "embedding_extractor", "not_an_extractor")
+def test_invalid_setting_is_rejected():
     with pytest.raises(ValueError, match=EXTRACTOR_KEY):
-        api.resolve_embedding_extractor()
+        api.resolve_embedding_extractor("not_an_extractor")
 
 
 def test_backbone_is_loaded_once_per_device(monkeypatch):
@@ -211,7 +212,9 @@ def test_backbone_with_the_wrong_dimension_is_rejected(monkeypatch):
             APIBioCLIP25FeatureExtractor(source_images=[], device="cpu")
 
 
-def _register_worker_pipelines(monkeypatch, pipelines: str, include_features: bool):
+def _register_worker_pipelines(
+    monkeypatch, pipelines: str, include_features: bool, embedding_extractor="none"
+):
     from trapdata.antenna import registration
 
     registered = []
@@ -225,20 +228,28 @@ def _register_worker_pipelines(monkeypatch, pipelines: str, include_features: bo
         antenna_api_auth_token="token",
         pipelines=pipelines,
         include_features=include_features,
+        embedding_extractor=embedding_extractor,
     )
     registration.register_pipelines([1], "test service", worker_settings)
     return registered
 
 
-def test_worker_registration_never_advertises_the_extractor(monkeypatch):
-    # The async worker does not run the extractor, so registering it would make
-    # Antenna wait for output that never arrives.
-    monkeypatch.setattr(api.settings, "embedding_extractor", EXTRACTOR_KEY)
-    registered = _register_worker_pipelines(monkeypatch, "moth_binary", False)
+@pytest.mark.parametrize(
+    "setting, advertised", [(EXTRACTOR_KEY, True), ("none", False)]
+)
+def test_worker_registration_follows_the_worker_extractor_setting(
+    monkeypatch, setting, advertised
+):
+    """The worker runs the extractor its own settings name (see test_worker.py), so
+    it registers exactly that one; the API's settings play no part."""
+    monkeypatch.setattr(api.settings, "embedding_extractor", "none")
+    registered = _register_worker_pipelines(monkeypatch, "moth_binary", False, setting)
 
     assert [p.slug for p in registered] == ["moth_binary"]
-    task_types = [a.task_type for p in registered for a in p.algorithms]
-    assert "embedding" not in task_types
+    extractors = [a for p in registered for a in p.algorithms if a.key == EXTRACTOR_KEY]
+    assert len(extractors) == int(advertised)
+    if advertised:
+        assert extractors[0].embedding_dimensions == DIM
 
 
 @pytest.mark.parametrize("include_features, declared", [(True, 2048), (False, None)])

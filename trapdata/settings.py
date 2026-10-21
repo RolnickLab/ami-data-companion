@@ -80,9 +80,9 @@ class Settings(BaseSettings):
     # here, not per request, so that /info and every response agree. See
     # trapdata/api/api.py:resolve_embedding_extractor.
     include_features: bool = False
-    # Key of the feature extractor the API runs on every detection in every pipeline,
-    # or "none". It is separate from feature_extractor above, which picks the desktop
-    # app's tracking model. The Antenna worker runs no extractor.
+    # Key of the feature extractor that the API and the Antenna worker run on every
+    # detection in every pipeline, or "none". It is separate from feature_extractor
+    # above, which picks the desktop app's tracking model.
     embedding_extractor: str = "bioclip_2_5_embeddings"
 
     # Pipelines to offer, as a comma-separated list of slugs from PIPELINE_CHOICES in
@@ -248,9 +248,9 @@ class Settings(BaseSettings):
             "embedding_extractor": {
                 "title": "Embedding extractor",
                 "description": (
-                    "Key of the feature extractor the API runs on every detection in "
-                    "every pipeline, bioclip_2_5_embeddings by default, or none. "
-                    "The Antenna worker runs no extractor."
+                    "Key of the feature extractor that the API and the Antenna worker "
+                    "run on every detection in every pipeline, "
+                    "bioclip_2_5_embeddings by default, or none."
                 ),
                 "kivy_type": "string",
                 "kivy_section": "antenna",

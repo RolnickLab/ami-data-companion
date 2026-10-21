@@ -55,6 +55,9 @@ class TestMemoryLeak(TestCase):
         settings.antenna_api_batch_size = 2
         settings.num_workers = 0
         settings.localization_batch_size = 2
+        # A bare MagicMock attribute is truthy, which would switch vectors on.
+        settings.include_features = False
+        settings.embedding_extractor = "none"
         return settings
 
     @pytest.mark.slow

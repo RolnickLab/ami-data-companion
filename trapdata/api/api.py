@@ -46,7 +46,7 @@ async def lifespan(app: fastapi.FastAPI):
     # Resolving the setting here also stops the service at startup on a typo.
     app.state.service_info = initialize_service_info(
         classifier_embeddings=settings.include_features,
-        embedding_extractor=resolve_embedding_extractor(),
+        embedding_extractor=resolve_embedding_extractor(settings.embedding_extractor),
     )
     logger.info("Initialized service info")
     yield
@@ -114,15 +114,15 @@ def select_pipelines(
     return {slug: PIPELINE_CHOICES[slug] for slug in slugs}
 
 
-def resolve_embedding_extractor() -> type[APIFeatureExtractor] | None:
+def resolve_embedding_extractor(key: str) -> type[APIFeatureExtractor] | None:
     """
-    Return the feature extractor that the AMI_EMBEDDING_EXTRACTOR setting names, or
-    None when it is "none" (or empty). An unknown key raises ValueError.
+    Return the feature extractor that a value of the AMI_EMBEDDING_EXTRACTOR setting
+    names, or None when it is "none" (or empty). An unknown key raises ValueError.
 
     It is a deployment setting, not a request option, so /info and every response
     describe the same algorithms. Antenna sends no request config in async mode.
     """
-    key = settings.embedding_extractor.strip()
+    key = key.strip()
     if key.lower() in ("", NO_EMBEDDING_EXTRACTOR):
         return None
     if key not in EMBEDDING_EXTRACTOR_CHOICES:
@@ -326,7 +326,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
     start_time = time.time()
 
-    Extractor = resolve_embedding_extractor()
+    Extractor = resolve_embedding_extractor(settings.embedding_extractor)
     Classifier = PIPELINE_CHOICES[str(data.pipeline)]
 
     detector = APIMothDetector(
@@ -504,9 +504,9 @@ def initialize_service_info(
     Describing a pipeline loads its models into memory, so only the pipelines chosen
     by select_pipelines are included. The caller says whether its species classifier
     sends vectors (the AMI_INCLUDE_FEATURES setting) and which feature extractor it
-    runs on every detection, or None: the API runs the one from the setting, and the
-    Antenna worker runs none. Antenna must not record an algorithm that never
-    produces output, so each path describes only what it returns.
+    runs on every detection (the AMI_EMBEDDING_EXTRACTOR setting), from the settings
+    that path runs with. Antenna must not record an algorithm that never produces
+    output, so each path describes only what it returns.
     """
     pipeline_configs = [
         make_pipeline_config_response(
