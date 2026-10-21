@@ -140,7 +140,13 @@ def register_pipelines(
 
     # Initialize service info once to get pipeline configurations
     logger.info("Initializing pipeline configurations...")
-    service_info = initialize_service_info(pipeline_slugs)
+    # Describe what the worker returns: the classifier's vectors follow the same
+    # setting as in _process_job, and the worker runs no embedding extractor.
+    service_info = initialize_service_info(
+        pipeline_slugs,
+        classifier_embeddings=settings.include_features,
+        embedding_extractor=None,
+    )
     pipeline_configs = service_info.pipelines
     logger.info(f"Generated {len(pipeline_configs)} pipeline configurations")
 

@@ -106,6 +106,23 @@ class ClassificationResponse(pydantic.BaseModel):
     timestamp: datetime.datetime
 
 
+class EmbeddingResponse(pydantic.BaseModel):
+    """A feature vector for one detection and the algorithm whose backbone made it.
+
+    It sits on the detection rather than on a classification, so storing it cannot
+    add a prediction. Vectors are only comparable with vectors from the same algorithm.
+    """
+
+    features: list[float] = pydantic.Field(
+        description=(
+            "Feature vector (embedding) from the model backbone, before the "
+            "classification head."
+        ),
+        repr=False,
+    )
+    algorithm: AlgorithmReference
+
+
 class DetectionResponse(pydantic.BaseModel):
     source_image_id: str
     bbox: BoundingBox
@@ -114,6 +131,15 @@ class DetectionResponse(pydantic.BaseModel):
     timestamp: datetime.datetime
     crop_image_url: str | None = None
     classifications: list[ClassificationResponse] = []
+    embeddings: list[EmbeddingResponse] | None = pydantic.Field(
+        default=None,
+        description=(
+            "Feature vectors for this detection, at most one per algorithm key. Every "
+            "algorithm in the pipeline that declares embedding_dimensions in /info "
+            "sends one for every detection, including those the moth/non-moth filter "
+            "rejected. Vectors are comparable only when their algorithm keys match."
+        ),
+    )
 
 
 class SourceImageRequest(pydantic.BaseModel):
@@ -227,6 +253,15 @@ class AlgorithmConfigResponse(pydantic.BaseModel):
         description="A URI to the weights or model details, could be a public web URL or object store path.",
     )
     category_map: AlgorithmCategoryMapResponse | None = None
+    embedding_dimensions: int | None = pydantic.Field(
+        default=None,
+        description=(
+            "The length of the feature vectors this algorithm returns in detection "
+            "embeddings. When it is set, every detection gets a vector of this length "
+            "from the algorithm; when it is None, the algorithm sends none. Antenna "
+            "stores vectors only from algorithms that declare it."
+        ),
+    )
 
 
 class PipelineConfigRequest(pydantic.BaseModel):
