@@ -76,6 +76,15 @@ class Settings(BaseSettings):
     antenna_service_name: str = "AMI Data Companion"
     antenna_api_batch_size: int = 24
 
+    # Feature vectors (embeddings) for the API and the Antenna worker. They are set
+    # here, not per request, so that /info and every response agree. See
+    # trapdata/api/api.py:resolve_embedding_extractor.
+    include_features: bool = False
+    # Key of the feature extractor that the API and the Antenna worker run on every
+    # detection in every pipeline, or "none". It is separate from feature_extractor
+    # above, which picks the desktop app's tracking model.
+    embedding_extractor: str = "bioclip_2_5_embeddings"
+
     # Pipelines to offer, as a comma-separated list of slugs from PIPELINE_CHOICES in
     # trapdata/api/api.py. The API server, the Antenna worker and pipeline registration
     # load models only for these pipelines. Empty means every pipeline.
@@ -222,6 +231,27 @@ class Settings(BaseSettings):
             "antenna_service_name": {
                 "title": "Antenna Service Name",
                 "description": "Name for the processing service registration (hostname will be added automatically)",
+                "kivy_type": "string",
+                "kivy_section": "antenna",
+            },
+            "include_features": {
+                "title": "Feature vectors from the species classifier",
+                "description": (
+                    "Attach a 2048-dim feature vector from the species classifier's "
+                    "backbone to every detection, including those the moth/non-moth "
+                    "filter rejected, which get no species label. Costs one more "
+                    "backbone pass per rejected detection."
+                ),
+                "kivy_type": "bool",
+                "kivy_section": "antenna",
+            },
+            "embedding_extractor": {
+                "title": "Embedding extractor",
+                "description": (
+                    "Key of the feature extractor that the API and the Antenna worker "
+                    "run on every detection in every pipeline, "
+                    "bioclip_2_5_embeddings by default, or none."
+                ),
                 "kivy_type": "string",
                 "kivy_section": "antenna",
             },

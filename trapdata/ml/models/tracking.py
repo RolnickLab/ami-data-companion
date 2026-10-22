@@ -428,6 +428,13 @@ class UntrackedObjectsIterableDatabaseDataset(torch.utils.data.IterableDataset):
 
 
 class FeatureExtractor(InferenceBaseClass):
+    """A second inference pass that saves backbone features for local tracking.
+
+    ``Resnet50TimmClassifier.forward_with_features`` gets the same features out of
+    the classification pass instead, so it needs no extra pass over the queue, but
+    it returns them unnormalized where this class L1-normalizes.
+    """
+
     name = "Default Feature Extractor"
     stage = 4
     type = "feature_extractor"

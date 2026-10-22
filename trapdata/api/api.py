@@ -27,6 +27,7 @@ from .models.classification import (
     MothClassifierTuringKenyaUganda,
     MothClassifierUKDenmark,
 )
+from .models.feature_extraction import APIBioCLIP25FeatureExtractor, APIFeatureExtractor
 from .models.localization import APIMothDetector
 from .schemas import (
     AlgorithmCategoryMapResponse,
@@ -42,7 +43,11 @@ from .schemas import ProcessingServiceInfoResponse, SourceImage, SourceImageResp
 @asynccontextmanager
 async def lifespan(app: fastapi.FastAPI):
     # cache the service info to be built only once at startup
-    app.state.service_info = initialize_service_info()
+    # Resolving the setting here also stops the service at startup on a typo.
+    app.state.service_info = initialize_service_info(
+        classifier_embeddings=settings.include_features,
+        embedding_extractor=resolve_embedding_extractor(settings.embedding_extractor),
+    )
     logger.info("Initialized service info")
     yield
     # Shutdown event: Clean up resources (if necessary)
@@ -67,6 +72,13 @@ PIPELINE_CHOICES = {
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
 }
+
+# Feature extractors that can embed every detection in any pipeline, keyed by algorithm
+# key. The AMI_EMBEDDING_EXTRACTOR setting picks one of them, or none.
+EMBEDDING_EXTRACTOR_CHOICES: dict[str, type[APIFeatureExtractor]] = {
+    APIBioCLIP25FeatureExtractor.get_key(): APIBioCLIP25FeatureExtractor,
+}
+NO_EMBEDDING_EXTRACTOR = "none"
 
 
 def parse_pipeline_setting(value: str) -> list[str]:
@@ -100,6 +112,25 @@ def select_pipelines(
             f"Must be one of: {', '.join(PIPELINE_CHOICES)}"
         )
     return {slug: PIPELINE_CHOICES[slug] for slug in slugs}
+
+
+def resolve_embedding_extractor(key: str) -> type[APIFeatureExtractor] | None:
+    """
+    Return the feature extractor that a value of the AMI_EMBEDDING_EXTRACTOR setting
+    names, or None when it is "none" (or empty). An unknown key raises ValueError.
+
+    It is a deployment setting, not a request option, so /info and every response
+    describe the same algorithms. Antenna sends no request config in async mode.
+    """
+    key = key.strip()
+    if key.lower() in ("", NO_EMBEDDING_EXTRACTOR):
+        return None
+    if key not in EMBEDDING_EXTRACTOR_CHOICES:
+        raise ValueError(
+            f"Unknown embedding extractor: {key}. "
+            f"Must be one of: {', '.join([*EMBEDDING_EXTRACTOR_CHOICES, NO_EMBEDDING_EXTRACTOR])}"
+        )
+    return EMBEDDING_EXTRACTOR_CHOICES[key]
 
 
 def _offered_pipeline_slugs() -> list[str]:
@@ -161,6 +192,7 @@ def make_algorithm_response(
         description=model.description,
         category_map=category_map,
         uri=resolve_model_url(model.weights_path),
+        embedding_dimensions=model.embedding_dimensions,
     )
 
 
@@ -175,15 +207,39 @@ def make_algorithm_config_response(
         description=model.description,
         category_map=category_map,
         uri=resolve_model_url(model.weights_path),
+        embedding_dimensions=model.embedding_dimensions,
+    )
+
+
+def make_extractor_config_response(
+    Extractor: type[APIFeatureExtractor],
+) -> AlgorithmConfigResponse:
+    """Describe a feature extractor from its class, without loading its backbone."""
+    return AlgorithmConfigResponse(
+        name=Extractor.name,
+        key=Extractor.get_key(),
+        task_type=Extractor.task_type,
+        description=Extractor.description,
+        category_map=None,
+        uri=Extractor.model_uri,
+        embedding_dimensions=Extractor.embedding_dimensions,
     )
 
 
 def make_pipeline_config_response(
     Classifier: type[APIMothClassifier],
     slug: str,
+    *,
+    classifier_embeddings: bool = False,
+    embedding_extractor: type[APIFeatureExtractor] | None = None,
 ) -> PipelineConfigResponse:
     """
     Create a configuration for an entire pipeline, given a species classifier class.
+
+    classifier_embeddings says whether the species classifier sends its backbone
+    vector for every detection, and embedding_extractor names the feature extractor
+    that embeds every detection, if the caller runs one. Each declares its vector
+    length only when it sends vectors.
     """
     algorithms = []
 
@@ -206,8 +262,12 @@ def make_pipeline_config_response(
         batch_size=settings.classification_batch_size,
         num_workers=settings.num_workers,
         terminal=True,
+        include_embeddings=classifier_embeddings,
     )
     algorithms.append(make_algorithm_config_response(classifier))
+
+    if embedding_extractor:
+        algorithms.append(make_extractor_config_response(embedding_extractor))
 
     return PipelineConfigResponse(
         name=classifier.name,
@@ -266,6 +326,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
     start_time = time.time()
 
+    Extractor = resolve_embedding_extractor(settings.embedding_extractor)
     Classifier = PIPELINE_CHOICES[str(data.pipeline)]
 
     detector = APIMothDetector(
@@ -281,6 +342,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
     detections_for_terminal_classifier: list[DetectionResponse] = []
     detections_to_return: list[DetectionResponse] = []
+    non_moth_detections: list[DetectionResponse] = []
 
     if should_filter_detections(Classifier):
         filter = MothClassifierBinary(
@@ -303,7 +365,6 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
         # Filter results based on positive_binary_label
         moth_detections = []
-        non_moth_detections = []
         for detection in filter.results:
             for classification in detection.classifications:
                 if classification.classification == filter.positive_binary_label:
@@ -331,16 +392,25 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         # single=True if len(filtered_detections) == 1 else False,
         single=True,  # @TODO solve issues with reading images in multiprocessing
         example_config_param=data.config.example_config_param,
+        include_embeddings=settings.include_features,
         terminal=True,
         # critera=data.config.criteria, # @TODO another approach to intermediate filter models
     )
     classifier.run()
+    # Return all detections, including those that were not classified as moths
+    detections_to_return += classifier.results
+
+    if classifier.produces_embeddings and non_moth_detections:
+        # Same model as the moth detections' vectors, so every vector in the
+        # response is comparable. Adds no classification to these detections.
+        classifier.embed(non_moth_detections)
+
+    if Extractor:
+        embed_detections(Extractor, source_images, detections_to_return)
+        algorithms_used[Extractor.get_key()] = make_extractor_config_response(Extractor)
     end_time = time.time()
     seconds_elapsed = float(end_time - start_time)
     algorithms_used[classifier.get_key()] = make_algorithm_response(classifier)
-
-    # Return all detections, including those that were not classified as moths
-    detections_to_return += classifier.results
 
     logger.info(
         f"Processed {len(source_images)} images in {seconds_elapsed:.2f} seconds"
@@ -363,6 +433,21 @@ async def process(data: PipelineRequest) -> PipelineResponse:
         total_time=seconds_elapsed,
     )
     return response
+
+
+def embed_detections(
+    Extractor: type[APIFeatureExtractor],
+    source_images: list[SourceImage],
+    detections: list[DetectionResponse],
+) -> list[DetectionResponse]:
+    """Attach the extractor's embedding to each detection, in place."""
+    extractor = Extractor(
+        source_images=source_images,
+        batch_size=settings.classification_batch_size,
+        num_workers=settings.num_workers,
+        single=True,  # @TODO solve issues with reading images in multiprocessing
+    )
+    return extractor.embed(detections)
 
 
 @app.get("/info", tags=["services"])
@@ -408,16 +493,28 @@ async def readyz():
 
 def initialize_service_info(
     pipelines: list[str] | None = None,
+    *,
+    classifier_embeddings: bool,
+    embedding_extractor: type[APIFeatureExtractor] | None,
 ) -> ProcessingServiceInfoResponse:
     """
     Describe the pipelines this service offers, for the /info endpoint and for
     registering the pipelines with Antenna.
 
     Describing a pipeline loads its models into memory, so only the pipelines chosen
-    by select_pipelines are included.
+    by select_pipelines are included. The caller says whether its species classifier
+    sends vectors (the AMI_INCLUDE_FEATURES setting) and which feature extractor it
+    runs on every detection (the AMI_EMBEDDING_EXTRACTOR setting), from the settings
+    that path runs with. Antenna must not record an algorithm that never produces
+    output, so each path describes only what it returns.
     """
     pipeline_configs = [
-        make_pipeline_config_response(classifier_class, slug=key)
+        make_pipeline_config_response(
+            classifier_class,
+            slug=key,
+            classifier_embeddings=classifier_embeddings,
+            embedding_extractor=embedding_extractor,
+        )
         for key, classifier_class in select_pipelines(pipelines).items()
     ]
 

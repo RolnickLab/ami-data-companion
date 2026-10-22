@@ -7,11 +7,12 @@ Only external service dependencies are mocked - ML models and image loading are 
 
 import pathlib
 from unittest import TestCase
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import torch
 from fastapi.testclient import TestClient
 
+from trapdata.antenna import registration
 from trapdata.antenna.client import get_jobs
 from trapdata.antenna.datasets import RESTDataset, rest_collate_fn
 from trapdata.antenna.registration import register_pipelines_for_project
@@ -24,9 +25,13 @@ from trapdata.antenna.schemas import (
 from trapdata.antenna.tests import antenna_api_server
 from trapdata.antenna.tests.antenna_api_server import app as antenna_app
 from trapdata.antenna.worker import _process_job
+from trapdata.api.api import PIPELINE_CHOICES
+from trapdata.api.models.classification import MothClassifierBinary
 from trapdata.api.schemas import PipelineResultsResponse
 from trapdata.api.tests.image_server import StaticFileTestServer
+from trapdata.api.tests.test_embedding_extractor import EXTRACTOR_KEY, fake_backbone
 from trapdata.api.tests.utils import get_test_image_urls, patch_antenna_api_requests
+from trapdata.ml.models.bioclip import BioCLIPFeatureExtractor
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 # ---------------------------------------------------------------------------
@@ -252,7 +257,9 @@ class TestProcessJobIntegration(TestCase):
     def setUp(self):
         antenna_api_server.reset()
 
-    def _make_settings(self):
+    def _make_settings(
+        self, include_features: bool = False, embedding_extractor: str = "none"
+    ):
         """Create mock settings for worker."""
         settings = MagicMock()
         settings.antenna_api_base_url = "http://testserver/api/v2"
@@ -260,7 +267,89 @@ class TestProcessJobIntegration(TestCase):
         settings.antenna_api_batch_size = 2
         settings.num_workers = 0  # Disable multiprocessing for tests
         settings.localization_batch_size = 2  # Real integer for batch processing
+        settings.classification_batch_size = 4
+        # A bare MagicMock attribute is truthy, which would switch these on.
+        settings.include_features = include_features
+        settings.embedding_extractor = embedding_extractor
         return settings
+
+    def _process_frame_with_rejected_crops(self, job_id: int, settings):
+        """Run the worker on one frame in which the binary filter rejects some crops."""
+        url = self.file_server.get_url("panama/01-20231110214539-snapshot.jpg")
+        task = AntennaPipelineProcessingTask(
+            id="task_0", image_id="img_0", image_url=url, reply_subject="reply_0"
+        )
+        antenna_api_server.setup_job(job_id=job_id, tasks=[task])
+        with patch_antenna_api_requests(self.antenna_client):
+            _process_job(
+                "quebec_vermont_moths_2023",
+                job_id,
+                settings,
+                device=torch.device("cpu"),
+            )
+        (task_result,) = antenna_api_server.get_posted_results(job_id)
+        return task_result.result.detections
+
+    def test_vectors_match_what_the_worker_registers(self):
+        """With both vector settings on, every crop, rejected ones included, gets one
+        vector from each algorithm that the worker's registration declares, of the
+        declared length, and no other vector."""
+        settings = self._make_settings(True, EXTRACTOR_KEY)
+        settings.pipelines = "quebec_vermont_moths_2023"
+        registered = []
+        with (
+            patch.object(BioCLIPFeatureExtractor, "load_backbone", fake_backbone),
+            patch.object(BioCLIPFeatureExtractor, "_loaded", {}),
+            patch.object(
+                registration,
+                "register_pipelines_for_project",
+                lambda **kw: registered.extend(kw["pipeline_configs"]) or (True, ""),
+            ),
+        ):
+            registration.register_pipelines([1], "test service", settings)
+            detections = self._process_frame_with_rejected_crops(112, settings)
+
+        (pipeline,) = registered
+        declared = {
+            a.key: a.embedding_dimensions
+            for a in pipeline.algorithms
+            if a.embedding_dimensions is not None
+        }
+        species_key = PIPELINE_CHOICES["quebec_vermont_moths_2023"].get_key()
+        self.assertEqual(set(declared), {species_key, EXTRACTOR_KEY})
+        self.assertTrue(
+            any(not any(c.terminal for c in d.classifications) for d in detections),
+            "The fixture frame should contain crops the filter rejects",
+        )
+        for detection in detections:
+            sent = {e.algorithm.key: len(e.features) for e in detection.embeddings}
+            self.assertEqual(sent, declared)
+
+    def test_include_features_reaches_rejected_crops(self):
+        """Every crop gets one species-classifier vector; rejected crops keep only
+        the filter's non-terminal label."""
+        species_key = PIPELINE_CHOICES["quebec_vermont_moths_2023"].get_key()
+        detections = self._process_frame_with_rejected_crops(
+            110, self._make_settings(include_features=True)
+        )
+        rejected = [
+            d for d in detections if not any(c.terminal for c in d.classifications)
+        ]
+        assert rejected, "The fixture frame should contain crops the filter rejects"
+        for detection in detections:
+            assert detection.embeddings is not None
+            assert len(detection.embeddings) == 1
+            assert detection.embeddings[0].algorithm.key == species_key
+            assert len(detection.embeddings[0].features) == 2048
+        for detection in rejected:
+            keys = [c.algorithm.key for c in detection.classifications]
+            assert keys == [MothClassifierBinary.get_key()]
+            assert detection.classifications[0].terminal is False
+
+    def test_no_embeddings_when_include_features_is_off(self):
+        detections = self._process_frame_with_rejected_crops(111, self._make_settings())
+        assert detections
+        assert all(d.embeddings is None for d in detections)
 
     def test_empty_queue(self):
         """No tasks in queue → returns False."""
@@ -421,6 +510,8 @@ class TestWorkerEndToEnd(TestCase):
         settings.antenna_api_batch_size = 2
         settings.num_workers = 0
         settings.localization_batch_size = 2  # Real integer for batch processing
+        settings.include_features = False
+        settings.embedding_extractor = "none"
         return settings
 
     def test_full_workflow_with_real_inference(self):

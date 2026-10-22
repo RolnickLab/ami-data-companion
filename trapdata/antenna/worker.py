@@ -14,10 +14,16 @@ from trapdata.antenna.client import get_full_service_name, get_jobs
 from trapdata.antenna.datasets import CUDAPrefetcher, get_rest_dataloader
 from trapdata.antenna.result_posting import ResultPoster
 from trapdata.antenna.schemas import AntennaTaskResult, AntennaTaskResultError
-from trapdata.api.api import PIPELINE_CHOICES, should_filter_detections
+from trapdata.api.api import (
+    PIPELINE_CHOICES,
+    resolve_embedding_extractor,
+    should_filter_detections,
+)
 from trapdata.api.models.classification import MothClassifierBinary
+from trapdata.api.models.feature_extraction import APIFeatureExtractor, attach_embedding
 from trapdata.api.models.localization import APIMothDetector
 from trapdata.api.schemas import (
+    AlgorithmReference,
     DetectionResponse,
     PipelineResultsResponse,
     SourceImageResponse,
@@ -200,6 +206,88 @@ def _apply_binary_classification(
     return moth_detections, non_moth_detections
 
 
+def _transform_crops(
+    detections: list[DetectionResponse],
+    image_tensors: dict[str, torch.Tensor],
+    transforms,
+) -> tuple[list[torch.Tensor], list[int]]:
+    """Crop and transform each detection, skipping empty boxes.
+
+    Returns the crops and, for each one, its index in ``detections``.
+    """
+    crops = []
+    valid_indices = []
+    for idx, dresp in enumerate(detections):
+        image_tensor = image_tensors[dresp.source_image_id]
+        bbox = dresp.bbox
+        y1, y2 = int(bbox.y1), int(bbox.y2)
+        x1, x2 = int(bbox.x1), int(bbox.x2)
+        if y1 >= y2 or x1 >= x2:
+            logger.warning(
+                f"Skipping detection {idx} with invalid bbox: "
+                f"({x1},{y1})->({x2},{y2})"
+            )
+            continue
+        crops.append(transforms(image_tensor[:, y1:y2, x1:x2]))
+        valid_indices.append(idx)
+    return crops, valid_indices
+
+
+def _embed_detections(
+    classifier,
+    detections: list[DetectionResponse],
+    image_tensors: dict[str, torch.Tensor],
+) -> None:
+    """Attach the species classifier's embedding to detections it did not classify.
+
+    These are the crops the moth/non-moth filter rejected. They keep the filter's
+    label and gain a vector from the same model as the moth crops, and no species
+    classification.
+    """
+    classifier.reset(detections)
+    crops, valid_indices = _transform_crops(
+        detections, image_tensors, classifier.get_transforms()
+    )
+    if not crops:
+        return
+    with classifier.embedding_only():
+        outputs = classifier.post_process_batch(
+            classifier.predict_batch(torch.stack(crops))
+        )
+    for crop_i, idx in enumerate(valid_indices):
+        classifier.update_detection_embedding(
+            image_id=detections[idx].source_image_id,
+            detection_idx=idx,
+            predictions=outputs[crop_i],
+        )
+
+
+def _embed_with_extractor(
+    extractor: APIFeatureExtractor,
+    detections: list[DetectionResponse],
+    image_tensors: dict[str, torch.Tensor],
+) -> None:
+    """Attach the feature extractor's vector to every detection, whatever its label.
+
+    Crops are transformed and encoded one extractor batch at a time, so a large
+    image batch never puts every crop through the encoder, or on the GPU, at once.
+    """
+    algorithm = AlgorithmReference(name=extractor.name, key=extractor.get_key())
+    transforms = extractor.get_transforms()
+    for start in range(0, len(detections), extractor.batch_size):
+        chunk = detections[start : start + extractor.batch_size]
+        crops, valid_indices = _transform_crops(chunk, image_tensors, transforms)
+        if not crops:
+            continue
+        vectors = extractor.post_process_batch(
+            extractor.predict_batch(torch.stack(crops))
+        )
+        for idx, features in zip(valid_indices, vectors, strict=True):
+            attach_embedding(
+                chunk[idx], features, algorithm, extractor.embedding_dimensions
+            )
+
+
 def _process_batch(
     batch: dict,
     batch_num: int,
@@ -208,6 +296,7 @@ def _process_batch(
     pipeline: str,
     binary_filter: "MothClassifierBinary | None",
     use_binary_filter: bool,
+    extractor: APIFeatureExtractor | None = None,
 ) -> tuple[int, int, list[AntennaTaskResult], float, float]:
     """Process a single batch of images through detection and classification.
 
@@ -223,6 +312,7 @@ def _process_batch(
         pipeline: Pipeline slug for response payload
         binary_filter: Binary moth/non-moth classifier, or None
         use_binary_filter: Whether to run binary classification step
+        extractor: Feature extractor that embeds every returned detection, or None
 
     Returns:
         (n_items, n_detections, batch_results, detect_time, classify_time)
@@ -294,27 +384,14 @@ def _process_batch(
 
         # Run terminal classifier on filtered detections
         classifier.reset(detections_for_terminal_classifier)
-        classify_transforms = classifier.get_transforms()
 
         # Collect and transform all crops for batched classification
-        crops = []
-        valid_indices = []
         n_detections = 0
-        for idx, dresp in enumerate(detections_for_terminal_classifier):
-            image_tensor = image_tensors[dresp.source_image_id]
-            bbox = dresp.bbox
-            y1, y2 = int(bbox.y1), int(bbox.y2)
-            x1, x2 = int(bbox.x1), int(bbox.x2)
-            if y1 >= y2 or x1 >= x2:
-                logger.warning(
-                    f"Skipping detection {idx} with invalid bbox: "
-                    f"({x1},{y1})->({x2},{y2})"
-                )
-                continue
-            crop = image_tensor[:, y1:y2, x1:x2]
-            crop_transformed = classify_transforms(crop)
-            crops.append(crop_transformed)
-            valid_indices.append(idx)
+        crops, valid_indices = _transform_crops(
+            detections_for_terminal_classifier,
+            image_tensors,
+            classifier.get_transforms(),
+        )
 
         classify_start = datetime.datetime.now()
         if crops:
@@ -332,6 +409,13 @@ def _process_batch(
                 )
                 image_detections[dresp.source_image_id].append(detection)
                 n_detections += 1
+
+        if classifier.produces_embeddings and detections_to_return:
+            _embed_detections(classifier, detections_to_return, image_tensors)
+
+        if extractor is not None:
+            returned = [d for dets in image_detections.values() for d in dets]
+            _embed_with_extractor(extractor, returned, image_tensors)
 
         classify_time = (datetime.datetime.now() - classify_start).total_seconds()
         # Count non-moth detections returned from binary filter
@@ -428,6 +512,9 @@ def _process_job(
     classifier_class = PIPELINE_CHOICES[pipeline]
     use_binary_filter = should_filter_detections(classifier_class)
     binary_filter = None
+    # Resolved before any work, so an unknown key fails the job at the start.
+    Extractor = resolve_embedding_extractor(settings.embedding_extractor)
+    extractor = None
 
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -463,9 +550,20 @@ def _process_job(
 
             # Defer instantiation of poster, detector and classifiers until we have data
             if not classifier:
-                classifier = classifier_class(source_images=[], detections=[])
+                classifier = classifier_class(
+                    source_images=[],
+                    detections=[],
+                    include_embeddings=settings.include_features,
+                )
                 detector = APIMothDetector([])
                 result_poster = ResultPoster(max_pending=MAX_PENDING_POSTS)
+                if Extractor is not None:
+                    # Loads the backbone once per process and device; later jobs
+                    # in this process reuse it (see BioCLIPFeatureExtractor._load).
+                    extractor = Extractor(
+                        source_images=[],
+                        batch_size=settings.classification_batch_size,
+                    )
 
                 if use_binary_filter:
                     binary_filter = MothClassifierBinary(
@@ -491,6 +589,7 @@ def _process_job(
                 pipeline,
                 binary_filter,
                 use_binary_filter,
+                extractor,
             )
             items += n_items
             total_detections += n_detections

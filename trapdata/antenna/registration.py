@@ -10,6 +10,7 @@ from trapdata.antenna.schemas import (
 from trapdata.api.api import (
     initialize_service_info,
     parse_pipeline_setting,
+    resolve_embedding_extractor,
     select_pipelines,
 )
 from trapdata.api.utils import get_http_session
@@ -140,7 +141,12 @@ def register_pipelines(
 
     # Initialize service info once to get pipeline configurations
     logger.info("Initializing pipeline configurations...")
-    service_info = initialize_service_info(pipeline_slugs)
+    # Describe what the worker returns, from the same settings _process_job reads.
+    service_info = initialize_service_info(
+        pipeline_slugs,
+        classifier_embeddings=settings.include_features,
+        embedding_extractor=resolve_embedding_extractor(settings.embedding_extractor),
+    )
     pipeline_configs = service_info.pipelines
     logger.info(f"Generated {len(pipeline_configs)} pipeline configurations")
 

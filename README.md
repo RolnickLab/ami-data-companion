@@ -237,6 +237,13 @@ AMI_PIPELINES=moth_binary,global_moths_2024 ami api
 
 The Antenna worker and `ami worker register` read the same setting.
 
+Two settings add feature vectors (embeddings) to every detection, including the crops the moth/non-moth filter rejected. They are deployment settings, not request options, so `/info` and every response agree:
+
+- `AMI_EMBEDDING_EXTRACTOR` names a feature extractor that the API and the Antenna worker run on every detection in every pipeline. The default is `bioclip_2_5_embeddings`, which loads the BioCLIP 2.5 ViT-H/14 backbone from the Hugging Face Hub on the first request or the first batch (several GB of weights and GPU memory). Set it to `none` to turn it off.
+- `AMI_INCLUDE_FEATURES=true` attaches the species classifier's own 2048-dim backbone vector to every detection, in the API and in the worker. It is off by default.
+
+An algorithm lists `embedding_dimensions` in `/info` only when it sends a vector for every detection.
+
 ## Running the Antenna Worker
 
 The worker polls the Antenna platform API for queued image processing jobs, downloads images, runs detection and classification, and posts results back to Antenna.
