@@ -129,7 +129,9 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             time.sleep(SLEEP_TIME_SECONDS)
 
 
-def _images_to_float(images):
+def _images_to_float(
+    images: torch.Tensor | list[torch.Tensor],
+) -> torch.Tensor | list[torch.Tensor]:
     """Convert uint8 images from the loader to float in [0, 1], on whatever device they are on.
 
     The loader keeps frames as uint8 so the float conversion happens here, after the
@@ -137,7 +139,9 @@ def _images_to_float(images):
     """
     if isinstance(images, torch.Tensor):
         return images.float().div_(255) if images.dtype == torch.uint8 else images
-    return [img.float().div_(255) if img.dtype == torch.uint8 else img for img in images]
+    return [
+        img.float().div_(255) if img.dtype == torch.uint8 else img for img in images
+    ]
 
 
 def _apply_binary_classification(

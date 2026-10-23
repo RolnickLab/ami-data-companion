@@ -459,14 +459,19 @@ class CUDAPrefetcher:
             return
 
         with torch.cuda.stream(self.stream):
-            self.next_batch = {
-                k: (
-                    v.to(self.device, non_blocking=True)
-                    if isinstance(v, torch.Tensor)
-                    else v
-                )
-                for k, v in batch.items()
-            }
+            self.next_batch = {k: self._to_device(v) for k, v in batch.items()}
+
+    def _to_device(self, value):
+        """Move a tensor, or a list of tensors (mixed-size image batches), to the device."""
+        if isinstance(value, torch.Tensor):
+            return value.to(self.device, non_blocking=True)
+        if (
+            isinstance(value, list)
+            and value
+            and all(isinstance(v, torch.Tensor) for v in value)
+        ):
+            return [v.to(self.device, non_blocking=True) for v in value]
+        return value
 
     def __iter__(self):
         return self
