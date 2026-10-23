@@ -24,11 +24,12 @@ different setting and targets a different bottleneck.
     ├──────────────────────────────────────────────────────────────────┤
     │  Thread pool  (ThreadPoolExecutor inside each DataLoader worker) │
     │  Downloads images concurrently *within* one API fetch batch.    │
-    │  Each thread: HTTP GET → PIL open → RGB convert → ToTensor().   │
+    │  Each thread: HTTP GET → PIL open → RGB convert → uint8 tensor. │
     │  Controlled by: ThreadPoolExecutor(max_workers=8) on the class. │
-    │  Note: RGB conversion and ToTensor are GIL-bound (CPU). Only    │
-    │  the network wait truly runs in parallel. A future optimisation  │
-    │  could move transforms out of the thread.                       │
+    │  Images stay uint8 here; the worker converts them to float on   │
+    │  the device. A float32 ToTensor() on a 64 MP frame took ~100 ms │
+    │  that did not shrink with more threads, and made each frame     │
+    │  4x larger in RAM and in the GPU transfer.                      │
     └──────────────────────────────────────────────────────────────────┘
 
 Settings quick-reference (prefix with AMI_ as env vars):
@@ -126,7 +127,8 @@ class RESTDataset(torch.utils.data.IterableDataset):
         self.auth_token = auth_token
         self.job_id = job_id
         self.batch_size = batch_size
-        self.image_transforms = image_transforms or torchvision.transforms.ToTensor()
+        # uint8 CHW; the worker converts to float on the device (see module docstring).
+        self.image_transforms = image_transforms or torchvision.transforms.PILToTensor()
 
         # These are created lazily in _ensure_sessions() because they contain
         # unpicklable objects (ThreadPoolExecutor has a SimpleQueue) and
@@ -185,16 +187,15 @@ class RESTDataset(torch.utils.data.IterableDataset):
     def _load_image(self, image_url: str) -> torch.Tensor | None:
         """Load an image from a URL and convert it to a PyTorch tensor.
 
-        Called from threads inside ``_load_images_threaded``. The HTTP
-        fetch is truly concurrent (network I/O releases the GIL), but
-        PIL decode, RGB conversion, and ``image_transforms`` (ToTensor)
-        are CPU-bound and serialised by the GIL.
+        Called from threads inside ``_load_images_threaded``. The HTTP fetch
+        and the PIL decode both release the GIL, so they run in parallel.
 
         Args:
             image_url: URL of the image to load
 
         Returns:
-            Image as a PyTorch tensor, or None if loading failed
+            Image as a uint8 PyTorch tensor (unless custom ``image_transforms``
+            were given), or None if loading failed
         """
         try:
             # Use dedicated session without auth for external images
@@ -458,14 +459,19 @@ class CUDAPrefetcher:
             return
 
         with torch.cuda.stream(self.stream):
-            self.next_batch = {
-                k: (
-                    v.to(self.device, non_blocking=True)
-                    if isinstance(v, torch.Tensor)
-                    else v
-                )
-                for k, v in batch.items()
-            }
+            self.next_batch = {k: self._to_device(v) for k, v in batch.items()}
+
+    def _to_device(self, value):
+        """Move a tensor, or a list of tensors (mixed-size image batches), to the device."""
+        if isinstance(value, torch.Tensor):
+            return value.to(self.device, non_blocking=True)
+        if (
+            isinstance(value, list)
+            and value
+            and all(isinstance(v, torch.Tensor) for v in value)
+        ):
+            return [v.to(self.device, non_blocking=True) for v in value]
+        return value
 
     def __iter__(self):
         return self

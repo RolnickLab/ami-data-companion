@@ -129,6 +129,21 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             time.sleep(SLEEP_TIME_SECONDS)
 
 
+def _images_to_float(
+    images: torch.Tensor | list[torch.Tensor],
+) -> torch.Tensor | list[torch.Tensor]:
+    """Convert uint8 images from the loader to float in [0, 1], on whatever device they are on.
+
+    The loader keeps frames as uint8 so the float conversion happens here, after the
+    transfer, instead of on the CPU in the loader threads (see trapdata/antenna/datasets.py).
+    """
+    if isinstance(images, torch.Tensor):
+        return images.float().div_(255) if images.dtype == torch.uint8 else images
+    return [
+        img.float().div_(255) if img.dtype == torch.uint8 else img for img in images
+    ]
+
+
 def _apply_binary_classification(
     binary_filter: "MothClassifierBinary",
     detector_results: list[DetectionResponse],
@@ -247,6 +262,8 @@ def _process_batch(
             )
 
         batch_start_time = datetime.datetime.now()
+
+        images = _images_to_float(images)
 
         # output is dict of "boxes", "labels", "scores"
         batch_output = []
