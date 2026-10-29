@@ -87,6 +87,17 @@ class Settings(BaseSettings):
     model_base_url: str = f"{DEFAULT_OBJECT_STORE_URL}ami-models/"
     image_base_url: str = f"{DEFAULT_OBJECT_STORE_URL}ami-trapdata/"
 
+    # DataLoader subprocess hygiene (see RolnickLab/ami-data-companion#140, #145)
+    # Start method for DataLoader worker subprocesses: "fork", "spawn",
+    # "forkserver", or "" for the PyTorch default ("fork" on Linux). "forkserver"
+    # stops workers from inheriting the parent's CUDA and pinned-memory state, at
+    # the cost of about 3 seconds per job while each worker imports torch again.
+    antenna_api_dataloader_mp_context: str = ""
+    # Seconds to wait for one batch from the DataLoader workers. If a worker
+    # subprocess hangs (#140), the job fails with an error after this time and
+    # the worker goes on polling, instead of waiting forever. 0 disables it.
+    antenna_api_dataloader_timeout_s: int = 300
+
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
         """

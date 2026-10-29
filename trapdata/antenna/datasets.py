@@ -69,6 +69,7 @@ from io import BytesIO
 
 import requests
 import torch
+import torch.multiprocessing as mp
 import torch.utils.data
 import torchvision
 from PIL import Image
@@ -417,12 +418,20 @@ def get_rest_dataloader(
     DataLoader num_workers > 0 is safe here because Antenna dequeues
     tasks atomically — each worker subprocess gets a unique set of tasks.
 
+    Subprocess hygiene (see #140, #145): workers are never persistent, so
+    they and their pipes are released at the end of every job. A non-zero
+    ``timeout`` (default 300 s) stops the main process from waiting forever
+    when a worker subprocess dies. The start method is configurable
+    (``forkserver`` keeps workers from inheriting the parent's CUDA state).
+
     Args:
         job_id: Job ID to fetch tasks for
         settings: Settings object. Relevant fields:
             - antenna_api_base_url / antenna_api_auth_token
             - antenna_api_batch_size  (tasks per API call and GPU batch size)
             - num_workers            (DataLoader subprocesses)
+            - antenna_api_dataloader_mp_context  (fork / spawn / forkserver / "")
+            - antenna_api_dataloader_timeout_s   (per-batch timeout, seconds)
     """
     dataset = RESTDataset(
         base_url=settings.antenna_api_base_url,
@@ -431,14 +440,52 @@ def get_rest_dataloader(
         batch_size=settings.antenna_api_batch_size,
     )
 
+    # Resolve multiprocessing context. Empty string / unset means "let
+    # PyTorch choose" (today: "fork" on Linux), which is the historical
+    # behavior. Anything else must be one of the multiprocessing start
+    # methods supported by the host. Only relevant when num_workers > 0
+    # because num_workers=0 runs the dataset inline in the main process.
+    # We query mp.get_all_start_methods() (rather than hardcoding the
+    # ("fork", "spawn", "forkserver") tuple) so that the validation matches
+    # what the running interpreter / platform actually supports — e.g. macOS
+    # under Python 3.13+ no longer lists "fork" by default.
+    mp_context = (
+        (getattr(settings, "antenna_api_dataloader_mp_context", "") or "")
+        .strip()
+        .lower()
+    )
+    if settings.num_workers > 0 and mp_context:
+        allowed = set(mp.get_all_start_methods())
+        if mp_context not in allowed:
+            raise ValueError(
+                f"antenna_api_dataloader_mp_context must be one of "
+                f"{sorted(allowed)!r} or empty; got {mp_context!r}"
+            )
+        dataloader_mp_context: object | None = mp.get_context(mp_context)
+    else:
+        dataloader_mp_context = None
+
+    # Per-batch timeout. PyTorch interprets 0 as "wait forever" (the
+    # behavior that caused the silent hangs in #140); we treat negative or
+    # zero as "disable the guard" so an operator can opt out if needed,
+    # but the default is a 5-minute ceiling.
+    timeout_s = int(getattr(settings, "antenna_api_dataloader_timeout_s", 300) or 0)
+    dataloader_timeout = timeout_s if timeout_s > 0 and settings.num_workers > 0 else 0
+
     return torch.utils.data.DataLoader(
         dataset,
         batch_size=1,  # We collate manually in rest_collate_fn, so set batch_size=1 here
         num_workers=settings.num_workers,
         collate_fn=_no_op_collate_fn,
         pin_memory=True,
-        persistent_workers=settings.num_workers > 0,
+        # Workers must not be persistent. A new DataLoader is built for every job and
+        # iterated once, so persistence saves nothing. With pin_memory on CUDA, PyTorch
+        # registers each persistent worker in an atexit hook, which keeps its two pipe
+        # FDs open until the process exits: two leaked pipes per worker per job. See #145.
+        persistent_workers=False,
         prefetch_factor=4 if settings.num_workers > 0 else None,
+        multiprocessing_context=dataloader_mp_context,
+        timeout=dataloader_timeout,
     )
 
 

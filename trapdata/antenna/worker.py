@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import gc
 import time
 from collections.abc import Callable
 
@@ -539,3 +540,11 @@ def _process_job(
     finally:
         if result_poster:
             result_poster.shutdown()
+        # Release the DataLoader iterator now, so its worker subprocesses are
+        # joined when the job ends, also when the job ends with an exception.
+        # empty_cache() returns cached CUDA blocks between jobs (#140). The pipe
+        # leak in #145 is fixed in get_rest_dataloader, not here.
+        del batch_source, loader
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
