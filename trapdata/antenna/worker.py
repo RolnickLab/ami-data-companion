@@ -540,23 +540,11 @@ def _process_job(
     finally:
         if result_poster:
             result_poster.shutdown()
-        # Explicit DataLoader teardown — defense against DataLoader
-        # subprocess shared-memory cleanup races (#140) and the per-batch
-        # pipe-FD accumulation observed in #145. Dropping the loader
-        # reference here forces PyTorch to join its subprocesses
-        # immediately instead of relying on Python's garbage collector to
-        # run __del__ at some indeterminate later time. gc.collect()
-        # picks up the cycle the loader keeps internally; empty_cache()
-        # returns CUDA buffers to the allocator pool so RSS / shmem-rss
-        # can fall back toward baseline between jobs.
-        try:
-            del loader
-        except UnboundLocalError:
-            pass
-        try:
-            del batch_source
-        except UnboundLocalError:
-            pass
+        # Release the DataLoader iterator now, so its worker subprocesses are
+        # joined when the job ends, also when the job ends with an exception.
+        # empty_cache() returns cached CUDA blocks between jobs (#140). The pipe
+        # leak in #145 is fixed in get_rest_dataloader, not here.
+        del batch_source, loader
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

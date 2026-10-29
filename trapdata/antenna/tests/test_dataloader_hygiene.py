@@ -1,15 +1,10 @@
-"""Regression test for DataLoader subprocess-hygiene settings.
+"""Regression tests for the DataLoader settings used by the Antenna worker.
 
-This test guards the fix shipped for ami-data-companion#140 / #145:
-``get_rest_dataloader()`` must apply the ``multiprocessing_context`` and
-``timeout`` knobs from settings. Without these, the DataLoader inherits the
-parent's heap via ``fork`` (leaking CUDA / pinned-memory state into shared
-memory) and silently hangs forever when a subprocess dies mid-batch.
-
-The RSS-growth side of the regression is already covered by
-``test_memory_leak.py``; this file focuses on the *configuration* surface so
-the fix can't be silently regressed by a future refactor of
-``get_rest_dataloader``.
+``get_rest_dataloader()`` must never use persistent workers (they leak pipes,
+see #145), must apply the ``timeout`` setting (a dead worker subprocess would
+otherwise hang the job forever, see #140), and must apply the configured start
+method. The pipe count itself is measured in ``test_dataloader_pipe_leak.py``;
+this file checks the configuration, so it also runs on machines without CUDA.
 """
 
 from types import SimpleNamespace
@@ -32,7 +27,7 @@ def _make_settings(**overrides) -> SimpleNamespace:
         "antenna_api_auth_token": "test-token",
         "antenna_api_batch_size": 2,
         "num_workers": 0,
-        "antenna_api_dataloader_mp_context": "forkserver",
+        "antenna_api_dataloader_mp_context": "",
         "antenna_api_dataloader_timeout_s": 300,
     }
     defaults.update(overrides)
@@ -52,16 +47,16 @@ class TestDataLoaderHygieneDefaults(TestCase):
         assert loader.multiprocessing_context is None
         assert loader.timeout == 0  # 0 = no timeout, same as PyTorch default
 
-    def test_num_workers_positive_applies_forkserver_context_by_default(self):
-        """num_workers > 0 = mp_context must be the forkserver context."""
+    def test_num_workers_positive_uses_pytorch_default_context_by_default(self):
+        """The default start method is PyTorch's own, so no context is passed."""
         loader = get_rest_dataloader(job_id=1, settings=_make_settings(num_workers=1))
-        ctx = loader.multiprocessing_context
-        assert (
-            ctx is not None
-        ), "DataLoader must have an explicit multiprocessing context"
-        # multiprocessing.get_context returns one of the context singletons; check
-        # its start method matches what we configured.
-        assert ctx.get_start_method() == "forkserver"
+        assert loader.multiprocessing_context is None
+
+    def test_workers_are_not_persistent(self):
+        """Persistent workers leak two pipes per worker per job when pin_memory is
+        on with CUDA, because PyTorch keeps them in an atexit hook (#145)."""
+        loader = get_rest_dataloader(job_id=1, settings=_make_settings(num_workers=2))
+        assert loader.persistent_workers is False
 
     def test_num_workers_positive_applies_timeout_by_default(self):
         loader = get_rest_dataloader(job_id=1, settings=_make_settings(num_workers=1))
@@ -70,6 +65,15 @@ class TestDataLoaderHygieneDefaults(TestCase):
 
 class TestDataLoaderHygieneOverrides(TestCase):
     """Operators can override or disable each knob via settings."""
+
+    def test_mp_context_can_be_set_to_forkserver(self):
+        loader = get_rest_dataloader(
+            job_id=1,
+            settings=_make_settings(
+                num_workers=1, antenna_api_dataloader_mp_context="forkserver"
+            ),
+        )
+        assert loader.multiprocessing_context.get_start_method() == "forkserver"
 
     def test_mp_context_can_be_overridden_to_spawn(self):
         loader = get_rest_dataloader(
@@ -128,7 +132,6 @@ class TestDataLoaderHygieneBackwardsCompat(TestCase):
             num_workers=1,
         )
         loader = get_rest_dataloader(job_id=1, settings=bare)
-        # Defaults: forkserver context + 300s timeout
-        assert loader.multiprocessing_context is not None
-        assert loader.multiprocessing_context.get_start_method() == "forkserver"
+        # Defaults: PyTorch's start method + 300s timeout
+        assert loader.multiprocessing_context is None
         assert loader.timeout == 300

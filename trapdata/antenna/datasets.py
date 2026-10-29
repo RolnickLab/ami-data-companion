@@ -418,12 +418,11 @@ def get_rest_dataloader(
     DataLoader num_workers > 0 is safe here because Antenna dequeues
     tasks atomically — each worker subprocess gets a unique set of tasks.
 
-    Subprocess hygiene (see #140, #145): we explicitly set
-    multiprocessing_context (default ``forkserver``) and a non-zero
-    ``timeout`` to keep the DataLoader from inheriting stale parent state
-    via ``fork`` and from hanging forever when a subprocess dies
-    mid-shared-memory-cleanup. Both knobs are env-configurable so a single
-    bad pipeline can fall back without touching the others.
+    Subprocess hygiene (see #140, #145): workers are never persistent, so
+    they and their pipes are released at the end of every job. A non-zero
+    ``timeout`` (default 300 s) stops the main process from waiting forever
+    when a worker subprocess dies. The start method is configurable
+    (``forkserver`` keeps workers from inheriting the parent's CUDA state).
 
     Args:
         job_id: Job ID to fetch tasks for
@@ -451,7 +450,7 @@ def get_rest_dataloader(
     # what the running interpreter / platform actually supports — e.g. macOS
     # under Python 3.13+ no longer lists "fork" by default.
     mp_context = (
-        (getattr(settings, "antenna_api_dataloader_mp_context", "forkserver") or "")
+        (getattr(settings, "antenna_api_dataloader_mp_context", "") or "")
         .strip()
         .lower()
     )
@@ -479,7 +478,11 @@ def get_rest_dataloader(
         num_workers=settings.num_workers,
         collate_fn=_no_op_collate_fn,
         pin_memory=True,
-        persistent_workers=settings.num_workers > 0,
+        # Workers must not be persistent. A new DataLoader is built for every job and
+        # iterated once, so persistence saves nothing. With pin_memory on CUDA, PyTorch
+        # registers each persistent worker in an atexit hook, which keeps its two pipe
+        # FDs open until the process exits: two leaked pipes per worker per job. See #145.
+        persistent_workers=False,
         prefetch_factor=4 if settings.num_workers > 0 else None,
         multiprocessing_context=dataloader_mp_context,
         timeout=dataloader_timeout,
