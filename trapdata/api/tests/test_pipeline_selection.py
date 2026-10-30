@@ -321,3 +321,21 @@ def test_an_unknown_retrained_slug_is_still_refused():
             pipeline=f"{api.trained_heads.RETRAINED_PREFIX}-never-trained",
             source_images=[],
         )
+
+
+def test_a_head_trained_after_startup_is_added_to_the_cached_info(
+    monkeypatch, retrained_head
+):
+    info = api.ProcessingServiceInfoResponse(name="test", pipelines=[])
+    monkeypatch.setattr(api.app.state, "service_info", info, raising=False)
+    described = PipelineConfigResponse(
+        name="retrained", slug=retrained_head, version=1, algorithms=[]
+    )
+    monkeypatch.setattr(
+        api, "make_pipeline_config_response", lambda cls, slug: described
+    )
+
+    api._describe_in_info(retrained_head)
+    api._describe_in_info(retrained_head)
+
+    assert [p.slug for p in info.pipelines] == [retrained_head]

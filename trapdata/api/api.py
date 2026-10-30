@@ -447,6 +447,21 @@ async def readyz():
 #     pass
 
 
+def _describe_in_info(slug: str) -> None:
+    """
+    Add a pipeline registered after startup to the cached /info, so Antenna can register it.
+
+    Only the new pipeline is described: rebuilding the whole response would load every
+    model again.
+    """
+    info = getattr(app.state, "service_info", None)
+    if info is None or any(p.slug == slug for p in info.pipelines):
+        return
+    info.pipelines.append(
+        make_pipeline_config_response(CLASSIFIER_CHOICES[slug], slug=slug)
+    )
+
+
 def initialize_service_info(
     pipelines: list[str] | None = None,
 ) -> ProcessingServiceInfoResponse:
@@ -671,6 +686,7 @@ async def train(data: TrainRequest) -> TrainResponse:
         pipeline_slug = trained_heads.TrainedHead(
             name=name, directory=pathlib.Path(), metadata={}
         ).pipeline_slug
+        _describe_in_info(pipeline_slug)
 
         if data.head_upload_url:
             head_url = _upload_head(data, saved)
