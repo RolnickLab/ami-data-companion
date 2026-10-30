@@ -540,3 +540,31 @@ class TestWorkerEndToEnd(TestCase):
         assert all(
             isinstance(r.result, PipelineResultsResponse) for r in posted_results
         )
+
+
+def test_crops_are_classified_in_chunks_and_keep_their_order():
+    """A detector may return thousands of boxes per image. Transforming and
+    stacking every crop at once can exhaust memory, so crops are classified in
+    chunks of at most CROP_CHUNK_SIZE, and the results stay in crop order."""
+    from trapdata.antenna.worker import CROP_CHUNK_SIZE, _classify_crops
+
+    class FakeClassifier:
+        def __init__(self):
+            self.chunk_sizes = []
+
+        def predict_batch(self, batch):
+            self.chunk_sizes.append(len(batch))
+            return batch[:, 0, 0, 0]
+
+        def post_process_batch(self, output):
+            return [int(value) for value in output]
+
+    n_crops = CROP_CHUNK_SIZE * 2 + 5
+    crops = [torch.full((3, 4, 4), float(i)) for i in range(n_crops)]
+    classifier = FakeClassifier()
+
+    results = _classify_crops(classifier, crops, transforms=lambda crop: crop)
+
+    assert results == list(range(n_crops))
+    assert max(classifier.chunk_sizes) <= CROP_CHUNK_SIZE
+    assert sum(classifier.chunk_sizes) == n_crops

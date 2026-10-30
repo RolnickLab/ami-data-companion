@@ -142,6 +142,25 @@ def _worker_loop(
             time.sleep(SLEEP_TIME_SECONDS)
 
 
+# Most crops classified at once. A detector can return thousands of boxes per
+# image, and transforming and stacking all their crops together can exhaust memory.
+CROP_CHUNK_SIZE = 256
+
+
+def _classify_crops(classifier, crops: list[torch.Tensor], transforms) -> list:
+    """Transform, stack and classify crops one chunk at a time.
+
+    Returns the post-processed results in the same order as ``crops``.
+    """
+    results = []
+    for start in range(0, len(crops), CROP_CHUNK_SIZE):
+        chunk = torch.stack(
+            [transforms(crop) for crop in crops[start : start + CROP_CHUNK_SIZE]]
+        )
+        results.extend(classifier.post_process_batch(classifier.predict_batch(chunk)))
+    return results
+
+
 def _apply_binary_classification(
     binary_filter: "MothClassifierBinary",
     detector_results: list[DetectionResponse],
@@ -177,18 +196,14 @@ def _apply_binary_classification(
                 f"({x1},{y1})->({x2},{y2})"
             )
             continue
-        crop = image_tensor[:, y1:y2, x1:x2]
-        crop_transformed = binary_transforms(crop)
-        binary_crops.append(crop_transformed)
+        binary_crops.append(image_tensor[:, y1:y2, x1:x2])
         binary_valid_indices.append(idx)
 
     moth_detections = []
     non_moth_detections = []
 
     if binary_crops:
-        batched_binary_crops = torch.stack(binary_crops)
-        binary_out = binary_filter.predict_batch(batched_binary_crops)
-        binary_out = binary_filter.post_process_batch(binary_out)
+        binary_out = _classify_crops(binary_filter, binary_crops, binary_transforms)
 
         for crop_i, idx in enumerate(binary_valid_indices):
             dresp = detector_results[idx]
@@ -224,7 +239,7 @@ def _process_batch(
 ) -> tuple[int, int, list[AntennaTaskResult], float, float]:
     """Process a single batch of images through detection and classification.
 
-    All large intermediates (image_tensors, crops, batched_crops, image_detections)
+    All large intermediates (image_tensors, crops, image_detections)
     are local to this function and freed by Python's reference counting when it
     returns, preventing memory accumulation across batches.
 
@@ -309,7 +324,7 @@ def _process_batch(
         classifier.reset(detections_for_terminal_classifier)
         classify_transforms = classifier.get_transforms()
 
-        # Collect and transform all crops for batched classification
+        # Collect crops; _classify_crops transforms and classifies them in chunks
         crops = []
         valid_indices = []
         n_detections = 0
@@ -333,16 +348,12 @@ def _process_batch(
                     f"x2={bbox.x2:.1f} y2={bbox.y2:.1f})"
                 )
                 continue
-            crop = image_tensor[:, y1:y2, x1:x2]
-            crop_transformed = classify_transforms(crop)
-            crops.append(crop_transformed)
+            crops.append(image_tensor[:, y1:y2, x1:x2])
             valid_indices.append(idx)
 
         classify_start = datetime.datetime.now()
         if crops:
-            batched_crops = torch.stack(crops)
-            classifier_out = classifier.predict_batch(batched_crops)
-            classifier_out = classifier.post_process_batch(classifier_out)
+            classifier_out = _classify_crops(classifier, crops, classify_transforms)
 
             for crop_i, idx in enumerate(valid_indices):
                 dresp = detections_for_terminal_classifier[idx]
