@@ -291,3 +291,33 @@ def test_register_command_fails_on_an_invalid_setting(offered, monkeypatch):
     assert isinstance(result.exception, SystemExit)
     assert result.exit_code != 0
     assert "not_a_pipeline" in result.output
+
+
+@pytest.fixture
+def retrained_head(monkeypatch):
+    """A head this service retrained, registered the way /train registers one."""
+    slug = f"{api.trained_heads.RETRAINED_PREFIX}-test-head"
+    monkeypatch.setitem(
+        api.CLASSIFIER_CHOICES, slug, api.CLASSIFIER_CHOICES["moth_binary"]
+    )
+    return slug
+
+
+def test_a_retrained_head_is_offered_whatever_the_setting_lists(
+    offered, retrained_head
+):
+    offered("moth_binary")
+    assert list(api.select_pipelines()) == ["moth_binary", retrained_head]
+
+
+def test_a_head_retrained_after_startup_is_accepted_by_process(retrained_head):
+    request = api.PipelineRequest(pipeline=retrained_head, source_images=[])
+    assert request.pipeline == retrained_head
+
+
+def test_an_unknown_retrained_slug_is_still_refused():
+    with pytest.raises(ValueError):
+        api.PipelineRequest(
+            pipeline=f"{api.trained_heads.RETRAINED_PREFIX}-never-trained",
+            source_images=[],
+        )

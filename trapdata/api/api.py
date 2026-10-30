@@ -113,7 +113,15 @@ def select_pipelines(
             f"Unknown pipeline(s){where}: {', '.join(unknown)}. "
             f"Must be one of: {', '.join(CLASSIFIER_CHOICES)}"
         )
-    return {slug: CLASSIFIER_CHOICES[slug] for slug in slugs}
+    selected = {slug: CLASSIFIER_CHOICES[slug] for slug in slugs}
+    # Heads this service retrained are always offered: they exist only because someone
+    # trained them here to use them, and no setting written before the run can name them.
+    selected.update(
+        (slug, classifier)
+        for slug, classifier in CLASSIFIER_CHOICES.items()
+        if slug.startswith(trained_heads.RETRAINED_PREFIX)
+    )
+    return selected
 
 
 def _offered_pipeline_slugs() -> list[str]:
@@ -236,15 +244,30 @@ def make_pipeline_config_response(
     )
 
 
+def _retrained_pipeline_slug(value: str) -> str:
+    if not (
+        value.startswith(trained_heads.RETRAINED_PREFIX) and value in CLASSIFIER_CHOICES
+    ):
+        raise ValueError(f"Unknown pipeline '{value}'")
+    return value
+
+
+# A head trained after startup is offered at once (trained_heads.register), but the enum
+# was built at import, so its slug is accepted here instead.
+RetrainedPipelineSlug = typing.Annotated[
+    str, pydantic.AfterValidator(_retrained_pipeline_slug)
+]
+
+
 class PipelineRequest(PipelineRequest_):
-    pipeline: PipelineChoice = pydantic.Field(
+    pipeline: PipelineChoice | RetrainedPipelineSlug = pydantic.Field(
         description=PipelineRequest_.model_fields["pipeline"].description,
         examples=list(_offered_pipeline_choices.keys()),
     )
 
 
 class PipelineResponse(PipelineResponse_):
-    pipeline: PipelineChoice = pydantic.Field(
+    pipeline: PipelineChoice | RetrainedPipelineSlug = pydantic.Field(
         PipelineChoice,
         description=PipelineResponse_.model_fields["pipeline"].description,
         examples=list(_offered_pipeline_choices.keys()),
@@ -636,6 +659,7 @@ async def train(data: TrainRequest) -> TrainResponse:
 
     saved = None
     head_url = None
+    pipeline_slug = None
     if data.save:
         name = data.name or f"head-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
         saved = training.save_head(
@@ -644,6 +668,9 @@ async def train(data: TrainRequest) -> TrainResponse:
         # Offer it straight away. The head it was trained from stays where it is; this
         # adds a choice rather than replacing one.
         trained_heads.register(CLASSIFIER_CHOICES)
+        pipeline_slug = trained_heads.TrainedHead(
+            name=name, directory=pathlib.Path(), metadata={}
+        ).pipeline_slug
 
         if data.head_upload_url:
             head_url = _upload_head(data, saved)
@@ -663,6 +690,7 @@ async def train(data: TrainRequest) -> TrainResponse:
         labels=result["labels"],
         saved=saved,
         head_url=head_url,
+        pipeline_slug=pipeline_slug,
         trained_at=result["trained_at"],
     )
 

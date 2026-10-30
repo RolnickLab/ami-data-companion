@@ -457,5 +457,12 @@ class TrainResponse(pydantic.BaseModel):
     labels: list[str]
     saved: dict[str, str] | None
     head_url: str | None = None
+    pipeline_slug: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "The pipeline that now serves the new head, which is also the key of its "
+            "classifier algorithm in /info. None when the head was not saved."
+        ),
+    )
     trained_at: str
     reported_to_antenna: bool = False
