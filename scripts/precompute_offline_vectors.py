@@ -120,37 +120,63 @@ def open_clip_encoder(backbone_key: str, device: str) -> Encoder:
     model, _, preprocess = open_clip.create_model_and_transforms(backbone_key)
     model.eval().to(device)
 
-    def encode(images: list) -> np.ndarray:
-        batch = torch.stack([preprocess(im) for im in images]).to(device)
+    def encode(tensors: list) -> np.ndarray:
+        # Items arrive already preprocessed by `prepare`, on the loader's threads.
+        batch = torch.stack(tensors).to(device)
         with torch.inference_mode():
             features = model.encode_image(batch).float()
         return features.cpu().numpy()
 
+    encode.prepare = preprocess
     return encode
 
 
+def _load(row: dict, prepare: typing.Callable | None):
+    image = open_image(row)
+    return prepare(image) if prepare else image
+
+
 def embed(
-    rows: list[dict], encoder: Encoder, batch_size: int = 64
+    rows: list[dict], encoder: Encoder, batch_size: int = 64, workers: int = 4
 ) -> tuple[list[dict], np.ndarray]:
-    """Embed every readable image; unreadable ones are skipped and reported, not fatal."""
+    """
+    Embed every readable image; unreadable ones are skipped and reported, not fatal.
+
+    Decoding a full-size JPEG costs more than the GPU's forward pass, so images are read
+    (and preprocessed, when the encoder exposes `prepare`) on a thread pool, one batch
+    ahead of the encoder.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    prepare = getattr(encoder, "prepare", None)
     kept: list[dict] = []
     chunks: list[np.ndarray] = []
     skipped = 0
-    for start in range(0, len(rows), batch_size):
-        batch_rows, images = [], []
-        for row in rows[start : start + batch_size]:
-            try:
-                images.append(open_image(row))
-                batch_rows.append(row)
-            except Exception as e:
-                skipped += 1
-                print(f"skip {row.get('image_id')}: {e}", file=sys.stderr)
-        if not images:
-            continue
-        vectors = np.asarray(encoder(images), dtype=np.float32)
-        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-        chunks.append(vectors / np.where(norms == 0, 1, norms))
-        kept.extend(batch_rows)
+    batches = [rows[i : i + batch_size] for i in range(0, len(rows), batch_size)]
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+
+        def submit(batch):
+            return [(row, pool.submit(_load, row, prepare)) for row in batch]
+
+        pending = submit(batches[0]) if batches else []
+        for index in range(len(batches)):
+            current = pending
+            pending = submit(batches[index + 1]) if index + 1 < len(batches) else []
+            batch_rows, images = [], []
+            for row, future in current:
+                try:
+                    images.append(future.result())
+                    batch_rows.append(row)
+                except Exception as e:
+                    skipped += 1
+                    print(f"skip {row.get('image_id')}: {e}", file=sys.stderr)
+            if not images:
+                continue
+            vectors = np.asarray(encoder(images), dtype=np.float32)
+            norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+            chunks.append(vectors / np.where(norms == 0, 1, norms))
+            kept.extend(batch_rows)
     if skipped:
         print(f"Skipped {skipped} unreadable image(s)", file=sys.stderr)
     if not chunks:
@@ -247,9 +273,10 @@ def run(
     batch_size: int = 64,
     shard: int = 0,
     num_shards: int = 1,
+    workers: int = 4,
 ) -> pathlib.Path:
     rows = [r for i, r in enumerate(rows) if i % num_shards == shard]
-    kept, vectors = embed(rows, encoder, batch_size=batch_size)
+    kept, vectors = embed(rows, encoder, batch_size=batch_size, workers=workers)
     if not kept:
         raise SystemExit("No image could be embedded.")
     run_id = f"{datetime.datetime.now():%Y%m%d%H%M%S}-{shard}-{uuid.uuid4().hex[:6]}"
@@ -270,6 +297,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--num-shards", type=int, default=1)
+    parser.add_argument(
+        "--workers", type=int, default=4, help="Threads decoding images"
+    )
     args = parser.parse_args(argv)
 
     rows = (
@@ -285,6 +315,7 @@ def main(argv: list[str] | None = None) -> None:
         batch_size=args.batch_size,
         shard=args.shard,
         num_shards=args.num_shards,
+        workers=args.workers,
     )
 
 
