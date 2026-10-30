@@ -58,6 +58,9 @@ class BioCLIPClassifier(InferenceBaseClass):
     # Retraining only has to fit the head, which is why these models are offered for it.
     trainable = True
 
+    # Length of the backbone's embeddings, reported in /info so Antenna stores them.
+    embedding_dimensions: int = 1024
+
     backbone_name: str = "hf-hub:imageomics/bioclip-2.5-vith14"
     head_repo_id: str = ""
     head_repo_type: str = "space"
@@ -141,6 +144,11 @@ class BioCLIPClassifier(InferenceBaseClass):
         checkpoint = np.load(self.weights)
         weight, bias = checkpoint["W"], checkpoint["b"]
         embed_dim = encoder.visual.output_dim
+        if embed_dim != self.embedding_dimensions:
+            raise ValueError(
+                f"{self.backbone_name} produces {embed_dim}-dim embeddings, but "
+                f"{type(self).__name__} declares {self.embedding_dimensions}."
+            )
         if weight.shape[1] != embed_dim:
             raise ValueError(
                 f"Head was fit on {weight.shape[1]}-dim embeddings but "

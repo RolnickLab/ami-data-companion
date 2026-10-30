@@ -176,6 +176,7 @@ def make_algorithm_response(
         category_map=category_map,
         uri=resolve_model_url(model.weights_path),
         trainable=getattr(model, "trainable", False),
+        embedding_dimensions=getattr(model, "embedding_dimensions", None),
     )
 
 
@@ -191,6 +192,7 @@ def make_algorithm_config_response(
         category_map=category_map,
         uri=resolve_model_url(model.weights_path),
         trainable=getattr(model, "trainable", False),
+        embedding_dimensions=getattr(model, "embedding_dimensions", None),
     )
 
 

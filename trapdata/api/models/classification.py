@@ -29,6 +29,7 @@ from ..schemas import (
     AlgorithmReference,
     ClassificationResponse,
     DetectionResponse,
+    EmbeddingResponse,
     SourceImage,
 )
 from .base import APIInferenceBaseClass
@@ -186,6 +187,16 @@ class APIMothClassifier(
             terminal=self.terminal,
         )
         self.update_classification(detection, classification)
+        if predictions.features is not None:
+            # Also on the detection, where Antenna stores vectors (antenna#1462).
+            embedding = EmbeddingResponse(
+                features=predictions.features, algorithm=classification.algorithm
+            )
+            detection.embeddings = [
+                e
+                for e in (detection.embeddings or [])
+                if e.algorithm.key != embedding.algorithm.key
+            ] + [embedding]
         return detection
 
     def run(self) -> list[DetectionResponse]:
