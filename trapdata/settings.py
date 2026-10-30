@@ -87,6 +87,11 @@ class Settings(BaseSettings):
     model_base_url: str = f"{DEFAULT_OBJECT_STORE_URL}ami-models/"
     image_base_url: str = f"{DEFAULT_OBJECT_STORE_URL}ami-trapdata/"
 
+    # Root of the precomputed iNaturalist/GBIF vectors a head can be retrained from
+    # without any Antenna data (see trapdata/ml/offline_vectors.py). Unset means training
+    # requests that ask for offline data are refused.
+    offline_vectors_dir: Optional[pathlib.Path] = None
+
     @pydantic.field_validator("image_base_path", "user_data_path")
     def validate_path(cls, v):
         """

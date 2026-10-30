@@ -48,10 +48,14 @@ class UnsupportedHeadType(Exception):
 
 @dataclasses.dataclass
 class TrainingRow:
-    detection_id: int
+    # None for a row that did not come from an Antenna detection (see offline_vectors).
+    detection_id: int | None
     label: str
     split: str
     features: np.ndarray
+    # "antenna" for a verified detection, "offline" for a precomputed iNat/GBIF vector.
+    source: str = "antenna"
+    image_id: str | None = None
 
 
 def fetch_dataset(
