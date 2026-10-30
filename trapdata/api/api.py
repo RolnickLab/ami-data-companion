@@ -15,6 +15,8 @@ from ..common.logs import logger  # noqa: F401
 from ..ml.utils import resolve_model_url
 from . import settings
 from .models.classification import (
+    AnyBugMixedV2InsectOrderClassifier,
+    AnyBugMixedV2MothClassifierGlobal,
     APIMothClassifier,
     InsectOrderClassifier,
     MothbotInsectOrderClassifier,
@@ -68,6 +70,8 @@ CLASSIFIER_CHOICES = {
     "insect_orders_2025": InsectOrderClassifier,
     "mothbot_insect_orders_2025": MothbotInsectOrderClassifier,
     "mothbot_panama_moths_2023": MothbotMothClassifierPanama,
+    "anybug_mixed_v2_insect_orders_2025": AnyBugMixedV2InsectOrderClassifier,
+    "anybug_mixed_v2_global_moths_2024": AnyBugMixedV2MothClassifierGlobal,
 }
 
 

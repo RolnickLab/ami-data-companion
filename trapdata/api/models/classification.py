@@ -28,7 +28,11 @@ from ..schemas import (
     SourceImage,
 )
 from .base import APIInferenceBaseClass
-from .localization import APIMothDetector, APIMothDetector_YOLO11m_Mothbot
+from .localization import (
+    APIAnyBugDetector_YOLO26s_Mixed_v2,
+    APIMothDetector,
+    APIMothDetector_YOLO11m_Mothbot,
+)
 
 
 class APIMothClassifier(
@@ -282,4 +286,34 @@ class MothbotMothClassifierPanama(MothClassifierPanama):
         "Laboratories, Jan 2024) -> binary moth/non-moth prefilter "
         "(Mila, 2024) -> 2023 Panama moth species classifier "
         "(mixed-resolution, 148 species)."
+    )
+
+
+class AnyBugMixedV2InsectOrderClassifier(InsectOrderClassifier):
+    """Pair the AnyBug Mixed v2 detector with the Mila ConvNeXt-T insect order
+    classifier. The binary moth/non-moth prefilter is skipped, because the order
+    classifier already distinguishes non-moth insects.
+    """
+
+    name = "AnyBug Mixed v2 + Insect Orders 2025"
+    detector_cls = APIAnyBugDetector_YOLO26s_Mixed_v2
+    pipeline_description = (
+        "AnyBug Mixed v2 YOLO26s-OBB creature detector (Digital Naturalism "
+        "Laboratories, Oct 2026) feeding the Mila ConvNeXt-T insect order "
+        "classifier (16 orders, Jan 2025)."
+    )
+
+
+class AnyBugMixedV2MothClassifierGlobal(MothClassifierGlobal):
+    """Pair the AnyBug Mixed v2 detector with the 2024 global moth species
+    classifier. Keeps the binary moth/non-moth prefilter, because the terminal
+    classifier only covers moth species.
+    """
+
+    name = "AnyBug Mixed v2 + Global Moths 2024"
+    detector_cls = APIAnyBugDetector_YOLO26s_Mixed_v2
+    pipeline_description = (
+        "AnyBug Mixed v2 YOLO26s-OBB creature detector (Digital Naturalism "
+        "Laboratories, Oct 2026) -> binary moth/non-moth prefilter (Mila, "
+        "2024) -> 2024 global moth species classifier."
     )

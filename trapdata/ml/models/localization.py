@@ -486,6 +486,9 @@ class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
     category_map = {0: "creature"}
     imgsz = 1600
     bbox_score_threshold = 0.25
+    # IoU above which Ultralytics' NMS drops the lower-scoring of two boxes.
+    # 0.7 is the Ultralytics default.
+    nms_iou_threshold = 0.7
     box_detections_per_img = 500
 
     def get_labels(self, labels_path) -> dict[int, str]:
@@ -560,6 +563,7 @@ class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
             imgs,
             imgsz=self.imgsz,
             conf=self.bbox_score_threshold,
+            iou=self.nms_iou_threshold,
             max_det=self.box_detections_per_img,
             device=self.device,
             verbose=False,
@@ -611,3 +615,40 @@ class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
             f"{self.name} ML-layer save_results called with {len(item_ids)} items "
             "(no-op; API wrapper handles persistence)"
         )
+
+
+class AnyBugObjectDetector_YOLO26s_Mixed_v2(MothObjectDetector_YOLO11m_Mothbot):
+    """Single-class "creature" detector for any insect, from Digital Naturalism
+    Laboratories' Mothbot project (Anybug-Mixed-v2-0).
+
+    A YOLO26s-OBB trained at 1600 px on a mix of moth-sheet, sticky-card and
+    natural or DSLR photos, so it is not limited to light-trap captures. It is
+    an OBB model like the Mothbot YOLO11m detector, so it reuses that class's
+    loading, input handling and OBB to axis-aligned post-processing.
+
+    Training run: https://wandb.ai/moth-ai/anybug-2/runs/mqcufly1
+    """
+
+    name = "AnyBug Mixed v2.0 Detector"
+    # Pinned to the commit that published the weights, so the file cannot change
+    # under a deployment.
+    weights_path = (
+        "https://github.com/Digital-Naturalism-Laboratories/Mothbot_Process/raw/"
+        "889da44abad111387f00b465b9c090db358e08e2/trained_models/"
+        "Anybug-Mixed-v2-0.pt"
+    )
+    description = (
+        "Single-class 'creature' detector for any insect, from Digital "
+        "Naturalism Laboratories' Mothbot project (Anybug-Mixed-v2-0). "
+        "YOLO26s-OBB trained at imgsz=1600 on moth-sheet, sticky-card and "
+        "natural photos, Oct 2026."
+    )
+    category_map = {0: "creature"}
+    imgsz = 1600
+    bbox_score_threshold = 0.25
+    # The checkpoint ships without a one-to-one head, so Ultralytics runs NMS.
+    # The Mothbot app's config for this model uses a much lower IoU (0.1); the
+    # Ultralytics default is kept until the two are compared on Antenna data.
+    nms_iou_threshold = 0.7
+    # Dense moth sheets can exceed the Mothbot YOLO11m default of 500 boxes.
+    box_detections_per_img = 5000

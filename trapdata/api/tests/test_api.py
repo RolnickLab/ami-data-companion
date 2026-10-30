@@ -255,7 +255,12 @@ class TestInferenceAPI(TestCase):
         from trapdata.api.api import CLASSIFIER_CHOICES
         from trapdata.api.models.localization import APIMothDetector
 
-        exempt = {"mothbot_insect_orders_2025", "mothbot_panama_moths_2023"}
+        exempt = {
+            "mothbot_insect_orders_2025",
+            "mothbot_panama_moths_2023",
+            "anybug_mixed_v2_insect_orders_2025",
+            "anybug_mixed_v2_global_moths_2024",
+        }
         for slug, Classifier in CLASSIFIER_CHOICES.items():
             if slug in exempt:
                 continue
@@ -278,6 +283,20 @@ class TestInferenceAPI(TestCase):
 
         Classifier = CLASSIFIER_CHOICES["mothbot_insect_orders_2025"]
         self.assertFalse(should_filter_detections(Classifier))
+
+    def test_anybug_mixed_v2_pipelines_use_the_anybug_detector(self):
+        """Both AnyBug v2 pipelines detect with the 1600 px AnyBug model; only the
+        species pipeline keeps the binary moth prefilter."""
+        from trapdata.api.api import CLASSIFIER_CHOICES, should_filter_detections
+        from trapdata.api.models.localization import APIAnyBugDetector_YOLO26s_Mixed_v2
+
+        orders = CLASSIFIER_CHOICES["anybug_mixed_v2_insect_orders_2025"]
+        species = CLASSIFIER_CHOICES["anybug_mixed_v2_global_moths_2024"]
+        for Classifier in (orders, species):
+            self.assertIs(Classifier.detector_cls, APIAnyBugDetector_YOLO26s_Mixed_v2)
+        self.assertEqual(APIAnyBugDetector_YOLO26s_Mixed_v2.imgsz, 1600)
+        self.assertFalse(should_filter_detections(orders))
+        self.assertTrue(should_filter_detections(species))
 
     def test_detection_response_has_optional_rotation_field(self):
         """The rotation field is opt-in for detectors that produce OBB."""

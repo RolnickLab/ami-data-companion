@@ -2,6 +2,7 @@ import datetime
 import typing
 
 from trapdata.ml.models.localization import (
+    AnyBugObjectDetector_YOLO26s_Mixed_v2,
     MothObjectDetector_FasterRCNN_2023,
     MothObjectDetector_YOLO11m_Mothbot,
 )
@@ -109,3 +110,13 @@ class APIMothDetector_YOLO11m_Mothbot(
     def run(self) -> list[DetectionResponse]:
         super().run()
         return self.results
+
+
+class APIAnyBugDetector_YOLO26s_Mixed_v2(
+    APIMothDetector_YOLO11m_Mothbot, AnyBugObjectDetector_YOLO26s_Mixed_v2
+):
+    """API wrapper for the AnyBug Mixed v2 detector.
+
+    The API behaviour comes from the Mothbot wrapper; the model settings (name,
+    weights, resolution and thresholds) come from the ML-layer class.
+    """
