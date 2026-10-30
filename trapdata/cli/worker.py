@@ -55,6 +55,13 @@ def worker_callback(
     Can be invoked as 'ami worker' or 'ami worker run'.
     """
     if ctx.invoked_subcommand is not None:
+        # Options given before a subcommand name do not reach the subcommand, so
+        # it would run with the default selection.
+        if pipelines or project:
+            raise typer.BadParameter(
+                "Put --pipeline and --project after the subcommand, for example "
+                f"'ami worker {ctx.invoked_subcommand} --project 7'."
+            )
         return
     _start_worker(pipelines, project)
 

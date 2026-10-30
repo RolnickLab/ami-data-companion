@@ -24,6 +24,7 @@ app = FastAPI(redirect_slashes=False)
 
 # State management for tests
 _jobs_queue: dict[int, list[AntennaPipelineProcessingTask]] = {}
+_job_projects: dict[int, int | None] = {}  # job_id -> project_id
 _posted_results: dict[int, list[AntennaTaskResult]] = {}
 _projects: list[dict] = []
 _registered_pipelines: dict[int, list[str]] = {}  # project_id -> pipeline slugs
@@ -34,6 +35,7 @@ def get_jobs(
     pipeline__slug__in: str = "",
     ids_only: int = 1,
     incomplete_only: int = 1,
+    project: int | None = None,
 ):
     """Return available job IDs.
 
@@ -41,6 +43,8 @@ def get_jobs(
         pipeline__slug__in: Comma-separated pipeline slugs filter
         ids_only: If 1, return only job IDs
         incomplete_only: If 1, return only incomplete jobs
+        project: Only jobs of this project. Like Antenna, the endpoint takes one
+            project id and ignores unknown filters such as project__id__in.
 
     Returns:
         AntennaJobsListResponse with list of job IDs
@@ -52,7 +56,11 @@ def get_jobs(
     default_slug = slugs[0] if slugs else "test_pipeline"
 
     # Return all jobs in queue (for testing, we return all registered jobs)
-    job_ids = list(_jobs_queue.keys())
+    job_ids = [
+        job_id
+        for job_id in _jobs_queue
+        if project is None or _job_projects.get(job_id) == project
+    ]
     results = [
         AntennaJobListItem(id=job_id, pipeline_slug=default_slug) for job_id in job_ids
     ]
@@ -152,14 +160,20 @@ def register_pipelines(project_id: int, payload: dict):
 # Test helper methods
 
 
-def setup_job(job_id: int, tasks: list[AntennaPipelineProcessingTask]):
+def setup_job(
+    job_id: int,
+    tasks: list[AntennaPipelineProcessingTask],
+    project_id: int | None = None,
+):
     """Populate job queue for testing.
 
     Args:
         job_id: Job ID to setup
         tasks: List of tasks to add to the queue
+        project_id: Project the job belongs to
     """
     _jobs_queue[job_id] = tasks.copy()
+    _job_projects[job_id] = project_id
 
 
 def get_posted_results(job_id: int) -> list[AntennaTaskResult]:
@@ -199,6 +213,7 @@ def get_registered_pipelines(project_id: int) -> list[str]:
 def reset():
     """Clear all state between tests."""
     _jobs_queue.clear()
+    _job_projects.clear()
     _posted_results.clear()
     _projects.clear()
     _registered_pipelines.clear()

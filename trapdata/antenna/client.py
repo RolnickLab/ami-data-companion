@@ -34,9 +34,12 @@ def get_jobs(
     pipeline_slugs: list[str],
     project_ids: list[int] | None = None,
 ) -> list[tuple[int, str]]:
-    """Fetch job ids from the API for the given pipelines in a single request.
+    """Fetch job ids from the API for the given pipelines.
 
-    Calls: GET {base_url}/jobs?pipeline__slug__in=<slugs>&ids_only=1
+    Calls: GET {base_url}/jobs?pipeline__slug__in=<slugs>&ids_only=1, once in
+    total, or once per project with &project=<id> when project_ids is given. The
+    Antenna jobs filter takes a single project and ignores unknown parameters,
+    so a list of projects cannot go in one request.
 
     Args:
         base_url: Antenna API base URL (e.g., "http://localhost:8000/api/v2")
@@ -59,15 +62,20 @@ def get_jobs(
                 "incomplete_only": 1,
                 "dispatch_mode": JobDispatchMode.ASYNC_API,  # Only fetch async_api jobs
             }
-            if project_ids:
-                params["project__id__in"] = ",".join(str(pid) for pid in project_ids)
+            project_params: list[dict[str, int]] = (
+                [{"project": pid} for pid in project_ids] if project_ids else [{}]
+            )
+            jobs = []
+            for project_param in project_params:
+                resp = session.get(url, params={**params, **project_param}, timeout=30)
+                resp.raise_for_status()
 
-            resp = session.get(url, params=params, timeout=30)
-            resp.raise_for_status()
-
-            # Parse and validate response with Pydantic
-            jobs_response = AntennaJobsListResponse.model_validate(resp.json())
-            return [(job.id, job.pipeline_slug) for job in jobs_response.results]
+                # Parse and validate response with Pydantic
+                jobs_response = AntennaJobsListResponse.model_validate(resp.json())
+                jobs.extend(
+                    (job.id, job.pipeline_slug) for job in jobs_response.results
+                )
+            return jobs
         except requests.RequestException as e:
             logger.error(f"Failed to fetch jobs from {base_url}: {e}")
             return []

@@ -215,18 +215,44 @@ def test_worker_uses_the_setting_unless_pipelines_are_named(offered, monkeypatch
     started = []
     monkeypatch.setattr(
         "trapdata.antenna.worker.run_worker",
-        lambda pipelines, project_ids: started.append(pipelines),
+        lambda pipelines, project_ids: started.append((pipelines, project_ids)),
     )
     offered("global_moths_2024")
     runner = CliRunner()
 
     assert runner.invoke(cli, []).exit_code == 0
     assert runner.invoke(cli, ["--pipeline", "moth_binary"]).exit_code == 0
+    assert runner.invoke(cli, ["run", "--project", "7"]).exit_code == 0
     rejected = runner.invoke(cli, ["--pipeline", "not_a_pipeline"])
 
-    assert started == [["global_moths_2024"], ["moth_binary"]]
+    assert started == [
+        (["global_moths_2024"], []),
+        (["moth_binary"], []),
+        (["global_moths_2024"], [7]),
+    ]
     assert rejected.exit_code != 0
     assert "not_a_pipeline" in rejected.output
+
+
+@pytest.mark.parametrize("subcommand", ["run", "register"])
+def test_worker_options_before_a_subcommand_are_rejected(monkeypatch, subcommand):
+    """
+    `ami worker --project 7 register` must not run with the default selection,
+    which for register would add pipelines to every accessible project. Options
+    belong after the subcommand name.
+    """
+    from trapdata.cli.worker import cli
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the subcommand ran without the options given")
+
+    monkeypatch.setattr("trapdata.antenna.worker.run_worker", refuse)
+    monkeypatch.setattr("trapdata.antenna.registration.register_pipelines", refuse)
+
+    result = CliRunner().invoke(cli, ["--project", "7", subcommand])
+
+    assert result.exit_code != 0
+    assert f"{subcommand} --project" in result.output
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]

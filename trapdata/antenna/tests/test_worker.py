@@ -229,6 +229,22 @@ class TestGetJobsIntegration(TestCase):
 
         assert [job_id for job_id, _ in result] == [10, 20, 30]
 
+    def test_returns_only_jobs_of_the_given_projects(self):
+        """A worker started with --project must not take jobs from other projects."""
+        antenna_api_server.setup_job(10, [], project_id=7)
+        antenna_api_server.setup_job(20, [], project_id=8)
+        antenna_api_server.setup_job(30, [], project_id=9)
+
+        with patch_antenna_api_requests(self.antenna_client):
+            result = get_jobs(
+                "http://testserver/api/v2",
+                "test-token",
+                ["moths_2024"],
+                project_ids=[7, 8],
+            )
+
+        assert sorted(job_id for job_id, _ in result) == [10, 20]
+
 
 # ---------------------------------------------------------------------------
 # TestProcessJobIntegration - Integration tests with real ML inference
