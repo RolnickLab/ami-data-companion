@@ -100,10 +100,37 @@ class ClassificationResponse(pydantic.BaseModel):
         ),
         repr=False,  # Too long to display in the repr
     )
+    features: list[float] | None = pydantic.Field(
+        default=None,
+        description=(
+            "The embedding the classifier head consumed, from the frozen backbone that "
+            "produced this classification. Returned only by models that can be retrained: "
+            "it is what a new head is fit on, so storing it means the backbone never has "
+            "to run over the same crop twice."
+        ),
+        repr=False,  # Too long to display in the repr
+    )
     inference_time: float | None = None
     algorithm: AlgorithmReference
     terminal: bool = True
     timestamp: datetime.datetime
+
+
+class EmbeddingResponse(pydantic.BaseModel):
+    """A feature vector for one detection and the algorithm whose backbone made it.
+
+    The shape Antenna stores (RolnickLab/antenna#1462), matching #178 here. Vectors are
+    only comparable with vectors from the same algorithm.
+    """
+
+    features: list[float] = pydantic.Field(
+        description=(
+            "Feature vector (embedding) from the model backbone, before the "
+            "classification head."
+        ),
+        repr=False,
+    )
+    algorithm: AlgorithmReference
 
 
 class DetectionResponse(pydantic.BaseModel):
@@ -114,6 +141,13 @@ class DetectionResponse(pydantic.BaseModel):
     timestamp: datetime.datetime
     crop_image_url: str | None = None
     classifications: list[ClassificationResponse] = []
+    embeddings: list[EmbeddingResponse] | None = pydantic.Field(
+        default=None,
+        description=(
+            "Feature vectors for this detection, at most one per algorithm key, from "
+            "algorithms that declare embedding_dimensions in /info."
+        ),
+    )
 
 
 class SourceImageRequest(pydantic.BaseModel):
@@ -226,6 +260,22 @@ class AlgorithmConfigResponse(pydantic.BaseModel):
         default=None,
         description="A URI to the weights or model details, could be a public web URL or object store path.",
     )
+    embedding_dimensions: int | None = pydantic.Field(
+        default=None,
+        description=(
+            "The length of the feature vectors this algorithm returns in detection "
+            "embeddings, or None when it sends none. Antenna stores vectors only from "
+            "algorithms that declare it."
+        ),
+    )
+    trainable: bool = pydantic.Field(
+        default=False,
+        description=(
+            "Whether this algorithm can be retrained from labelled data. Antenna reads this "
+            "to decide whether retraining can be offered for the algorithm. Only a classifier "
+            "head over a frozen backbone is cheap enough to retrain; a detector is not."
+        ),
+    )
     category_map: AlgorithmCategoryMapResponse | None = None
 
 
@@ -330,3 +380,138 @@ class ProcessingServiceInfoResponse(pydantic.BaseModel):
             ]
         ],
     )
+
+
+class TrainRequest(pydantic.BaseModel):
+    """Retrain a classifier head from a dataset Antenna has already prepared."""
+
+    dataset_url: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "URL of the npz training set Antenna wrote to storage. May be omitted only "
+            "when use_offline_inat is on and classes lists the species."
+        ),
+    )
+    algorithm_key: str = pydantic.Field(
+        description=(
+            "Which head to retrain. Its current weights are the baseline the new head "
+            "must beat."
+        )
+    )
+    job_id: int | None = pydantic.Field(
+        default=None,
+        description=(
+            "Antenna job to report back to. Without it the result is only returned in "
+            "this response."
+        ),
+    )
+    callback_url: str | None = pydantic.Field(
+        default=None, description="Where to post the result when training finishes."
+    )
+    callback_token: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Token for the callback, so Antenna can tell a real result from a forged one."
+        ),
+    )
+    name: str | None = pydantic.Field(
+        default=None, description="Name for the produced head."
+    )
+    head_upload_url: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Where to upload the head this run produces, so it outlives this service's "
+            "disk. Omitted by a caller that keeps no copy."
+        ),
+    )
+    progress_url: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Where to report the epoch this run has reached, so the caller can show how "
+            "far along it is. Omitted by a caller that only wants the result."
+        ),
+    )
+    # Defaults match what Antenna stores as this algorithm's training config; it sends
+    # whatever an admin has set there, so these are overridden in practice.
+    min_per_species: int = 2
+    min_improvement: float = 0.0
+    head_type: str = "linear"
+    epochs: int = 300
+    learning_rate: float = 0.01
+    weight_decay: float = 1e-4
+    save: bool = pydantic.Field(
+        default=True,
+        description=(
+            "Write the head to disk. It is never loaded into the running service "
+            "automatically."
+        ),
+    )
+    use_offline_inat: bool = pydantic.Field(
+        default=False,
+        description=(
+            "Also learn from the precomputed iNaturalist/GBIF vectors this service holds "
+            "(AMI_OFFLINE_VECTORS_DIR), filtered to the species list. With a dataset_url "
+            "they only add training rows: the held-out comparison stays on Antenna's rows."
+        ),
+    )
+    classes: list[str] | None = pydantic.Field(
+        default=None,
+        description=(
+            "The species the head covers. Needed when there is no dataset_url; otherwise "
+            "it overrides the list inside the dataset."
+        ),
+    )
+    backbone_key: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Which backbone's offline vectors to read. Defaults to the backbone of the "
+            "head named by algorithm_key; vectors from another backbone cannot be mixed."
+        ),
+    )
+    offline_max_per_species: int | None = pydantic.Field(
+        default=None,
+        ge=1,
+        description=(
+            "Cap on offline rows per species and split, so common species do not drown "
+            "out the rest or the project's own crops."
+        ),
+    )
+
+    @pydantic.model_validator(mode="after")
+    def _has_data(self) -> "TrainRequest":
+        if not self.dataset_url and not self.use_offline_inat:
+            raise ValueError(
+                "Give a dataset_url, or turn on use_offline_inat with a species list."
+            )
+        if not self.dataset_url and not self.classes:
+            raise ValueError(
+                "Training from offline data alone needs classes: the species to cover."
+            )
+        return self
+
+
+class TrainResponse(pydantic.BaseModel):
+    promote: bool
+    reason: str
+    warnings: list[str]
+    rows: dict
+    classes_restored_from_current_head: int = 0
+    counts: dict
+    dropped_species: list[str]
+    candidate_metrics: dict
+    incumbent_metrics: dict | None
+    labels: list[str]
+    saved: dict[str, str] | None
+    head_url: str | None = None
+    pipeline_slug: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "The pipeline that now serves the new head, which is also the key of its "
+            "classifier algorithm in /info. None when the head was not saved."
+        ),
+    )
+    trained_at: str
+    reported_to_antenna: bool = False
+    # What the offline tier contributed, when it was asked for: rows, species found and
+    # the species it holds no vectors for.
+    offline: dict | None = None

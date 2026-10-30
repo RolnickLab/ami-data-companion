@@ -5,6 +5,7 @@ pipelines.
 
 import enum
 import time
+import typing
 from contextlib import asynccontextmanager
 
 import fastapi
@@ -12,12 +13,15 @@ import pydantic
 from fastapi.middleware.gzip import GZipMiddleware
 
 from ..common.logs import logger  # noqa: F401
+from ..ml import offline_vectors, trained_heads, training
 from ..ml.utils import resolve_model_url
 from . import settings
 from .models.classification import (
     APIMothClassifier,
     InsectOrderClassifier,
     MothClassifierBinary,
+    MothClassifierBioCLIP25Newfoundland,
+    MothClassifierBioCLIP25Panama,
     MothClassifierGlobal,
     MothClassifierPanama,
     MothClassifierPanama2024,
@@ -36,7 +40,13 @@ from .schemas import (
 )
 from .schemas import PipelineRequest as PipelineRequest_
 from .schemas import PipelineResultsResponse as PipelineResponse_
-from .schemas import ProcessingServiceInfoResponse, SourceImage, SourceImageResponse
+from .schemas import (
+    ProcessingServiceInfoResponse,
+    SourceImage,
+    SourceImageResponse,
+    TrainRequest,
+    TrainResponse,
+)
 
 
 @asynccontextmanager
@@ -64,7 +74,13 @@ CLASSIFIER_CHOICES = {
     "global_moths_2024": MothClassifierGlobal,
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
+    "bioclip_2_5_newfoundland": MothClassifierBioCLIP25Newfoundland,
+    "bioclip_2_5_panama": MothClassifierBioCLIP25Panama,
 }
+
+# Heads this service retrained in an earlier run are offered alongside the ones it ships
+# with, so a restart does not lose them.
+trained_heads.register(CLASSIFIER_CHOICES)
 
 
 def parse_pipeline_setting(value: str) -> list[str]:
@@ -97,7 +113,15 @@ def select_pipelines(
             f"Unknown pipeline(s){where}: {', '.join(unknown)}. "
             f"Must be one of: {', '.join(CLASSIFIER_CHOICES)}"
         )
-    return {slug: CLASSIFIER_CHOICES[slug] for slug in slugs}
+    selected = {slug: CLASSIFIER_CHOICES[slug] for slug in slugs}
+    # Heads this service retrained are always offered: they exist only because someone
+    # trained them here to use them, and no setting written before the run can name them.
+    selected.update(
+        (slug, classifier)
+        for slug, classifier in CLASSIFIER_CHOICES.items()
+        if slug.startswith(trained_heads.RETRAINED_PREFIX)
+    )
+    return selected
 
 
 def _offered_pipeline_slugs() -> list[str]:
@@ -159,6 +183,8 @@ def make_algorithm_response(
         description=model.description,
         category_map=category_map,
         uri=resolve_model_url(model.weights_path),
+        trainable=getattr(model, "trainable", False),
+        embedding_dimensions=getattr(model, "embedding_dimensions", None),
     )
 
 
@@ -173,6 +199,8 @@ def make_algorithm_config_response(
         description=model.description,
         category_map=category_map,
         uri=resolve_model_url(model.weights_path),
+        trainable=getattr(model, "trainable", False),
+        embedding_dimensions=getattr(model, "embedding_dimensions", None),
     )
 
 
@@ -216,15 +244,30 @@ def make_pipeline_config_response(
     )
 
 
+def _retrained_pipeline_slug(value: str) -> str:
+    if not (
+        value.startswith(trained_heads.RETRAINED_PREFIX) and value in CLASSIFIER_CHOICES
+    ):
+        raise ValueError(f"Unknown pipeline '{value}'")
+    return value
+
+
+# A head trained after startup is offered at once (trained_heads.register), but the enum
+# was built at import, so its slug is accepted here instead.
+RetrainedPipelineSlug = typing.Annotated[
+    str, pydantic.AfterValidator(_retrained_pipeline_slug)
+]
+
+
 class PipelineRequest(PipelineRequest_):
-    pipeline: PipelineChoice = pydantic.Field(
+    pipeline: PipelineChoice | RetrainedPipelineSlug = pydantic.Field(
         description=PipelineRequest_.model_fields["pipeline"].description,
         examples=list(_offered_pipeline_choices.keys()),
     )
 
 
 class PipelineResponse(PipelineResponse_):
-    pipeline: PipelineChoice = pydantic.Field(
+    pipeline: PipelineChoice | RetrainedPipelineSlug = pydantic.Field(
         PipelineChoice,
         description=PipelineResponse_.model_fields["pipeline"].description,
         examples=list(_offered_pipeline_choices.keys()),
@@ -404,6 +447,21 @@ async def readyz():
 #     pass
 
 
+def _describe_in_info(slug: str) -> None:
+    """
+    Add a pipeline registered after startup to the cached /info, so Antenna can register it.
+
+    Only the new pipeline is described: rebuilding the whole response would load every
+    model again.
+    """
+    info = getattr(app.state, "service_info", None)
+    if info is None or any(p.slug == slug for p in info.pipelines):
+        return
+    info.pipelines.append(
+        make_pipeline_config_response(CLASSIFIER_CHOICES[slug], slug=slug)
+    )
+
+
 def initialize_service_info(
     pipelines: list[str] | None = None,
 ) -> ProcessingServiceInfoResponse:
@@ -430,6 +488,326 @@ def initialize_service_info(
         # algorithms=list(algorithm_choices.values()),
     )
     return _info
+
+
+def _classifier_class(algorithm_key: str):
+    """The classifier served under this pipeline slug or algorithm key, or None."""
+    classifier_class = CLASSIFIER_CHOICES.get(algorithm_key)
+    if classifier_class is None:
+        classifier_class = next(
+            (c for c in CLASSIFIER_CHOICES.values() if c.get_key() == algorithm_key),
+            None,
+        )
+    return classifier_class
+
+
+def _incumbent_head(algorithm_key: str) -> dict | None:
+    """
+    Load the weights of the head currently in service, so a new one can be compared to it.
+
+    Returns None when the key names something this service does not serve or something
+    whose head cannot be read: training still runs, it just has no baseline to beat.
+    """
+    classifier_class = _classifier_class(algorithm_key)
+    if classifier_class is None or not getattr(classifier_class, "trainable", False):
+        logger.warn(
+            f"No trainable head named '{algorithm_key}'; training without a baseline"
+        )
+        return None
+
+    try:
+        weight, bias, labels = classifier_class.load_head_arrays()
+    except Exception as e:
+        logger.warn(f"Could not read the current head for '{algorithm_key}': {e}")
+        return None
+    return {"weights": weight, "bias": bias, "labels": labels}
+
+
+def _offline_rows(
+    data: TrainRequest, antenna_rows: list, dataset_metadata: dict
+) -> "offline_vectors.OfflineSelection":
+    """
+    Rows from the precomputed iNat/GBIF vectors, for the species this run covers.
+
+    Raises HTTPException (422) when the offline tier is not set up or cannot serve the
+    backbone this head sits on; the caller asked for it, so silently training without it
+    would hand back a head built from less data than they think.
+    """
+    if not settings.offline_vectors_dir:
+        raise fastapi.HTTPException(
+            status_code=422,
+            detail="Offline vectors are not configured on this service (AMI_OFFLINE_VECTORS_DIR).",
+        )
+    backbone_key = data.backbone_key or getattr(
+        _classifier_class(data.algorithm_key), "backbone_name", None
+    )
+    if not backbone_key:
+        raise fastapi.HTTPException(
+            status_code=422,
+            detail=(
+                f"Cannot tell which backbone '{data.algorithm_key}' sits on, so cannot pick "
+                "offline vectors for it. Pass backbone_key."
+            ),
+        )
+    species = (
+        data.classes
+        or dataset_metadata.get("classes")
+        or sorted({row.label for row in antenna_rows})
+    )
+    try:
+        selection = offline_vectors.OfflineVectorSource(
+            settings.offline_vectors_dir
+        ).load(
+            species,
+            backbone_key=backbone_key,
+            max_per_species=data.offline_max_per_species,
+            # With Antenna rows the held-out score must stay on the user's own crops.
+            all_as_train=bool(antenna_rows),
+        )
+    except (offline_vectors.OfflineVectorsUnavailable, ValueError) as e:
+        raise fastapi.HTTPException(status_code=422, detail=str(e))
+
+    if antenna_rows and selection.rows:
+        antenna_dim = len(antenna_rows[0].features)
+        if antenna_dim != selection.dimensions:
+            raise fastapi.HTTPException(
+                status_code=422,
+                detail=(
+                    f"The Antenna vectors have {antenna_dim} dimensions but the offline ones "
+                    f"for '{backbone_key}' have {selection.dimensions}: they come from "
+                    "different backbones and cannot train one head."
+                ),
+            )
+    return selection
+
+
+def _upload_head(data: TrainRequest, saved: dict) -> str | None:
+    """
+    Send the head this run produced to whoever asked for it, and say where it landed.
+
+    Reported rather than raised on failure, like the callback below: the training itself
+    succeeded, and losing the upload should not make the caller think it did not. The
+    head also stays on local disk either way, so a failed upload costs durability, not
+    the ability to serve it.
+    """
+    import requests
+
+    headers = {}
+    if data.callback_token:
+        headers["Authorization"] = f"Token {data.callback_token}"
+
+    handles = {}
+    try:
+        for name, path in saved.items():
+            handles[name] = open(path, "rb")
+        reply = requests.post(
+            data.head_upload_url, files=handles, headers=headers, timeout=120
+        )
+        reply.raise_for_status()
+        # The caller decides where it put the files; report back what it says.
+        stored = reply.json().get("files", {})
+        head = stored.get("head") or next(iter(stored.values()), None)
+        return head.get("url") if head else None
+    except Exception as e:
+        logger.error(
+            f"Trained successfully but could not upload the head to "
+            f"{data.head_upload_url}: {e}"
+        )
+        return None
+    finally:
+        for handle in handles.values():
+            handle.close()
+
+
+def _progress_reporter(data: TrainRequest) -> typing.Callable[[int, int], None] | None:
+    """
+    Report the epoch a run has reached, so the caller's job can show how far along it is.
+
+    None when the caller asked for no progress. Failures are logged and swallowed, like
+    the callbacks below: a run must not die because a status ping did not land.
+    """
+    import requests
+
+    if not data.progress_url:
+        return None
+
+    headers = {"Content-Type": "application/json"}
+    if data.callback_token:
+        headers["Authorization"] = f"Token {data.callback_token}"
+
+    def report(epoch: int, total_epochs: int) -> None:
+        try:
+            requests.post(
+                data.progress_url,
+                json={"epoch": epoch, "total_epochs": total_epochs},
+                headers=headers,
+                timeout=10,
+            )
+        except Exception as e:
+            logger.debug(f"Could not report epoch {epoch} to {data.progress_url}: {e}")
+
+    return report
+
+
+def _report_to_antenna(
+    data: TrainRequest, response: TrainResponse, dataset_metadata: dict
+) -> bool:
+    """
+    Tell the Antenna job how the run went.
+
+    Reported rather than raised on failure: the training itself succeeded, and losing the
+    callback should not make the caller think it did not.
+    """
+    import requests
+
+    payload = {
+        "job_id": data.job_id,
+        "algorithm_key": data.algorithm_key,
+        "dataset": dataset_metadata,
+        # The exact file this was fitted on. The metadata describes the set; this says
+        # which copy of it, which is what the caller records against the new version.
+        "dataset_url": data.dataset_url,
+        "result": response.model_dump(),
+    }
+    headers = {"Content-Type": "application/json"}
+    if data.callback_token:
+        headers["Authorization"] = f"Token {data.callback_token}"
+    try:
+        reply = requests.post(
+            data.callback_url, json=payload, headers=headers, timeout=60
+        )
+        reply.raise_for_status()
+        return True
+    except Exception as e:
+        logger.error(
+            f"Trained successfully but could not report to Antenna at "
+            f"{data.callback_url}: {e}"
+        )
+        return False
+
+
+@app.post("/train", tags=["training"])
+async def train(data: TrainRequest) -> TrainResponse:
+    """
+    Retrain a classifier head from human-verified labels.
+
+    Antenna prepares the dataset and hands over a URL; this downloads it, fits a new head,
+    and scores it against the head currently in service on the same held-out rows. It
+    never swaps the running head: promoting is a separate, deliberate step, because an
+    automatic swap would let one bad training run quietly degrade every later
+    classification.
+    """
+    import datetime
+    import pathlib
+
+    import requests
+
+    rows: list = []
+    dataset_metadata: dict = {}
+    if data.dataset_url:
+        try:
+            rows, dataset_metadata = training.fetch_dataset(data.dataset_url)
+        except requests.HTTPError as e:
+            raise fastapi.HTTPException(
+                status_code=502, detail=f"Could not download the training set: {e}"
+            )
+        except Exception as e:
+            raise fastapi.HTTPException(
+                status_code=422, detail=f"Could not read the training set: {e}"
+            )
+
+    offline = None
+    if data.use_offline_inat:
+        offline = _offline_rows(data, rows, dataset_metadata)
+        rows = rows + offline.rows
+
+    if not rows:
+        detail = "The training set is empty."
+        if offline is not None and offline.missing:
+            detail += f" No offline vectors for: {', '.join(offline.missing)}."
+        raise fastapi.HTTPException(status_code=422, detail=detail)
+
+    try:
+        result = training.retrain(
+            rows=rows,
+            incumbent=_incumbent_head(data.algorithm_key),
+            min_per_species=data.min_per_species,
+            min_improvement=data.min_improvement,
+            epochs=data.epochs,
+            learning_rate=data.learning_rate,
+            weight_decay=data.weight_decay,
+            head_type=data.head_type,
+            # Antenna ships the species list inside the dataset; it usually comes from a
+            # project's taxa list and must win over whatever happens to be in the rows.
+            declared_classes=data.classes or dataset_metadata.get("classes"),
+            on_epoch=_progress_reporter(data),
+        )
+    except (training.NotEnoughData, training.UnsupportedHeadType) as e:
+        raise fastapi.HTTPException(status_code=422, detail=str(e))
+
+    if offline is not None and offline.missing:
+        result["warnings"].append(
+            f"No offline vectors for {len(offline.missing)} species: "
+            f"{', '.join(offline.missing[:20])}"
+            + (" ..." if len(offline.missing) > 20 else "")
+            + ". They learn only from Antenna rows, or keep the current head's weights."
+        )
+
+    saved = None
+    head_url = None
+    pipeline_slug = None
+    if data.save:
+        name = data.name or f"head-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        saved = training.save_head(
+            result, pathlib.Path(trained_heads.TRAINED_HEADS_DIR), name
+        )
+        # Offer it straight away. The head it was trained from stays where it is; this
+        # adds a choice rather than replacing one.
+        trained_heads.register(CLASSIFIER_CHOICES)
+        pipeline_slug = trained_heads.TrainedHead(
+            name=name, directory=pathlib.Path(), metadata={}
+        ).pipeline_slug
+        _describe_in_info(pipeline_slug)
+
+        if data.head_upload_url:
+            head_url = _upload_head(data, saved)
+
+    response = TrainResponse(
+        promote=result["promote"],
+        reason=result["reason"],
+        warnings=result["warnings"],
+        rows=result["rows"],
+        classes_restored_from_current_head=result.get(
+            "classes_restored_from_current_head", 0
+        ),
+        counts=result["counts"],
+        dropped_species=result["dropped_species"],
+        candidate_metrics=result["candidate_metrics"],
+        incumbent_metrics=result["incumbent_metrics"],
+        labels=result["labels"],
+        saved=saved,
+        head_url=head_url,
+        pipeline_slug=pipeline_slug,
+        trained_at=result["trained_at"],
+        offline=offline.summary() if offline is not None else None,
+    )
+
+    if not data.callback_url:
+        # No callback: this response is the only way the caller sees the result, so it
+        # carries the whole thing. This is the direct-use path, not Antenna's.
+        return response
+
+    response.reported_to_antenna = _report_to_antenna(data, response, dataset_metadata)
+    # One way in: the result went to the callback, so this is an acknowledgement rather
+    # than a second copy for the caller to parse.
+    return fastapi.responses.JSONResponse(
+        status_code=202,
+        content={
+            "status": "accepted",
+            "job_id": data.job_id,
+            "reported_to_antenna": response.reported_to_antenna,
+        },
+    )
 
 
 if __name__ == "__main__":
