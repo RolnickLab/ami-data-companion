@@ -32,6 +32,9 @@ dependencies = [
     "torchvision>=0.20",
     "typer>=0.12.3,<1",
     "ultralytics>=8.3",
+    # Ultralytics depends on opencv-python, which needs X11 libraries that headless
+    # servers lack. The headless build provides the same cv2 module without them.
+    "opencv-python-headless>=4.6,<5",
     "uvicorn>=0.20",
 ]
 
@@ -65,6 +68,11 @@ ami = "trapdata.cli.base:cli"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+# Leave out opencv-python so only the headless build installs cv2 (see the
+# opencv-python-headless dependency above).
+override-dependencies = ["opencv-python ; sys_platform == 'never'"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
