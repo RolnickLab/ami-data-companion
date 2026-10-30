@@ -295,6 +295,10 @@ class TestInferenceAPI(TestCase):
         for Classifier in (orders, species):
             self.assertIs(Classifier.detector_cls, APIAnyBugDetector_YOLO26s_Mixed_v2)
         self.assertEqual(APIAnyBugDetector_YOLO26s_Mixed_v2.imgsz, 1600)
+        self.assertEqual(
+            APIAnyBugDetector_YOLO26s_Mixed_v2.weights_path,
+            "anybug/detection/Anybug-Mixed-v2-0.pt",
+        )
         self.assertFalse(should_filter_detections(orders))
         self.assertTrue(should_filter_detections(species))
 

@@ -248,19 +248,57 @@ def test_predict_batch_gives_each_image_the_same_letterbox_as_alone():
 
     def fake_predict(imgs, **kwargs):
         calls.append([img.shape for img in imgs])
-        return [f"result for {img.shape}" for img in imgs]
+        # Identify each image by its pixel value, so swapped results are caught.
+        return [int(img[0, 0, 0]) for img in imgs]
 
     detector.model = MagicMock()
     detector.model.predict.side_effect = fake_predict
 
-    wide = torch.zeros(3, 2160, 4096)
-    small = torch.zeros(3, 680, 1024)
-    results = detector.predict_batch([wide, small, wide])
+    # Pixel values 10, 20, 30 (scaled to uint8 by the RGB-to-BGR conversion).
+    first_wide = torch.full((3, 216, 409), 10 / 255)
+    small = torch.full((3, 68, 102), 20 / 255)
+    second_wide = torch.full((3, 216, 409), 30 / 255)
+    results = detector.predict_batch([first_wide, small, second_wide])
 
     assert all(len(set(shapes)) == 1 for shapes in calls)
     assert sorted(len(shapes) for shapes in calls) == [1, 2]
-    assert results == [
-        "result for (2160, 4096, 3)",
-        "result for (680, 1024, 3)",
-        "result for (2160, 4096, 3)",
-    ]
+    assert results == [10, 20, 30]
+
+
+def test_yolo_loader_refuses_a_checkpoint_with_the_wrong_checksum(tmp_path):
+    """Ultralytics unpickles checkpoints, which can run code, so a weights file
+    must match its pinned SHA-256 before it is loaded."""
+    import pytest
+
+    from trapdata.ml.models.localization import _load_ultralytics_yolo
+
+    checkpoint = tmp_path / "model.pt"
+    checkpoint.write_bytes(b"not the published weights")
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        _load_ultralytics_yolo(checkpoint, expected_sha256="0" * 64)
+
+
+def test_yolo_detectors_pin_a_checksum_for_their_weights():
+    from trapdata.ml.models.localization import (
+        AnyBugObjectDetector_YOLO26s_Mixed_v2,
+        MothObjectDetector_YOLO11m_Mothbot,
+    )
+
+    for detector in (
+        MothObjectDetector_YOLO11m_Mothbot,
+        AnyBugObjectDetector_YOLO26s_Mixed_v2,
+    ):
+        assert len(detector.weights_sha256) == 64
+
+
+def test_yolo_detectors_are_not_offered_in_the_desktop_app():
+    """The desktop app reads images through a database queue that collates
+    tensors, which the YOLO detectors do not accept, so they are API-only."""
+    from trapdata.ml.models import ObjectDetectorChoice, object_detectors
+    from trapdata.ml.models.localization import MothObjectDetector_YOLO11m_Mothbot
+
+    assert MothObjectDetector_YOLO11m_Mothbot.name not in object_detectors
+    assert MothObjectDetector_YOLO11m_Mothbot.get_key() not in {
+        choice.name for choice in ObjectDetectorChoice
+    }

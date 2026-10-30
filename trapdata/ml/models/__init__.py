@@ -22,10 +22,15 @@ def get_default_model(choices: EnumMeta) -> str:
     return choice_list[0].value  # type: ignore
 
 
-object_detectors = {Model.name: Model for Model in ObjectDetector.__subclasses__()}
+# Detectors marked api_only run only behind the API and the Antenna worker, so the
+# desktop app and CLI do not offer them.
+_desktop_object_detectors = [
+    Model for Model in ObjectDetector.__subclasses__() if not Model.api_only
+]
+object_detectors = {Model.name: Model for Model in _desktop_object_detectors}
 ObjectDetectorChoice = ModelChoiceEnum(
     "ObjectDetectorChoice",
-    {Model.get_key(): Model.name for Model in ObjectDetector.__subclasses__()},
+    {Model.get_key(): Model.name for Model in _desktop_object_detectors},
 )
 DEFAULT_OBJECT_DETECTOR = get_default_model(ObjectDetectorChoice)
 

@@ -1,4 +1,5 @@
 import dataclasses
+import hashlib
 import pathlib
 
 import cv2
@@ -141,6 +142,10 @@ class LocalizationFilesystemDataset(torch.utils.data.Dataset):
 
 
 class ObjectDetector(InferenceBaseClass):
+    # True for detectors that need the API's image dataset (see
+    # trapdata.ml.models.object_detectors).
+    api_only = False
+
     title = "Unknown Object Detector"
     type = "object_detection"
     stage = 1
@@ -353,11 +358,8 @@ class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
 # Mothbot_Process project. Trained at imgsz=1600, Jan 2024. Weights are hosted
 # on Arbutus alongside our other models.
 #
-# This implementation is an independent rewrite; Mothbot's repo is unlicensed
-# (see docs/superpowers/specs/2026-04-14-mothbot-detection-pipeline-design.md).
-# The torch 2.6 weights_only fallback below is adapted from
-# Mothbot_Process/pipeline/detect.py -- the pattern is standard ultralytics
-# PyTorch 2.6 compat handling, not Mothbot-specific logic.
+# This implementation is an independent rewrite of the Mothbot_Process (MIT)
+# detection step.
 # -----------------------------------------------------------------------------
 
 
@@ -423,59 +425,28 @@ def _tensor_to_bgr_numpy(t: torch.Tensor) -> np.ndarray:
     return (t.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)[..., ::-1]
 
 
-def _load_ultralytics_yolo(weights_path):
-    """Load an ultralytics YOLO model with a PyTorch 2.6 weights_only fallback.
+def _load_ultralytics_yolo(weights_path, expected_sha256: str):
+    """Load an ultralytics YOLO checkpoint after checking its SHA-256.
 
-    Newer PyTorch defaults to torch.load(..., weights_only=True), which can
-    refuse to load Ultralytics checkpoints that embed custom model classes.
-    For local, trusted checkpoints we retry with weights_only=False.
-
-    Adapted from Mothbot_Process/pipeline/detect.py (unlicensed repo; pattern
-    is standard ultralytics PyTorch 2.6 compat handling).
+    Ultralytics unpickles checkpoints, and unpickling can run code, so only a
+    file that matches the published weights is loaded.
     """
-    import os
-
-    import torch as _torch
     from ultralytics import YOLO
 
-    try:
-        return YOLO(str(weights_path))
-    except Exception as err:
-        if "Weights only load failed" not in str(err):
-            raise
-
-        logger.info(
-            "Retrying YOLO load with torch.load(weights_only=False) compatibility "
-            "(trusted local checkpoint)"
+    digest = hashlib.sha256(pathlib.Path(weights_path).read_bytes()).hexdigest()
+    if digest != expected_sha256:
+        raise ValueError(
+            f"SHA-256 of {weights_path} is {digest}, expected {expected_sha256}. "
+            "Delete the file so it is downloaded again."
         )
-        original_load = _torch.load
-        original_force_wo = os.environ.get("TORCH_FORCE_WEIGHTS_ONLY_LOAD")
-        original_force_no_wo = os.environ.get("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD")
-
-        def _patched_load(*args, **kwargs):
-            kwargs["weights_only"] = False
-            return original_load(*args, **kwargs)
-
-        _torch.load = _patched_load
-        try:
-            os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"] = "0"
-            os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
-            return YOLO(str(weights_path))
-        finally:
-            _torch.load = original_load
-            if original_force_wo is None:
-                os.environ.pop("TORCH_FORCE_WEIGHTS_ONLY_LOAD", None)
-            else:
-                os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"] = original_force_wo
-            if original_force_no_wo is None:
-                os.environ.pop("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", None)
-            else:
-                os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = original_force_no_wo
+    return YOLO(str(weights_path))
 
 
 class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
     name = "Mothbot YOLO11m Creature Detector"
     weights_path = "mothbot/detection/yolo11m_4500_imgsz1600_b1_2024-01-18.pt"
+    weights_sha256 = "8fcd7c578eb123d711939f92654419f415cdb94d30a08a97f294ad10767a6192"
+    api_only = True
     description = (
         "Single-class 'creature' detector from Digital Naturalism "
         "Laboratories' Mothbot project. YOLO11m-OBB, trained at "
@@ -507,7 +478,7 @@ class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
 
     def get_model(self):
         logger.debug(f"Loading YOLO weights: {self.weights}")
-        model = _load_ultralytics_yolo(self.weights)
+        model = _load_ultralytics_yolo(self.weights, self.weights_sha256)
         # ultralytics manages its own device placement via the device kwarg
         # passed to .predict(), so we don't .to(self.device) here.
         return model
@@ -645,11 +616,12 @@ class AnyBugObjectDetector_YOLO26s_Mixed_v2(MothObjectDetector_YOLO11m_Mothbot):
 
     The weights are a copy of trained_models/Anybug-Mixed-v2-0.pt from
     Digital-Naturalism-Laboratories/Mothbot_Process at commit 889da44
-    (sha256 5e7926f0...).
+    (same SHA-256 as weights_sha256).
     """
 
     name = "AnyBug Mixed v2.0 Detector"
     weights_path = "anybug/detection/Anybug-Mixed-v2-0.pt"
+    weights_sha256 = "5e7926f081704dbdf19014bc4240e35e0bea1290c71f595fe4db39d1621db167"
     description = (
         "Single-class 'creature' detector for any insect, from Digital "
         "Naturalism Laboratories' Mothbot project (Anybug-Mixed-v2-0). "
