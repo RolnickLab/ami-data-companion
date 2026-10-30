@@ -385,8 +385,12 @@ class ProcessingServiceInfoResponse(pydantic.BaseModel):
 class TrainRequest(pydantic.BaseModel):
     """Retrain a classifier head from a dataset Antenna has already prepared."""
 
-    dataset_url: str = pydantic.Field(
-        description="URL of the npz training set Antenna wrote to storage."
+    dataset_url: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "URL of the npz training set Antenna wrote to storage. May be omitted only "
+            "when use_offline_inat is on and classes lists the species."
+        ),
     )
     algorithm_key: str = pydantic.Field(
         description=(
@@ -442,6 +446,48 @@ class TrainRequest(pydantic.BaseModel):
             "automatically."
         ),
     )
+    use_offline_inat: bool = pydantic.Field(
+        default=False,
+        description=(
+            "Also learn from the precomputed iNaturalist/GBIF vectors this service holds "
+            "(AMI_OFFLINE_VECTORS_DIR), filtered to the species list. With a dataset_url "
+            "they only add training rows: the held-out comparison stays on Antenna's rows."
+        ),
+    )
+    classes: list[str] | None = pydantic.Field(
+        default=None,
+        description=(
+            "The species the head covers. Needed when there is no dataset_url; otherwise "
+            "it overrides the list inside the dataset."
+        ),
+    )
+    backbone_key: str | None = pydantic.Field(
+        default=None,
+        description=(
+            "Which backbone's offline vectors to read. Defaults to the backbone of the "
+            "head named by algorithm_key; vectors from another backbone cannot be mixed."
+        ),
+    )
+    offline_max_per_species: int | None = pydantic.Field(
+        default=None,
+        ge=1,
+        description=(
+            "Cap on offline rows per species and split, so common species do not drown "
+            "out the rest or the project's own crops."
+        ),
+    )
+
+    @pydantic.model_validator(mode="after")
+    def _has_data(self) -> "TrainRequest":
+        if not self.dataset_url and not self.use_offline_inat:
+            raise ValueError(
+                "Give a dataset_url, or turn on use_offline_inat with a species list."
+            )
+        if not self.dataset_url and not self.classes:
+            raise ValueError(
+                "Training from offline data alone needs classes: the species to cover."
+            )
+        return self
 
 
 class TrainResponse(pydantic.BaseModel):
@@ -466,3 +512,6 @@ class TrainResponse(pydantic.BaseModel):
     )
     trained_at: str
     reported_to_antenna: bool = False
+    # What the offline tier contributed, when it was asked for: rows, species found and
+    # the species it holds no vectors for.
+    offline: dict | None = None

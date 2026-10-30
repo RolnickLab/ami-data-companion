@@ -13,7 +13,7 @@ import pydantic
 from fastapi.middleware.gzip import GZipMiddleware
 
 from ..common.logs import logger  # noqa: F401
-from ..ml import trained_heads, training
+from ..ml import offline_vectors, trained_heads, training
 from ..ml.utils import resolve_model_url
 from . import settings
 from .models.classification import (
@@ -490,6 +490,17 @@ def initialize_service_info(
     return _info
 
 
+def _classifier_class(algorithm_key: str):
+    """The classifier served under this pipeline slug or algorithm key, or None."""
+    classifier_class = CLASSIFIER_CHOICES.get(algorithm_key)
+    if classifier_class is None:
+        classifier_class = next(
+            (c for c in CLASSIFIER_CHOICES.values() if c.get_key() == algorithm_key),
+            None,
+        )
+    return classifier_class
+
+
 def _incumbent_head(algorithm_key: str) -> dict | None:
     """
     Load the weights of the head currently in service, so a new one can be compared to it.
@@ -497,12 +508,7 @@ def _incumbent_head(algorithm_key: str) -> dict | None:
     Returns None when the key names something this service does not serve or something
     whose head cannot be read: training still runs, it just has no baseline to beat.
     """
-    classifier_class = CLASSIFIER_CHOICES.get(algorithm_key)
-    if classifier_class is None:
-        classifier_class = next(
-            (c for c in CLASSIFIER_CHOICES.values() if c.get_key() == algorithm_key),
-            None,
-        )
+    classifier_class = _classifier_class(algorithm_key)
     if classifier_class is None or not getattr(classifier_class, "trainable", False):
         logger.warn(
             f"No trainable head named '{algorithm_key}'; training without a baseline"
@@ -515,6 +521,64 @@ def _incumbent_head(algorithm_key: str) -> dict | None:
         logger.warn(f"Could not read the current head for '{algorithm_key}': {e}")
         return None
     return {"weights": weight, "bias": bias, "labels": labels}
+
+
+def _offline_rows(
+    data: TrainRequest, antenna_rows: list, dataset_metadata: dict
+) -> "offline_vectors.OfflineSelection":
+    """
+    Rows from the precomputed iNat/GBIF vectors, for the species this run covers.
+
+    Raises HTTPException (422) when the offline tier is not set up or cannot serve the
+    backbone this head sits on; the caller asked for it, so silently training without it
+    would hand back a head built from less data than they think.
+    """
+    if not settings.offline_vectors_dir:
+        raise fastapi.HTTPException(
+            status_code=422,
+            detail="Offline vectors are not configured on this service (AMI_OFFLINE_VECTORS_DIR).",
+        )
+    backbone_key = data.backbone_key or getattr(
+        _classifier_class(data.algorithm_key), "backbone_name", None
+    )
+    if not backbone_key:
+        raise fastapi.HTTPException(
+            status_code=422,
+            detail=(
+                f"Cannot tell which backbone '{data.algorithm_key}' sits on, so cannot pick "
+                "offline vectors for it. Pass backbone_key."
+            ),
+        )
+    species = (
+        data.classes
+        or dataset_metadata.get("classes")
+        or sorted({row.label for row in antenna_rows})
+    )
+    try:
+        selection = offline_vectors.OfflineVectorSource(
+            settings.offline_vectors_dir
+        ).load(
+            species,
+            backbone_key=backbone_key,
+            max_per_species=data.offline_max_per_species,
+            # With Antenna rows the held-out score must stay on the user's own crops.
+            all_as_train=bool(antenna_rows),
+        )
+    except (offline_vectors.OfflineVectorsUnavailable, ValueError) as e:
+        raise fastapi.HTTPException(status_code=422, detail=str(e))
+
+    if antenna_rows and selection.rows:
+        antenna_dim = len(antenna_rows[0].features)
+        if antenna_dim != selection.dimensions:
+            raise fastapi.HTTPException(
+                status_code=422,
+                detail=(
+                    f"The Antenna vectors have {antenna_dim} dimensions but the offline ones "
+                    f"for '{backbone_key}' have {selection.dimensions}: they come from "
+                    "different backbones and cannot train one head."
+                ),
+            )
+    return selection
 
 
 def _upload_head(data: TrainRequest, saved: dict) -> str | None:
@@ -638,21 +702,30 @@ async def train(data: TrainRequest) -> TrainResponse:
 
     import requests
 
-    try:
-        rows, dataset_metadata = training.fetch_dataset(data.dataset_url)
-    except requests.HTTPError as e:
-        raise fastapi.HTTPException(
-            status_code=502, detail=f"Could not download the training set: {e}"
-        )
-    except Exception as e:
-        raise fastapi.HTTPException(
-            status_code=422, detail=f"Could not read the training set: {e}"
-        )
+    rows: list = []
+    dataset_metadata: dict = {}
+    if data.dataset_url:
+        try:
+            rows, dataset_metadata = training.fetch_dataset(data.dataset_url)
+        except requests.HTTPError as e:
+            raise fastapi.HTTPException(
+                status_code=502, detail=f"Could not download the training set: {e}"
+            )
+        except Exception as e:
+            raise fastapi.HTTPException(
+                status_code=422, detail=f"Could not read the training set: {e}"
+            )
+
+    offline = None
+    if data.use_offline_inat:
+        offline = _offline_rows(data, rows, dataset_metadata)
+        rows = rows + offline.rows
 
     if not rows:
-        raise fastapi.HTTPException(
-            status_code=422, detail="The training set is empty."
-        )
+        detail = "The training set is empty."
+        if offline is not None and offline.missing:
+            detail += f" No offline vectors for: {', '.join(offline.missing)}."
+        raise fastapi.HTTPException(status_code=422, detail=detail)
 
     try:
         result = training.retrain(
@@ -666,11 +739,19 @@ async def train(data: TrainRequest) -> TrainResponse:
             head_type=data.head_type,
             # Antenna ships the species list inside the dataset; it usually comes from a
             # project's taxa list and must win over whatever happens to be in the rows.
-            declared_classes=dataset_metadata.get("classes"),
+            declared_classes=data.classes or dataset_metadata.get("classes"),
             on_epoch=_progress_reporter(data),
         )
     except (training.NotEnoughData, training.UnsupportedHeadType) as e:
         raise fastapi.HTTPException(status_code=422, detail=str(e))
+
+    if offline is not None and offline.missing:
+        result["warnings"].append(
+            f"No offline vectors for {len(offline.missing)} species: "
+            f"{', '.join(offline.missing[:20])}"
+            + (" ..." if len(offline.missing) > 20 else "")
+            + ". They learn only from Antenna rows, or keep the current head's weights."
+        )
 
     saved = None
     head_url = None
@@ -708,6 +789,7 @@ async def train(data: TrainRequest) -> TrainResponse:
         head_url=head_url,
         pipeline_slug=pipeline_slug,
         trained_at=result["trained_at"],
+        offline=offline.summary() if offline is not None else None,
     )
 
     if not data.callback_url:
