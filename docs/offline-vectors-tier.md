@@ -21,7 +21,7 @@ on vectors alone. No image or GPU is needed at train time.
 | Species names | `leps-ai.global_all_leps_2605.inat_taxa` | Joined on `inat_taxon_id` (`species_name`, `family`). |
 | Regional taxa lists | `leps-ai.global_all_leps_2605.taxa_regions` (756k rows) + `regions` (33.5k) | `species_id -> region_gid`. This is the natural source of a taxa list. |
 | Model registry (scaffolded) | `track_models`, `track_experiments`, `track_experiment_results` | 1 row each. Not used here. |
-| Image bytes | Arbutus S3 bucket `ami-trainingdata`, squashfs shards `task_N.sqfs`, mounted on the GPU workspace at `/mnt/squash-0..9` | Shard = `photo_id % 10`, path = `relative_local_path`. Read-only. Cold reads come from S3. |
+| Image bytes | Arbutus S3 bucket `ami-trainingdata`, squashfs shards `task_N.sqfs`, mounted on the GPU workspace at `/mnt/squash-0..9` | Those shards are the **butterfly** set (shard = `photo_id % 10`). On 2026-10-30 the mounts gave I/O errors (`/mnt/s3` mountpoint-s3 broken). `global_all_leps_2605` paths look like `global_all_leps_2605/task_49/589/<uuid>.jpg`, which is not in those shards. Every row also has `absolute_url` (iNat open-data S3, public), and that is what the demo used. |
 | Earlier, smaller dataset | `leps-ai.global_butterflies_2604.*` | Butterflies only (~7k species). The distillation experiments used it. |
 | Pipeline code that made manifests and vectors | `~/antenna-models-training/bioclip-distill-leps/src/step1_global.py` (BigQuery manifest, observation-grouped 80/10/10 split on `gbif_id`), `src/step3_embed.py` (open_clip, L2-normalised, float16, written to Parquet) | Local copy holds **manifests only**: `data/manifest.parquet` (10k rows), `manifest_b.parquet` (5k), `manifest_d.parquet` (44k). No vectors. |
 | Existing vectors (from memory notes, **not re-checked**: no access from here) | GPU VM `/mnt/melabbas/emb25h_subset/` (BioCLIP-2.5 ViT-H/14, 1024-d, ~331k images = 257,779 train + 73,242 test over 6,687 butterfly species, cap 50/species), and `data/embeddings_global.parquet` (BioCLIP-2, 768-d) | `/mnt` on that VM is ephemeral. A backup of `/mnt` was taken on 2026-09-03 to `s3://ami-trainingdata/ai-for-leps/backup/2026-09-03_ami-workspace-02-gpu_mnt-ephemeral/`. **Butterflies only.** The moth heads (Newfoundland, Panama) need `global_all_leps_2605`, which has no vectors yet. |
@@ -146,9 +146,10 @@ Script: `scripts/precompute_offline_vectors.py`
 Outline of the production run:
 
 1. Manifest from BigQuery. Reuse `step1_global.py` on `global_all_leps_2605`, joined with `inat_taxa`,
-   using `fetch_status='downloaded'` and the `gbif_id`-grouped split. Cap per species and split. Map
-   `photo_id % 10` plus `relative_local_path` to `/mnt/squash-N/...` as `image_path`.
-   Always `--dry_run` first. The column scans are about 0.5 GB.
+   using `fetch_status='downloaded'` and the `gbif_id`-grouped split. Cap per species and split. Point
+   `image_path` at a local copy of the images, or use `image_url` (`absolute_url`).
+   Always `--dry_run` first. Selecting `absolute_url` and `relative_local_path` scans about 5.5 GB.
+   Counting by taxon alone scans about 0.5 GB.
 2. Run the script on the Arbutus GPU workspace in shards. Write to persistent disk (`/data`), not `/mnt`.
 3. `aws s3 sync` the backbone directory to the object store.
 4. Optional quick win: convert the existing butterfly `emb25h_subset` vectors into this layout, if the
@@ -196,3 +197,16 @@ GPU time. **Every figure here is an estimate.**
    dropped from the head instead?
 7. **Tier 2** (verified data across all Antenna projects) could ship to the service in this same layout,
    with `source="antenna"`. Worth doing?
+
+## 8. Demo set built on 2026-10-30
+
+- Location: `~/offline-vectors-demo/hf-hub_imageomics_bioclip-2.5-vith14/` (4.1 MB).
+- Contents: 20 Newfoundland species x 100 images = 2,000 vectors. Split by `gbif_id`: 1,637 train, 363 test+val.
+- How it was made:
+  - The images came from `absolute_url`, downloaded on the GPU workspace (2,598 of 2,600 succeeded).
+  - They were embedded with this script in fp32, using the `open_clip` preprocess and L2 normalisation, which is the same as `BioCLIPWithLinearHead`.
+  - It took 3 min 23 s on the H100 MIG slice.
+- Check: the deployed Newfoundland head (749 classes) gets top-1 0.953 on these vectors. So they are in the space the head expects.
+- `/train` with `use_offline_inat` and the 20 names, and no dataset: new head 0.983 vs current 0.945 on the 363 held-out rows.
+  - This is **not** a fair comparison. The new head picks among 20 species; the current head picks among 749.
+  - The current head may also have been trained on these same iNat photos.
