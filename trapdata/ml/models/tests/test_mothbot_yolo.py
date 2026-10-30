@@ -221,3 +221,46 @@ def test_post_process_single_filters_degenerate_detections():
     ), f"Expected 1 detection (degenerate filtered), got {len(dets)}: {dets}"
     assert dets[0].x2 - dets[0].x1 > 0
     assert dets[0].y2 - dets[0].y1 > 0
+
+
+def test_predict_batch_gives_each_image_the_same_letterbox_as_alone():
+    """An image's detections must not depend on the other images in its batch.
+
+    Ultralytics pads a batch of same-sized images to the smallest rectangle but
+    pads a batch of mixed sizes to a full square, and the square padding finds
+    fewer objects. predict_batch therefore sends each image size as its own
+    call and returns the results in the original order.
+    """
+    from unittest.mock import MagicMock
+
+    from trapdata.ml.models.localization import MothObjectDetector_YOLO11m_Mothbot
+
+    detector = MothObjectDetector_YOLO11m_Mothbot.__new__(
+        MothObjectDetector_YOLO11m_Mothbot
+    )
+    detector.imgsz = 1600
+    detector.bbox_score_threshold = 0.25
+    detector.nms_iou_threshold = 0.7
+    detector.box_detections_per_img = 300
+    detector.device = "cpu"
+
+    calls = []
+
+    def fake_predict(imgs, **kwargs):
+        calls.append([img.shape for img in imgs])
+        return [f"result for {img.shape}" for img in imgs]
+
+    detector.model = MagicMock()
+    detector.model.predict.side_effect = fake_predict
+
+    wide = torch.zeros(3, 2160, 4096)
+    small = torch.zeros(3, 680, 1024)
+    results = detector.predict_batch([wide, small, wide])
+
+    assert all(len(set(shapes)) == 1 for shapes in calls)
+    assert sorted(len(shapes) for shapes in calls) == [1, 2]
+    assert results == [
+        "result for (2160, 4096, 3)",
+        "result for (680, 1024, 3)",
+        "result for (2160, 4096, 3)",
+    ]

@@ -551,6 +551,11 @@ class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
         inputs' channel order (see LoadPilAndNumpy._single_check docstring),
         so we flip RGB to BGR here. Without this the detector emits large,
         low-quality boxes because the color statistics don't match training.
+
+        Each image size goes to ultralytics as a separate call. Ultralytics pads
+        a batch of same-sized images to the smallest rectangle, but pads a
+        batch of mixed sizes to a full square, which finds fewer objects. One
+        call per size gives every image the result it would get on its own.
         """
         if isinstance(batch, torch.Tensor):
             # (B, C, H, W) RGB in [0, 1] float -> list of (H, W, C) BGR uint8
@@ -559,15 +564,27 @@ class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
             imgs = [_tensor_to_bgr_numpy(t) for t in batch]
         else:
             imgs = batch
-        return self.model.predict(
-            imgs,
-            imgsz=self.imgsz,
-            conf=self.bbox_score_threshold,
-            iou=self.nms_iou_threshold,
-            max_det=self.box_detections_per_img,
-            device=self.device,
-            verbose=False,
-        )
+
+        # numpy arrays have .shape; PIL images have .size
+        indices_by_size: dict[tuple[int, ...], list[int]] = {}
+        for i, img in enumerate(imgs):
+            size = img.shape[:2] if hasattr(img, "shape") else img.size
+            indices_by_size.setdefault(tuple(size), []).append(i)
+
+        results = [None] * len(imgs)
+        for indices in indices_by_size.values():
+            outputs = self.model.predict(
+                [imgs[i] for i in indices],
+                imgsz=self.imgsz,
+                conf=self.bbox_score_threshold,
+                iou=self.nms_iou_threshold,
+                max_det=self.box_detections_per_img,
+                device=self.device,
+                verbose=False,
+            )
+            for i, output in zip(indices, outputs):
+                results[i] = output
+        return results
 
     def post_process_single(self, result):
         """Flatten one ultralytics Result into a list of detection records.
