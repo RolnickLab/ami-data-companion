@@ -14,7 +14,7 @@ from trapdata import TrapImage, db, logger
 from trapdata.db.models.detections import save_detected_objects
 from trapdata.db.models.queue import ImageQueue
 from trapdata.ml.models.base import InferenceBaseClass
-from trapdata.ml.utils import open_image
+from trapdata.ml.utils import load_model_checkpoint, open_image
 
 
 class LocalizationIterableDatabaseDataset(torch.utils.data.IterableDataset):
@@ -202,7 +202,7 @@ class ObjectDetector(InferenceBaseClass):
 
 class MothObjectDetector_FasterRCNN_2021(ObjectDetector):
     name = "FasterRCNN for AMI Moth Traps 2021"
-    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/localization/v1_localizmodel_2021-08-17-12-06.pt"
+    weights_path = "moths/localization/v1_localizmodel_2021-08-17-12-06.pt"
     description = (
         "Model trained on moth trap data in 2021. "
         "Accurate but can be slow on a machine without GPU."
@@ -223,7 +223,7 @@ class MothObjectDetector_FasterRCNN_2021(ObjectDetector):
             )
         )
         logger.debug(f"Loading weights: {self.weights}")
-        checkpoint = torch.load(self.weights, map_location=self.device)
+        checkpoint = load_model_checkpoint(self.weights, self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model = model.to(self.device)
@@ -249,7 +249,7 @@ class MothObjectDetector_FasterRCNN_2021(ObjectDetector):
 
 class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
     name = "FasterRCNN for AMI Moth Traps 2023"
-    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/localization/fasterrcnn_resnet50_fpn_tz53qv9v.pt"
+    weights_path = "moths/localization/fasterrcnn_resnet50_fpn_tz53qv9v.pt"
     description = (
         "Model trained on GBIF images and synthetic data in 2023. "
         "Accurate but can be slow on a machine without GPU."
@@ -266,7 +266,7 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
             weights=None,
             box_detections_per_img=self.box_detections_per_img,
         )
-        checkpoint = torch.load(self.weights, map_location=self.device)
+        checkpoint = load_model_checkpoint(self.weights, self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model = model.to(self.device)
@@ -292,7 +292,7 @@ class MothObjectDetector_FasterRCNN_2023(ObjectDetector):
 
 class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
     name = "FasterRCNN - MobileNet for AMI Moth Traps 2023"
-    weights_path = "https://object-arbutus.cloud.computecanada.ca/ami-models/moths/localization/fasterrcnn_mobilenet_v3_large_fpn_uqfh7u9w.pt"
+    weights_path = "moths/localization/fasterrcnn_mobilenet_v3_large_fpn_uqfh7u9w.pt"
     description = (
         "Model trained on GBIF images and synthetic data in 2023. "
         "Slightly less accurate but much faster than other models."
@@ -322,7 +322,7 @@ class MothObjectDetector_FasterRCNN_MobileNet_2023(ObjectDetector):
             rpn_score_thresh=0.05,
             box_detections_per_img=self.box_detections_per_img,
         )
-        checkpoint = torch.load(self.weights, map_location=self.device)
+        checkpoint = load_model_checkpoint(self.weights, self.device)
         state_dict = checkpoint.get("model_state_dict") or checkpoint
         model.load_state_dict(state_dict)
         model = model.to(self.device)
@@ -475,10 +475,7 @@ def _load_ultralytics_yolo(weights_path):
 
 class MothObjectDetector_YOLO11m_Mothbot(ObjectDetector):
     name = "Mothbot YOLO11m Creature Detector"
-    weights_path = (
-        "https://object-arbutus.cloud.computecanada.ca/ami-models/"
-        "mothbot/detection/yolo11m_4500_imgsz1600_b1_2024-01-18.pt"
-    )
+    weights_path = "mothbot/detection/yolo11m_4500_imgsz1600_b1_2024-01-18.pt"
     description = (
         "Single-class 'creature' detector from Digital Naturalism "
         "Laboratories' Mothbot project. YOLO11m-OBB, trained at "

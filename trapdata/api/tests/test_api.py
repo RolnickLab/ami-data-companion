@@ -5,7 +5,7 @@ from unittest import TestCase
 from fastapi.testclient import TestClient
 
 from trapdata.api.api import (
-    PIPELINE_CHOICES,
+    CLASSIFIER_CHOICES,
     PipelineChoice,
     PipelineRequest,
     PipelineResponse,
@@ -15,7 +15,11 @@ from trapdata.api.api import (
 )
 from trapdata.api.schemas import PipelineConfigRequest
 from trapdata.api.tests.image_server import StaticFileTestServer
-from trapdata.api.tests.utils import get_pipeline_class, get_test_images
+from trapdata.api.tests.utils import (
+    IMAGE_WITH_DETECTIONS,
+    get_pipeline_class,
+    get_test_images,
+)
 from trapdata.tests import TEST_IMAGES_BASE_PATH
 
 logging.basicConfig(level=logging.INFO)
@@ -38,8 +42,19 @@ class TestInferenceAPI(TestCase):
         if hasattr(cls, "file_server"):
             cls.file_server.stop()
 
-    def get_test_images(self, subdir: str = "vermont", num: int = 2):
-        return get_test_images(self.file_server, self.test_images_dir, subdir, num)
+    def get_test_images(
+        self,
+        subdir: str = "vermont",
+        num: int = 2,
+        filenames: list[str] | None = None,
+    ):
+        return get_test_images(
+            self.file_server,
+            self.test_images_dir,
+            subdir=subdir,
+            num=num,
+            filenames=filenames,
+        )
 
     def get_test_pipeline(self, slug: str = "quebec_vermont_moths_2023"):
         return get_pipeline_class(slug)
@@ -62,12 +77,12 @@ class TestInferenceAPI(TestCase):
 
     def test_pipeline_config_with_binary_classifier(self):
         binary_classifier_pipeline_choice = "moth_binary"
-        BinaryClassifier = PIPELINE_CHOICES[binary_classifier_pipeline_choice]
+        BinaryClassifier = CLASSIFIER_CHOICES[binary_classifier_pipeline_choice]
         binary_classifier_instance = BinaryClassifier(source_images=[], detections=[])
         BinaryClassifierResponse = make_algorithm_response(binary_classifier_instance)
 
         species_classifier_pipeline_choice = "quebec_vermont_moths_2023"
-        SpeciesClassifier = PIPELINE_CHOICES[species_classifier_pipeline_choice]
+        SpeciesClassifier = CLASSIFIER_CHOICES[species_classifier_pipeline_choice]
         species_classifier_instance = SpeciesClassifier(source_images=[], detections=[])
         SpeciesClassifierResponse = make_algorithm_response(species_classifier_instance)
 
@@ -99,7 +114,7 @@ class TestInferenceAPI(TestCase):
     def test_processing_with_only_binary_classifier(self):
         binary_classifier_pipeline_choice = "moth_binary"
         binary_algorithm_key = "moth_nonmoth_classifier"
-        BinaryAlgorithmClass = PIPELINE_CHOICES[binary_classifier_pipeline_choice]
+        BinaryAlgorithmClass = CLASSIFIER_CHOICES[binary_classifier_pipeline_choice]
         # Create an instance to get the num_classes
         binary_algorithm = BinaryAlgorithmClass(source_images=[], detections=[])
 
@@ -127,7 +142,7 @@ class TestInferenceAPI(TestCase):
         Test that the logits are included in the classification response when
         requested via the pipeline configuration.
         """
-        test_images = self.get_test_images(num=1)
+        test_images = self.get_test_images(filenames=[IMAGE_WITH_DETECTIONS])
         assert test_images, "No test images found"
 
         test_pipeline_slug = "insect_orders_2025"
@@ -176,7 +191,7 @@ class TestInferenceAPI(TestCase):
         Test that classification responses have no labels (from algorithm config)
         and scores/logits count equals num classes in category map.
         """
-        test_images = self.get_test_images(num=1)
+        test_images = self.get_test_images(filenames=[IMAGE_WITH_DETECTIONS])
         assert test_images, "No test images found"
 
         test_pipeline_slug = "insect_orders_2025"
@@ -237,11 +252,11 @@ class TestInferenceAPI(TestCase):
 
         New pipelines introduced with their own detector are exempt.
         """
-        from trapdata.api.api import PIPELINE_CHOICES
+        from trapdata.api.api import CLASSIFIER_CHOICES
         from trapdata.api.models.localization import APIMothDetector
 
-        exempt = {"mothbot_insect_orders_2025"}
-        for slug, Classifier in PIPELINE_CHOICES.items():
+        exempt = {"mothbot_insect_orders_2025", "mothbot_panama_moths_2023"}
+        for slug, Classifier in CLASSIFIER_CHOICES.items():
             if slug in exempt:
                 continue
             self.assertIs(
@@ -251,17 +266,17 @@ class TestInferenceAPI(TestCase):
             )
 
     def test_mothbot_pipeline_uses_yolo_detector(self):
-        from trapdata.api.api import PIPELINE_CHOICES
+        from trapdata.api.api import CLASSIFIER_CHOICES
         from trapdata.api.models.localization import APIMothDetector_YOLO11m_Mothbot
 
-        assert "mothbot_insect_orders_2025" in PIPELINE_CHOICES
-        Classifier = PIPELINE_CHOICES["mothbot_insect_orders_2025"]
+        assert "mothbot_insect_orders_2025" in CLASSIFIER_CHOICES
+        Classifier = CLASSIFIER_CHOICES["mothbot_insect_orders_2025"]
         self.assertIs(Classifier.detector_cls, APIMothDetector_YOLO11m_Mothbot)
 
     def test_mothbot_pipeline_skips_binary_filter(self):
-        from trapdata.api.api import PIPELINE_CHOICES, should_filter_detections
+        from trapdata.api.api import CLASSIFIER_CHOICES, should_filter_detections
 
-        Classifier = PIPELINE_CHOICES["mothbot_insect_orders_2025"]
+        Classifier = CLASSIFIER_CHOICES["mothbot_insect_orders_2025"]
         self.assertFalse(should_filter_detections(Classifier))
 
     def test_detection_response_has_optional_rotation_field(self):
