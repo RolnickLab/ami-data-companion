@@ -643,17 +643,13 @@ class AnyBugObjectDetector_YOLO26s_Mixed_v2(MothObjectDetector_YOLO11m_Mothbot):
     an OBB model like the Mothbot YOLO11m detector, so it reuses that class's
     loading, input handling and OBB to axis-aligned post-processing.
 
-    Training run: https://wandb.ai/moth-ai/anybug-2/runs/mqcufly1
+    The weights are a copy of trained_models/Anybug-Mixed-v2-0.pt from
+    Digital-Naturalism-Laboratories/Mothbot_Process at commit 889da44
+    (sha256 5e7926f0...).
     """
 
     name = "AnyBug Mixed v2.0 Detector"
-    # Pinned to the commit that published the weights, so the file cannot change
-    # under a deployment.
-    weights_path = (
-        "https://github.com/Digital-Naturalism-Laboratories/Mothbot_Process/raw/"
-        "889da44abad111387f00b465b9c090db358e08e2/trained_models/"
-        "Anybug-Mixed-v2-0.pt"
-    )
+    weights_path = "anybug/detection/Anybug-Mixed-v2-0.pt"
     description = (
         "Single-class 'creature' detector for any insect, from Digital "
         "Naturalism Laboratories' Mothbot project (Anybug-Mixed-v2-0). "
