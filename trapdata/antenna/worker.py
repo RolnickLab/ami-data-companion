@@ -30,13 +30,19 @@ MAX_PENDING_POSTS = 5  # Maximum number of concurrent result posts before blocki
 SLEEP_TIME_SECONDS = 5
 
 
-def run_worker(pipelines: list[str]):
+def run_worker(pipelines: list[str], project_ids: list[int] | None = None):
     """Run the worker to process images from the REST API queue.
 
     Automatically spawns one AMI worker instance process per available GPU.
     On single-GPU or CPU-only machines, runs in-process (no overhead).
+
+    Args:
+        pipelines: Pipeline slugs to poll for jobs.
+        project_ids: Optional project IDs to limit jobs to. If empty/None,
+            pulls jobs for all projects the auth token has access to.
     """
     settings = read_settings()
+    project_ids = project_ids or []
 
     # Validate auth token
     if not settings.antenna_api_auth_token:
@@ -59,7 +65,7 @@ def run_worker(pipelines: list[str]):
         # can't be pickled. Each child process calls read_settings() itself.
         mp.spawn(
             _worker_loop,
-            args=(pipelines,),
+            args=(pipelines, project_ids),
             nprocs=gpu_count,
             join=True,
         )
@@ -68,17 +74,21 @@ def run_worker(pipelines: list[str]):
             logger.info(f"Found 1 GPU: {torch.cuda.get_device_name(0)}")
         else:
             logger.info("No GPUs found, running on CPU")
-        _worker_loop(0, pipelines)
+        _worker_loop(0, pipelines, project_ids)
 
 
-def _worker_loop(gpu_id: int, pipelines: list[str]):
+def _worker_loop(
+    gpu_id: int, pipelines: list[str], project_ids: list[int] | None = None
+):
     """Main polling loop for a single AMI worker instance, pinned to a specific GPU.
 
     Args:
         gpu_id: GPU index to pin this AMI worker instance to (0 for CPU-only).
         pipelines: List of pipeline slugs to poll for jobs.
+        project_ids: Optional project IDs to limit jobs to.
     """
     settings = read_settings()
+    project_ids = project_ids or []
     device = torch.device(f"cuda:{gpu_id}" if torch.cuda.is_available() else "cpu")
     if torch.cuda.is_available() and torch.cuda.device_count() > 0:
         torch.cuda.set_device(gpu_id)
@@ -89,6 +99,8 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
     # Build full service name with hostname
     full_service_name = get_full_service_name(settings.antenna_service_name)
     logger.info(f"Running worker as: {full_service_name}")
+    if project_ids:
+        logger.info(f"Filtering jobs to projects: {project_ids}")
 
     while True:
         # TODO CGJS: Support pulling and prioritizing single image tasks, which are used in interactive testing
@@ -102,6 +114,7 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
             base_url=settings.antenna_api_base_url,
             auth_token=settings.antenna_api_auth_token,
             pipeline_slugs=pipelines,
+            project_ids=project_ids if project_ids else None,
         )
         for job_id, pipeline in jobs:
             logger.info(
@@ -127,6 +140,25 @@ def _worker_loop(gpu_id: int, pipelines: list[str]):
                 f"[GPU {gpu_id}] No jobs found, sleeping for {SLEEP_TIME_SECONDS} seconds"
             )
             time.sleep(SLEEP_TIME_SECONDS)
+
+
+# Most crops classified at once. A detector can return thousands of boxes per
+# image, and transforming and stacking all their crops together can exhaust memory.
+CROP_CHUNK_SIZE = 256
+
+
+def _classify_crops(classifier, crops: list[torch.Tensor], transforms) -> list:
+    """Transform, stack and classify crops one chunk at a time.
+
+    Returns the post-processed results in the same order as ``crops``.
+    """
+    results = []
+    for start in range(0, len(crops), CROP_CHUNK_SIZE):
+        chunk = torch.stack(
+            [transforms(crop) for crop in crops[start : start + CROP_CHUNK_SIZE]]
+        )
+        results.extend(classifier.post_process_batch(classifier.predict_batch(chunk)))
+    return results
 
 
 def _apply_binary_classification(
@@ -164,18 +196,14 @@ def _apply_binary_classification(
                 f"({x1},{y1})->({x2},{y2})"
             )
             continue
-        crop = image_tensor[:, y1:y2, x1:x2]
-        crop_transformed = binary_transforms(crop)
-        binary_crops.append(crop_transformed)
+        binary_crops.append(image_tensor[:, y1:y2, x1:x2])
         binary_valid_indices.append(idx)
 
     moth_detections = []
     non_moth_detections = []
 
     if binary_crops:
-        batched_binary_crops = torch.stack(binary_crops)
-        binary_out = binary_filter.predict_batch(batched_binary_crops)
-        binary_out = binary_filter.post_process_batch(binary_out)
+        binary_out = _classify_crops(binary_filter, binary_crops, binary_transforms)
 
         for crop_i, idx in enumerate(binary_valid_indices):
             dresp = detector_results[idx]
@@ -211,7 +239,7 @@ def _process_batch(
 ) -> tuple[int, int, list[AntennaTaskResult], float, float]:
     """Process a single batch of images through detection and classification.
 
-    All large intermediates (image_tensors, crops, batched_crops, image_detections)
+    All large intermediates (image_tensors, crops, image_detections)
     are local to this function and freed by Python's reference counting when it
     returns, preventing memory accumulation across batches.
 
@@ -296,31 +324,36 @@ def _process_batch(
         classifier.reset(detections_for_terminal_classifier)
         classify_transforms = classifier.get_transforms()
 
-        # Collect and transform all crops for batched classification
+        # Collect crops; _classify_crops transforms and classifies them in chunks
         crops = []
         valid_indices = []
         n_detections = 0
         for idx, dresp in enumerate(detections_for_terminal_classifier):
             image_tensor = image_tensors[dresp.source_image_id]
             bbox = dresp.bbox
-            y1, y2 = int(bbox.y1), int(bbox.y2)
-            x1, x2 = int(bbox.x1), int(bbox.x2)
+            _, img_h, img_w = image_tensor.shape
+            # Clamp bbox to image bounds before using as slice indices. YOLO-OBB
+            # can produce negative coords for detections near image edges; PyTorch
+            # slicing would treat negatives as end-relative indices, yielding an
+            # empty crop and an H=0/W=0 Resize error downstream.
+            y1 = max(0, min(int(bbox.y1), img_h))
+            y2 = max(0, min(int(bbox.y2), img_h))
+            x1 = max(0, min(int(bbox.x1), img_w))
+            x2 = max(0, min(int(bbox.x2), img_w))
             if y1 >= y2 or x1 >= x2:
                 logger.warning(
-                    f"Skipping detection {idx} with invalid bbox: "
-                    f"({x1},{y1})->({x2},{y2})"
+                    f"Skipping detection {idx} with invalid bbox after clamping "
+                    f"to image {img_w}x{img_h}: ({x1},{y1})->({x2},{y2}) "
+                    f"(raw: x1={bbox.x1:.1f} y1={bbox.y1:.1f} "
+                    f"x2={bbox.x2:.1f} y2={bbox.y2:.1f})"
                 )
                 continue
-            crop = image_tensor[:, y1:y2, x1:x2]
-            crop_transformed = classify_transforms(crop)
-            crops.append(crop_transformed)
+            crops.append(image_tensor[:, y1:y2, x1:x2])
             valid_indices.append(idx)
 
         classify_start = datetime.datetime.now()
         if crops:
-            batched_crops = torch.stack(crops)
-            classifier_out = classifier.predict_batch(batched_crops)
-            classifier_out = classifier.post_process_batch(classifier_out)
+            classifier_out = _classify_crops(classifier, crops, classify_transforms)
 
             for crop_i, idx in enumerate(valid_indices):
                 dresp = detections_for_terminal_classifier[idx]
@@ -464,7 +497,7 @@ def _process_job(
             # Defer instantiation of poster, detector and classifiers until we have data
             if not classifier:
                 classifier = classifier_class(source_images=[], detections=[])
-                detector = APIMothDetector([])
+                detector = classifier_class.detector_cls([])
                 result_poster = ResultPoster(max_pending=MAX_PENDING_POSTS)
 
                 if use_binary_filter:

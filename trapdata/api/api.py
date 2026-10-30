@@ -15,8 +15,12 @@ from ..common.logs import logger  # noqa: F401
 from ..ml.utils import resolve_model_url
 from . import settings
 from .models.classification import (
+    AnyBugMixedV2InsectOrderClassifier,
+    AnyBugMixedV2MothClassifierGlobal,
     APIMothClassifier,
     InsectOrderClassifier,
+    MothbotInsectOrderClassifier,
+    MothbotMothClassifierPanama,
     MothClassifierBinary,
     MothClassifierGlobal,
     MothClassifierPanama,
@@ -64,6 +68,10 @@ CLASSIFIER_CHOICES = {
     "global_moths_2024": MothClassifierGlobal,
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
+    "mothbot_insect_orders_2025": MothbotInsectOrderClassifier,
+    "mothbot_panama_moths_2023": MothbotMothClassifierPanama,
+    "anybug_mixed_v2_insect_orders_2025": AnyBugMixedV2InsectOrderClassifier,
+    "anybug_mixed_v2_global_moths_2024": AnyBugMixedV2MothClassifierGlobal,
 }
 
 
@@ -121,10 +129,13 @@ PipelineChoice = enum.Enum("PipelineChoice", _offered_pipeline_choices)
 
 
 def should_filter_detections(Classifier: type[APIMothClassifier]) -> bool:
-    if Classifier in [MothClassifierBinary, InsectOrderClassifier]:
+    # Classifiers that skip the binary moth/non-moth prefilter: the binary
+    # classifier itself (there's nothing downstream to filter for), and any
+    # order-level classifier (it already distinguishes non-moth insects,
+    # so a binary prefilter would discard signal).
+    if issubclass(Classifier, (MothClassifierBinary, InsectOrderClassifier)):
         return False
-    else:
-        return True
+    return True
 
 
 def make_category_map_response(
@@ -185,7 +196,7 @@ def make_pipeline_config_response(
     """
     algorithms = []
 
-    detector = APIMothDetector(
+    detector = Classifier.detector_cls(
         source_images=[],
     )
     algorithms.append(make_algorithm_config_response(detector))
@@ -207,10 +218,18 @@ def make_pipeline_config_response(
     )
     algorithms.append(make_algorithm_config_response(classifier))
 
+    # Prefer a pipeline-level description when the classifier supplies one
+    # (describes the full detector+classifier combo). Otherwise fall back to
+    # the classifier's own description, which is what every other pipeline
+    # currently ships.
+    pipeline_description = (
+        getattr(classifier, "pipeline_description", None) or classifier.description
+    )
+
     return PipelineConfigResponse(
         name=classifier.name,
         slug=slug,
-        description=classifier.description,
+        description=pipeline_description,
         version=1,
         algorithms=algorithms,
     )
@@ -266,7 +285,7 @@ async def process(data: PipelineRequest) -> PipelineResponse:
 
     Classifier = CLASSIFIER_CHOICES[str(data.pipeline)]
 
-    detector = APIMothDetector(
+    detector = Classifier.detector_cls(
         source_images=source_images,
         batch_size=settings.localization_batch_size,
         num_workers=settings.num_workers,

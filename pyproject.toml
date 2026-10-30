@@ -3,7 +3,7 @@ name = "trapdata"
 version = "0.6.0"
 description = "Companion software for automated insect monitoring stations"
 authors = [{ name = "Michael Bunsen", email = "notbot@gmail.com" }]
-license = { text = "MIT" }
+license = { text = "AGPL-3.0" }
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 urls = { Homepage = "https://github.com/RolnickLab/ami-data-companion", Repository = "https://github.com/RolnickLab/ami-data-companion" }
@@ -31,6 +31,10 @@ dependencies = [
     "torch>=2.5",
     "torchvision>=0.20",
     "typer>=0.12.3,<1",
+    "ultralytics>=8.3",
+    # Ultralytics depends on opencv-python, which needs X11 libraries that headless
+    # servers lack. The headless build provides the same cv2 module without them.
+    "opencv-python-headless>=4.6,<5",
     "uvicorn>=0.20",
 ]
 
@@ -64,6 +68,11 @@ ami = "trapdata.cli.base:cli"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+# Leave out opencv-python so only the headless build installs cv2 (see the
+# opencv-python-headless dependency above).
+override-dependencies = ["opencv-python ; sys_platform == 'never'"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

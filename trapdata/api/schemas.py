@@ -114,6 +114,17 @@ class DetectionResponse(pydantic.BaseModel):
     timestamp: datetime.datetime
     crop_image_url: str | None = None
     classifications: list[ClassificationResponse] = []
+    rotation: float | None = pydantic.Field(
+        default=None,
+        description=(
+            "Rotation angle in degrees (cv2.minAreaRect convention), when "
+            "the detector produces oriented bounding boxes. FUTURE: "
+            "downstream classifiers may use this to crop a straightened "
+            "patch instead of the axis-aligned envelope. See "
+            "`docs/superpowers/specs/2026-04-14-mothbot-detection-pipeline-design.md` "
+            "for the proposed RotatedBoundingBox schema upgrade."
+        ),
+    )
 
 
 class SourceImageRequest(pydantic.BaseModel):

@@ -52,7 +52,24 @@ def register_pipelines_for_project(
             response.raise_for_status()
 
             result = AsyncPipelineRegistrationResponse.model_validate(response.json())
-            return True, f"Created {len(result.pipelines_created)} new pipelines"
+            parts = []
+            if result.processing_service_id:
+                parts.append(f"Processing service ID {result.processing_service_id}")
+            if result.pipelines_created:
+                parts.append(
+                    f"created {len(result.pipelines_created)} pipelines "
+                    f"({', '.join(result.pipelines_created)})"
+                )
+            if result.pipelines_updated:
+                parts.append(
+                    f"updated {len(result.pipelines_updated)} pipelines "
+                    f"({', '.join(result.pipelines_updated)})"
+                )
+            if not result.pipelines_created and not result.pipelines_updated:
+                parts.append(
+                    f"all {len(pipeline_configs)} pipelines already registered"
+                )
+            return True, "; ".join(parts)
 
         except requests.RequestException as e:
             if (
@@ -76,6 +93,7 @@ def register_pipelines(
     project_ids: list[int],
     service_name: str,
     settings: Settings | None = None,
+    pipeline_slugs: list[str] | None = None,
 ) -> None:
     """
     Register pipelines for specified projects or all accessible projects.
@@ -85,6 +103,8 @@ def register_pipelines(
         service_name: Name of the processing service
         settings: Settings object with the antenna_api_* configuration and the
             pipelines to register (defaults to read_settings())
+        pipeline_slugs: Optional list of pipeline slugs to register. When given, they
+            take precedence over the AMI_PIPELINES setting.
     """
     # Import here to avoid circular import
     from trapdata.antenna.client import get_user_projects
@@ -110,10 +130,12 @@ def register_pipelines(
     # Check the pipeline names before contacting Antenna, so a typo fails fast.
     try:
         pipeline_slugs = list(
-            select_pipelines(parse_pipeline_setting(settings.pipelines))
+            select_pipelines(
+                pipeline_slugs or parse_pipeline_setting(settings.pipelines)
+            )
         )
     except ValueError as e:
-        logger.error(f"Invalid AMI_PIPELINES setting: {e}")
+        logger.error(f"Invalid pipeline selection: {e}")
         return
 
     # Add hostname to service name
@@ -180,10 +202,12 @@ def register_pipelines(
 
     # Summary report
     logger.info("\n=== Registration Summary ===")
-    logger.info(f"Service name: {full_service_name}")
-    logger.info(f"Total projects processed: {len(projects_to_process)}")
-    logger.info(f"Successful registrations: {len(successful_registrations)}")
-    logger.info(f"Failed registrations: {len(failed_registrations)}")
+    logger.info(f"Processing service: {full_service_name}")
+    logger.info(f"Pipelines advertised: {len(pipeline_configs)}")
+    logger.info(f"Projects processed: {len(projects_to_process)}")
+    logger.info(
+        f"Successful: {len(successful_registrations)}, Failed: {len(failed_registrations)}"
+    )
 
     if successful_registrations:
         logger.info("\nSuccessful registrations:")

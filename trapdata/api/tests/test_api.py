@@ -246,3 +246,101 @@ class TestInferenceAPI(TestCase):
                 f"Number of logits ({len(classification.logits)}) should equal "
                 f"number of classes ({num_classes})"
             )
+
+    def test_existing_pipelines_default_to_apimothdetector(self):
+        """Pre-existing pipelines must keep using APIMothDetector.
+
+        New pipelines introduced with their own detector are exempt.
+        """
+        from trapdata.api.api import CLASSIFIER_CHOICES
+        from trapdata.api.models.localization import APIMothDetector
+
+        exempt = {
+            "mothbot_insect_orders_2025",
+            "mothbot_panama_moths_2023",
+            "anybug_mixed_v2_insect_orders_2025",
+            "anybug_mixed_v2_global_moths_2024",
+        }
+        for slug, Classifier in CLASSIFIER_CHOICES.items():
+            if slug in exempt:
+                continue
+            self.assertIs(
+                Classifier.detector_cls,
+                APIMothDetector,
+                f"{slug} should default to APIMothDetector",
+            )
+
+    def test_mothbot_pipeline_uses_yolo_detector(self):
+        from trapdata.api.api import CLASSIFIER_CHOICES
+        from trapdata.api.models.localization import APIMothDetector_YOLO11m_Mothbot
+
+        assert "mothbot_insect_orders_2025" in CLASSIFIER_CHOICES
+        Classifier = CLASSIFIER_CHOICES["mothbot_insect_orders_2025"]
+        self.assertIs(Classifier.detector_cls, APIMothDetector_YOLO11m_Mothbot)
+
+    def test_mothbot_pipeline_skips_binary_filter(self):
+        from trapdata.api.api import CLASSIFIER_CHOICES, should_filter_detections
+
+        Classifier = CLASSIFIER_CHOICES["mothbot_insect_orders_2025"]
+        self.assertFalse(should_filter_detections(Classifier))
+
+    def test_anybug_mixed_v2_pipelines_use_the_anybug_detector(self):
+        """Both AnyBug v2 pipelines detect with the 1600 px AnyBug model; only the
+        species pipeline keeps the binary moth prefilter."""
+        from trapdata.api.api import CLASSIFIER_CHOICES, should_filter_detections
+        from trapdata.api.models.localization import APIAnyBugDetector_YOLO26s_Mixed_v2
+
+        orders = CLASSIFIER_CHOICES["anybug_mixed_v2_insect_orders_2025"]
+        species = CLASSIFIER_CHOICES["anybug_mixed_v2_global_moths_2024"]
+        for Classifier in (orders, species):
+            self.assertIs(Classifier.detector_cls, APIAnyBugDetector_YOLO26s_Mixed_v2)
+        self.assertEqual(APIAnyBugDetector_YOLO26s_Mixed_v2.imgsz, 1600)
+        self.assertEqual(
+            APIAnyBugDetector_YOLO26s_Mixed_v2.weights_path,
+            "anybug/detection/Anybug-Mixed-v2-0.pt",
+        )
+        self.assertFalse(should_filter_detections(orders))
+        self.assertTrue(should_filter_detections(species))
+
+    def test_detection_response_has_optional_rotation_field(self):
+        """The rotation field is opt-in for detectors that produce OBB."""
+        import datetime
+
+        from trapdata.api.schemas import (
+            AlgorithmReference,
+            BoundingBox,
+            DetectionResponse,
+        )
+
+        # Default: rotation is None
+        d = DetectionResponse(
+            source_image_id="img1",
+            bbox=BoundingBox(x1=0, y1=0, x2=10, y2=10),
+            algorithm=AlgorithmReference(name="x", key="x"),
+            timestamp=datetime.datetime.now(),
+        )
+        self.assertIsNone(d.rotation)
+
+        # Accepts a float
+        d2 = DetectionResponse(
+            source_image_id="img1",
+            bbox=BoundingBox(x1=0, y1=0, x2=10, y2=10),
+            algorithm=AlgorithmReference(name="x", key="x"),
+            timestamp=datetime.datetime.now(),
+            rotation=-42.5,
+        )
+        self.assertAlmostEqual(d2.rotation, -42.5)
+
+    def test_yolo_api_detector_instantiates(self):
+        """The new YOLO detector wrapper should construct with no source images
+        (matches the pattern the /info handler uses to read algorithm metadata).
+
+        This test exercises weight download + model load — it will be slow on
+        first run but cached thereafter.
+        """
+        from trapdata.api.models.localization import APIMothDetector_YOLO11m_Mothbot
+
+        detector = APIMothDetector_YOLO11m_Mothbot(source_images=[])
+        self.assertEqual(detector.name, "Mothbot YOLO11m Creature Detector")
+        self.assertEqual(detector.category_map, {0: "creature"})
+        self.assertEqual(detector.imgsz, 1600)
