@@ -5,7 +5,12 @@ import numpy as np
 import torch
 
 from trapdata.common.logs import logger
+from trapdata.ml import trained_heads
 from trapdata.ml.models.base import ClassifierResult
+from trapdata.ml.models.bioclip import (
+    BioCLIP25NewfoundlandClassifier,
+    BioCLIP25PanamaClassifier,
+)
 from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
     InferenceBaseClass,
@@ -25,6 +30,7 @@ from ..schemas import (
     AlgorithmReference,
     ClassificationResponse,
     DetectionResponse,
+    EmbeddingResponse,
     SourceImage,
 )
 from .base import APIInferenceBaseClass
@@ -66,13 +72,23 @@ class APIMothClassifier(
             batch_size=self.batch_size,
         )
 
-    def post_process_batch(self, logits: torch.Tensor):
+    def post_process_batch(self, batch_output: torch.Tensor | tuple):
         """
         Return the labels, softmax/calibrated scores, and the original logits for
         each image in the batch.
 
         Almost like the base class method, but we need to return the logits as well.
+
+        A model whose head can be retrained returns ``(logits, features)`` so the
+        embedding travels with the classification it produced; anything else returns
+        logits alone.
         """
+        if isinstance(batch_output, tuple):
+            logits, features = batch_output
+            features = features.cpu()
+        else:
+            logits, features = batch_output, None
+
         predictions = torch.nn.functional.softmax(logits, dim=1)
         predictions = predictions.cpu().numpy()
         logits = logits.cpu()
@@ -88,6 +104,7 @@ class APIMothClassifier(
                 labels=labels,
                 logit=logit,
                 scores=pred.tolist(),
+                features=features[i].tolist() if features is not None else None,
             )
 
             batch_results.append(result)
@@ -164,12 +181,23 @@ class APIMothClassifier(
             classification=self.get_best_label(predictions),
             scores=predictions.scores,
             logits=predictions.logit,
+            features=predictions.features,
             inference_time=seconds_per_item,
             algorithm=AlgorithmReference(name=self.name, key=self.get_key()),
             timestamp=datetime.datetime.now(),
             terminal=self.terminal,
         )
         self.update_classification(detection, classification)
+        if predictions.features is not None:
+            # Also on the detection, where Antenna stores vectors (antenna#1462).
+            embedding = EmbeddingResponse(
+                features=predictions.features, algorithm=classification.algorithm
+            )
+            detection.embeddings = [
+                e
+                for e in (detection.embeddings or [])
+                if e.algorithm.key != embedding.algorithm.key
+            ] + [embedding]
         return detection
 
     def run(self) -> list[DetectionResponse]:
@@ -186,6 +214,16 @@ class APIMothClassifier(
 
 
 class MothClassifierBinary(APIMothClassifier, MothNonMothClassifier):
+    pass
+
+
+class MothClassifierBioCLIP25Newfoundland(
+    APIMothClassifier, BioCLIP25NewfoundlandClassifier
+):
+    pass
+
+
+class MothClassifierBioCLIP25Panama(APIMothClassifier, BioCLIP25PanamaClassifier):
     pass
 
 
@@ -231,3 +269,60 @@ class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
 
 class InsectOrderClassifier(APIMothClassifier, InsectOrderClassifier2025):
     pass
+
+
+def _make_retrained_classifier(head: "trained_heads.TrainedHead", classifier_choices: dict) -> type:
+    """
+    Build the classifier class that serves one retrained head.
+
+    A retrained head is stored in the label-map convention save_head writes, so it is served
+    through the Newfoundland-style base. Only the backbone it was fit on varies by source, so
+    carry that across from the source algorithm; fall back to the default if it is unknown.
+    """
+    source_key = head.metadata.get("algorithm_key")
+    source = classifier_choices.get(source_key) if source_key else None
+    if source_key and source is None:
+        logger.warn(
+            f"Retrained head '{head.name}' names an unknown source algorithm '{source_key}'; serving on the default backbone"
+        )
+
+    attrs = {
+        "name": f"BioCLIP 2.5 + LogReg head (retrained {head.name})",
+        "description": (
+            "A classifier head retrained from verified identifications. "
+            f"Trained on {sum(head.metadata.get('counts', {}).values()) or 'an unrecorded number of'} crops."
+        ),
+        "key": head.pipeline_slug,
+        "head_local_dir": str(head.directory),
+        "head_filename": f"{head.name}{trained_heads.HEAD_SUFFIX}",
+        "categories_filename": f"{head.name}{trained_heads.LABELS_SUFFIX}",
+    }
+    for attr in ("backbone_name", "embedding_dimensions"):
+        value = getattr(source, attr, None)
+        if value is not None:
+            attrs[attr] = value
+
+    return type(
+        f"MothClassifierRetrained_{head.name.replace('-', '_')}",
+        (MothClassifierBioCLIP25Newfoundland,),
+        attrs,
+    )
+
+
+def register_retrained_heads(classifier_choices: dict, directory: str | None = None) -> list[str]:
+    """
+    Add every retrained head on disk to the pipeline choices, and say which were added.
+
+    Called at startup and again after a training run, so a head becomes selectable without
+    restarting the service.
+    """
+    added = []
+    for head in trained_heads.discover(directory):
+        if head.pipeline_slug in classifier_choices:
+            continue
+        classifier_choices[head.pipeline_slug] = _make_retrained_classifier(head, classifier_choices)
+        added.append(head.pipeline_slug)
+
+    if added:
+        logger.info(f"Registered {len(added)} retrained head(s): {added}")
+    return added
