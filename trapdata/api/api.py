@@ -3,13 +3,16 @@ Fast API interface for processing images through the localization and classifica
 pipelines.
 """
 
+import datetime
 import enum
+import pathlib
 import time
 import typing
 from contextlib import asynccontextmanager
 
 import fastapi
 import pydantic
+import requests
 from fastapi.middleware.gzip import GZipMiddleware
 
 from ..common.logs import logger  # noqa: F401
@@ -592,7 +595,6 @@ def _upload_head(data: TrainRequest, saved: dict) -> str | None:
     head also stays on local disk either way, so a failed upload costs durability, not
     the ability to serve it.
     """
-    import requests
 
     headers = {}
     if data.callback_token:
@@ -628,7 +630,6 @@ def _progress_reporter(data: TrainRequest) -> typing.Callable[[int, int], None] 
     None when the caller asked for no progress. Failures are logged and swallowed, like
     the callbacks below: a run must not die because a status ping did not land.
     """
-    import requests
 
     if not data.progress_url:
         return None
@@ -660,7 +661,6 @@ def _report_to_antenna(
     Reported rather than raised on failure: the training itself succeeded, and losing the
     callback should not make the caller think it did not.
     """
-    import requests
 
     payload = {
         "job_id": data.job_id,
@@ -715,10 +715,6 @@ async def train(data: TrainRequest) -> TrainResponse:
     automatic swap would let one bad training run quietly degrade every later
     classification.
     """
-    import datetime
-    import pathlib
-
-    import requests
 
     rows: list = []
     dataset_metadata: dict = {}
