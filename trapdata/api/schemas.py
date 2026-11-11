@@ -515,3 +515,16 @@ class TrainResponse(pydantic.BaseModel):
     # What the offline tier contributed, when it was asked for: rows, species found and
     # the species it holds no vectors for.
     offline: dict | None = None
+
+
+class TrainAccepted(pydantic.BaseModel):
+    """
+    The callback path's acknowledgement.
+
+    When a callback_url is given, the full result is sent to that URL, so /train returns this
+    202 acknowledgement rather than a second copy of the result for the caller to parse.
+    """
+
+    status: str = "accepted"
+    job_id: int | None = None
+    reported_to_antenna: bool

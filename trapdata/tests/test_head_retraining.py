@@ -433,3 +433,32 @@ def test_the_callback_says_which_file_the_run_was_fitted_on(monkeypatch):
     assert api._report_to_antenna(data, response, {"rows": 6}) is True
     assert sent["dataset_url"] == "http://antenna/media/training/set.npz"
     assert sent["dataset"] == {"rows": 6}
+
+
+def test_the_train_endpoint_documents_its_callback_acknowledgement():
+    """The callback path returns a 202 ack, not a TrainResponse, so the schema must say so."""
+    from trapdata.api.api import app
+
+    responses = app.openapi()["paths"]["/train"]["post"]["responses"]
+    assert "202" in responses
+
+
+def test_saved_paths_are_reported_as_relative_names():
+    """The response exposes the head's file names, not this service's absolute paths."""
+    from trapdata.api.api import _response_saved
+
+    out = _response_saved(
+        {
+            "head": "/home/user/.cache/torch/hub/trained_heads/run-1.npz",
+            "labels": "/home/user/.cache/torch/hub/trained_heads/run-1.label_map.json",
+        }
+    )
+    assert out == {"head": "run-1.npz", "labels": "run-1.label_map.json"}
+    assert _response_saved(None) is None
+
+
+def test_the_slug_helper_is_the_one_source_of_a_heads_pipeline_slug():
+    """One place builds the retrained-head slug, so the throwaway construction is gone."""
+    assert trained_heads.slug_for("run-1") == "bioclip-2-5-retrained-run-1"
+    head = trained_heads.TrainedHead(name="run-1", directory=pathlib.Path("."), metadata={})
+    assert head.pipeline_slug == trained_heads.slug_for("run-1")

@@ -45,6 +45,7 @@ from .schemas import (
     ProcessingServiceInfoResponse,
     SourceImage,
     SourceImageResponse,
+    TrainAccepted,
     TrainRequest,
     TrainResponse,
 )
@@ -687,7 +688,23 @@ def _report_to_antenna(
         return False
 
 
-@app.post("/train", tags=["training"])
+def _response_saved(saved: dict | None) -> dict | None:
+    """
+    The saved head's file names for the response, not its absolute server paths.
+
+    save_head returns on-disk paths because the upload step reads the file; the caller only
+    needs the names, so the response does not leak where this service keeps them.
+    """
+    if not saved:
+        return None
+    return {key: pathlib.Path(path).name for key, path in saved.items()}
+
+
+@app.post(
+    "/train",
+    tags=["training"],
+    responses={202: {"model": TrainAccepted, "description": "Accepted; the full result was sent to the callback URL."}},
+)
 async def train(data: TrainRequest) -> TrainResponse:
     """
     Retrain a classifier head from human-verified labels.
@@ -784,7 +801,7 @@ async def train(data: TrainRequest) -> TrainResponse:
         candidate_metrics=result["candidate_metrics"],
         incumbent_metrics=result["incumbent_metrics"],
         labels=result["labels"],
-        saved=saved,
+        saved=_response_saved(saved),
         head_url=head_url,
         pipeline_slug=pipeline_slug,
         trained_at=result["trained_at"],
@@ -801,11 +818,9 @@ async def train(data: TrainRequest) -> TrainResponse:
     # than a second copy for the caller to parse.
     return fastapi.responses.JSONResponse(
         status_code=202,
-        content={
-            "status": "accepted",
-            "job_id": data.job_id,
-            "reported_to_antenna": response.reported_to_antenna,
-        },
+        content=TrainAccepted(
+            job_id=data.job_id, reported_to_antenna=response.reported_to_antenna
+        ).model_dump(),
     )
 
 
