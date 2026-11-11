@@ -39,7 +39,12 @@ class BioCLIPWithLinearHead(torch.nn.Module):
         self.head = head
 
     def forward(self, images: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Return ``(logits, features)``. The features are what the head consumed."""
+        """
+        Return ``(logits, features)``. The features are what the head consumed.
+
+        Only the API classifier path reads this tuple; the pure-ml pipeline expects a bare
+        logits tensor, which is why a BioCLIP head is wired to the API path, not that one.
+        """
         features = self.encoder.encode_image(images).float()
         # The head was fit on L2-normalised embeddings, so normalise here too.
         features = features / features.norm(dim=-1, keepdim=True)

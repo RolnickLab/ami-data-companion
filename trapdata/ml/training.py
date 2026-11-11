@@ -417,7 +417,7 @@ def retrain(
 
 
 def save_head(
-    result: dict[str, typing.Any], directory: pathlib.Path, name: str
+    result: dict[str, typing.Any], directory: pathlib.Path, name: str, algorithm_key: str | None = None
 ) -> dict[str, str]:
     """
     Write the head in the same format the service already loads (npz + label_map.json).
@@ -445,6 +445,7 @@ def save_head(
                 "counts": result["counts"],
                 "metrics": result["candidate_metrics"],
                 "trained_at": result["trained_at"],
+                "algorithm_key": algorithm_key,
             },
             indent=2,
         )

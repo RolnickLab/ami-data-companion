@@ -5,6 +5,7 @@ import numpy as np
 import torch
 
 from trapdata.common.logs import logger
+from trapdata.ml import trained_heads
 from trapdata.ml.models.base import ClassifierResult
 from trapdata.ml.models.bioclip import (
     BioCLIP25NewfoundlandClassifier,
@@ -268,3 +269,60 @@ class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
 
 class InsectOrderClassifier(APIMothClassifier, InsectOrderClassifier2025):
     pass
+
+
+def _make_retrained_classifier(head: "trained_heads.TrainedHead", classifier_choices: dict) -> type:
+    """
+    Build the classifier class that serves one retrained head.
+
+    A retrained head is stored in the label-map convention save_head writes, so it is served
+    through the Newfoundland-style base. Only the backbone it was fit on varies by source, so
+    carry that across from the source algorithm; fall back to the default if it is unknown.
+    """
+    source_key = head.metadata.get("algorithm_key")
+    source = classifier_choices.get(source_key) if source_key else None
+    if source_key and source is None:
+        logger.warn(
+            f"Retrained head '{head.name}' names an unknown source algorithm '{source_key}'; serving on the default backbone"
+        )
+
+    attrs = {
+        "name": f"BioCLIP 2.5 + LogReg head (retrained {head.name})",
+        "description": (
+            "A classifier head retrained from verified identifications. "
+            f"Trained on {sum(head.metadata.get('counts', {}).values()) or 'an unrecorded number of'} crops."
+        ),
+        "key": head.pipeline_slug,
+        "head_local_dir": str(head.directory),
+        "head_filename": f"{head.name}{trained_heads.HEAD_SUFFIX}",
+        "categories_filename": f"{head.name}{trained_heads.LABELS_SUFFIX}",
+    }
+    for attr in ("backbone_name", "embedding_dimensions"):
+        value = getattr(source, attr, None)
+        if value is not None:
+            attrs[attr] = value
+
+    return type(
+        f"MothClassifierRetrained_{head.name.replace('-', '_')}",
+        (MothClassifierBioCLIP25Newfoundland,),
+        attrs,
+    )
+
+
+def register_retrained_heads(classifier_choices: dict, directory: str | None = None) -> list[str]:
+    """
+    Add every retrained head on disk to the pipeline choices, and say which were added.
+
+    Called at startup and again after a training run, so a head becomes selectable without
+    restarting the service.
+    """
+    added = []
+    for head in trained_heads.discover(directory):
+        if head.pipeline_slug in classifier_choices:
+            continue
+        classifier_choices[head.pipeline_slug] = _make_retrained_classifier(head, classifier_choices)
+        added.append(head.pipeline_slug)
+
+    if added:
+        logger.info(f"Registered {len(added)} retrained head(s): {added}")
+    return added

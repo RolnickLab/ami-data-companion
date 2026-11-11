@@ -30,6 +30,7 @@ from .models.classification import (
     MothClassifierTuringCostaRica,
     MothClassifierTuringKenyaUganda,
     MothClassifierUKDenmark,
+    register_retrained_heads,
 )
 from .models.localization import APIMothDetector
 from .schemas import (
@@ -80,7 +81,7 @@ CLASSIFIER_CHOICES = {
 
 # Heads this service retrained in an earlier run are offered alongside the ones it ships
 # with, so a restart does not lose them.
-trained_heads.register(CLASSIFIER_CHOICES)
+register_retrained_heads(CLASSIFIER_CHOICES)
 
 
 def parse_pipeline_setting(value: str) -> list[str]:
@@ -252,7 +253,7 @@ def _retrained_pipeline_slug(value: str) -> str:
     return value
 
 
-# A head trained after startup is offered at once (trained_heads.register), but the enum
+# A head trained after startup is offered at once (register_retrained_heads), but the enum
 # was built at import, so its slug is accepted here instead.
 RetrainedPipelineSlug = typing.Annotated[
     str, pydantic.AfterValidator(_retrained_pipeline_slug)
@@ -759,14 +760,12 @@ async def train(data: TrainRequest) -> TrainResponse:
     if data.save:
         name = data.name or f"head-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
         saved = training.save_head(
-            result, pathlib.Path(trained_heads.TRAINED_HEADS_DIR), name
+            result, pathlib.Path(trained_heads.TRAINED_HEADS_DIR), name, algorithm_key=data.algorithm_key
         )
         # Offer it straight away. The head it was trained from stays where it is; this
         # adds a choice rather than replacing one.
-        trained_heads.register(CLASSIFIER_CHOICES)
-        pipeline_slug = trained_heads.TrainedHead(
-            name=name, directory=pathlib.Path(), metadata={}
-        ).pipeline_slug
+        register_retrained_heads(CLASSIFIER_CHOICES)
+        pipeline_slug = trained_heads.slug_for(name)
         _describe_in_info(pipeline_slug)
 
         if data.head_upload_url:

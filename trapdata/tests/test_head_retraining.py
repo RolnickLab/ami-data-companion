@@ -11,7 +11,10 @@ import pathlib
 import numpy as np
 import pytest
 
-from trapdata.api.models.classification import MothClassifierBioCLIP25Newfoundland
+from trapdata.api.models.classification import (
+    MothClassifierBioCLIP25Newfoundland,
+    register_retrained_heads,
+)
 from trapdata.ml import trained_heads, training
 
 EMBED_DIM = 8
@@ -91,7 +94,7 @@ def test_a_saved_head_can_be_found_and_served(tmp_path: pathlib.Path):
     assert [head.name for head in found] == ["run-1"]
 
     choices: dict = {}
-    added = trained_heads.register(choices, str(tmp_path))
+    added = register_retrained_heads(choices, str(tmp_path))
 
     assert added == [found[0].pipeline_slug]
     classifier = choices[found[0].pipeline_slug]
@@ -99,6 +102,54 @@ def test_a_saved_head_can_be_found_and_served(tmp_path: pathlib.Path):
     # It reads the head it was trained into, not the one it was trained from.
     assert classifier.head_local_dir == str(tmp_path)
     assert classifier.trainable is True
+
+
+def test_a_served_head_reports_its_training_crop_count(tmp_path: pathlib.Path):
+    """The served head should say how many crops it was trained on, not a blank fallback."""
+    rows = _rows(["Species one", "Species two"]) + _rows(
+        ["Species one", "Species two"], per_label=4, split="test"
+    )
+    result = training.retrain(rows=rows, incumbent=None, min_per_species=2, epochs=50)
+    training.save_head(result, tmp_path, "run-1")
+    expected = sum(result["counts"].values())
+
+    choices: dict = {}
+    register_retrained_heads(choices, str(tmp_path))
+    classifier = next(iter(choices.values()))
+
+    assert "an unrecorded number of" not in classifier.description
+    assert str(expected) in classifier.description
+
+
+def test_a_saved_head_records_the_algorithm_it_was_trained_from(tmp_path: pathlib.Path):
+    """A retrained head must remember its source algorithm so the right base class serves it."""
+    rows = _rows(["Species one", "Species two"]) + _rows(
+        ["Species one", "Species two"], per_label=4, split="test"
+    )
+    result = training.retrain(rows=rows, incumbent=None, min_per_species=2, epochs=50)
+    training.save_head(result, tmp_path, "run-1", algorithm_key="bioclip_2_5_panama")
+
+    found = trained_heads.discover(str(tmp_path))
+    assert found[0].metadata["algorithm_key"] == "bioclip_2_5_panama"
+
+
+def test_a_retrained_head_is_served_on_its_source_backbone(tmp_path: pathlib.Path):
+    """The served head must use the backbone of the algorithm it was retrained from."""
+    rows = _rows(["Species one", "Species two"]) + _rows(
+        ["Species one", "Species two"], per_label=4, split="test"
+    )
+    result = training.retrain(rows=rows, incumbent=None, min_per_species=2, epochs=50)
+    training.save_head(result, tmp_path, "run-1", algorithm_key="made-up-source")
+
+    class FakeSource:
+        backbone_name = "hf-hub:example/other-backbone"
+        embedding_dimensions = 512
+
+    choices: dict = {"made-up-source": FakeSource}
+    register_retrained_heads(choices, str(tmp_path))
+
+    retrained = choices[trained_heads.discover(str(tmp_path))[0].pipeline_slug]
+    assert retrained.backbone_name == "hf-hub:example/other-backbone"
 
 
 def test_a_saved_head_writes_the_weights_and_labels_it_promises(tmp_path: pathlib.Path):
@@ -132,7 +183,7 @@ def test_a_retrained_head_can_read_back_its_own_label_map(tmp_path: pathlib.Path
     training.save_head(result, tmp_path, "run-1")
 
     choices: dict = {}
-    trained_heads.register(choices, str(tmp_path))
+    register_retrained_heads(choices, str(tmp_path))
     classifier = next(iter(choices.values()))
 
     # Reading the labels must not need the backbone.

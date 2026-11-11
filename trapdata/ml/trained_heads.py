@@ -38,6 +38,11 @@ LABELS_SUFFIX = ".label_map.json"
 RETRAINED_PREFIX = "bioclip-2-5-retrained"
 
 
+def slug_for(name: str) -> str:
+    """The pipeline slug a retrained head of this name is offered under."""
+    return f"{RETRAINED_PREFIX}-{name}"
+
+
 class TrainedHead(typing.NamedTuple):
     """One head this service has produced, as found on disk."""
 
@@ -47,7 +52,7 @@ class TrainedHead(typing.NamedTuple):
 
     @property
     def pipeline_slug(self) -> str:
-        return f"{RETRAINED_PREFIX}-{self.name}"
+        return slug_for(self.name)
 
 
 def discover(directory: str | None = None) -> list[TrainedHead]:
@@ -64,60 +69,11 @@ def discover(directory: str | None = None) -> list[TrainedHead]:
             logger.warn(f"Skipping retrained head '{name}': no label map beside it")
             continue
 
-        metadata_path = root / f"{name}.json"
         metadata = {}
-        if metadata_path.exists():
-            try:
-                metadata = json.loads(metadata_path.read_text())
-            except json.JSONDecodeError:
-                logger.warn(
-                    f"Retrained head '{name}' has unreadable metadata; ignoring it"
-                )
+        try:
+            metadata = json.loads(labels_path.read_text())
+        except json.JSONDecodeError:
+            logger.warn(f"Retrained head '{name}' has an unreadable label map; ignoring its metadata")
 
         heads.append(TrainedHead(name=name, directory=root, metadata=metadata))
     return heads
-
-
-def make_classifier_class(head: TrainedHead) -> type:
-    """
-    Build the classifier class that serves one retrained head.
-
-    The head is the only thing that differs from the classifier it was trained from, so
-    the class is that classifier with the head read from disk instead of the Hub.
-    """
-    from trapdata.api.models.classification import MothClassifierBioCLIP25Newfoundland
-
-    return type(
-        f"MothClassifierRetrained_{head.name.replace('-', '_')}",
-        (MothClassifierBioCLIP25Newfoundland,),
-        {
-            "name": f"BioCLIP 2.5 + LogReg head (retrained {head.name})",
-            "description": (
-                "A classifier head retrained from verified identifications. "
-                f"Trained on {head.metadata.get('rows', 'an unrecorded number of')} crops."
-            ),
-            "key": head.pipeline_slug,
-            "head_local_dir": str(head.directory),
-            "head_filename": f"{head.name}{HEAD_SUFFIX}",
-            "categories_filename": f"{head.name}{LABELS_SUFFIX}",
-        },
-    )
-
-
-def register(classifier_choices: dict, directory: str | None = None) -> list[str]:
-    """
-    Add every retrained head on disk to the pipeline choices, and say which were added.
-
-    Called at startup and again after a training run, so a head becomes selectable without
-    restarting the service.
-    """
-    added = []
-    for head in discover(directory):
-        if head.pipeline_slug in classifier_choices:
-            continue
-        classifier_choices[head.pipeline_slug] = make_classifier_class(head)
-        added.append(head.pipeline_slug)
-
-    if added:
-        logger.info(f"Registered {len(added)} retrained head(s): {added}")
-    return added
