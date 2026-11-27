@@ -30,6 +30,16 @@ class MaybeTensor:
         return f"{self.__class__.__name__}()"
 
 
+class QuantizeToUint8Levels:
+    """Round a [0, 1] image tensor to the 256 levels an 8-bit image can hold."""
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.round(x * 255) / 255
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}()"
+
+
 class ClassificationIterableDatabaseDataset(torch.utils.data.IterableDataset):
     def __init__(self, queue, image_transforms, batch_size=4):
         super().__init__()
@@ -314,6 +324,159 @@ class Resnet50TimmClassifier(Resnet50Classifier):
         return model
 
 
+class CosineClassifierHead(torch.nn.Module):
+    """
+    Classification head of models trained with mini_trainer
+    (https://github.com/asgersvenning/mini_trainer), such as Nemo (MAMBO v3).
+
+    A class scores by the cosine between the normalized embedding and its normalized
+    weight vector, rescaled to a z-score, plus a bias. Module names match the
+    checkpoint keys so its state dict loads strictly.
+    """
+
+    def __init__(self, in_features: int, num_classes: int):
+        super().__init__()
+        self.hidden = torch.nn.Linear(in_features, in_features)
+        # Present in the checkpoint; a normalized head does not use it
+        self.batch_norm = torch.nn.BatchNorm1d(in_features)
+        self.linear = torch.nn.utils.parametrizations.weight_norm(
+            torch.nn.Linear(in_features, num_classes), name="weight", dim=0
+        )
+        # Unit-length class vectors, so the product with the embedding is a cosine
+        gain = self.linear.parametrizations.weight.original0
+        torch.nn.init.ones_(gain)
+        gain.requires_grad_(False)
+
+    def keep_classes(self, indexes: list[int]) -> None:
+        """Score only these classes, in this order."""
+        index = torch.as_tensor(indexes, device=self.linear.bias.device)
+        with torch.no_grad():
+            weight = self.linear.weight.index_select(0, index)
+            bias = self.linear.bias.index_select(0, index)
+        self.linear = torch.nn.Linear(weight.shape[1], weight.shape[0])
+        with torch.no_grad():
+            self.linear.weight.copy_(weight)
+            self.linear.bias.copy_(bias)
+
+    def embed(self, x: torch.Tensor) -> torch.Tensor:
+        x = torch.nn.functional.leaky_relu(self.hidden(x))
+        return torch.nn.functional.normalize(x, p=2, dim=-1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        cosine = torch.nn.functional.linear(self.embed(x), self.linear.weight)
+        eps = 1e-7
+        angle = torch.acos(-cosine.clamp(-1 + eps, 1 - eps))
+        zscore = (angle - torch.pi / 2) * (self.hidden.out_features - 2) ** 0.5
+        return zscore + self.linear.bias
+
+
+class MiniTrainerClassifier(InferenceBaseClass):
+    """
+    A torchvision backbone with the mini_trainer cosine head.
+
+    The backbone and embedding width come from the metadata mini_trainer stores in the
+    checkpoint, and a checkpoint whose input size or head type does not match this
+    class is refused. The label map decides which classes are offered: its indexes are
+    the checkpoint's output indexes, and outputs it leaves out are dropped. Only the
+    leaf (species) scores are used; Antenna derives higher ranks from the taxonomy.
+    """
+
+    input_size = 384
+    # Preprocessing of the released model: squash to a square, upscale, center crop
+    resize_size = 438
+    normalization = imagenet_normalization
+
+    def get_labels(self, labels_path) -> dict[int, str]:
+        labels = super().get_labels(labels_path)
+        # Checkpoint output index of each class offered, in the order offered
+        self.output_indexes = sorted(labels)
+        return {new: labels[old] for new, old in enumerate(self.output_indexes)}
+
+    def get_model(self):
+        checkpoint = load_model_checkpoint(self.weights, self.device)
+        state_dict = checkpoint.get("model_state_dict") or checkpoint
+        head_name, metadata = self._checkpoint_metadata(state_dict)
+        self._check_metadata(metadata)
+
+        model = getattr(torchvision.models, metadata["backbone_class"])(weights=None)
+        head = CosineClassifierHead(metadata["in_features"], metadata["out_features"])
+        setattr(model, head_name, head)
+
+        # Hierarchy masks map species to genus and family; ranks above species are not
+        # scored here
+        state_dict = {
+            key: value
+            for key, value in state_dict.items()
+            if not key.startswith((f"{head_name}.mask_", f"{head_name}._extra_state"))
+        }
+        model.load_state_dict(state_dict)
+        if len(self.output_indexes) < metadata["out_features"]:
+            head.keep_classes(self.output_indexes)
+        model = model.to(self.device)
+        model.eval()
+        return model
+
+    @staticmethod
+    def _checkpoint_metadata(state_dict: dict) -> tuple[str, dict]:
+        for key, value in state_dict.items():
+            if key.endswith("._extra_state") and isinstance(value, dict):
+                if "mini_trainer_version" in value:
+                    return value["backbone_output_name"], value
+        raise ValueError("Checkpoint has no mini_trainer metadata")
+
+    def _check_metadata(self, metadata: dict) -> None:
+        expected = {
+            "normalized": True,
+            "hidden": True,
+            "preferred_size": self.input_size,
+        }
+        mismatched = {
+            key: (metadata.get(key), value)
+            for key, value in expected.items()
+            if metadata.get(key) != value
+        }
+        if mismatched:
+            raise ValueError(
+                f"Checkpoint for {self.name} does not match the model settings "
+                f"(checkpoint value, expected value): {mismatched}"
+            )
+        outside = [i for i in self.output_indexes if i >= metadata["out_features"]]
+        if outside:
+            raise ValueError(
+                f"Label map for {self.name} names output indexes the checkpoint does "
+                f"not have ({metadata['out_features']} outputs): {outside[:10]}"
+            )
+
+    def get_transforms(self):
+        # Resize tensors, not PIL images: tensor nearest-neighbour sampling picks the
+        # same source pixels as the released preprocessing, PIL's does not
+        return torchvision.transforms.Compose(
+            [
+                MaybeTensor(),
+                torchvision.transforms.Resize(
+                    (self.input_size, self.input_size),
+                    interpolation=torchvision.transforms.InterpolationMode.NEAREST,
+                ),
+                torchvision.transforms.Resize(self.resize_size, antialias=False),
+                QuantizeToUint8Levels(),
+                torchvision.transforms.CenterCrop(self.input_size),
+                self.normalization,
+            ]
+        )
+
+    def post_process_batch(self, output):
+        predictions = torch.nn.functional.softmax(output, dim=1)
+        predictions = predictions.cpu().numpy()
+
+        categories = predictions.argmax(axis=1)
+        labels = [self.category_map[cat] for cat in categories]
+        scores = predictions.max(axis=1).astype(float)
+
+        result = list(zip(labels, scores))
+        logger.debug(f"Post-processing result batch: {result}")
+        return result
+
+
 class BinaryClassifier(Resnet50ClassifierLowRes):
     stage = 2
     type = "binary_classification"
@@ -563,6 +726,26 @@ class PanamaMothSpeciesClassifier2024(SpeciesClassifier, Resnet50TimmClassifier)
     labels_path = (
         "moths/classification/"
         "03_ami-gbif_fine-grained_c-america_category_map-with_names.json"
+    )
+
+
+class GlobalMothSpeciesClassifierNemo2026(SpeciesClassifier, MiniTrainerClassifier):
+    lookup_gbif_names = False
+
+    name = "Global Species Classifier - Nemo (MAMBO v3)"
+    description = (
+        "Nemo (MAMBO v3) by Asger Svenning, Aarhus University. EfficientNetV2-S "
+        "trained on September 11, 2026 on 5.06M GBIF images of 12,632 moth and "
+        "butterfly species. Weights licensed CC BY-NC-SA 4.0. "
+        "https://huggingface.co/asgersvenning/MAMBO-v3"
+    )
+    # Copy of bundle/models/pytorch/best.pt from the Hugging Face repo at revision
+    # a70e530 (sha256 174b9214...5e8a), renamed so it cannot collide in the model cache
+    weights_path = (
+        "moths/classification/" "global_nemo-mambo-v3_efficientnet_v2_s_20260911.pt"
+    )
+    labels_path = (
+        "moths/classification/" "global_nemo-mambo-v3_category_map_with_names.json"
     )
 
 
