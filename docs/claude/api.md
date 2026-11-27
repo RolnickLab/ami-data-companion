@@ -376,6 +376,11 @@ curl http://localhost:2000/readyz
 - Region: Multi-region
 - Use case: General-purpose moth classification
 
+**global_moths_nemo_2026:**
+- Species: 12,632 moths and butterflies (Nemo / MAMBO v3, EfficientNetV2-S, by Asger Svenning)
+- Region: Global
+- Use case: General-purpose moth classification. Weights are CC BY-NC-SA 4.0.
+
 **insect_orders_2025:**
 - Classes: Insect orders (Lepidoptera, Coleoptera, etc.)
 - Region: Global

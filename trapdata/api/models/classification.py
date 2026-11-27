@@ -8,6 +8,7 @@ from trapdata.common.logs import logger
 from trapdata.ml.models.base import ClassifierResult
 from trapdata.ml.models.classification import (
     GlobalMothSpeciesClassifier,
+    GlobalMothSpeciesClassifierNemo2026,
     InferenceBaseClass,
     InsectOrderClassifier2025,
     MothNonMothClassifier,
@@ -226,6 +227,10 @@ class MothClassifierTuringKenyaUganda(
 
 
 class MothClassifierGlobal(APIMothClassifier, GlobalMothSpeciesClassifier):
+    pass
+
+
+class MothClassifierGlobalNemo(APIMothClassifier, GlobalMothSpeciesClassifierNemo2026):
     pass
 
 

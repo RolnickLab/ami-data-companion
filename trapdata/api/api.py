@@ -19,6 +19,7 @@ from .models.classification import (
     InsectOrderClassifier,
     MothClassifierBinary,
     MothClassifierGlobal,
+    MothClassifierGlobalNemo,
     MothClassifierPanama,
     MothClassifierPanama2024,
     MothClassifierQuebecVermont,
@@ -62,6 +63,7 @@ CLASSIFIER_CHOICES = {
     "anguilla_moths_turing_2024": MothClassifierTuringAnguilla,
     "kenya-uganda_moths_turing_2024": MothClassifierTuringKenyaUganda,
     "global_moths_2024": MothClassifierGlobal,
+    "global_moths_nemo_2026": MothClassifierGlobalNemo,
     "moth_binary": MothClassifierBinary,
     "insect_orders_2025": InsectOrderClassifier,
 }
